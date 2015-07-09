@@ -14,13 +14,18 @@ import views.html
 
 import scala.concurrent.ExecutionContext.Implicits.global
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{Promise, ExecutionContext, Future}
+
+case class Submit(id: Int, team: Int, problem: String, arrived: Int, passed: Int, taken: Int, afterFreeze: Boolean) {
+  def success = taken > 0 && passed == taken
+}
 
 class Status(val problems: Seq[String], val rows: Seq[RankedRow])
 class Team(val id: Int, val name: String, val notRated: Boolean)
-class Row(val team: Team, val solved: Int, val time: Int, val cells: Map[String, Cell])
-class Cell(val problem: String, val success: Boolean, val failedAttempts: Int, val time: Int) {
 
+class Row(val team: Team, val solved: Int, val time: Int, val cells: Map[String, Cell])
+
+class Cell(val problem: String, val success: Boolean, val failedAttempts: Int, val time: Int) {
   def timeStr = "%02d:%02d".format(time / 3600, (time / 60) % 60)
 
   def toShort =
@@ -38,18 +43,16 @@ class Monitor (dbConfig: DatabaseConfig[JdbcProfile]) {
 
   val db = dbConfig.db
 
-  case class Submit(id: Int, team: Int, problem: String, arrived: Int, success: Boolean, afterFreeze: Boolean)
-
   implicit val getSubmitResult = GetResult(r => Submit(r.nextInt(), r.nextInt(), r.nextString().toUpperCase,
-    r.nextInt(), r.nextBoolean(), r.nextBoolean()))
+    r.nextInt(), r.nextInt(), r.nextInt(), r.nextBoolean()))
 
   def getContestProblems(contest: Int) =
-    sql"""select ID from Problems where Contest = $contest""".as[String]
+    sql"""select ID, Rating from Problems where Contest = $contest""".as[(String, Int)]
 
   def getContestSubmits(contest: Int) =
     sql"""select Submits.ID, Team, Task, unix_timestamp(Submits.Arrived) - unix_timestamp(Contests.Start) as Arrived0,
-           Submits.Passed = Submits.Taken and Submits.Passed > 0, Submits.Arrived > Contests.End from Contests, Submits where
-           Contests.ID = $contest and
+           Submits.Passed, Submits.Taken, Submits.Arrived > Contests.Finish from Contests, Submits where
+           Contests.ID = $contest and Submits.Arrived < Contests.End and Submits.Arrived >= Contests.Start and
            Contests.ID = Submits.Contest and Submits.Finished and Submits.Compiled order by Arrived0""".as[Submit]
 
   def getContestTeams(contest: Int) =
@@ -116,7 +119,7 @@ class Monitor (dbConfig: DatabaseConfig[JdbcProfile]) {
       db.run(getContestTeams(contest)).flatMap { teams =>
         val teams0 = teams.map(teamToTeam)
         db.run(getContestSubmits(contest)).map { submits =>
-          (calculateStatus(problems, teams0, submits.filter(!_.afterFreeze)), calculateStatus(problems, teams0, submits))
+          (calculateStatus(problems.map(_._1), teams0, submits.filter(!_.afterFreeze)), calculateStatus(problems.map(_._1), teams0, submits))
         }
       }
     }
