@@ -16,9 +16,9 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 import scala.concurrent.{ExecutionContext, Future}
 
-class Status(val problems: Seq[String], val rows: Seq[Row])
-class Team(val id: Int, val name: String)
-class Row(val team: Team, val rank: Int, val solved: Int, val time: Int, val cells: Map[String, Cell])
+class Status(val problems: Seq[String], val rows: Seq[RankedRow])
+class Team(val id: Int, val name: String, val notRated: Boolean)
+class Row(val team: Team, val solved: Int, val time: Int, val cells: Map[String, Cell])
 class Cell(val problem: String, val success: Boolean, val failedAttempts: Int, val time: Int) {
 
   def timeStr = "%02d:%02d".format(time / 3600, (time / 60) % 60)
@@ -27,6 +27,11 @@ class Cell(val problem: String, val success: Boolean, val failedAttempts: Int, v
     (if (success) "+" else "-") +
       (if (failedAttempts > 0) failedAttempts.toInt else "") +
       (if (success) " " + timeStr else "")
+}
+
+class RankedRow(val rank: Int, val position: Int, val row: Row) {
+  def rankStr =
+    if (rank == 0) "*" else rank.toString
 }
 
 class Monitor (dbConfig: DatabaseConfig[JdbcProfile]) {
@@ -49,12 +54,12 @@ class Monitor (dbConfig: DatabaseConfig[JdbcProfile]) {
            Contests.ID = Submits.Contest and Submits.Finished and Submits.Compiled order by Arrived0""".as[Submit]
 
   def getContestTeams(contest: Int) =
-    sql"""select Participants.LocalID, Schools.Name, Teams.Num, Teams.Name from Participants, Schools, Teams where
+    sql"""select Participants.LocalID, Schools.Name, Teams.Num, Teams.Name, Participants.NotRated from Participants, Schools, Teams where
          Participants.Contest = $contest and Teams.ID = Participants.Team and Schools.ID = Teams.School
-       """.as[(Int, String, Option[Int], Option[String])]
+       """.as[(Int, String, Option[Int], Option[String], Boolean)]
 
-  def teamToTeam(v: (Int, String, Option[Int], Option[String])): Team =
-    new Team(v._1, v._2 + v._3.map("#" + _.toString).getOrElse("") + v._4.map(": " + _).getOrElse(""))
+  def teamToTeam(v: (Int, String, Option[Int], Option[String], Boolean)): Team =
+    new Team(v._1, v._2 + v._3.map("#" + _.toString).getOrElse("") + v._4.map(": " + _).getOrElse(""), v._5)
 
   def getTimeAndSuccess(submits: Seq[Submit]): Option[Cell] = {
     val xs = submits.sortBy(_.arrived).zipWithIndex
@@ -64,6 +69,21 @@ class Monitor (dbConfig: DatabaseConfig[JdbcProfile]) {
     }.orElse(xs.lastOption.map { m =>
       new Cell(m._1.problem, false, m._2 + 1, 0)
     })
+  }
+
+  def pullRank(ranked: Seq[RankedRow], next: Row): Seq[RankedRow] = {
+    val nextR =
+      ranked.lastOption.map { lastRanked =>
+        if (next.team.notRated)
+          (0, lastRanked.position)
+        else
+          if (lastRanked.row.solved == next.solved && lastRanked.row.time == next.time)
+            (lastRanked.rank, lastRanked.position + 1)
+          else
+            (lastRanked.position + 1, lastRanked.position + 1)
+      }.getOrElse((if (next.team.notRated) 0 else 1, if (next.team.notRated) 0 else 1))
+
+    ranked :+ new RankedRow(nextR._1, nextR._2, next)
   }
 
   def calculateStatus(problems: Seq[String], teams: Seq[Team], submits: Seq[Submit]) = {
@@ -81,14 +101,15 @@ class Monitor (dbConfig: DatabaseConfig[JdbcProfile]) {
     val teamRows = teams.map { team =>
       val cells = rows.getOrElse(team.id, Seq())
 
-      new Row(team, 0, cells.count(_.success),
+      new Row(team, cells.count(_.success),
         cells.filter(_.success).map(x => (x.time / 60) + x.failedAttempts * 20).sum,
         cells.map(x => x.problem -> x).toMap)
 
-    }.toSeq.sortBy(x => (-x.solved, -x.time, x.team.name))
+    }.sortBy(x => (-x.solved, x.time, x.team.name))
 
+    val rankedRows = teamRows.foldLeft(Seq[RankedRow]())(pullRank)
 
-    new Status(problems, teamRows)
+    new Status(problems, rankedRows)
   }
 
   def getStatus(db: Database, contest: Int)(implicit ec: ExecutionContext): Future[(Status, Status)] = {
