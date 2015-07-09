@@ -1,0 +1,30 @@
+@(status: models.Status)
+
+@main("Contester", tab = "monitor") {
+
+<h1>Monitor</h1>
+
+<table class="table table-striped table-bordered">
+    <thead>
+    <tr><th>Rank</th><th>ID</th><th>Name</th><th>Solved</th><th>Time</th>
+        @for(p <- status.problems) {
+            <th>@p</th>
+        }
+    </tr>
+    </thead>
+    <tbody>
+    @for(r <- status.rows) {
+    <tr><td>@r.rank</td><td>@r.team.id</td><td>@r.team.name</td><td>@r.solved</td><td>@r.time</td>
+        @for(p <- status.problems) {
+        <td>
+            @if(r.cells.contains(p)) {
+                @r.cells(p).toShort
+            }
+        </td>
+        }
+    </tr>
+    }
+    </tbody>
+</table>
+
+}

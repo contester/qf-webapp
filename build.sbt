@@ -1,0 +1,42 @@
+name := "qf"
+
+scalaVersion  := "2.11.7"
+
+organization := "org.stingray.contester"
+
+version := "0.0.1-SNAPSHOT"
+
+lazy val root = (project in file(".")).enablePlugins(PlayScala)
+
+mainClass in assembly := Some("play.core.server.NettyServer")
+
+fullClasspath in assembly += Attributed.blank(PlayKeys.playPackageAssets.value)
+
+// Take the first ServerWithStop because it's packaged into two jars
+assemblyMergeStrategy in assembly := {
+  case PathList("play", "core", "server", "ServerWithStop.class") => MergeStrategy.first
+  case other => (assemblyMergeStrategy in assembly).value(other)
+}
+
+resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"
+
+libraryDependencies ++= Seq(
+  cache,
+  "com.adrianhurt" %% "play-bootstrap3" % "0.4",
+  "org.webjars" % "font-awesome" % "4.3.0-1",
+  "org.webjars" % "bootstrap-datepicker" % "1.3.1",
+  "jp.t2v" %% "play2-auth"      % "0.13.1",
+  "jp.t2v" %% "play2-auth-test" % "0.13.1" % "test",
+  "com.typesafe.play" %% "play-slick" % "1.0.0",
+  "mysql" % "mysql-connector-java" % "5.1.36"
+)
+
+routesGenerator := InjectedRoutesGenerator
+
+// Exclude commons-logging because it conflicts with the jcl-over-slf4j
+libraryDependencies ~= { _ map {
+  case m if m.organization == "commons-logging" =>
+    m.exclude("commons-logging", "commons-logging")
+  case m => m
+}}
+

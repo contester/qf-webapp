@@ -1,0 +1,23 @@
+/target/
+/lib_managed/
+/src_managed/
+/project/boot/
+/.idea/workspace.xml
+/conf/application.conf
+
+# Ignore Play! working directory #
+bin/
+/db
+.eclipse
+/lib/
+/logs/
+/modules
+/project/project
+/project/target
+tmp/
+test-result
+server.pid
+*.iml
+*.eml
+/dist/
+.cache

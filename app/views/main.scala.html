@@ -1,0 +1,60 @@
+@(title: String, admin: Boolean = false, tab: String = "", styles: Html = Html(""), scripts: Html = Html(""), modals: Html = Html(""))(content: Html)
+
+<!DOCTYPE html>
+
+<html>
+<head>
+    <title>@if(title !="") {
+    @title :
+    }
+    Contester</title>
+    <link rel="stylesheet" media="screen" href="@routes.Assets.at("lib/bootstrap/css/bootstrap.min.css")">
+    <link rel="stylesheet" media="screen" href="@routes.Assets.at("lib/font-awesome/css/font-awesome.min.css")">
+    <link rel="stylesheet" media="screen" href="@routes.Assets.at("lib/bootstrap-datepicker/css/datepicker3.css")">
+    @styles
+    <style>
+        body {
+        padding-top: 60px; /* 60px to make the container go all the way to the bottom of the topbar */
+        }
+    </style>
+    <script src="@routes.Assets.at("lib/jquery/jquery.min.js")" type="text/javascript"></script>
+	<script src="@routes.Assets.at("lib/bootstrap/js/bootstrap.min.js")" type="text/javascript"></script>
+    <script src="@routes.Assets.at("lib/bootstrap-datepicker/js/bootstrap-datepicker.js")" type="text/javascript"></script>
+    @scripts
+</head>
+<body>
+
+<nav class="navbar navbar-inverse navbar-fixed-top">
+  <div class="container-fluid">
+    <!-- Brand and toggle get grouped for better mobile display -->
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1">
+        <span class="sr-only">Toggle navigation</span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="#">Contester@if(title != ""){
+        : @title
+        }</a>
+    </div>
+
+    <!-- Collect the nav links, forms, and other content for toggling -->
+    <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
+      <span class="nav navbar-right">
+      @if(admin) {
+      <a href="/users" class="btn btn-danger navbar-btn" type="button">Админ</a>
+      }
+        <a href="/logout" class="btn btn-default navbar-btn" type="button"><span class="glyphicon glyphicon-remove"></span> Выйти</a>
+      </span>
+    </div><!-- /.navbar-collapse -->
+  </div><!-- /.container-fluid -->
+</nav>
+
+<div class="container">
+    @content
+</div>
+
+@modals
+</body>
+</html>

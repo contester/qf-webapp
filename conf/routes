@@ -1,0 +1,3 @@
+GET /monitor/:id controllers.Application.monitor(id: Int)
+
+GET     /assets/*file				controllers.Assets.at(path="/public", file)
