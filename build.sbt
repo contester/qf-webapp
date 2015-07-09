@@ -22,7 +22,7 @@ resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repos
 
 libraryDependencies ++= Seq(
   cache,
-  "com.adrianhurt" %% "play-bootstrap3" % "0.4",
+  "com.adrianhurt" %% "play-bootstrap3" % "0.4.4-P24",
   "org.webjars" % "font-awesome" % "4.3.0-1",
   "org.webjars" % "bootstrap-datepicker" % "1.3.1",
   "jp.t2v" %% "play2-auth"      % "0.13.1",

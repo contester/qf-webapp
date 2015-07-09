@@ -25,8 +25,7 @@ class Cell(val problem: String, val success: Boolean, val failedAttempts: Int, v
 
   def toShort =
     (if (success) "+" else "-") +
-      (if (failedAttempts > 0) failedAttempts.toInt else "") +
-      (if (success) " " + timeStr else "")
+      (if (failedAttempts > 0) failedAttempts.toInt else "")
 }
 
 class RankedRow(val rank: Int, val position: Int, val row: Row) {

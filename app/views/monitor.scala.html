@@ -1,10 +1,8 @@
 @(status: models.Status)
 
-@main("Contester", tab = "monitor") {
+@main("Monitor", tab = "monitor") {
 
-<h1>Monitor</h1>
-
-<table class="table table-striped table-bordered">
+<table class="table table-hover table-bordered table-responsive">
     <thead>
     <tr><th>Rank</th><th>ID</th><th>Name</th><th>Solved</th><th>Penalty</th>
         @for(p <- status.problems) {
@@ -14,11 +12,16 @@
     </thead>
     <tbody>
     @for(r <- status.rows) {
-    <tr><td>@r.rankStr</td><td>@r.row.team.id</td><td>@r.row.team.name</td><td>@r.row.solved</td><td>@r.row.time</td>
+    <tr><th scope="row">@r.rankStr</th><td>@r.row.team.id</td><td>@r.row.team.name</td><td>@r.row.solved</td><td>@r.row.time</td>
         @for(p <- status.problems) {
-        <td>
+        <td class="text-center">
             @if(r.row.cells.contains(p)) {
-                @r.row.cells(p).toShort
+                @if(r.row.cells(p).success) {
+                    <span class="text-success"><strong>@r.row.cells(p).toShort</strong></span><br/>
+                    <span class="text-info"><small>@r.row.cells(p).timeStr</small></span>
+                } else {
+                    <span class="text-muted">@r.row.cells(p).toShort</span>
+                }
             }
         </td>
         }
