@@ -6,6 +6,7 @@ import javax.inject.Inject
 import org.jboss.netty.util.{Timeout, TimerTask, HashedWheelTimer}
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.mvc.{Action, Controller}
+import play.twirl.api.Html
 import slick.backend.DatabaseConfig
 import slick.dbio.DBIO
 import slick.driver.JdbcProfile
@@ -22,15 +23,72 @@ case class Submit(id: Int, team: Int, problem: String, arrived: Int, passed: Int
 
 case class Team(val id: Int, val name: String, val notRated: Boolean)
 
-trait AnyStatus
+trait AScore extends Ordered[AScore]
+trait ACell
+
+case class RankedRow[A <: AScore, C <: ACell](rank: Int, team: Team, score: A, cells: Map[String, C]) {
+  def rankStr =
+    if (rank == 0) "*" else rank.toString
+}
+
+class AStatus[S <: AScore, C <: ACell](problems: Seq[String], rows: Seq[RankedRow[S, C]])
+
+object School {
+  case class Cell(val score: Double, val full: Boolean) extends ACell
+
+  object Cell {
+    def calculate(base: Double, fraction: Double, failedAttempts: Int) = {
+      val tops = {
+        val x = base - failedAttempts
+        if (x < 20)
+          20
+        else
+          x
+      }
+      if (fraction == 1)
+        tops
+      else {
+        val x = tops * 2 * fraction / 3
+        if (x < 5)
+          0.0
+        else
+          x
+      }
+    }
+
+    def submitFraction(s: Submit) =
+      if (s.taken == 0)
+        0.0
+      else
+        s.passed.toDouble / s.taken.toDouble
+
+    def apply(submits: Seq[Submit]): Cell = {
+      val maxScore = submits.sortBy(_.arrived).zipWithIndex.map(x => calculate(30,submitFraction(x._1), x._2)).max
+      new Cell(maxScore, submits.exists(submitFraction(_) == 1))
+    }
+  }
+
+  case class Score(val score: Double) extends AScore {
+    override def compare(that: AScore): Int =
+      that match {
+        case other: Score => other.score.compare(score)
+        case x => x.hashCode().compare(hashCode())
+      }
+  }
+
+  object Score {
+    def apply(cells: Seq[Cell]): Score =
+      new Score(cells.map(_.score).sum)
+  }
+
+}
 
 object ACM {
-
-  case class Status(val problems: Seq[String], val rows: Seq[RankedRow]) extends AnyStatus
+  case class Status(val problems: Seq[String], val rows: Seq[ACMRankedRow]) extends AStatus[ACM.Score, ACM.Cell](problems, rows)
 
   case class Row(val team: Team, val score: Score, val cells: Map[String, Cell])
 
-  trait Cell {
+  trait Cell extends ACell {
     def success: Boolean = false
     def toShort: String
     def timeStr: String = ""
@@ -42,30 +100,23 @@ object ACM {
     override def toShort: String = "+" + (if (!failedAttempts.isEmpty) failedAttempts.length.toString else "")
     override def timeStr = "%02d:%02d".format(time / 3600, (time / 60) % 60)
   }
+
   case class Failure(val failedAttempts: Seq[Int]) extends Cell {
     override def toShort: String = if (!failedAttempts.isEmpty) {"-" + failedAttempts.length.toString} else ""
   }
 
-  case class Score(val solved: Int, val penalty: Int) extends Ordered[Score] {
-    override def compare(that: Score): Int = {
-      val r = that.solved.compare(solved)
-      if (r == 0) {
-        penalty.compare(that.penalty)
-      } else r
+  case class Score(val solved: Int, val penalty: Int) extends AScore {
+    override def compare(that: AScore): Int =
+    that match {
+      case other: Score =>
+        val r = other.solved.compare(solved)
+        if (r == 0) {
+          penalty.compare(other.penalty)
+        } else r
+
+      case x =>
+        x.hashCode().compare(hashCode())
     }
-  }
-
-  class noCell(val problem: String, val success: Boolean, val failedAttempts: Int, val time: Int) {
-    def timeStr = "%02d:%02d".format(time / 3600, (time / 60) % 60)
-
-    def toShort =
-      (if (success) "+" else "-") +
-        (if (failedAttempts > 0) failedAttempts.toInt else "")
-  }
-
-  class RankedRow(val rank: Int, val team: Team, val score: Score, val cells: Map[String, Cell]) {
-    def rankStr =
-      if (rank == 0) "*" else rank.toString
   }
 
   def submitFold(state: Cell, submit: Submit): Cell =
@@ -98,7 +149,9 @@ object ACM {
   def getScore(cells: Seq[Cell]) =
     cells.foldLeft(new Score(0, 0))(cellFold)
 
-  type RankState = (Seq[RankedRow], Int)
+  type ACMRankedRow = RankedRow[Score, Cell]
+
+  type RankState = (Seq[ACMRankedRow], Int)
 
   def pullRank(state: RankState, next: Row): RankState = {
     val position = state._2
@@ -113,7 +166,7 @@ object ACM {
           (position + 1, position + 1)
       }.getOrElse(1, 1)
 
-    (state._1 :+ new RankedRow(nextR._1, next.team, next.score, next.cells), nextR._2)
+    (state._1 :+ new ACMRankedRow(nextR._1, next.team, next.score, next.cells), nextR._2)
   }
 
   def calculateStatus(problems: Seq[String], teams: Seq[Team], submits: Seq[Submit]) = {
@@ -136,7 +189,7 @@ object ACM {
       new Row(team, score, cells)
     }.sortBy(_.score)
 
-    val rankedRows = teamRows.foldLeft((Seq[RankedRow](), 0))(pullRank)._1
+    val rankedRows = teamRows.foldLeft((Seq[ACMRankedRow](), 0))(pullRank)._1
 
     new Status(problems, rankedRows)
   }

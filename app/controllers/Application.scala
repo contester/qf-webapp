@@ -26,7 +26,6 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider, lifecycle
     Future.successful()
   }
 
-
   def monitor(id: Int) = Action.async { implicit request =>
     val np = Promise[(ACM.Status, ACM.Status)]
     monitorModel.contestMonitorsFu.putIfAbsent(id, np).getOrElse(np).future.map(x => Ok(html.monitor(x._2)))
