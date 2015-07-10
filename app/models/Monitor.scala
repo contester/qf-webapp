@@ -20,22 +20,126 @@ case class Submit(id: Int, team: Int, problem: String, arrived: Int, passed: Int
   def success = taken > 0 && passed == taken
 }
 
-class Status(val problems: Seq[String], val rows: Seq[RankedRow])
-class Team(val id: Int, val name: String, val notRated: Boolean)
+case class Team(val id: Int, val name: String, val notRated: Boolean)
 
-class Row(val team: Team, val solved: Int, val time: Int, val cells: Map[String, Cell])
+trait AnyStatus
 
-class Cell(val problem: String, val success: Boolean, val failedAttempts: Int, val time: Int) {
-  def timeStr = "%02d:%02d".format(time / 3600, (time / 60) % 60)
+object ACM {
 
-  def toShort =
-    (if (success) "+" else "-") +
-      (if (failedAttempts > 0) failedAttempts.toInt else "")
-}
+  case class Status(val problems: Seq[String], val rows: Seq[RankedRow]) extends AnyStatus
 
-class RankedRow(val rank: Int, val position: Int, val row: Row) {
-  def rankStr =
-    if (rank == 0) "*" else rank.toString
+  case class Row(val team: Team, val score: Score, val cells: Map[String, Cell])
+
+  trait Cell {
+    def success: Boolean = false
+    def toShort: String
+    def timeStr: String = ""
+  }
+
+  case class Success(val failedAttempts: Seq[Int], val time: Int) extends Cell {
+    override def success: Boolean = true
+
+    override def toShort: String = "+" + (if (!failedAttempts.isEmpty) failedAttempts.length.toString else "")
+    override def timeStr = "%02d:%02d".format(time / 3600, (time / 60) % 60)
+  }
+  case class Failure(val failedAttempts: Seq[Int]) extends Cell {
+    override def toShort: String = if (!failedAttempts.isEmpty) {"-" + failedAttempts.length.toString} else ""
+  }
+
+  case class Score(val solved: Int, val penalty: Int) extends Ordered[Score] {
+    override def compare(that: Score): Int = {
+      val r = that.solved.compare(solved)
+      if (r == 0) {
+        penalty.compare(that.penalty)
+      } else r
+    }
+  }
+
+  class noCell(val problem: String, val success: Boolean, val failedAttempts: Int, val time: Int) {
+    def timeStr = "%02d:%02d".format(time / 3600, (time / 60) % 60)
+
+    def toShort =
+      (if (success) "+" else "-") +
+        (if (failedAttempts > 0) failedAttempts.toInt else "")
+  }
+
+  class RankedRow(val rank: Int, val team: Team, val score: Score, val cells: Map[String, Cell]) {
+    def rankStr =
+      if (rank == 0) "*" else rank.toString
+  }
+
+  def submitFold(state: Cell, submit: Submit): Cell =
+    state match {
+      case Failure(failedAttempts) =>
+        if (submit.success)
+          new Success(failedAttempts.filter(_ < submit.arrived), submit.arrived)
+        else
+          new Failure(failedAttempts :+ submit.arrived)
+      case Success(failedAttempts, arrived) if (arrived > submit.arrived) =>
+        if (submit.success)
+          new Success(failedAttempts.filter(_ < submit.arrived), submit.arrived)
+        else
+          new Success(failedAttempts :+ submit.arrived, arrived)
+      case x: Cell =>
+        x
+    }
+
+  def getCell(submits: Seq[Submit]): Cell =
+    submits.foldLeft((new Failure(Nil)).asInstanceOf[Cell])(submitFold)
+
+  def cellFold(state: Score, cell: Cell) =
+    cell match {
+      case Success(failedAttempts, time) =>
+        new Score(state.solved + 1, state.penalty + (time / 60) + failedAttempts.length * 20)
+      case _ =>
+        state
+    }
+
+  def getScore(cells: Seq[Cell]) =
+    cells.foldLeft(new Score(0, 0))(cellFold)
+
+  type RankState = (Seq[RankedRow], Int)
+
+  def pullRank(state: RankState, next: Row): RankState = {
+    val position = state._2
+
+    val nextR =
+      if (next.team.notRated)
+        (0, position)
+      else state._1.lastOption.map { lastRanked =>
+        if (lastRanked.score == next.score)
+          (lastRanked.rank, position + 1)
+        else
+          (position + 1, position + 1)
+      }.getOrElse(1, 1)
+
+    (state._1 :+ new RankedRow(nextR._1, next.team, next.score, next.cells), nextR._2)
+  }
+
+  def calculateStatus(problems: Seq[String], teams: Seq[Team], submits: Seq[Submit]) = {
+    import scala.collection.JavaConversions.asJavaIterable
+
+    val rows = submits.groupBy(_.team).map {
+      case (teamId, s0) =>
+      val cells: Map[String, Cell] = s0.groupBy(_.problem).map {
+                  case (problemId, s1) =>
+                      problemId -> getCell(s1)
+                }
+
+              teamId -> cells
+          }
+
+    val teamRows = teams.map { team =>
+      val cells = rows.getOrElse(team.id, Seq()).toMap
+      val score = getScore(cells.values.toSeq)
+
+      new Row(team, score, cells)
+    }.sortBy(_.score)
+
+    val rankedRows = teamRows.foldLeft((Seq[RankedRow](), 0))(pullRank)._1
+
+    new Status(problems, rankedRows)
+  }
 }
 
 class Monitor (dbConfig: DatabaseConfig[JdbcProfile]) {
@@ -63,63 +167,13 @@ class Monitor (dbConfig: DatabaseConfig[JdbcProfile]) {
   def teamToTeam(v: (Int, String, Option[Int], Option[String], Boolean)): Team =
     new Team(v._1, v._2 + v._3.map("#" + _.toString).getOrElse("") + v._4.map(": " + _).getOrElse(""), v._5)
 
-  def getTimeAndSuccess(submits: Seq[Submit]): Option[Cell] = {
-    val xs = submits.sortBy(_.arrived).zipWithIndex
 
-    xs.find(_._1.success).map { m =>
-      new Cell(m._1.problem, true, m._2, m._1.arrived)
-    }.orElse(xs.lastOption.map { m =>
-      new Cell(m._1.problem, false, m._2 + 1, 0)
-    })
-  }
-
-  def pullRank(ranked: Seq[RankedRow], next: Row): Seq[RankedRow] = {
-    val nextR =
-      ranked.lastOption.map { lastRanked =>
-        if (next.team.notRated)
-          (0, lastRanked.position)
-        else
-          if (lastRanked.row.solved == next.solved && lastRanked.row.time == next.time)
-            (lastRanked.rank, lastRanked.position + 1)
-          else
-            (lastRanked.position + 1, lastRanked.position + 1)
-      }.getOrElse((if (next.team.notRated) 0 else 1, if (next.team.notRated) 0 else 1))
-
-    ranked :+ new RankedRow(nextR._1, nextR._2, next)
-  }
-
-  def calculateStatus(problems: Seq[String], teams: Seq[Team], submits: Seq[Submit]) = {
-    import scala.collection.JavaConversions.asJavaIterable
-
-    val rows = submits.groupBy(_.team).map {
-      case (teamId, s0) =>
-        val cells = s0.groupBy(_.problem).map {
-          case (problemId, s1) =>
-            getTimeAndSuccess(s1)
-        }.flatten.toSeq
-
-        teamId -> cells
-    }
-    val teamRows = teams.map { team =>
-      val cells = rows.getOrElse(team.id, Seq())
-
-      new Row(team, cells.count(_.success),
-        cells.filter(_.success).map(x => (x.time / 60) + x.failedAttempts * 20).sum,
-        cells.map(x => x.problem -> x).toMap)
-
-    }.sortBy(x => (-x.solved, x.time, x.team.name))
-
-    val rankedRows = teamRows.foldLeft(Seq[RankedRow]())(pullRank)
-
-    new Status(problems, rankedRows)
-  }
-
-  def getStatus(db: Database, contest: Int)(implicit ec: ExecutionContext): Future[(Status, Status)] = {
+  def getStatus(db: Database, contest: Int)(implicit ec: ExecutionContext): Future[(ACM.Status, ACM.Status)] = {
     db.run(getContestProblems(contest)).flatMap { problems =>
       db.run(getContestTeams(contest)).flatMap { teams =>
         val teams0 = teams.map(teamToTeam)
         db.run(getContestSubmits(contest)).map { submits =>
-          (calculateStatus(problems.map(_._1), teams0, submits.filter(!_.afterFreeze)), calculateStatus(problems.map(_._1), teams0, submits))
+          (ACM.calculateStatus(problems.map(_._1), teams0, submits.filter(!_.afterFreeze)), ACM.calculateStatus(problems.map(_._1), teams0, submits))
         }
       }
     }
@@ -128,8 +182,15 @@ class Monitor (dbConfig: DatabaseConfig[JdbcProfile]) {
   val contestMonitors = {
     import scala.collection.JavaConverters._
     import java.util.concurrent.ConcurrentHashMap
-    new ConcurrentHashMap[Int, (Status, Status)]().asScala
+    new ConcurrentHashMap[Int, (ACM.Status, ACM.Status)]().asScala
   }
+
+  val contestMonitorsFu = {
+    import scala.collection.JavaConverters._
+    import java.util.concurrent.ConcurrentHashMap
+    new ConcurrentHashMap[Int, Promise[(ACM.Status, ACM.Status)]]().asScala
+  }
+
 
   val getContests = sql"select ID, SchoolMode from Contests".as[(Int, Boolean)]
 
@@ -145,6 +206,12 @@ class Monitor (dbConfig: DatabaseConfig[JdbcProfile]) {
       statuses.foreach {
         case (contestId, contestStatus) =>
           contestMonitors.put(contestId, contestStatus)
+          val m = contestMonitorsFu.putIfAbsent(contestId, Promise[(ACM.Status, ACM.Status)]).get
+            if (m.isCompleted) {
+              contestMonitorsFu.put(contestId, Promise.successful(contestStatus))
+            } else {
+              m.success(contestStatus)
+            }
       }
     }
 

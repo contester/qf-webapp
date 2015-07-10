@@ -1,4 +1,4 @@
-@(status: models.Status)
+@(status: models.ACM.Status)
 
 @main("Monitor", tab = "monitor") {
 
@@ -12,15 +12,15 @@
     </thead>
     <tbody>
     @for(r <- status.rows) {
-    <tr><th scope="row">@r.rankStr</th><td>@r.row.team.id</td><td>@r.row.team.name</td><td>@r.row.solved</td><td>@r.row.time</td>
+    <tr><th scope="row">@r.rankStr</th><td>@r.team.id</td><td>@r.team.name</td><td>@r.score.solved</td><td>@r.score.penalty</td>
         @for(p <- status.problems) {
         <td class="text-center">
-            @if(r.row.cells.contains(p)) {
-                @if(r.row.cells(p).success) {
-                    <span class="text-success"><strong>@r.row.cells(p).toShort</strong></span><br/>
-                    <span class="text-info"><small>@r.row.cells(p).timeStr</small></span>
+            @if(r.cells.contains(p)) {
+                @if(r.cells(p).success) {
+                    <span class="text-success"><strong>@r.cells(p).toShort</strong></span><br/>
+                    <span class="text-info"><small>@r.cells(p).timeStr</small></span>
                 } else {
-                    <span class="text-muted">@r.row.cells(p).toShort</span>
+                    <span class="text-muted">@r.cells(p).toShort</span>
                 }
             }
         </td>

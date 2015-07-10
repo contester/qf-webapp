@@ -3,7 +3,7 @@ package controllers
 import javax.inject.Inject
 
 import jp.t2v.lab.play2.auth.{AuthenticationElement, AuthElement, LoginLogout}
-import models.Monitor
+import models.{ACM, Monitor}
 import play.api.Logger
 import play.api.data.Form
 import play.api.data.Forms._
@@ -14,7 +14,7 @@ import play.api.mvc.{Action, Controller}
 import slick.driver.JdbcProfile
 import views.html
 
-import scala.concurrent.Future
+import scala.concurrent.{Promise, Future}
 
 class Application @Inject() (dbConfigProvider: DatabaseConfigProvider, lifecycle: ApplicationLifecycle) extends Controller {
 
@@ -28,7 +28,8 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider, lifecycle
 
 
   def monitor(id: Int) = Action.async { implicit request =>
-    Future.successful(Ok(html.monitor(monitorModel.contestMonitors(id)._1)))
+    val np = Promise[(ACM.Status, ACM.Status)]
+    monitorModel.contestMonitorsFu.putIfAbsent(id, np).getOrElse(np).future.map(x => Ok(html.monitor(x._2)))
   }
 
 }
