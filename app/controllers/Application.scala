@@ -3,7 +3,7 @@ package controllers
 import javax.inject.Inject
 
 import jp.t2v.lab.play2.auth.{AuthenticationElement, AuthElement, LoginLogout}
-import models.{ACM, Monitor}
+import models.{AnyStatus, ACM, Monitor}
 import play.api.Logger
 import play.api.data.Form
 import play.api.data.Forms._
@@ -27,7 +27,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider, lifecycle
   }
 
   def monitor(id: Int) = Action.async { implicit request =>
-    val np = Promise[(ACM.Status, ACM.Status)]
+    val np = Promise[(AnyStatus, AnyStatus)]
     monitorModel.contestMonitorsFu.putIfAbsent(id, np).getOrElse(np).future.map(x => Ok(html.monitor(x._2)))
   }
 

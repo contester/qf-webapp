@@ -38,10 +38,19 @@ object School {
   case class Score(val score: Double) extends Ordered[Score] {
     override def compare(that: Score): Int =
       that.score.compare(score)
+
+    def toShort = f"$score%.2f"
+    override def equals(obj: scala.Any): Boolean =
+      obj match {
+        case other: Score => score == other.score
+        case _ => super.equals(obj)
+      }
   }
 
   case class Status(problems: Seq[String], rows: Seq[RankedRow]) extends AnyStatus
-  case class Cell(val score: Double, val full: Boolean)
+  case class Cell(val score: Double, val full: Boolean) {
+    def toShort = f"$score%.2f"
+  }
 
   object Cell {
     def calculate(base: Double, fraction: Double, failedAttempts: Int) = {
@@ -82,7 +91,11 @@ object School {
   }
 
   case class Row(team: Team, score: Score, cells: Map[String, Cell])
-  case class RankedRow(rank: Int, team: Team, score: Score, cells: Map[String, Cell])
+  case class RankedRow(rank: Int, team: Team, score: Score, cells: Map[String, Cell]) {
+    def rankStr =
+      if (rank == 0) "*" else rank.toString
+
+  }
 
     def calculateStatus(problems: Seq[(String, Int)], teams: Seq[Team], submits: Seq[Submit]): Status = {
       import scala.collection.JavaConversions.asJavaIterable
@@ -163,6 +176,13 @@ object ACM {
         penalty.compare(that.penalty)
       } else r
     }
+
+    override def equals(obj: scala.Any): Boolean =
+      obj match {
+        case other: Score => solved == other.solved && penalty == other.penalty
+        case _ => super.equals(obj)
+      }
+
   }
 
   def submitFold(state: Cell, submit: Submit): Cell =
@@ -265,12 +285,17 @@ class Monitor (dbConfig: DatabaseConfig[JdbcProfile]) {
     new Team(v._1, v._2 + v._3.map("#" + _.toString).getOrElse("") + v._4.map(": " + _).getOrElse(""), v._5)
 
 
-  def getStatus(db: Database, contest: Int)(implicit ec: ExecutionContext): Future[(ACM.Status, ACM.Status)] = {
+  def getStatus(db: Database, contest: Int, schoolMode: Boolean)(implicit ec: ExecutionContext): Future[(AnyStatus, AnyStatus)] = {
     db.run(getContestProblems(contest)).flatMap { problems =>
       db.run(getContestTeams(contest)).flatMap { teams =>
         val teams0 = teams.map(teamToTeam)
         db.run(getContestSubmits(contest)).map { submits =>
-          (ACM.calculateStatus(problems.map(_._1), teams0, submits.filter(!_.afterFreeze)), ACM.calculateStatus(problems.map(_._1), teams0, submits))
+          val sub0 = submits.filter(!_.afterFreeze)
+          if (schoolMode)
+            (School.calculateStatus(problems, teams0, sub0), School.calculateStatus(problems, teams0, submits))
+          else
+            (ACM.calculateStatus(problems.map(_._1), teams0, sub0),
+              ACM.calculateStatus(problems.map(_._1), teams0, submits))
         }
       }
     }
@@ -279,20 +304,20 @@ class Monitor (dbConfig: DatabaseConfig[JdbcProfile]) {
   val contestMonitors = {
     import scala.collection.JavaConverters._
     import java.util.concurrent.ConcurrentHashMap
-    new ConcurrentHashMap[Int, (ACM.Status, ACM.Status)]().asScala
+    new ConcurrentHashMap[Int, (AnyStatus, AnyStatus)]().asScala
   }
 
   val contestMonitorsFu = {
     import scala.collection.JavaConverters._
     import java.util.concurrent.ConcurrentHashMap
-    new ConcurrentHashMap[Int, Promise[(ACM.Status, ACM.Status)]]().asScala
+    new ConcurrentHashMap[Int, Promise[(AnyStatus, AnyStatus)]]().asScala
   }
 
 
   val getContests = sql"select ID, SchoolMode from Contests".as[(Int, Boolean)]
 
   def getContestState(contest: Int, schoolMode: Boolean) =
-    getStatus(db, contest)
+    getStatus(db, contest, schoolMode)
 
   def rebuildMonitors: Future[Unit] =
     dbConfig.db.run(getContests).flatMap { contests =>
@@ -303,7 +328,7 @@ class Monitor (dbConfig: DatabaseConfig[JdbcProfile]) {
       statuses.foreach {
         case (contestId, contestStatus) =>
           contestMonitors.put(contestId, contestStatus)
-          val np = Promise[(ACM.Status, ACM.Status)]
+          val np = Promise[(AnyStatus, AnyStatus)]
           val m = contestMonitorsFu.putIfAbsent(contestId,np).getOrElse(np)
             if (m.isCompleted) {
               contestMonitorsFu.put(contestId, Promise.successful(contestStatus))
