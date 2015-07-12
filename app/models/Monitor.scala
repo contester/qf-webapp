@@ -11,6 +11,7 @@ import slick.backend.DatabaseConfig
 import slick.dbio.DBIO
 import slick.driver.JdbcProfile
 import slick.jdbc.GetResult
+import spire.math.Rational
 import views.html
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -35,7 +36,8 @@ case class RankedRow[A <: AScore, C <: ACell](rank: Int, team: Team, score: A, c
 */
 
 object School {
-  case class Score(val score: Double) extends Ordered[Score] {
+  /*
+  case class Score(val score: Rational) extends Ordered[Score] {
     override def compare(that: Score): Int =
       that.score.compare(score)
 
@@ -45,15 +47,27 @@ object School {
         case other: Score => score == other.score
         case _ => super.equals(obj)
       }
-  }
+  }*/
 
   case class Status(problems: Seq[String], rows: Seq[RankedRow]) extends AnyStatus
-  case class Cell(val score: Double, val full: Boolean) {
-    def toShort = f"$score%.2f"
+  case class Cell(val score: Rational, val full: Boolean) {
+    def toShort =
+      if (score.isWhole) {
+        if (score == 0)
+          ""
+        else
+          s"$score"
+
+      }
+      else {
+        val f: Float = score.toFloat
+        f"$f%.2f"
+      }
+
   }
 
   object Cell {
-    def calculate(base: Double, fraction: Double, failedAttempts: Int) = {
+    def calculate(base: Int, fraction: Rational, failedAttempts: Int): Rational = {
       val tops = {
         val x = base - failedAttempts
         if (x < 20)
@@ -72,11 +86,11 @@ object School {
       }
     }
 
-    def submitFraction(s: Submit) =
+    def submitFraction(s: Submit): Rational =
       if (s.taken == 0)
-        0.0
+        Rational(0)
       else
-        s.passed.toDouble / s.taken.toDouble
+        Rational(s.passed,s.taken)
 
     def apply(submits: Seq[Submit]): Cell = {
       val maxScore = submits.sortBy(_.arrived).zipWithIndex.map(x => calculate(30,submitFraction(x._1), x._2)).max
@@ -86,12 +100,14 @@ object School {
 
 
   object Score {
-    def apply(cells: Seq[Cell]): Score =
-      new Score(cells.map(_.score).sum)
+    def apply(cells: Seq[Cell]): Rational = {
+      import spire.implicits._
+      cells.map(_.score).qsum
+    }
   }
 
-  case class Row(team: Team, score: Score, cells: Map[String, Cell])
-  case class RankedRow(rank: Int, team: Team, score: Score, cells: Map[String, Cell]) {
+  case class Row(team: Team, score: Rational, cells: Map[String, Cell])
+  case class RankedRow(rank: Int, team: Team, score: Rational, cells: Map[String, Cell]) {
     def rankStr =
       if (rank == 0) "*" else rank.toString
 
@@ -115,7 +131,7 @@ object School {
         val score = Score(cells.values.toSeq)
 
         new Row(team, score, cells)
-      }.sortBy(_.score)
+      }.sortBy(_.score).reverse
 
       val rankedRows = teamRows.foldLeft((Seq[RankedRow](), 0))(pullRank)._1
 
