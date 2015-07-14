@@ -18,14 +18,9 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 import scala.concurrent.{Promise, ExecutionContext, Future}
 
-case class Submit(id: Int, team: Int, problem: String, arrived: Int, passed: Int, taken: Int, afterFreeze: Boolean) {
-  def success = taken > 0 && passed == taken
-}
-
 trait AnyStatus {
   def problems: Seq[String]
 }
-
 
 object School {
   implicit val scale = FixedScale(100)
@@ -62,7 +57,7 @@ object School {
         Rational(s.passed,s.taken)
 
     def apply(submits: Seq[Submit]): Cell = {
-      val maxScore = submits.sortBy(_.arrived).zipWithIndex.map(x => calculate(30,submitFraction(x._1), x._2)).max
+      val maxScore = submits.sortBy(_.arrivedSeconds).zipWithIndex.map(x => calculate(30,submitFraction(x._1), x._2)).max
       new Cell(maxScore, submits.exists(submitFraction(_) == 1))
     }
   }
@@ -91,7 +86,7 @@ object School {
     def calculateStatus(problems: Seq[(String, Int)], teams: Seq[LocalTeam], submits: Seq[Submit]): Status = {
       import scala.collection.JavaConversions.asJavaIterable
 
-      val rows = submits.groupBy(_.team).map {
+      val rows = submits.groupBy(_.teamId).map {
         case (teamId, s0) =>
           val cells: Map[String, Cell] = s0.groupBy(_.problem).map {
             case (problemId, s1) =>
@@ -180,14 +175,14 @@ object ACM {
     state match {
       case Failure(failedAttempts) =>
         if (submit.success)
-          new Success(failedAttempts.filter(_ < submit.arrived), submit.arrived)
+          new Success(failedAttempts.filter(_ < submit.arrivedSeconds), submit.arrivedSeconds)
         else
-          new Failure(failedAttempts :+ submit.arrived)
-      case Success(failedAttempts, arrived) if (arrived > submit.arrived) =>
+          new Failure(failedAttempts :+ submit.arrivedSeconds)
+      case Success(failedAttempts, arrived) if (arrived > submit.arrivedSeconds) =>
         if (submit.success)
-          new Success(failedAttempts.filter(_ < submit.arrived), submit.arrived)
+          new Success(failedAttempts.filter(_ < submit.arrivedSeconds), submit.arrivedSeconds)
         else
-          new Success(failedAttempts :+ submit.arrived, arrived)
+          new Success(failedAttempts :+ submit.arrivedSeconds, arrived)
       case x: Cell =>
         x
     }
@@ -227,7 +222,7 @@ object ACM {
   def calculateStatus(problems: Seq[String], teams: Seq[LocalTeam], submits: Seq[Submit]) = {
     import scala.collection.JavaConversions.asJavaIterable
 
-    val rows = submits.groupBy(_.team).map {
+    val rows = submits.groupBy(_.teamId).map {
       case (teamId, s0) =>
       val cells: Map[String, Cell] = s0.groupBy(_.problem).map {
                   case (problemId, s1) =>
@@ -255,17 +250,8 @@ class Monitor (dbConfig: DatabaseConfig[JdbcProfile]) {
 
   val db = dbConfig.db
 
-  implicit val getSubmitResult = GetResult(r => Submit(r.nextInt(), r.nextInt(), r.nextString().toUpperCase,
-    r.nextInt(), r.nextInt(), r.nextInt(), r.nextBoolean()))
-
   def getContestProblems(contest: Int) =
     sql"""select ID, Rating from Problems where Contest = $contest""".as[(String, Int)]
-
-  def getContestSubmits(contest: Int) =
-    sql"""select Submits.ID, Team, Task, unix_timestamp(Submits.Arrived) - unix_timestamp(Contests.Start) as Arrived0,
-           Submits.Passed, Submits.Taken, Submits.Arrived > Contests.Finish from Contests, Submits where
-           Contests.ID = $contest and Submits.Arrived < Contests.End and Submits.Arrived >= Contests.Start and
-           Contests.ID = Submits.Contest and Submits.Finished and Submits.Compiled order by Arrived0""".as[Submit]
 
   implicit val getLocalTeam = GetResult(r =>
     LocalTeam(r.nextInt(), r.nextString(), r.nextIntOption(), r.nextString(), r.nextBoolean()))
@@ -279,7 +265,7 @@ class Monitor (dbConfig: DatabaseConfig[JdbcProfile]) {
   def getStatus(db: Database, contest: Int, schoolMode: Boolean)(implicit ec: ExecutionContext): Future[(AnyStatus, AnyStatus)] = {
     db.run(getContestProblems(contest)).flatMap { problems =>
       db.run(getContestTeams(contest)).flatMap { teams =>
-        db.run(getContestSubmits(contest)).map { submits =>
+        db.run(Submits.getContestSubmits(contest)).map { submits =>
           val sub0 = submits.filter(!_.afterFreeze)
           if (schoolMode)
             (School.calculateStatus(problems, teams, sub0), School.calculateStatus(problems, teams, submits))
