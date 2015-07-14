@@ -10,7 +10,7 @@ import play.twirl.api.Html
 import slick.backend.DatabaseConfig
 import slick.dbio.DBIO
 import slick.driver.JdbcProfile
-import slick.jdbc.GetResult
+import slick.jdbc.{JdbcBackend, GetResult}
 import spire.math.Rational
 import views.html
 
@@ -102,7 +102,7 @@ object School {
   object Score {
     def apply(cells: Seq[Cell]): Rational = {
       import spire.implicits._
-      cells.map(_.score).qsum
+      cells.map(_.score).foldLeft(Rational(0))(_+_)
     }
   }
 
@@ -337,10 +337,8 @@ class Monitor (dbConfig: DatabaseConfig[JdbcProfile]) {
 
   def rebuildMonitors: Future[Unit] =
     dbConfig.db.run(getContests).flatMap { contests =>
-      println(contests)
       Future.sequence(contests.map(x => getContestState(x._1, x._2).map(y => (x._1, y))))
     }.map { statuses =>
-      println(statuses)
       statuses.foreach {
         case (contestId, contestStatus) =>
           contestMonitors.put(contestId, contestStatus)
@@ -360,7 +358,6 @@ class Monitor (dbConfig: DatabaseConfig[JdbcProfile]) {
 
   def rebuildMonitorsLoop: Unit =
     rebuildMonitors.onComplete { result =>
-      println(result)
       if (!done)
         timer.newTimeout(new TimerTask {
           override def run(timeout: Timeout): Unit = rebuildMonitorsLoop

@@ -25,8 +25,8 @@ libraryDependencies ++= Seq(
   "com.adrianhurt" %% "play-bootstrap3" % "0.4.4-P24",
   "org.webjars" % "font-awesome" % "4.3.0-1",
   "org.webjars" % "bootstrap-datepicker" % "1.3.1",
-  "jp.t2v" %% "play2-auth"      % "0.13.1",
-  "jp.t2v" %% "play2-auth-test" % "0.13.1" % "test",
+  "jp.t2v" %% "play2-auth"      % "0.14.0",
+  "jp.t2v" %% "play2-auth-test" % "0.14.0" % "test",
   "com.typesafe.play" %% "play-slick" % "1.0.0",
   "mysql" % "mysql-connector-java" % "5.1.36",
   "org.spire-math" %% "spire" % "0.10.1"

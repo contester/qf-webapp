@@ -1,3 +1,9 @@
+GET / controllers.Application.index
+
 GET /monitor/:id controllers.Application.monitor(id: Int)
+
+GET /login controllers.AuthForms.login
+POST /login controllers.AuthForms.authenticate
+GET /logout controllers.AuthForms.logout
 
 GET     /assets/*file				controllers.Assets.at(path="/public", file)

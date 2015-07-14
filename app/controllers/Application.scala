@@ -31,4 +31,8 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider, lifecycle
     monitorModel.contestMonitorsFu.putIfAbsent(id, np).getOrElse(np).future.map(x => Ok(html.monitor(x._2)))
   }
 
+  def index = Action.async { implicit request =>
+    Future.successful(Ok("foo"))
+  }
+
 }
