@@ -21,12 +21,13 @@
     @status match {
         case st: ACM.Status => {
             @for(r <- st.rows) {
-                @if(current == r.team.id) {
+                @if(current == r.team.localId) {
                     <tr class="info">
                 } else {
                     <tr>
                 }
-            <th scope="row">@r.rankStr</th><td>@r.team.id</td><td>@r.team.name</td><td>@r.score.solved</td><td>@r.score.penalty</td>
+            <th scope="row">@r.rankStr</th><td>@r.team.localId</td>
+        <td>@r.team.schoolNameWithNum<br/><small>@r.team.teamName</small></td><td>@r.score.solved</td><td>@r.score.penalty</td>
                 @for(p <- st.problems) {
                 <td class="text-center">
                     @if(r.cells.contains(p)) {
@@ -44,12 +45,12 @@
         }
     case st: School.Status => {
         @for(r <- st.rows) {
-    @if(current == r.team.id) {
+    @if(current == r.team.localId) {
     <tr class="info">
         } else {
     <tr>
         }
-        <th scope="row">@r.rankStr</th><td>@r.team.id</td><td>@r.team.name</td><td>@r.scoreStr</td>
+        <th scope="row">@r.rankStr</th><td>@r.team.localId</td><td>@r.team.schoolNameWithNum<br/><small>@r.team.teamName</small></td><td>@r.scoreStr</td>
             @for(p <- st.problems) {
             <td class="text-center">
                 @if(r.cells.contains(p)) {

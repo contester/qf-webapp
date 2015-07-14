@@ -1,5 +1,6 @@
 GET / controllers.Application.index
 
+GET /monitor controllers.Application.monitorDefault
 GET /monitor/ controllers.Application.monitorDefault
 GET /monitor/:id controllers.Application.monitor(id: Int)
 

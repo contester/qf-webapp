@@ -22,33 +22,13 @@ case class Submit(id: Int, team: Int, problem: String, arrived: Int, passed: Int
   def success = taken > 0 && passed == taken
 }
 
-case class Team(val id: Int, val name: String, val notRated: Boolean)
-
 trait AnyStatus {
   def problems: Seq[String]
 }
 
-/*
-case class RankedRow[A <: AScore, C <: ACell](rank: Int, team: Team, score: A, cells: Map[String, C]) {
-  def rankStr =
-    if (rank == 0) "*" else rank.toString
-}
-*/
 
 object School {
   implicit val scale = FixedScale(100)
-  /*
-  case class Score(val score: Rational) extends Ordered[Score] {
-    override def compare(that: Score): Int =
-      that.score.compare(score)
-
-    def toShort = f"$score%.2f"
-    override def equals(obj: scala.Any): Boolean =
-      obj match {
-        case other: Score => score == other.score
-        case _ => super.equals(obj)
-      }
-  }*/
 
   case class Status(problems: Seq[String], rows: Seq[RankedRow]) extends AnyStatus
   case class Cell(val score: Rational, val full: Boolean) {
@@ -99,8 +79,8 @@ object School {
     if (r.isWhole()) r
     else FixedPoint(r).toString(scale)
 
-  case class Row(team: Team, score: Rational, cells: Map[String, Cell])
-  case class RankedRow(rank: Int, team: Team, score: Rational, cells: Map[String, Cell]) {
+  case class Row(team: LocalTeam, score: Rational, cells: Map[String, Cell])
+  case class RankedRow(rank: Int, team: LocalTeam, score: Rational, cells: Map[String, Cell]) {
 
     def rankStr =
       if (rank == 0) "*" else rank.toString
@@ -108,7 +88,7 @@ object School {
     def scoreStr = rationalToScoreStr(score)
   }
 
-    def calculateStatus(problems: Seq[(String, Int)], teams: Seq[Team], submits: Seq[Submit]): Status = {
+    def calculateStatus(problems: Seq[(String, Int)], teams: Seq[LocalTeam], submits: Seq[Submit]): Status = {
       import scala.collection.JavaConversions.asJavaIterable
 
       val rows = submits.groupBy(_.team).map {
@@ -122,7 +102,7 @@ object School {
       }.toMap
 
       val teamRows = teams.map { team =>
-        val cells = rows.getOrElse(team.id, Seq()).toMap
+        val cells = rows.getOrElse(team.localId, Seq()).toMap
         val score = Score(cells.values.toSeq)
 
         new Row(team, score, cells)
@@ -156,12 +136,12 @@ object School {
 object ACM {
   case class Status(val problems: Seq[String], val rows: Seq[RankedRow]) extends AnyStatus
 
-  case class RankedRow(rank: Int, team: Team, score: Score, cells: Map[String, Cell]) {
+  case class RankedRow(rank: Int, team: LocalTeam, score: Score, cells: Map[String, Cell]) {
     def rankStr =
       if (rank == 0) "*" else rank.toString
 
   }
-  case class Row(val team: Team, val score: Score, val cells: Map[String, Cell])
+  case class Row(val team: LocalTeam, val score: Score, val cells: Map[String, Cell])
 
   trait Cell {
     def success: Boolean = false
@@ -244,7 +224,7 @@ object ACM {
     (state._1 :+ new RankedRow(nextR._1, next.team, next.score, next.cells), nextR._2)
   }
 
-  def calculateStatus(problems: Seq[String], teams: Seq[Team], submits: Seq[Submit]) = {
+  def calculateStatus(problems: Seq[String], teams: Seq[LocalTeam], submits: Seq[Submit]) = {
     import scala.collection.JavaConversions.asJavaIterable
 
     val rows = submits.groupBy(_.team).map {
@@ -258,7 +238,7 @@ object ACM {
           }
 
     val teamRows = teams.map { team =>
-      val cells = rows.getOrElse(team.id, Seq()).toMap
+      val cells = rows.getOrElse(team.localId, Seq()).toMap
       val score = getScore(cells.values.toSeq)
 
       new Row(team, score, cells)
@@ -287,26 +267,25 @@ class Monitor (dbConfig: DatabaseConfig[JdbcProfile]) {
            Contests.ID = $contest and Submits.Arrived < Contests.End and Submits.Arrived >= Contests.Start and
            Contests.ID = Submits.Contest and Submits.Finished and Submits.Compiled order by Arrived0""".as[Submit]
 
+  implicit val getLocalTeam = GetResult(r =>
+    LocalTeam(r.nextInt(), r.nextString(), r.nextIntOption(), r.nextString(), r.nextBoolean()))
+
+
   def getContestTeams(contest: Int) =
     sql"""select Participants.LocalID, Schools.Name, Teams.Num, Teams.Name, Participants.NotRated from Participants, Schools, Teams where
          Participants.Contest = $contest and Teams.ID = Participants.Team and Schools.ID = Teams.School
-       """.as[(Int, String, Option[Int], Option[String], Boolean)]
-
-  def teamToTeam(v: (Int, String, Option[Int], Option[String], Boolean)): Team =
-    new Team(v._1, v._2 + v._3.map("#" + _.toString).getOrElse("") + v._4.map(": " + _).getOrElse(""), v._5)
-
+       """.as[LocalTeam]
 
   def getStatus(db: Database, contest: Int, schoolMode: Boolean)(implicit ec: ExecutionContext): Future[(AnyStatus, AnyStatus)] = {
     db.run(getContestProblems(contest)).flatMap { problems =>
       db.run(getContestTeams(contest)).flatMap { teams =>
-        val teams0 = teams.map(teamToTeam)
         db.run(getContestSubmits(contest)).map { submits =>
           val sub0 = submits.filter(!_.afterFreeze)
           if (schoolMode)
-            (School.calculateStatus(problems, teams0, sub0), School.calculateStatus(problems, teams0, submits))
+            (School.calculateStatus(problems, teams, sub0), School.calculateStatus(problems, teams, submits))
           else
-            (ACM.calculateStatus(problems.map(_._1), teams0, sub0),
-              ACM.calculateStatus(problems.map(_._1), teams0, submits))
+            (ACM.calculateStatus(problems.map(_._1), teams, sub0),
+              ACM.calculateStatus(problems.map(_._1), teams, submits))
         }
       }
     }

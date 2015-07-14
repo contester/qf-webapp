@@ -7,16 +7,21 @@ import slick.profile.SqlStreamingAction
 import scala.concurrent.{ExecutionContext, Future}
 
 case class Contest(id: Int, name: String, schoolMode: Boolean)
-//case class Team(val id: Int, val name: String, val notRated: Boolean)
 
-case class LocalTeam(id: Int, schoolName: String, num: Option[Int], teamName: String) {
-  def teamName1 =
-    s"$schoolName" + num.map(x => s" #$x").getOrElse("")
+trait Team {
+  def schoolName: String
+  def teamNum: Option[Int]
+  def teamName: String
 
-  def teamName2 = if (teamName.isEmpty) None else Some(teamName)
-
-  def fullName = teamName1 + teamName2.map(x => s": $x").getOrElse("")
+  def schoolNameWithNum: String = s"$schoolName" + teamNum.map(x => s" #$x").getOrElse("")
+  def teamFullName: String = {
+    schoolNameWithNum +
+      (if (!teamName.isEmpty) s": $teamName"
+      else "")
+  }
 }
+
+case class LocalTeam(localId: Int, schoolName: String, teamNum: Option[Int], teamName: String, notRated: Boolean) extends Team
 
 case class LoggedInTeam(username: String, contest: Contest, team: LocalTeam)
 
@@ -27,7 +32,7 @@ object Users {
   implicit val getLoggedInTeam = GetResult(r => LoggedInTeam(
     r.nextString(),
     Contest(r.nextInt(), r.nextString(), r.nextBoolean()),
-    LocalTeam(r.nextInt(), r.nextString(), r.nextIntOption(), r.nextString())))
+    LocalTeam(r.nextInt(), r.nextString(), r.nextIntOption(), r.nextString(), r.nextBoolean())))
 
 
   def authQuery(username: String, password: String) =
@@ -38,7 +43,8 @@ object Users {
           Assignments.LocalID as LocalID,
           Schools.Name as SchoolName,
           Teams.Num as TeamNum,
-          Teams.Name as TeamName
+          Teams.Name as TeamName,
+          Participants.NotRated
           from Assignments, Participants, Contests, Teams, Schools
          where Assignments.Username = $username and Assignments.Password = $password
          and Assignments.Contest = Contests.ID and Participants.Contest = Contests.ID and
@@ -57,7 +63,8 @@ object Users {
           Assignments.LocalID as LocalID,
           Schools.Name as SchoolName,
           Teams.Num as TeamNum,
-          Teams.Name as TeamName
+          Teams.Name as TeamName,
+          Participants.NotRated
           from Assignments, Participants, Contests, Teams, Schools
          where Assignments.Username = $username
          and Assignments.Contest = Contests.ID and Participants.Contest = Contests.ID and
