@@ -11,7 +11,7 @@ import slick.backend.DatabaseConfig
 import slick.dbio.DBIO
 import slick.driver.JdbcProfile
 import slick.jdbc.{JdbcBackend, GetResult}
-import spire.math.Rational
+import spire.math.{FixedPoint, FixedScale, Rational}
 import views.html
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -36,6 +36,7 @@ case class RankedRow[A <: AScore, C <: ACell](rank: Int, team: Team, score: A, c
 */
 
 object School {
+  implicit val scale = FixedScale(100)
   /*
   case class Score(val score: Rational) extends Ordered[Score] {
     override def compare(that: Score): Int =
@@ -52,18 +53,10 @@ object School {
   case class Status(problems: Seq[String], rows: Seq[RankedRow]) extends AnyStatus
   case class Cell(val score: Rational, val full: Boolean) {
     def toShort =
-      if (score.isWhole) {
-        if (score == 0)
-          ""
-        else
-          s"$score"
-
-      }
-      else {
-        val f: Float = score.toFloat
-        f"$f%.2f"
-      }
-
+      if (score == 0)
+        ""
+      else
+        FixedPoint(score).toString(scale)
   }
 
   object Cell {
@@ -108,9 +101,11 @@ object School {
 
   case class Row(team: Team, score: Rational, cells: Map[String, Cell])
   case class RankedRow(rank: Int, team: Team, score: Rational, cells: Map[String, Cell]) {
+
     def rankStr =
       if (rank == 0) "*" else rank.toString
 
+    def scoreStr = FixedPoint(score).toString(scale)
   }
 
     def calculateStatus(problems: Seq[(String, Int)], teams: Seq[Team], submits: Seq[Submit]): Status = {

@@ -39,7 +39,7 @@
         }
     case st: School.Status => {
         @for(r <- st.rows) {
-        <tr><th scope="row">@r.rankStr</th><td>@r.team.id</td><td>@r.team.name</td><td>@r.score</td>
+        <tr><th scope="row">@r.rankStr</th><td>@r.team.id</td><td>@r.team.name</td><td>@r.scoreStr</td>
             @for(p <- st.problems) {
             <td class="text-center">
                 @if(r.cells.contains(p)) {
