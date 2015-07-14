@@ -52,11 +52,7 @@ object School {
 
   case class Status(problems: Seq[String], rows: Seq[RankedRow]) extends AnyStatus
   case class Cell(val score: Rational, val full: Boolean) {
-    def toShort =
-      if (score == 0)
-        ""
-      else
-        FixedPoint(score).toString(scale)
+    def toShort = rationalToScoreStr(score)
   }
 
   object Cell {
@@ -99,13 +95,17 @@ object School {
     }
   }
 
+  def rationalToScoreStr(r: Rational) =
+    if (r.isWhole()) r
+    else FixedPoint(r).toString(scale)
+
   case class Row(team: Team, score: Rational, cells: Map[String, Cell])
   case class RankedRow(rank: Int, team: Team, score: Rational, cells: Map[String, Cell]) {
 
     def rankStr =
       if (rank == 0) "*" else rank.toString
 
-    def scoreStr = FixedPoint(score).toString(scale)
+    def scoreStr = rationalToScoreStr(score)
   }
 
     def calculateStatus(problems: Seq[(String, Int)], teams: Seq[Team], submits: Seq[Submit]): Status = {
