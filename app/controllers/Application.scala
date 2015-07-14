@@ -17,12 +17,16 @@ import views.html
 
 import scala.concurrent.{Promise, Future}
 
-case class Submit0(arrived: Int, problem: String, finished: Boolean, compiled: Boolean, passed: Int, taken: Int) {
+case class Submit0(arrived: Int, problem: String, finished: Boolean, compiled: Boolean, passed: Int, taken: Int, index: Int) {
+  def arrivedStr = "%02d:%02d".format(arrived / 3600, (arrived / 60) % 60)
+
   def resultStr =
     if (!finished) "..."
     else if (!compiled) "Не скомпилировалось"
     else if (passed == taken) "Полное решение"
     else s"Неполное решение: $passed из $taken"
+
+  def success = finished && compiled && (passed == taken)
 }
 
 class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvider, lifecycle: ApplicationLifecycle) extends Controller with AuthElement with AuthConfigImpl {
@@ -50,7 +54,7 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
 
   import slick.driver.MySQLDriver.api._
 
-  implicit val toSubmit0=GetResult(r => Submit0(r.nextInt(), r.nextString(), r.nextBoolean(), r.nextBoolean(), r.nextInt(), r.nextInt()))
+  implicit val toSubmit0=GetResult(r => Submit0(r.nextInt(), r.nextString().toUpperCase, r.nextBoolean(), r.nextBoolean(), r.nextInt(), r.nextInt(), 0))
 
   private def getSubmitsQuery(contest: Int, team: Int) =
     sql"""select UNIX_TIMESTAMP(Submits.Arrived) - UNIX_TIMESTAMP(Contests.Start) as arrived0,
@@ -62,10 +66,16 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
   private def getSubmits(team: LoggedInTeam) =
     db.db.run(getSubmitsQuery(team.contest.id, team.team.id))
 
+  private def indexSubmits(submits: Seq[Submit0]): Seq[Submit0] =
+    submits.groupBy(_.problem).mapValues(_.sortBy(_.arrived).zipWithIndex.map { x =>
+      Submit0(x._1.arrived, x._1.problem, x._1.finished, x._1.compiled, x._1.passed, x._1.taken, x._2 + 1)
+    }).values.flatten.toSeq.sortBy(_.arrived).reverse
+
+
   def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
     getSubmits(loggedInTeam).map { subs =>
-      Ok(html.index(loggedInTeam, subs))
+      Ok(html.index(loggedInTeam, indexSubmits(subs)))
     }
   }
 

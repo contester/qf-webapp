@@ -17,7 +17,13 @@
 </thead>
     <tbody>
     @for(s <- submits) {
-    <tr><td>@s.arrived</td><td>@s.problem</td><td></td><td></td><td>@s.resultStr</td><td></td><td></td></tr>
+    <tr><td>@s.arrivedStr</td><td>@s.problem</td><td>@s.index</td><td></td>
+        @if(s.success) {
+            <td class="success">
+        } else {
+        <td>
+        }
+            @s.resultStr</td><td></td><td></td></tr>
     }
     </tbody>
 </table>
