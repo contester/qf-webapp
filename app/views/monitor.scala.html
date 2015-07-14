@@ -1,4 +1,4 @@
-@(status: models.AnyStatus)
+@(status: models.AnyStatus, current: Int)
 
 @main("Monitor", tab = "monitor") {
 
@@ -21,7 +21,12 @@
     @status match {
         case st: ACM.Status => {
             @for(r <- st.rows) {
-            <tr><th scope="row">@r.rankStr</th><td>@r.team.id</td><td>@r.team.name</td><td>@r.score.solved</td><td>@r.score.penalty</td>
+                @if(current == r.team.id) {
+                    <tr class="info">
+                } else {
+                    <tr>
+                }
+            <th scope="row">@r.rankStr</th><td>@r.team.id</td><td>@r.team.name</td><td>@r.score.solved</td><td>@r.score.penalty</td>
                 @for(p <- st.problems) {
                 <td class="text-center">
                     @if(r.cells.contains(p)) {
@@ -39,7 +44,12 @@
         }
     case st: School.Status => {
         @for(r <- st.rows) {
-        <tr><th scope="row">@r.rankStr</th><td>@r.team.id</td><td>@r.team.name</td><td>@r.scoreStr</td>
+    @if(current == r.team.id) {
+    <tr class="info">
+        } else {
+    <tr>
+        }
+        <th scope="row">@r.rankStr</th><td>@r.team.id</td><td>@r.team.name</td><td>@r.scoreStr</td>
             @for(p <- st.problems) {
             <td class="text-center">
                 @if(r.cells.contains(p)) {

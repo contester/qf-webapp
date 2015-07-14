@@ -1,5 +1,13 @@
 @(title: String, admin: Boolean = false, tab: String = "", styles: Html = Html(""), scripts: Html = Html(""), modals: Html = Html(""))(content: Html)
 
+@navlink(myid: String, myhref: String, mytext: String) = {
+    @if(myid == tab) {
+        <li class="active"><a href="#">@mytext <span class="sr-only">(current)</span></a></li>
+    } else {
+        <li><a href="@myhref">@mytext</a></li>
+    }
+}
+
 <!DOCTYPE html>
 
 <html>
@@ -50,9 +58,9 @@
     <!-- Collect the nav links, forms, and other content for toggling -->
     <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
           <ul class="nav navbar-nav">
-        <li class="active"><a href="#">Подходы <span class="sr-only">(current)</span></a></li>
+          @navlink("index", "/", "Подходы")
         <li><a href="#">Отправить</a></li>
-        <li><a href="#">Монитор</a></li>
+        @navlink("monitor", "/monitor/", "Монитор")
         <li class="dropdown">
           <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">Информация <span class="caret"></span></a>
           <ul class="dropdown-menu">
