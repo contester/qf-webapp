@@ -9,7 +9,14 @@ import scala.concurrent.{ExecutionContext, Future}
 case class Contest(id: Int, name: String, schoolMode: Boolean)
 //case class Team(val id: Int, val name: String, val notRated: Boolean)
 
-case class LocalTeam(id: Int, schoolName: String, num: Option[Int], teamName: String)
+case class LocalTeam(id: Int, schoolName: String, num: Option[Int], teamName: String) {
+  def teamName1 =
+    s"$schoolName" + num.map(x => s" #$x").getOrElse("")
+
+  def teamName2 = if (teamName.isEmpty) None else Some(teamName)
+
+  def fullName = teamName1 + teamName2.map(x => s": $x").getOrElse("")
+}
 
 case class LoggedInTeam(username: String, contest: Contest, team: LocalTeam)
 

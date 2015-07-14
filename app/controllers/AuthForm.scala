@@ -42,6 +42,10 @@ class AuthForms @Inject() (val messagesApi: MessagesApi, override val dbConfigPr
     gotoLogoutSucceeded
   }
 
+  def doAuth(username: String, password: String) =
+    //Users.authenticate(db.db, username, password)
+    Users.resolve(db.db, username)
+
   /**
    * Return the `gotoLoginSucceeded` method's result in the login action.
    *
@@ -51,7 +55,7 @@ class AuthForms @Inject() (val messagesApi: MessagesApi, override val dbConfigPr
   def authenticate = Action.async { implicit request =>
     loginForm.bindFromRequest.fold(
       formWithErrors => Future.successful(BadRequest(html.login(formWithErrors))),
-      user => Users.authenticate(db.db, user.username, user.password).flatMap {
+      user => doAuth(user.username, user.password).flatMap {
         case Some(found) =>
           gotoLoginSucceeded(found.username)
 
