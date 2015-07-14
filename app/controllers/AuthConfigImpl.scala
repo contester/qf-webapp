@@ -53,7 +53,8 @@ trait AuthConfigImpl extends AuthConfig {
    * A function that returns a `User` object from an `Id`.
    * You can alter the procedure to suit your application.
    */
-  def resolveUser(id: Id)(implicit ctx: ExecutionContext): Future[Option[User]] = ???
+  def resolveUser(id: Id)(implicit ctx: ExecutionContext): Future[Option[User]] =
+    Users.resolve(db.db, id)
 
   /**
    * Where to redirect the user after a successful login.

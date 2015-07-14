@@ -41,4 +41,23 @@ object Users {
 
   def authenticate(db: JdbcBackend#DatabaseDef, username: String, password: String)(implicit ec: ExecutionContext): Future[Option[LoggedInTeam]] =
     db.run(authQuery(username, password)).map(_.headOption)
+
+  def resolveQuery(username: String) =
+    sql"""select Assignments.Username,
+          Assignments.Contest as ContestID,
+          Contests.Name as ContestName,
+          Contests.SchoolMode as SchoolMode,
+          Assignments.LocalID as LocalID,
+          Schools.Name as SchoolName,
+          Teams.Num as TeamNum,
+          Teams.Name as TeamName
+          from Assignments, Participants, Contests, Teams, Schools
+         where Assignments.Username = $username
+         and Assignments.Contest = Contests.ID and Participants.Contest = Contests.ID and
+         Participants.LocalID = Assignments.LocalID and Participants.Team = Teams.ID and
+         Teams.School = Schools.ID
+       """.as[LoggedInTeam]
+
+  def resolve(db: JdbcBackend#DatabaseDef, username: String)(implicit ec: ExecutionContext): Future[Option[LoggedInTeam]] =
+    db.run(resolveQuery(username)).map(_.headOption)
 }
