@@ -10,7 +10,7 @@
     </thead>
     <tbody>
     @for(s <- submits) {
-    <tr><td>@s.submit.arrivedSeconds</td><td>@s.submit.problem</td><td>@s.index</td><td>@s.submit.ext</td>
+    <tr><td>@s.submit.arrivedStr</td><td>@s.submit.problem</td><td>@s.index</td><td>@s.submit.ext</td>
         @if(s.submit.success) {
         <td class="success">
             } else {

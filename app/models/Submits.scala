@@ -32,7 +32,7 @@ trait ContestSubmit extends AbstractSubmit {
   def afterFreeze: Boolean
   def problemRating: Int
 
-  def arrivedStr = "%02d:%02d".format(arrivedSeconds / 3600, (arrivedSeconds / 60) % 60)
+  def arrivedStr = SecondsToTimeStr(arrivedSeconds)
 }
 
 trait Indexed {
