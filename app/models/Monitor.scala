@@ -55,8 +55,38 @@ object Foo {
   }
 
 
-  def rank[ScoreType <: Ordered[ScoreType], CellType](rows: Seq[MonitorRow[ScoreType, CellType]]): Seq[RankedRow[ScoreType, CellType]] =
+  def rank[ScoreType, CellType](rows: Seq[MonitorRow[ScoreType, CellType]]): Seq[RankedRow[ScoreType, CellType]] =
     rows.foldLeft((Seq[RankedRow[ScoreType, CellType]](), 0))(pullRank)._1
+
+  case class SomeRow[ScoreType, CellType](team: LocalTeam, score: ScoreType,
+                                                                cells: Map[String, CellType]) extends MonitorRow[ScoreType, CellType]
+
+  def groupAndRank[ScoreType, CellType](teams: Seq[LocalTeam], submits: Seq[Submit],
+                                                               getCell: (Seq[Submit]) => CellType,
+                                                               getScore: (Seq[CellType]) => ScoreType)(implicit ord: Ordering[ScoreType]): Seq[RankedRow[ScoreType, CellType]] = {
+    import scala.collection.JavaConversions.asJavaIterable
+
+    val rows = submits.groupBy(_.teamId).map {
+      case (teamId, s0) =>
+        val cells: Map[String, CellType] = s0.groupBy(_.problem).map {
+          case (problemId, s1) =>
+            problemId -> getCell(s1)
+        }
+
+        teamId -> cells
+    }.toMap
+
+    val teamRows = teams.map { team =>
+      val cells = rows.getOrElse(team.localId, Seq()).toMap
+      val score = getScore(cells.values.toSeq)
+
+      SomeRow(team, score, cells)
+    }.sortBy(_.score)
+
+    Foo.rank(teamRows)
+  }
+
+
 }
 
 object School {
@@ -67,8 +97,6 @@ object School {
       Submits.indexSubmits(submits, SchoolCell.empty).lastOption.map(_.score).getOrElse(SchoolCell.empty)
   }
 
-
-
   object Score {
     def apply(cells: Seq[SchoolCell]): Rational = {
       //import spire.implicits._
@@ -76,39 +104,14 @@ object School {
     }
   }
 
-  case class Row(team: LocalTeam, score: Rational, cells: Map[String, SchoolCell]) extends MonitorRow[Rational, SchoolCell]
-
     def calculateStatus(problems: Seq[(String, Int)], teams: Seq[LocalTeam], submits: Seq[Submit]): Status = {
-      import scala.collection.JavaConversions.asJavaIterable
-
-      val rows = submits.groupBy(_.teamId).map {
-        case (teamId, s0) =>
-          val cells: Map[String, SchoolCell] = s0.groupBy(_.problem).map {
-            case (problemId, s1) =>
-              problemId -> Cell(s1)
-          }
-
-          teamId -> cells
-      }.toMap
-
-      val teamRows = teams.map { team =>
-        val cells = rows.getOrElse(team.localId, Seq()).toMap
-        val score = Score(cells.values.toSeq)
-
-        new Row(team, score, cells)
-      }.sortBy(_.score).reverse
-
-      val rankedRows = Foo.rank(teamRows)
-
-      new Status(problems.map(_._1), rankedRows)
+      implicit val ord = Ordering[Rational].reverse
+      new Status(problems.map(_._1), Foo.groupAndRank(teams, submits, Cell(_), Score(_)))
     }
-
 }
 
 object ACM {
   case class Status(val problems: Seq[String], val rows: Seq[RankedRow[Score, ACMCell]]) extends AnyStatus
-
-  case class Row(val team: LocalTeam, val score: Score, val cells: Map[String, ACMCell]) extends MonitorRow[Score, ACMCell]
 
   case class Score(val solved: Int, val penalty: Int) extends Ordered[Score] {
     override def compare(that: Score): Int = {
@@ -139,28 +142,7 @@ object ACM {
     cells.foldLeft(new Score(0, 0))(cellFold)
 
   def calculateStatus(problems: Seq[String], teams: Seq[LocalTeam], submits: Seq[Submit]) = {
-    import scala.collection.JavaConversions.asJavaIterable
-
-    val rows = submits.groupBy(_.teamId).map {
-      case (teamId, s0) =>
-      val cells: Map[String, ACMCell] = s0.groupBy(_.problem).map {
-                  case (problemId, s1) =>
-                      problemId -> getCell(s1)
-                }
-
-              teamId -> cells
-          }
-
-    val teamRows = teams.map { team =>
-      val cells = rows.getOrElse(team.localId, Seq()).toMap
-      val score = getScore(cells.values.toSeq)
-
-      new Row(team, score, cells)
-    }.sortBy(_.score)
-
-    val rankedRows = Foo.rank(teamRows)
-
-    new Status(problems, rankedRows)
+    new Status(problems, Foo.groupAndRank(teams, submits, getCell(_), getScore(_)))
   }
 }
 
