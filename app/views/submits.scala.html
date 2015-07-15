@@ -1,4 +1,4 @@
-@(loggedIn: LoggedInTeam, submits: Seq[Submit])
+@(submits: Seq[Submits.IndexedSubmit[Submit, SchoolCell]])
 
 @if(submits.isEmpty) {
 <p>Подходов не обнаружено.</p>
@@ -10,13 +10,13 @@
     </thead>
     <tbody>
     @for(s <- submits) {
-    <tr><td>@s.arrivedSeconds</td><td>@s.problem</td><td>@s</td><td></td>
-        @if(s.success) {
+    <tr><td>@s._1.arrivedSeconds</td><td>@s._1.problem</td><td>@s._3</td><td>@s._1.ext</td>
+        @if(s._1.success) {
         <td class="success">
             } else {
         <td>
             }
-            @s.passed</td><td></td><td></td></tr>
+            @s._1.asSchool</td><td>@s._2.score</td><td></td></tr>
     }
     </tbody>
 </table>

@@ -15,13 +15,19 @@ trait AbstractSubmit {
   def taken: Int
 
   def success = finished && compiled && taken > 0 && passed == taken
+
+  def asSchool =
+    if (!finished) "..."
+    else if (!compiled) "Compilation failed"
+    else if (passed == taken) "Полное решение"
+    else s"$passed из $taken"
 }
 
 trait SubmitId {
   def submitId: Int
 }
 
-trait ContestSubmit {
+trait ContestSubmit extends AbstractSubmit {
   def arrivedSeconds: Int
   def afterFreeze: Boolean
 
@@ -35,31 +41,59 @@ trait Indexed {
 case class Submit(submitId: Int, arrivedTimestamp: DateTime, teamId: Int,
                   problem: String, ext: String, finished: Boolean,
                    compiled: Boolean, passed: Int, taken: Int, arrivedSeconds: Int,
-                  afterFreeze: Boolean) extends AbstractSubmit with ContestSubmit with SubmitId
+                  afterFreeze: Boolean) extends ContestSubmit with SubmitId
 
 trait SubmitScore[S] {
-  def withSubmit(submit: AbstractSubmit): S
+  def withSubmit(submit: ContestSubmit): S
 }
 
+object SchoolCell {
+  def calculate(base: Int, fraction: Rational, attempt: Int): Rational = {
+    val tops = {
+      val x = base - attempt + 1
+      if (x < 20)
+        20
+      else
+        x
+    }
+    if (fraction == 1)
+      tops
+    else {
+      val x = tops * 2 * fraction / 3
+      if (x < 5)
+        0
+      else
+        x
+    }
+  }
+}
+
+case class SchoolCell(attempt: Int, score: Rational) extends SubmitScore[SchoolCell] {
+  override def withSubmit(submit: ContestSubmit): SchoolCell =
+    if (!submit.compiled)
+      this
+    else
+      SchoolCell(attempt + 1, score.max(SchoolCell.calculate(30, Rational(submit.passed, submit.taken), attempt + 1)))
+}
 
 object Submits {
   import slick.driver.MySQLDriver.api._
 
-  type IndexedSubmit[S <: AbstractSubmit] = (S, Int)
+  type IndexedSubmit[S <: AbstractSubmit, Sc <: SubmitScore[Sc]] = (S, Sc, Int)
 
   implicit def dateTimeOrdering: Ordering[DateTime] = Ordering.fromLessThan(_ isBefore _)
 
-  def indexSubmits[S <: AbstractSubmit](submits: Seq[S]): Seq[IndexedSubmit[S]] =
+  def indexSubmits[S <: ContestSubmit, Sc <: SubmitScore[Sc]](submits: Seq[S], scorer: => Sc): Seq[IndexedSubmit[S, Sc]] =
     submits.groupBy(x => (x.teamId, x.problem))
-      .mapValues(x => x.sortBy(_.arrivedTimestamp).zipWithIndex.map(x => (x._1, x._2))).values.toSeq.flatten
+      .mapValues(x => scoreSubmits(x.sortBy(_.arrivedTimestamp), scorer)
+      .zipWithIndex.map(x => (x._1._2, x._1._1, x._2 + 1))).values.toSeq.flatten
 
-  def scoreSubmits[S <: AbstractSubmit, Sc <: SubmitScore[Sc]](submits: Seq[S], empty: Sc): Seq[(Sc, S)] =
+  def scoreSubmits[S <: ContestSubmit, Sc <: SubmitScore[Sc]](submits: Seq[S], empty: Sc): Seq[(Sc, S)] =
     submits.foldLeft((empty, Seq[(Sc, S)]())) {
       case (state, submit) =>
         val newLeft = state._1.withSubmit(submit)
         (newLeft, state._2 :+ (newLeft, submit))
     }._2
-
 
   def getContestSubmits(contest: Int) = {
     implicit val getSubmitResult = GetResult(r => Submit(

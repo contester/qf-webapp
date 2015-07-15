@@ -48,8 +48,8 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
   private def getSubmits(team: LoggedInTeam) =
     db.db.run(Submits.getContestTeamSubmits(team.contest.id, team.team.localId))
 
-  private def indexSubmits(submits: Seq[Submit]): Seq[IndexedSubmit[Submit]] =
-    Submits.indexSubmits(submits).sortBy(_._1.arrivedSeconds).reverse
+  private def indexSubmits(submits: Seq[Submit]) =
+    Submits.indexSubmits[Submit, SchoolCell](submits, SchoolCell(0, 0)).sortBy(_._1.arrivedSeconds).reverse
 
   def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
