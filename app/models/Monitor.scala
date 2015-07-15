@@ -106,14 +106,9 @@ object School {
 }
 
 object ACM {
-  case class Status(val problems: Seq[String], val rows: Seq[RankedRow]) extends AnyStatus
+  case class Status(val problems: Seq[String], val rows: Seq[RankedRow[Score, Cell]]) extends AnyStatus
 
-  case class RankedRow(rank: Int, team: LocalTeam, score: Score, cells: Map[String, Cell]) {
-    def rankStr =
-      if (rank == 0) "*" else rank.toString
-
-  }
-  case class Row(val team: LocalTeam, val score: Score, val cells: Map[String, Cell])
+  case class Row(val team: LocalTeam, val score: Score, val cells: Map[String, Cell]) extends MonitorRow[Score, Cell]
 
   trait Cell {
     def success: Boolean = false
@@ -178,24 +173,6 @@ object ACM {
   def getScore(cells: Seq[Cell]) =
     cells.foldLeft(new Score(0, 0))(cellFold)
 
-  type RankState = (Seq[RankedRow], Int)
-
-  def pullRank(state: RankState, next: Row): RankState = {
-    val position = state._2
-
-    val nextR =
-      if (next.team.notRated)
-        (0, position)
-      else state._1.lastOption.map { lastRanked =>
-        if (lastRanked.score == next.score)
-          (lastRanked.rank, position + 1)
-        else
-          (position + 1, position + 1)
-      }.getOrElse(1, 1)
-
-    (state._1 :+ new RankedRow(nextR._1, next.team, next.score, next.cells), nextR._2)
-  }
-
   def calculateStatus(problems: Seq[String], teams: Seq[LocalTeam], submits: Seq[Submit]) = {
     import scala.collection.JavaConversions.asJavaIterable
 
@@ -216,7 +193,7 @@ object ACM {
       new Row(team, score, cells)
     }.sortBy(_.score)
 
-    val rankedRows = teamRows.foldLeft((Seq[RankedRow](), 0))(pullRank)._1
+    val rankedRows = Foo.rank(teamRows)
 
     new Status(problems, rankedRows)
   }
