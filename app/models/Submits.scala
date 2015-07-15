@@ -2,7 +2,7 @@ package models
 
 import org.joda.time.DateTime
 import slick.jdbc.GetResult
-import spire.math.Rational
+import spire.math.{FixedScale, FixedPoint, Rational}
 
 trait AbstractSubmit {
   def arrivedTimestamp: DateTime
@@ -52,14 +52,6 @@ trait CellScore[S] {
   def withCell(cell: S): CellScore[S]
 }
 
-case class SchoolScore(score: Rational) extends CellScore[SchoolCell] {
-  override def withCell(cell: SchoolCell): CellScore[SchoolCell] =
-    if (cell.score > 0)
-      SchoolScore(score + cell.score)
-    else
-      this
-}
-
 object SchoolCell {
   def calculate(base: Int, fraction: Rational, attempt: Int): Rational = {
     val tops = {
@@ -79,15 +71,29 @@ object SchoolCell {
         x
     }
   }
+
+  def empty = SchoolCell(0, 0, false)
 }
 
-case class SchoolCell(attempt: Int, score: Rational) extends SubmitScore[SchoolCell] {
+object RationalToScoreStr {
+  implicit private val scale = FixedScale(100)
+
+  def apply(r: Rational): String =
+    if (r.isWhole()) r.toString
+    else FixedPoint(r).toString(scale)
+}
+
+case class SchoolCell(attempt: Int, score: Rational, fullSolution: Boolean) extends SubmitScore[SchoolCell] {
+  override def toString =
+    if (attempt == 0) ""
+    else RationalToScoreStr(score)
+
   override def withSubmit(submit: ContestSubmit): SchoolCell =
     if (!submit.compiled)
       this
     else
       SchoolCell(attempt + 1, score.max(SchoolCell.calculate(submit.problemRating,
-        Rational(submit.passed, submit.taken), attempt + 1)))
+        Rational(submit.passed, submit.taken), attempt + 1)), fullSolution || submit.success)
 }
 
 object Submits {

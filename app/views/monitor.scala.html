@@ -50,14 +50,16 @@
         } else {
     <tr>
         }
-        <th scope="row">@r.rankStr</th><td>@r.team.localId</td><td>@r.team.schoolNameWithNum<br/><small>@r.team.teamName</small></td><td>@r.scoreStr</td>
-            @for(p <- st.problems) {
+        <th scope="row" class="text-center">@r.rankStr</th><td class="text-center">@r.team.localId</td>
+        <td>@r.team.schoolNameWithNum<br/><small>@r.team.teamName</small></td>
+        <td class="text-center">@RationalToScoreStr(r.score)</td>
+            @for(p <- st.problems.map(r.cells.get)) {
             <td class="text-center">
-                @if(r.cells.contains(p)) {
-                @if(r.cells(p).full) {
-                <span class="text-success"><strong>@r.cells(p).toShort</strong></span>
+                @for(cell <- p) {
+                @if(cell.fullSolution) {
+                <span class="text-success"><strong>@cell</strong></span>
                 } else {
-                <span class="text-muted">@r.cells(p).toShort</span>
+                <span class="text-muted">@cell</span>
                 }
                 }
             </td>

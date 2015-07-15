@@ -3,6 +3,7 @@ package models
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
+import models.Foo.{RankedRow, MonitorRow}
 import org.jboss.netty.util.{Timeout, TimerTask, HashedWheelTimer}
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.mvc.{Action, Controller}
@@ -22,72 +23,22 @@ trait AnyStatus {
   def problems: Seq[String]
 }
 
-case class ARow[CellType, ScoreType <: CellScore[CellType]](team: LocalTeam, score: ScoreType, cells: Map[String, CellType])
 
-object School {
-  implicit val scale = FixedScale(100)
-
-  case class Status(problems: Seq[String], rows: Seq[RankedRow]) extends AnyStatus
-  case class Cell(val score: Rational, val full: Boolean) {
-    def toShort = rationalToScoreStr(score)
+object Foo {
+  trait MonitorRow[ScoreType, CellType] {
+    def team: LocalTeam
+    def score: ScoreType
+    def cells: Map[String, CellType]
   }
 
-  object Cell {
-    def apply(submits: Seq[Submit]): Cell = {
-      val score = Submits.indexSubmits(submits, SchoolCell(0, 0)).lastOption.map(_.score).getOrElse(SchoolCell(0, 0))
-      new Cell(score.score, submits.exists(_.success))
-    }
-  }
-
-
-  object Score {
-    def apply(cells: Seq[Cell]): Rational = {
-      import spire.implicits._
-      cells.map(_.score).foldLeft(Rational(0))(_+_)
-    }
-  }
-
-  def rationalToScoreStr(r: Rational) =
-    if (r.isWhole()) r
-    else FixedPoint(r).toString(scale)
-
-  case class Row(team: LocalTeam, score: Rational, cells: Map[String, Cell])
-  case class RankedRow(rank: Int, team: LocalTeam, score: Rational, cells: Map[String, Cell]) {
-
+  case class RankedRow[ScoreType, CellType](rank: Int, team: LocalTeam, score: ScoreType, cells: Map[String, CellType]) {
     def rankStr =
       if (rank == 0) "*" else rank.toString
-
-    def scoreStr = rationalToScoreStr(score)
   }
 
-    def calculateStatus(problems: Seq[(String, Int)], teams: Seq[LocalTeam], submits: Seq[Submit]): Status = {
-      import scala.collection.JavaConversions.asJavaIterable
+  type RankState[ScoreType, CellType] = (Seq[RankedRow[ScoreType, CellType]], Int)
 
-      val rows = submits.groupBy(_.teamId).map {
-        case (teamId, s0) =>
-          val cells: Map[String, Cell] = s0.groupBy(_.problem).map {
-            case (problemId, s1) =>
-              problemId -> Cell(s1)
-          }
-
-          teamId -> cells
-      }.toMap
-
-      val teamRows = teams.map { team =>
-        val cells = rows.getOrElse(team.localId, Seq()).toMap
-        val score = Score(cells.values.toSeq)
-
-        new Row(team, score, cells)
-      }.sortBy(_.score).reverse
-
-      val rankedRows = teamRows.foldLeft((Seq[RankedRow](), 0))(pullRank)._1
-
-      new Status(problems.map(_._1), rankedRows)
-    }
-
-  type RankState = (Seq[RankedRow], Int)
-
-  def pullRank(state: RankState, next: Row): RankState = {
+  def pullRank[ScoreType, CellType](state: RankState[ScoreType, CellType], next: MonitorRow[ScoreType, CellType]): RankState[ScoreType, CellType] = {
     val position = state._2
 
     val nextR =
@@ -102,6 +53,55 @@ object School {
 
     (state._1 :+ new RankedRow(nextR._1, next.team, next.score, next.cells), nextR._2)
   }
+
+
+  def rank[ScoreType <: Ordered[ScoreType], CellType](rows: Seq[MonitorRow[ScoreType, CellType]]): Seq[RankedRow[ScoreType, CellType]] =
+    rows.foldLeft((Seq[RankedRow[ScoreType, CellType]](), 0))(pullRank)._1
+}
+
+object School {
+  case class Status(problems: Seq[String], rows: Seq[RankedRow[Rational, SchoolCell]]) extends AnyStatus
+
+  object Cell {
+    def apply(submits: Seq[Submit]): SchoolCell =
+      Submits.indexSubmits(submits, SchoolCell.empty).lastOption.map(_.score).getOrElse(SchoolCell.empty)
+  }
+
+
+
+  object Score {
+    def apply(cells: Seq[SchoolCell]): Rational = {
+      //import spire.implicits._
+      cells.map(_.score).foldLeft(Rational(0))(_+_)
+    }
+  }
+
+  case class Row(team: LocalTeam, score: Rational, cells: Map[String, SchoolCell]) extends MonitorRow[Rational, SchoolCell]
+
+    def calculateStatus(problems: Seq[(String, Int)], teams: Seq[LocalTeam], submits: Seq[Submit]): Status = {
+      import scala.collection.JavaConversions.asJavaIterable
+
+      val rows = submits.groupBy(_.teamId).map {
+        case (teamId, s0) =>
+          val cells: Map[String, SchoolCell] = s0.groupBy(_.problem).map {
+            case (problemId, s1) =>
+              problemId -> Cell(s1)
+          }
+
+          teamId -> cells
+      }.toMap
+
+      val teamRows = teams.map { team =>
+        val cells = rows.getOrElse(team.localId, Seq()).toMap
+        val score = Score(cells.values.toSeq)
+
+        new Row(team, score, cells)
+      }.sortBy(_.score).reverse
+
+      val rankedRows = Foo.rank(teamRows)
+
+      new Status(problems.map(_._1), rankedRows)
+    }
 
 }
 
