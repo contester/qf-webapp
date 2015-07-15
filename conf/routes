@@ -4,6 +4,9 @@ GET /monitor controllers.Application.monitorDefault
 GET /monitor/ controllers.Application.monitorDefault
 GET /monitor/:id controllers.Application.monitor(id: Int)
 
+GET /submit controllers.Application.submit
+POST /submit controllers.Application.submitPost
+
 GET /login controllers.AuthForms.login
 POST /login controllers.AuthForms.authenticate
 GET /logout controllers.AuthForms.logout
