@@ -48,6 +48,18 @@ trait SubmitScore[S] {
   def withSubmit(submit: ContestSubmit): S
 }
 
+trait CellScore[S] {
+  def withCell(cell: S): CellScore[S]
+}
+
+case class SchoolScore(score: Rational) extends CellScore[SchoolCell] {
+  override def withCell(cell: SchoolCell): CellScore[SchoolCell] =
+    if (cell.score > 0)
+      SchoolScore(score + cell.score)
+    else
+      this
+}
+
 object SchoolCell {
   def calculate(base: Int, fraction: Rational, attempt: Int): Rational = {
     val tops = {
@@ -74,7 +86,8 @@ case class SchoolCell(attempt: Int, score: Rational) extends SubmitScore[SchoolC
     if (!submit.compiled)
       this
     else
-      SchoolCell(attempt + 1, score.max(SchoolCell.calculate(submit.problemRating, Rational(submit.passed, submit.taken), attempt + 1)))
+      SchoolCell(attempt + 1, score.max(SchoolCell.calculate(submit.problemRating,
+        Rational(submit.passed, submit.taken), attempt + 1)))
 }
 
 object Submits {

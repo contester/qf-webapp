@@ -22,6 +22,8 @@ trait AnyStatus {
   def problems: Seq[String]
 }
 
+case class ARow[CellType, ScoreType <: CellScore[CellType]](team: LocalTeam, score: ScoreType, cells: Map[String, CellType])
+
 object School {
   implicit val scale = FixedScale(100)
 
