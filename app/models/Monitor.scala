@@ -23,7 +23,6 @@ trait AnyStatus {
   def problems: Seq[String]
 }
 
-
 object Foo {
   trait MonitorRow[ScoreType, CellType] {
     def team: LocalTeam
@@ -64,8 +63,6 @@ object Foo {
   def groupAndRank[ScoreType, CellType](teams: Seq[LocalTeam], submits: Seq[Submit],
                                                                getCell: (Seq[Submit]) => CellType,
                                                                getScore: (Seq[CellType]) => ScoreType)(implicit ord: Ordering[ScoreType]): Seq[RankedRow[ScoreType, CellType]] = {
-    import scala.collection.JavaConversions.asJavaIterable
-
     val rows = submits.groupBy(_.teamId).map {
       case (teamId, s0) =>
         val cells: Map[String, CellType] = s0.groupBy(_.problem).map {
@@ -106,7 +103,7 @@ object School {
 
     def calculateStatus(problems: Seq[(String, Int)], teams: Seq[LocalTeam], submits: Seq[Submit]): Status = {
       implicit val ord = Ordering[Rational].reverse
-      new Status(problems.map(_._1), Foo.groupAndRank(teams, submits, Cell(_), Score(_)))
+      Status(problems.map(_._1), Foo.groupAndRank(teams, submits, Cell(_), Score(_)))
     }
 }
 
@@ -120,13 +117,6 @@ object ACM {
         penalty.compare(that.penalty)
       } else r
     }
-
-    override def equals(obj: scala.Any): Boolean =
-      obj match {
-        case other: Score => solved == other.solved && penalty == other.penalty
-        case _ => super.equals(obj)
-      }
-
   }
 
   def getCell(submits: Seq[Submit]): ACMCell =
@@ -134,16 +124,15 @@ object ACM {
 
   def cellFold(state: Score, cell: ACMCell) =
     if (cell.fullSolution)
-        new Score(state.solved + 1, state.penalty + cell.score)
+        Score(state.solved + 1, state.penalty + cell.score)
     else
         state
 
   def getScore(cells: Seq[ACMCell]) =
-    cells.foldLeft(new Score(0, 0))(cellFold)
+    cells.foldLeft(Score(0, 0))(cellFold)
 
-  def calculateStatus(problems: Seq[String], teams: Seq[LocalTeam], submits: Seq[Submit]) = {
-    new Status(problems, Foo.groupAndRank(teams, submits, getCell(_), getScore(_)))
-  }
+  def calculateStatus(problems: Seq[String], teams: Seq[LocalTeam], submits: Seq[Submit]) =
+    Status(problems, Foo.groupAndRank(teams, submits, getCell(_), getScore(_)))
 }
 
 class Monitor (dbConfig: DatabaseConfig[JdbcProfile]) {
