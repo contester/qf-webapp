@@ -96,6 +96,29 @@ case class SchoolCell(attempt: Int, score: Rational, fullSolution: Boolean) exte
         Rational(submit.passed, submit.taken), attempt + 1)), fullSolution || submit.success)
 }
 
+object ACMCell {
+  def empty = ACMCell(0, 0, false)
+}
+
+object SecondsToTimeStr {
+  def apply(time: Int) = "%02d:%02d".format(time / 3600, (time / 60) % 60)
+}
+
+case class ACMCell(attempt: Int, arrivedSeconds: Int, fullSolution: Boolean) extends SubmitScore[ACMCell] {
+  def score = if (fullSolution) (arrivedSeconds / 60 + (attempt - 1) * 20) else 0
+
+  override def toString =
+    if (attempt == 0) ""
+    else if (fullSolution) ("+" + (if (attempt == 1) "" else (attempt - 1).toString))
+    else s"-$attempt"
+
+  override def withSubmit(submit: ContestSubmit): ACMCell =
+    if (!submit.compiled || fullSolution)
+      this
+    else
+      ACMCell(attempt + 1, submit.arrivedSeconds, submit.success)
+}
+
 object Submits {
   import slick.driver.MySQLDriver.api._
 

@@ -106,26 +106,9 @@ object School {
 }
 
 object ACM {
-  case class Status(val problems: Seq[String], val rows: Seq[RankedRow[Score, Cell]]) extends AnyStatus
+  case class Status(val problems: Seq[String], val rows: Seq[RankedRow[Score, ACMCell]]) extends AnyStatus
 
-  case class Row(val team: LocalTeam, val score: Score, val cells: Map[String, Cell]) extends MonitorRow[Score, Cell]
-
-  trait Cell {
-    def success: Boolean = false
-    def toShort: String
-    def timeStr: String = ""
-  }
-
-  case class Success(val failedAttempts: Seq[Int], val time: Int) extends Cell {
-    override def success: Boolean = true
-
-    override def toShort: String = "+" + (if (!failedAttempts.isEmpty) failedAttempts.length.toString else "")
-    override def timeStr = "%02d:%02d".format(time / 3600, (time / 60) % 60)
-  }
-
-  case class Failure(val failedAttempts: Seq[Int]) extends Cell {
-    override def toShort: String = if (!failedAttempts.isEmpty) {"-" + failedAttempts.length.toString} else ""
-  }
+  case class Row(val team: LocalTeam, val score: Score, val cells: Map[String, ACMCell]) extends MonitorRow[Score, ACMCell]
 
   case class Score(val solved: Int, val penalty: Int) extends Ordered[Score] {
     override def compare(that: Score): Int = {
@@ -143,34 +126,16 @@ object ACM {
 
   }
 
-  def submitFold(state: Cell, submit: Submit): Cell =
-    state match {
-      case Failure(failedAttempts) =>
-        if (submit.success)
-          new Success(failedAttempts.filter(_ < submit.arrivedSeconds), submit.arrivedSeconds)
-        else
-          new Failure(failedAttempts :+ submit.arrivedSeconds)
-      case Success(failedAttempts, arrived) if (arrived > submit.arrivedSeconds) =>
-        if (submit.success)
-          new Success(failedAttempts.filter(_ < submit.arrivedSeconds), submit.arrivedSeconds)
-        else
-          new Success(failedAttempts :+ submit.arrivedSeconds, arrived)
-      case x: Cell =>
-        x
-    }
+  def getCell(submits: Seq[Submit]): ACMCell =
+    Submits.indexSubmits(submits, ACMCell.empty).lastOption.map(_.score).getOrElse(ACMCell.empty)
 
-  def getCell(submits: Seq[Submit]): Cell =
-    submits.foldLeft((new Failure(Nil)).asInstanceOf[Cell])(submitFold)
-
-  def cellFold(state: Score, cell: Cell) =
-    cell match {
-      case Success(failedAttempts, time) =>
-        new Score(state.solved + 1, state.penalty + (time / 60) + failedAttempts.length * 20)
-      case _ =>
+  def cellFold(state: Score, cell: ACMCell) =
+    if (cell.fullSolution)
+        new Score(state.solved + 1, state.penalty + cell.score)
+    else
         state
-    }
 
-  def getScore(cells: Seq[Cell]) =
+  def getScore(cells: Seq[ACMCell]) =
     cells.foldLeft(new Score(0, 0))(cellFold)
 
   def calculateStatus(problems: Seq[String], teams: Seq[LocalTeam], submits: Seq[Submit]) = {
@@ -178,7 +143,7 @@ object ACM {
 
     val rows = submits.groupBy(_.teamId).map {
       case (teamId, s0) =>
-      val cells: Map[String, Cell] = s0.groupBy(_.problem).map {
+      val cells: Map[String, ACMCell] = s0.groupBy(_.problem).map {
                   case (problemId, s1) =>
                       problemId -> getCell(s1)
                 }
