@@ -79,14 +79,14 @@ case class SchoolCell(attempt: Int, score: Rational) extends SubmitScore[SchoolC
 object Submits {
   import slick.driver.MySQLDriver.api._
 
-  type IndexedSubmit[S <: AbstractSubmit, Sc <: SubmitScore[Sc]] = (S, Sc, Int)
+  case class ScoredSubmit[S <: AbstractSubmit, Sc <: SubmitScore[Sc]](submit: S, score: Sc, index: Int)
 
   implicit def dateTimeOrdering: Ordering[DateTime] = Ordering.fromLessThan(_ isBefore _)
 
-  def indexSubmits[S <: ContestSubmit, Sc <: SubmitScore[Sc]](submits: Seq[S], scorer: => Sc): Seq[IndexedSubmit[S, Sc]] =
+  def indexSubmits[S <: ContestSubmit, Sc <: SubmitScore[Sc]](submits: Seq[S], scorer: => Sc): Seq[ScoredSubmit[S, Sc]] =
     submits.groupBy(x => (x.teamId, x.problem))
       .mapValues(x => scoreSubmits(x.sortBy(_.arrivedTimestamp), scorer)
-      .zipWithIndex.map(x => (x._1._2, x._1._1, x._2 + 1))).values.toSeq.flatten
+      .zipWithIndex.map(x => ScoredSubmit(x._1._2, x._1._1, x._2 + 1))).values.toSeq.flatten
 
   def scoreSubmits[S <: ContestSubmit, Sc <: SubmitScore[Sc]](submits: Seq[S], empty: Sc): Seq[(Sc, S)] =
     submits.foldLeft((empty, Seq[(Sc, S)]())) {

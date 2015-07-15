@@ -3,7 +3,6 @@ package controllers
 import javax.inject.Inject
 
 import jp.t2v.lab.play2.auth.{AuthenticationElement, AuthElement, LoginLogout}
-import models.Submits.IndexedSubmit
 import models._
 import play.api.Logger
 import play.api.data.Form
@@ -49,7 +48,7 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
     db.db.run(Submits.getContestTeamSubmits(team.contest.id, team.team.localId))
 
   private def indexSubmits(submits: Seq[Submit]) =
-    Submits.indexSubmits[Submit, SchoolCell](submits, SchoolCell(0, 0)).sortBy(_._1.arrivedSeconds).reverse
+    Submits.indexSubmits[Submit, SchoolCell](submits, SchoolCell(0, 0)).sortBy(_.submit.arrivedSeconds).reverse
 
   def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
