@@ -1,4 +1,4 @@
-@(loggedIn: LoggedInTeam, submits: Seq[Submit0])
+@(loggedIn: LoggedInTeam, submits: Seq[Submit])
 
 @if(submits.isEmpty) {
 <p>Подходов не обнаружено.</p>
@@ -10,13 +10,15 @@
     </thead>
     <tbody>
     @for(s <- submits) {
-    <tr><td>@s.arrivedStr</td><td>@s.problem</td><td>@s.index</td><td></td>
+    <tr><td>@s.arrivedSeconds</td><td>@s.problem</td><td>@s</td><td></td>
         @if(s.success) {
         <td class="success">
             } else {
         <td>
             }
-            @s.resultStr</td><td></td><td></td></tr>
+            @s.passed</td><td></td><td></td></tr>
     }
     </tbody>
 </table>
+
+}

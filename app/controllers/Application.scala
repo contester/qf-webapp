@@ -3,6 +3,7 @@ package controllers
 import javax.inject.Inject
 
 import jp.t2v.lab.play2.auth.{AuthenticationElement, AuthElement, LoginLogout}
+import models.Submits.IndexedSubmit
 import models._
 import play.api.Logger
 import play.api.data.Form
@@ -44,24 +45,11 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
 
   import slick.driver.MySQLDriver.api._
 
-
-  implicit val toSubmit0=GetResult(r => SubmitE(r.nextInt(), r.nextString().toUpperCase, r.nextString().toLowerCase(), r.nextBoolean(), r.nextBoolean(), r.nextInt(), r.nextInt()))
-
-  private def getSubmitsQuery(contest: Int, team: Int) =
-    sql"""select UNIX_TIMESTAMP(Submits.Arrived) - UNIX_TIMESTAMP(Contests.Start) as arrived0,
-          Submits.Task,
-           Submits.Finished, Submits.Compiled, Submits.Passed, Submits.Taken from Submits, Contests
-         where Submits.Team=$team and Submits.Contest=$contest and Submits.Contest=Contests.ID order by arrived0
-       """.as[Submit0]
-
   private def getSubmits(team: LoggedInTeam) =
-    db.db.run(getSubmitsQuery(team.contest.id, team.team.localId))
+    db.db.run(Submits.getContestTeamSubmits(team.contest.id, team.team.localId))
 
-  private def indexSubmits(submits: Seq[SubmitE]): Seq[Submit0] =
-    submits.groupBy(_.problem).mapValues(_.sortBy(_.arrived).zipWithIndex.map { x =>
-      Submit0(x._1.arrived, x._1.problem, x._1.finished, x._1.compiled, x._1.passed, x._1.taken, x._2 + 1)
-    }).values.flatten.toSeq.sortBy(_.arrived).reverse
-
+  private def indexSubmits(submits: Seq[Submit]): Seq[IndexedSubmit[Submit]] =
+    Submits.indexSubmits(submits).sortBy(_._1.arrivedSeconds).reverse
 
   def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn

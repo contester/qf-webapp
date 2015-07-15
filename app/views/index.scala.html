@@ -1,4 +1,4 @@
-@(loggedIn: LoggedInTeam, submits: Seq[Submit0])
+@(loggedIn: LoggedInTeam, submits: Seq[Submits.IndexedSubmit[Submit]])
 
 @import helper.Implicits._
 @import b3.vertical.fieldConstructor
@@ -6,28 +6,5 @@
 @main("Contester", tab = "index") {
 
 <h1>Здравствуйте, @loggedIn.team.teamFullName.</h1>
-
-@if(submits.isEmpty) {
-<p>Подходов не обнаружено.</p>
-} else {
-
-<table class="table table-hover table-bordered table-responsive">
-    <thead>
-    <tr><th>Время</th><th>Задача</th><th>Попытка</th><th>Язык</th><th>Результат</th><th>Баллы</th><th>Время работы</th></tr>
-</thead>
-    <tbody>
-    @for(s <- submits) {
-    <tr><td>@s.arrivedStr</td><td>@s.problem</td><td>@s.index</td><td></td>
-        @if(s.success) {
-            <td class="success">
-        } else {
-        <td>
-        }
-            @s.resultStr</td><td></td><td></td></tr>
-    }
-    </tbody>
-</table>
-
-}
 
 }
