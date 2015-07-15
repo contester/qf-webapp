@@ -4,12 +4,14 @@ import javax.inject.Inject
 
 import jp.t2v.lab.play2.auth.{AuthenticationElement, AuthElement, LoginLogout}
 import models._
+import org.apache.commons.io.FileUtils
 import play.api.Logger
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
 import play.api.inject.ApplicationLifecycle
+import play.api.libs.Files.TemporaryFile
 import play.api.libs.concurrent.Execution.Implicits.defaultContext
 import play.api.mvc.{Action, Controller}
 import slick.driver.JdbcProfile
@@ -89,16 +91,24 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
   def submitPost = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
 
-    println(request)
-
     getProblems(loggedInTeam.contest.id).flatMap { problems =>
       getCompilers(loggedInTeam.contest.id).flatMap { compilers =>
-        submitForm.bindFromRequest.fold(
+        val parsed = submitForm.bindFromRequest
+        val solutionOpt = request.body.file("file").map { solution =>
+          FileUtils.readFileToByteArray(solution.ref.file)
+        }
+
+        val parsed0 = if (solutionOpt.isDefined) parsed
+          else parsed.withGlobalError("can't open the file")
+
+        parsed0.fold(
           formWithErrors => {
-            println(formWithErrors.errors)
             Future.successful(BadRequest(html.sendsolution(loggedInTeam, formWithErrors, problems, compilers)))
           },
-          user => Future.successful(Redirect(routes.Application.index))
+          submitData => {
+            println(loggedInTeam.contest, loggedInTeam.team, submitData.problem, submitData.compiler, solutionOpt.get.length)
+              Future.successful(Redirect(routes.Application.index))
+          }
         )
       }
     }

@@ -7,8 +7,9 @@
 
 <h1>Здравствуйте, @loggedIn.team.teamFullName.</h1>
 
-@b3.vertical.form(controllers.routes.Application.submitPost, 'enctype -> "multipart/form-data") { implicit ifc =>
-<h2>Отправить решение на проверку.</h2>
+<div class="well bs-component">
+@b3.form(controllers.routes.Application.submitPost, 'enctype -> "multipart/form-data") {
+<legend>Отправить решение на проверку.</legend>
 
 @form.globalError.map { error =>
 <div class="alert alert-danger" role="alert">
@@ -29,4 +30,5 @@
 @b3.file(form("file"), '_label -> "Файл с решением")
 @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Отправить}
 }
+</div>
 }

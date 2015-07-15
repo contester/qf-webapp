@@ -29,6 +29,7 @@ libraryDependencies ++= Seq(
   "jp.t2v" %% "play2-auth-test" % "0.14.0" % "test",
   "com.typesafe.play" %% "play-slick" % "1.0.0",
   "mysql" % "mysql-connector-java" % "5.1.36",
+  "commons-io" % "commons-io" % "2.4",
   "org.spire-math" %% "spire" % "0.10.1"
 )
 

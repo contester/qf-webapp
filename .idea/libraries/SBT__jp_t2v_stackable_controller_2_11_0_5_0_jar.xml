@@ -1,0 +1,13 @@
+<component name="libraryTable">
+  <library name="SBT: jp.t2v:stackable-controller_2.11:0.5.0:jar">
+    <CLASSES>
+      <root url="jar://$USER_HOME$/.ivy2/cache/jp.t2v/stackable-controller_2.11/jars/stackable-controller_2.11-0.5.0.jar!/" />
+    </CLASSES>
+    <JAVADOC>
+      <root url="jar://$USER_HOME$/.ivy2/cache/jp.t2v/stackable-controller_2.11/docs/stackable-controller_2.11-0.5.0-javadoc.jar!/" />
+    </JAVADOC>
+    <SOURCES>
+      <root url="jar://$USER_HOME$/.ivy2/cache/jp.t2v/stackable-controller_2.11/srcs/stackable-controller_2.11-0.5.0-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>
