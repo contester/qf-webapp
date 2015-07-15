@@ -30,6 +30,7 @@ trait SubmitId {
 trait ContestSubmit extends AbstractSubmit {
   def arrivedSeconds: Int
   def afterFreeze: Boolean
+  def problemRating: Int
 
   def arrivedStr = "%02d:%02d".format(arrivedSeconds / 3600, (arrivedSeconds / 60) % 60)
 }
@@ -41,7 +42,7 @@ trait Indexed {
 case class Submit(submitId: Int, arrivedTimestamp: DateTime, teamId: Int,
                   problem: String, ext: String, finished: Boolean,
                    compiled: Boolean, passed: Int, taken: Int, arrivedSeconds: Int,
-                  afterFreeze: Boolean) extends ContestSubmit with SubmitId
+                  afterFreeze: Boolean, problemRating: Int) extends ContestSubmit with SubmitId
 
 trait SubmitScore[S] {
   def withSubmit(submit: ContestSubmit): S
@@ -73,7 +74,7 @@ case class SchoolCell(attempt: Int, score: Rational) extends SubmitScore[SchoolC
     if (!submit.compiled)
       this
     else
-      SchoolCell(attempt + 1, score.max(SchoolCell.calculate(30, Rational(submit.passed, submit.taken), attempt + 1)))
+      SchoolCell(attempt + 1, score.max(SchoolCell.calculate(submit.problemRating, Rational(submit.passed, submit.taken), attempt + 1)))
 }
 
 object Submits {
@@ -99,32 +100,34 @@ object Submits {
     implicit val getSubmitResult = GetResult(r => Submit(
       r.nextInt(), new DateTime(r.nextTimestamp()), r.nextInt(), r.nextString(), r.nextString(), r.nextBoolean(),
       r.nextBoolean(),
-      r.nextInt(), r.nextInt(), r.nextInt(), r.nextBoolean()
+      r.nextInt(), r.nextInt(), r.nextInt(), r.nextBoolean(), r.nextInt()
     ))
 
     sql"""select Submits.ID, Submits.Arrived,
           Team, Task, Ext, Finished, Compiled,
           Passed, Taken,
           unix_timestamp(Submits.Arrived) - unix_timestamp(Contests.Start) as Arrived0,
-          Submits.Arrived > Contests.Finish from Contests, Submits where
+          Submits.Arrived > Contests.Finish, Problems.Rating from Contests, Submits, Problems where
           Contests.ID = $contest and Submits.Arrived < Contests.End and Submits.Arrived >= Contests.Start and
-          Contests.ID = Submits.Contest and Submits.Finished order by Arrived0""".as[Submit]
+          Contests.ID = Submits.Contest and Submits.Finished and Problems.Contest = Contests.ID and
+          Problems.ID = Submits.Task order by Arrived0""".as[Submit]
   }
 
   def getContestTeamSubmits(contest: Int, team: Int) = {
     implicit val getSubmitResult = GetResult(r => Submit(
       r.nextInt(), new DateTime(r.nextTimestamp()), r.nextInt(), r.nextString(), r.nextString(), r.nextBoolean(),
       r.nextBoolean(),
-      r.nextInt(), r.nextInt(), r.nextInt(), r.nextBoolean()
+      r.nextInt(), r.nextInt(), r.nextInt(), r.nextBoolean(), r.nextInt()
     ))
 
     sql"""select Submits.ID, Submits.Arrived,
           Team, Task, Ext, Finished, Compiled,
           Passed, Taken,
           unix_timestamp(Submits.Arrived) - unix_timestamp(Contests.Start) as Arrived0,
-          Submits.Arrived > Contests.Finish from Contests, Submits where
+          Submits.Arrived > Contests.Finish, Problems.Rating from Contests, Submits, Problems where
           Submits.Team = $team and
           Contests.ID = $contest and Submits.Arrived < Contests.End and Submits.Arrived >= Contests.Start and
-          Contests.ID = Submits.Contest and Submits.Finished order by Arrived0""".as[Submit]
+          Contests.ID = Submits.Contest and Problems.Contest = Contests.ID and
+          Problems.ID = Submits.Task order by Arrived0""".as[Submit]
   }
 }

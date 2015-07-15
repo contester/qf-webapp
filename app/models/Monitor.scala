@@ -31,34 +31,9 @@ object School {
   }
 
   object Cell {
-    def calculate(base: Int, fraction: Rational, failedAttempts: Int): Rational = {
-      val tops = {
-        val x = base - failedAttempts
-        if (x < 20)
-          20
-        else
-          x
-      }
-      if (fraction == 1)
-        tops
-      else {
-        val x = tops * 2 * fraction / 3
-        if (x < 5)
-          0.0
-        else
-          x
-      }
-    }
-
-    def submitFraction(s: Submit): Rational =
-      if (s.taken == 0)
-        Rational(0)
-      else
-        Rational(s.passed,s.taken)
-
     def apply(submits: Seq[Submit]): Cell = {
-      val maxScore = submits.sortBy(_.arrivedSeconds).zipWithIndex.map(x => calculate(30,submitFraction(x._1), x._2)).max
-      new Cell(maxScore, submits.exists(submitFraction(_) == 1))
+      val score = Submits.indexSubmits(submits, SchoolCell(0, 0)).lastOption.map(_.score).getOrElse(SchoolCell(0, 0))
+      new Cell(score.score, submits.exists(_.success))
     }
   }
 
