@@ -13,6 +13,8 @@ import play.api.i18n.{I18nSupport, MessagesApi}
 import play.api.inject.ApplicationLifecycle
 import play.api.libs.Files.TemporaryFile
 import play.api.libs.concurrent.Execution.Implicits.defaultContext
+import play.api.libs.iteratee.{Enumerator, Concurrent}
+import play.api.libs.json.JsValue
 import play.api.mvc.{Action, Controller}
 import slick.driver.JdbcProfile
 import slick.jdbc.GetResult
@@ -23,7 +25,41 @@ import scala.concurrent.{Promise, Future}
 
 case class SubmitData(problem: String, compiler: String)
 
-class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvider, lifecycle: ApplicationLifecycle, val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport{
+import akka.actor._
+
+object HelloActor {
+  def props = Props[HelloActor]
+
+  case class SayHello(name: String)
+}
+
+case class Join(username: String)
+case class Connected(enumerator:Enumerator[String])
+
+class HelloActor extends Actor {
+  import HelloActor._
+  import scala.concurrent.duration._
+
+  import context.dispatcher
+  val tick =
+    context.system.scheduler.schedule(10 seconds, 10 seconds, self, "tick")
+
+  val (chatEnumerator, chatChannel) = Concurrent.broadcast[String]
+
+  def receive = {
+    case Join(username) => {
+      sender ! Connected(chatEnumerator)
+    }
+    case "tick" => {
+      println("tick")
+      chatChannel.push("blah")
+    }
+  }
+}
+
+class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvider, system: ActorSystem, lifecycle: ApplicationLifecycle, val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport{
+
+  val helloActor = system.actorOf(HelloActor.props, "hello-actor")
 
   val monitorModel = new Monitor(dbConfigProvider.get[JdbcProfile])
   monitorModel.rebuildMonitorsLoop
@@ -120,19 +156,22 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
   import play.api.mvc._
   import play.api.libs.iteratee._
 
-  def socket =  WebSocket.using[String] { request =>
+  def socket =  WebSocket.tryAccept[String] { request =>
 
-    // Concurrent.broadcast returns (Enumerator, Concurrent.Channel)
-    val (out, channel) = Concurrent.broadcast[String]
-
+    println(request)
     // log the message to stdout and send response back to client
     val in = Iteratee.foreach[String] {
       msg => println(msg)
-        // the Enumerator returned by Concurrent.broadcast subscribes to the channel and will
-        // receive the pushed messages
-        channel push("I received your message: " + msg)
     }
-    (in,out)
+
+    import scala.concurrent.duration._
+    import akka.pattern.ask
+
+    (helloActor.ask(Join("foo"))(5 seconds)).map {
+      case Connected(out) =>
+        Right((in, out))
+      case _ => Left(BadRequest("foo"))
+    }
   }
 
 }
