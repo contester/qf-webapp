@@ -122,6 +122,12 @@ case class ACMCell(attempt: Int, arrivedSeconds: Int, fullSolution: Boolean) ext
 object Submits {
   import slick.driver.MySQLDriver.api._
 
+  type SubmitScorerFunc[Sc] = Seq[Submit] => Sc
+
+  def score2[Sc](submits: Seq[Submit], scorer: SubmitScorerFunc) =
+    submits.groupBy(x => (x.teamId, x.problem))
+      .mapValues(x => scorer(x.sortBy(_.arrivedSeconds)))
+
   case class ScoredSubmit[S <: AbstractSubmit, Sc <: SubmitScore[Sc]](submit: S, score: Sc, index: Int)
 
   implicit def dateTimeOrdering: Ordering[DateTime] = Ordering.fromLessThan(_ isBefore _)

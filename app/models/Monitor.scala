@@ -188,14 +188,22 @@ class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, lifecycle: Ap
     contestMonitorsFu.putIfAbsent(id, np).getOrElse(np)
   }
 
-  val getContests = sql"select ID, SchoolMode from Contests".as[(Int, Boolean)]
+  import com.github.nscala_time.time.Imports._
+
+  implicit val convertContests = GetResult(r => Contest(r.nextInt(), r.nextString(), r.nextBoolean(),
+    new DateTime(r.nextTimestamp()), new DateTime(r.nextTimestamp()), new DateTime(r.nextTimestamp()),
+    new DateTime(r.nextTimestamp())))
+
+
+  val getContests =
+    sql"""select ID, Name, SchoolMode, Start, End, Finish, Expose from Contests""".as[Contest]
 
   def getContestState(contest: Int, schoolMode: Boolean) =
     getStatus(db, contest, schoolMode)
 
   def rebuildMonitors: Future[Unit] =
     dbConfig.db.run(getContests).flatMap { contests =>
-      Future.sequence(contests.map(x => getContestState(x._1, x._2).map(y => (x._1, y))))
+      Future.sequence(contests.map(x => getContestState(x.id, x.schoolMode).map(y => (x.id, y))))
     }.map { statuses =>
       statuses.foreach {
         case (contestId, contestStatus) =>

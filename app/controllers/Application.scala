@@ -52,7 +52,7 @@ class HelloActor extends Actor {
     }
     case "tick" => {
       println("tick")
-      chatChannel.push("blah")
+      //chatChannel.push("blah")
     }
   }
 }
