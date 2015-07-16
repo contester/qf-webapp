@@ -41,7 +41,9 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
   def monitorDefault = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
     val np = Promise[(AnyStatus, AnyStatus)]
-    monitorModel.contestMonitorsFu.putIfAbsent(loggedInTeam.contest.id, np).getOrElse(np).future.map(x => Ok(html.monitor(x._2, loggedInTeam.team.localId)))
+    monitorModel.contestMonitorsFu.putIfAbsent(loggedInTeam.contest.id, np).getOrElse(np).future.map(x => {
+      val v = if (loggedInTeam.contest.frozen) x._1 else x._2
+      Ok(html.monitor(v, loggedInTeam.team.localId))})
   }
 
   private def anyUser(account: LoggedInTeam): Future[Boolean] = Future.successful(true)

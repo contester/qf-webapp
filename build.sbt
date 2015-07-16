@@ -30,6 +30,7 @@ libraryDependencies ++= Seq(
   "com.typesafe.play" %% "play-slick" % "1.0.0",
   "mysql" % "mysql-connector-java" % "5.1.36",
   "commons-io" % "commons-io" % "2.4",
+  "com.github.nscala-time" %% "nscala-time" % "2.0.0",
   "org.spire-math" %% "spire" % "0.10.1"
 )
 
