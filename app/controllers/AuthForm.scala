@@ -16,42 +16,25 @@ import scala.concurrent.Future
 
 case class AuthData(username: String, password: String)
 
-class AuthForms @Inject() (val messagesApi: MessagesApi, override val dbConfigProvider: DatabaseConfigProvider) extends Controller with LoginLogout with AuthConfigImpl with I18nSupport {
-  /** Your application's login form.  Alter it to fit your application */
+class AuthForms @Inject() (val messagesApi: MessagesApi, override val dbConfigProvider: DatabaseConfigProvider)
+  extends Controller with LoginLogout with AuthConfigImpl with I18nSupport {
+
   val loginForm = Form {
     mapping("username" -> text, "password" -> text)(AuthData.apply)(AuthData.unapply)
   }
 
-  /** Alter the login page action to suit your application. */
   def login = Action { implicit request =>
     Ok(html.login(loginForm))
   }
 
-  /**
-   * Return the `gotoLogoutSucceeded` method's result in the logout action.
-   *
-   * Since the `gotoLogoutSucceeded` returns `Future[Result]`,
-   * you can add a procedure like the following.
-   *
-   *   gotoLogoutSucceeded.map(_.flashing(
-   *     "success" -> "You've been logged out"
-   *   ))
-   */
   def logout = Action.async { implicit request =>
-    // do something...
-    gotoLogoutSucceeded
+    gotoLogoutSucceeded.map(_.flashing("success" -> "You've been logged out"))
   }
 
   def doAuth(username: String, password: String) =
     //Users.authenticate(db.db, username, password)
     Users.resolve(db.db, username)
 
-  /**
-   * Return the `gotoLoginSucceeded` method's result in the login action.
-   *
-   * Since the `gotoLoginSucceeded` returns `Future[Result]`,
-   * you can add a procedure like the `gotoLogoutSucceeded`.
-   */
   def authenticate = Action.async { implicit request =>
     loginForm.bindFromRequest.fold(
       formWithErrors => Future.successful(BadRequest(html.login(formWithErrors))),

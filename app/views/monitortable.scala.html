@@ -1,0 +1,70 @@
+@(status: models.AnyStatus, current: Int)
+
+<table class="table table-hover table-bordered table-responsive">
+    <thead>
+    @status match {
+    case st: ACM.Status => {
+    <tr><th>Rank</th><th>ID</th><th>Name</th><th>Solved</th><th>Penalty</th>
+        }
+        case st: School.Status => {
+    <tr><th>Rank</th><th>ID</th><th>Name</th><th>Score</th>
+        }
+        }
+        @for(p <- status.problems) {
+        <th>@p</th>
+        }
+    </tr>
+    </thead>
+    <tbody>
+    @status match {
+    case st: ACM.Status => {
+    @for(r <- st.rows) {
+    @if(current == r.team.localId) {
+    <tr class="info">
+        } else {
+    <tr>
+        }
+        <th scope="row">@r.rankStr</th><td>@r.team.localId</td>
+        <td>@r.team.schoolNameWithNum<br/><small>@r.team.teamName</small></td><td>@r.score.solved</td><td>@r.score.penalty</td>
+        @for(p <- st.problems.map(r.cells.get)) {
+        <td class="text-center">
+            @for(cell <- p) {
+            @if(cell.fullSolution) {
+            <span class="text-success"><strong>@cell</strong></span><br/>
+            <span class="text-info"><small>@SecondsToTimeStr(cell.arrivedSeconds)</small></span>
+            } else {
+            <span class="text-muted">@cell</span>
+            }
+            }
+        </td>
+        }
+    </tr>
+    }
+    }
+    case st: School.Status => {
+    @for(r <- st.rows) {
+    @if(current == r.team.localId) {
+    <tr class="info">
+        } else {
+    <tr>
+        }
+        <th scope="row" class="text-center">@r.rankStr</th><td class="text-center">@r.team.localId</td>
+        <td>@r.team.schoolNameWithNum<br/><small>@r.team.teamName</small></td>
+        <td class="text-center">@RationalToScoreStr(r.score)</td>
+        @for(p <- st.problems.map(r.cells.get)) {
+        <td class="text-center">
+            @for(cell <- p) {
+            @if(cell.fullSolution) {
+            <span class="text-success"><strong>@cell</strong></span>
+            } else {
+            <span class="text-muted">@cell</span>
+            }
+            }
+        </td>
+        }
+    </tr>
+    }
+    }
+    }
+    </tbody>
+</table>

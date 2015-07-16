@@ -1,0 +1,7 @@
+@(status: models.AnyStatus, loggedIn: LoggedInTeam)
+
+@main("Monitor", tab = "monitor") {
+
+@monitortable(status, loggedIn.team.localId)
+
+}

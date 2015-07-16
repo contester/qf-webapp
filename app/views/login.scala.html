@@ -14,10 +14,18 @@
     <link rel="stylesheet" media="screen" href="@routes.Assets.at("lib/bootstrap/css/bootstrap.min.css")">
     <link rel="stylesheet" media="screen" href="@routes.Assets.at("lib/font-awesome/css/font-awesome.min.css")">
     <link rel="stylesheet" media="screen" href="@routes.Assets.at("lib/bootstrap-datepicker/css/datepicker3.css")">
+    <link href="@routes.Assets.at("css/roboto.min.css")" rel="stylesheet">
+    <link href="@routes.Assets.at("css/material.min.css")" rel="stylesheet">
+    <link href="@routes.Assets.at("css/ripples.min.css")" rel="stylesheet">
     <link rel="stylesheet" media="screen" href="@routes.Assets.at("css/signin.css")">
     <script src="@routes.Assets.at("lib/jquery/jquery.min.js")" type="text/javascript"></script>
   <script src="@routes.Assets.at("lib/bootstrap/js/bootstrap.min.js")" type="text/javascript"></script>
     <script src="@routes.Assets.at("lib/bootstrap-datepicker/js/bootstrap-datepicker.js")" type="text/javascript"></script>
+        <script src="@routes.Assets.at("js/ripples.min.js")"></script>
+    <script src="@routes.Assets.at("js/material.min.js")"></script>
+    <script type="text/javascript">
+    $.material.init()
+    </script>
 
   <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
   <!--[if lt IE 9]>
@@ -30,6 +38,7 @@
 
 <div class="container">
 
+    <div class="well">
     @b3.vertical.form(controllers.routes.AuthForms.authenticate, 'class -> "form-signin") { implicit ifc =>
     <h2 class="form-signin-heading">Пожалуйста, авторизуйтесь.</h2>
 
@@ -51,6 +60,7 @@
     @b3.password(form("password"), '_label -> "Пароль")
     @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Авторизоваться}
     }
+    </div>
 
 </div>
 </body>
