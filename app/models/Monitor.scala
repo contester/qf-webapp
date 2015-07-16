@@ -1,11 +1,12 @@
 package models
 
 import java.util.concurrent.TimeUnit
-import javax.inject.Inject
+import javax.inject.{Singleton, Inject}
 
 import models.Foo.{RankedRow, MonitorRow}
 import org.jboss.netty.util.{Timeout, TimerTask, HashedWheelTimer}
 import play.api.db.slick.DatabaseConfigProvider
+import play.api.inject.ApplicationLifecycle
 import play.api.mvc.{Action, Controller}
 import play.twirl.api.Html
 import slick.backend.DatabaseConfig
@@ -135,8 +136,15 @@ object ACM {
     Status(problems, Foo.groupAndRank(teams, submits, getCell(_), getScore(_)))
 }
 
-class Monitor (dbConfig: DatabaseConfig[JdbcProfile]) {
+@Singleton
+class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, lifecycle: ApplicationLifecycle) {
+  val dbConfig = dbConfigProvider.get[JdbcProfile]
   import dbConfig.driver.api._
+
+  lifecycle.addStopHook { () =>
+    done = true
+    Future.successful()
+  }
 
   val db = dbConfig.db
 
@@ -206,9 +214,12 @@ class Monitor (dbConfig: DatabaseConfig[JdbcProfile]) {
 
   def rebuildMonitorsLoop: Unit =
     rebuildMonitors.onComplete { result =>
+      println(result)
       if (!done)
         timer.newTimeout(new TimerTask {
           override def run(timeout: Timeout): Unit = rebuildMonitorsLoop
         }, 20, TimeUnit.SECONDS)
     }
+
+  rebuildMonitorsLoop
 }

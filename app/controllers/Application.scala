@@ -57,21 +57,16 @@ class HelloActor extends Actor {
   }
 }
 
-class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvider, system: ActorSystem, lifecycle: ApplicationLifecycle, val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport{
+class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvider, monitorModel: Monitor,
+                             system: ActorSystem, val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport{
 
   val helloActor = system.actorOf(HelloActor.props, "hello-actor")
-
-  val monitorModel = new Monitor(dbConfigProvider.get[JdbcProfile])
-  monitorModel.rebuildMonitorsLoop
-
-  lifecycle.addStopHook { () =>
-    monitorModel.done = true
-    Future.successful()
-  }
 
   def monitor(id: Int) = Action.async { implicit request =>
     monitorModel.getMonitor(id).map(x => Ok(html.monitor(x._2)))
   }
+
+  println(monitorModel)
 
   def monitorDefault = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
