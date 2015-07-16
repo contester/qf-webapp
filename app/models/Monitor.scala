@@ -196,22 +196,28 @@ class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, lifecycle: Ap
     }
   }
 
+  case class StoredContestStatus(contest: Contest, frozen: AnyStatus, exposed: AnyStatus) {
+    private[this] def status(overrideFreeze: Boolean) =
+      if (contest.frozen && !overrideFreeze)
+        frozen
+      else
+        exposed
+
+    def monitor(overrideFreeze: Boolean) =
+      ContestMonitor(contest, status(overrideFreeze))
+  }
+
   val contestMonitorsFu = {
     import scala.collection.JavaConverters._
     import java.util.concurrent.ConcurrentHashMap
-    new ConcurrentHashMap[Int, Promise[(Contest, AnyStatus, AnyStatus)]]().asScala
+    new ConcurrentHashMap[Int, Promise[StoredContestStatus]]().asScala
   }
 
-  def getMonitor(id: Int, overrideFreeze: Boolean): Future[(Contest, AnyStatus)] = newOrUpdatedPromise(id).future
-    .map { x =>
-    if (x._1.frozen && !overrideFreeze)
-      x._1 -> x._2
-    else
-      x._1 -> x._3
-  }
+  def getMonitor(id: Int, overrideFreeze: Boolean): Future[ContestMonitor] =
+    newOrUpdatedPromise(id).future.map(_.monitor(overrideFreeze))
 
   private def newOrUpdatedPromise(id: Int) = {
-    val np = Promise[(Contest, AnyStatus, AnyStatus)]
+    val np = Promise[StoredContestStatus]
     contestMonitorsFu.putIfAbsent(id, np).getOrElse(np)
   }
 
@@ -236,9 +242,9 @@ class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, lifecycle: Ap
         case (contest, contestStatus) =>
           val m = newOrUpdatedPromise(contest.id)
             if (m.isCompleted) {
-              contestMonitorsFu.put(contest.id, Promise.successful((contest, contestStatus._1, contestStatus._2)))
+              contestMonitorsFu.put(contest.id, Promise.successful(StoredContestStatus(contest, contestStatus._1, contestStatus._2)))
             } else {
-              m.success((contest, contestStatus._1, contestStatus._2))
+              m.success(StoredContestStatus(contest, contestStatus._1, contestStatus._2))
             }
       }
     }
