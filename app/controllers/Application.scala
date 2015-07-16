@@ -140,7 +140,6 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
         )
       }
     }
-
   }
 
   import play.api.mvc._
