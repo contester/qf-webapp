@@ -2,12 +2,13 @@
 
 <table class="table table-hover table-bordered table-responsive">
     <thead>
+    <tr><th>Rank</th><th>ID</th><th>Name</th>
     @status match {
     case st: ACM.Status => {
-    <tr><th>Rank</th><th>ID</th><th>Name</th><th>Solved</th><th>Penalty</th>
+    <th>Solved</th><th>Penalty</th>
         }
         case st: School.Status => {
-    <tr><th>Rank</th><th>ID</th><th>Name</th><th>Score</th>
+    <th>Score</th>
         }
         }
         @for(p <- status.problems) {
