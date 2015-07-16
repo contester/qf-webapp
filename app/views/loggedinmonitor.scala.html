@@ -1,7 +1,26 @@
 @(status: models.AnyStatus, loggedIn: LoggedInTeam)(implicit request: RequestHeader)
 
+@import com.github.nscala_time.time.Imports._
+@import org.joda.time.format.PeriodFormat
+
 @main("Monitor", tab = "monitor") {
 
+<h3>@loggedIn.contest.name</h3>
+@if(loggedIn.contest.frozen) {
+<p class="text-warning">Монитор заморожен</p>
+}
+@if(loggedIn.contest.finished) {
+<p class="text-info">Соревнование закончено</p>
+} else {
+@if(loggedIn.contest.started) {
+<p>До окончания соревнования: @(PeriodFormat.getDefault().print((DateTime.now to loggedIn.contest.endTime).toPeriod))</p>
+} else {
+<p>До начала соревнования: @(PeriodFormat.getDefault().print((DateTime.now to loggedIn.contest.startTime).toPeriod))</p>
+}
+}
+
+@if(loggedIn.contest.started) {
 @monitortable(status, loggedIn.team.localId)
+}
 
 }

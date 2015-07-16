@@ -42,7 +42,7 @@ class HelloActor extends Actor {
 
   import context.dispatcher
   val tick =
-    context.system.scheduler.schedule(10 seconds, 10 seconds, self, "tick")
+    context.system.scheduler.schedule(60 seconds, 60 seconds, self, "tick")
 
   val (chatEnumerator, chatChannel) = Concurrent.broadcast[String]
 
@@ -157,14 +157,12 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
   import play.api.libs.iteratee._
 
   def socket = WebSocket.tryAccept[String] { implicit request =>
-
     println(request)
 
     authorized(anyUser).flatMap {
       case Left(result) => Future.successful(Left(result))
       case Right((user, resultUpdater)) => {
         println(user)
-        // log the message to stdout and send response back to client
         val in = Iteratee.foreach[String] {
           msg => println(msg)
         }
