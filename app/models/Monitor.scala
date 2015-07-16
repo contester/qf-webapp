@@ -28,6 +28,12 @@ trait AnyStatus {
 trait AnyRankedRow {
   def rank: Int
   def team: LocalTeam
+
+  def anyScore: Any
+  def anyCells: Map[String, Any]
+
+  def rankStr =
+    if (rank == 0) "*" else rank.toString
 }
 
 object Foo {
@@ -38,8 +44,9 @@ object Foo {
   }
 
   case class RankedRow[ScoreType, CellType](rank: Int, team: LocalTeam, score: ScoreType, cells: Map[String, CellType]) extends AnyRankedRow {
-    def rankStr =
-      if (rank == 0) "*" else rank.toString
+    override def anyScore: Any = score
+
+    override def anyCells: Map[String, Any] = cells
   }
 
   type RankState[ScoreType, CellType] = (Seq[RankedRow[ScoreType, CellType]], Int)
