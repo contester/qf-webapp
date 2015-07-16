@@ -124,7 +124,7 @@ object Submits {
 
   type SubmitScorerFunc[Sc] = Seq[Submit] => Sc
 
-  def score2[Sc](submits: Seq[Submit], scorer: SubmitScorerFunc) =
+  def score2[Sc](submits: Seq[Submit], scorer: SubmitScorerFunc[Sc]) =
     submits.groupBy(x => (x.teamId, x.problem))
       .mapValues(x => scorer(x.sortBy(_.arrivedSeconds)))
 
