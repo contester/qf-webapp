@@ -20,6 +20,8 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 import scala.concurrent.{Promise, ExecutionContext, Future}
 
+case class ContestMonitor(contest: Contest, status: AnyStatus)
+
 trait AnyStatus {
   def problems: Seq[String]
   def anyRows: Seq[AnyRankedRow]
@@ -197,13 +199,19 @@ class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, lifecycle: Ap
   val contestMonitorsFu = {
     import scala.collection.JavaConverters._
     import java.util.concurrent.ConcurrentHashMap
-    new ConcurrentHashMap[Int, Promise[(AnyStatus, AnyStatus)]]().asScala
+    new ConcurrentHashMap[Int, Promise[(Contest, AnyStatus, AnyStatus)]]().asScala
   }
 
-  def getMonitor(id: Int): Future[(AnyStatus, AnyStatus)] = newOrUpdatedPromise(id).future
+  def getMonitor(id: Int, overrideFreeze: Boolean): Future[(Contest, AnyStatus)] = newOrUpdatedPromise(id).future
+    .map { x =>
+    if (x._1.frozen && !overrideFreeze)
+      x._1 -> x._2
+    else
+      x._1 -> x._3
+  }
 
   private def newOrUpdatedPromise(id: Int) = {
-    val np = Promise[(AnyStatus, AnyStatus)]
+    val np = Promise[(Contest, AnyStatus, AnyStatus)]
     contestMonitorsFu.putIfAbsent(id, np).getOrElse(np)
   }
 
@@ -222,15 +230,15 @@ class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, lifecycle: Ap
 
   def rebuildMonitors: Future[Unit] =
     dbConfig.db.run(getContests).flatMap { contests =>
-      Future.sequence(contests.map(x => getContestState(x.id, x.schoolMode).map(y => (x.id, y))))
+      Future.sequence(contests.map(x => getContestState(x.id, x.schoolMode).map(y => (x, y))))
     }.map { statuses =>
       statuses.foreach {
-        case (contestId, contestStatus) =>
-          val m = newOrUpdatedPromise(contestId)
+        case (contest, contestStatus) =>
+          val m = newOrUpdatedPromise(contest.id)
             if (m.isCompleted) {
-              contestMonitorsFu.put(contestId, Promise.successful(contestStatus))
+              contestMonitorsFu.put(contest.id, Promise.successful((contest, contestStatus._1, contestStatus._2)))
             } else {
-              m.success(contestStatus)
+              m.success((contest, contestStatus._1, contestStatus._2))
             }
       }
     }

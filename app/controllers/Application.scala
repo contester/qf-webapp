@@ -63,16 +63,13 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
   val helloActor = system.actorOf(HelloActor.props, "hello-actor")
 
   def monitor(id: Int) = Action.async { implicit request =>
-    monitorModel.getMonitor(id).map(x => Ok(html.monitor(x._2)))
+    monitorModel.getMonitor(id, false).map(x => Ok(html.monitor(x._1, x._2)))
   }
-
-  println(monitorModel)
 
   def monitorDefault = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
-    monitorModel.getMonitor(loggedInTeam.contest.id).map(x => {
-      val v = if (loggedInTeam.contest.frozen) x._1 else x._2
-      Ok(html.loggedinmonitor(v, loggedInTeam))})
+    monitorModel.getMonitor(loggedInTeam.contest.id, false).map(x => {
+      Ok(html.loggedinmonitor(x._1, x._2, loggedInTeam))})
   }
 
   private def anyUser(account: LoggedInTeam): Future[Boolean] = Future.successful(true)
