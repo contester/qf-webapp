@@ -22,6 +22,12 @@ import scala.concurrent.{Promise, ExecutionContext, Future}
 
 trait AnyStatus {
   def problems: Seq[String]
+  def anyRows: Seq[AnyRankedRow]
+}
+
+trait AnyRankedRow {
+  def rank: Int
+  def team: LocalTeam
 }
 
 object Foo {
@@ -31,7 +37,7 @@ object Foo {
     def cells: Map[String, CellType]
   }
 
-  case class RankedRow[ScoreType, CellType](rank: Int, team: LocalTeam, score: ScoreType, cells: Map[String, CellType]) {
+  case class RankedRow[ScoreType, CellType](rank: Int, team: LocalTeam, score: ScoreType, cells: Map[String, CellType]) extends AnyRankedRow {
     def rankStr =
       if (rank == 0) "*" else rank.toString
   }
@@ -88,7 +94,9 @@ object Foo {
 }
 
 object School {
-  case class Status(problems: Seq[String], rows: Seq[RankedRow[Rational, SchoolCell]]) extends AnyStatus
+  case class Status(problems: Seq[String], rows: Seq[RankedRow[Rational, SchoolCell]]) extends AnyStatus {
+    override def anyRows: Seq[AnyRankedRow] = rows
+  }
 
   object Cell {
     def apply(submits: Seq[Submit]): SchoolCell =
@@ -109,7 +117,9 @@ object School {
 }
 
 object ACM {
-  case class Status(val problems: Seq[String], val rows: Seq[RankedRow[Score, ACMCell]]) extends AnyStatus
+  case class Status(val problems: Seq[String], val rows: Seq[RankedRow[Score, ACMCell]]) extends AnyStatus {
+    override def anyRows: Seq[AnyRankedRow] = rows
+  }
 
   case class Score(val solved: Int, val penalty: Int) extends Ordered[Score] {
     override def compare(that: Score): Int = {
