@@ -1,4 +1,4 @@
-@(title: String, admin: Boolean = false, tab: String = "", loggedInOpt: Option[LoggedInTeam] = None, styles: Html = Html(""), scripts: Html = Html(""), modals: Html = Html(""))(content: Html)
+@(title: String, admin: Boolean = false, tab: String = "", loggedInOpt: Option[LoggedInTeam] = None, styles: Html = Html(""), scripts: Html = Html(""), modals: Html = Html(""))(content: Html)(implicit request: RequestHeader)
 
 @navlink(myid: String, myhref: String, mytext: String) = {
     @if(myid == tab) {
@@ -40,6 +40,17 @@
     <script src="@routes.Assets.at("js/material.min.js")"></script>
     <script type="text/javascript">
     $.material.init()
+
+    $(function() {
+			var WS = window['MozWebSocket'] ? MozWebSocket : WebSocket
+            var chatSocket = new WS("@routes.Application.socket.webSocketURL()")
+
+            var receiveEvent = function(event) {
+                console.log(event)
+            }
+
+            chatSocket.onmessage = receiveEvent
+        })
     </script>
     @scripts
 </head>
