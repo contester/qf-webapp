@@ -9,3 +9,5 @@ case class Contest(id: Int, name: String, schoolMode: Boolean, startTime: DateTi
   def started = DateTime.now >= startTime
 
 }
+
+case class Problem(id: String, name: String, tests: Int, rating: Int)

@@ -102,9 +102,9 @@ object School {
     }
   }
 
-    def calculateStatus(problems: Seq[(String, Int)], teams: Seq[LocalTeam], submits: Seq[Submit]): Status = {
+    def calculateStatus(problems: Seq[Problem], teams: Seq[LocalTeam], submits: Seq[Submit]): Status = {
       implicit val ord = Ordering[Rational].reverse
-      Status(problems.map(_._1), Foo.groupAndRank(teams, submits, Cell(_), Score(_)))
+      Status(problems.map(_.id), Foo.groupAndRank(teams, submits, Cell(_), Score(_)))
     }
 }
 
@@ -132,8 +132,8 @@ object ACM {
   def getScore(cells: Seq[ACMCell]) =
     cells.foldLeft(Score(0, 0))(cellFold)
 
-  def calculateStatus(problems: Seq[String], teams: Seq[LocalTeam], submits: Seq[Submit]) =
-    Status(problems, Foo.groupAndRank(teams, submits, getCell(_), getScore(_)))
+  def calculateStatus(problems: Seq[Problem], teams: Seq[LocalTeam], submits: Seq[Submit]) =
+    Status(problems.map(_.id), Foo.groupAndRank(teams, submits, getCell(_), getScore(_)))
 }
 
 @Singleton
@@ -148,8 +148,10 @@ class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, lifecycle: Ap
 
   val db = dbConfig.db
 
+  implicit val getProblem = GetResult(r => Problem(r.nextString().toUpperCase, r.nextString(), r.nextInt(), r.nextInt()))
+
   def getContestProblems(contest: Int) =
-    sql"""select ID, Rating from Problems where Contest = $contest""".as[(String, Int)]
+    sql"""select ID, Name, Tests, Rating from Problems where Contest = $contest order by ID""".as[Problem]
 
   implicit val getLocalTeam = GetResult(r =>
     LocalTeam(r.nextInt(), r.nextString(), r.nextIntOption(), r.nextString(), r.nextBoolean()))
@@ -168,8 +170,8 @@ class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, lifecycle: Ap
           if (schoolMode)
             (School.calculateStatus(problems, teams, sub0), School.calculateStatus(problems, teams, submits))
           else
-            (ACM.calculateStatus(problems.map(_._1), teams, sub0),
-              ACM.calculateStatus(problems.map(_._1), teams, submits))
+            (ACM.calculateStatus(problems, teams, sub0),
+              ACM.calculateStatus(problems, teams, submits))
         }
       }
     }
