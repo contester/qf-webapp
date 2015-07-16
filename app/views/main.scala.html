@@ -60,9 +60,14 @@
       body: "Hey there! You've been notified!",
     });
 
-    notification.onclick = function () {
-      window.open("http://stackoverflow.com/a/13328397/1269037");
-    };
+    notification.addEventListener('click', function () {
+    window.focus()
+            this.close()
+    })
+
+    window.setTimeout(function() {
+        notification.close()
+        }, 120000)
 
   }
 
