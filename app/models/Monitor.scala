@@ -167,18 +167,18 @@ class Monitor (dbConfig: DatabaseConfig[JdbcProfile]) {
     }
   }
 
-  val contestMonitors = {
-    import scala.collection.JavaConverters._
-    import java.util.concurrent.ConcurrentHashMap
-    new ConcurrentHashMap[Int, (AnyStatus, AnyStatus)]().asScala
-  }
-
   val contestMonitorsFu = {
     import scala.collection.JavaConverters._
     import java.util.concurrent.ConcurrentHashMap
     new ConcurrentHashMap[Int, Promise[(AnyStatus, AnyStatus)]]().asScala
   }
 
+  def getMonitor(id: Int): Future[(AnyStatus, AnyStatus)] = newOrUpdatedPromise(id).future
+
+  private def newOrUpdatedPromise(id: Int) = {
+    val np = Promise[(AnyStatus, AnyStatus)]
+    contestMonitorsFu.putIfAbsent(id, np).getOrElse(np)
+  }
 
   val getContests = sql"select ID, SchoolMode from Contests".as[(Int, Boolean)]
 
@@ -191,9 +191,7 @@ class Monitor (dbConfig: DatabaseConfig[JdbcProfile]) {
     }.map { statuses =>
       statuses.foreach {
         case (contestId, contestStatus) =>
-          contestMonitors.put(contestId, contestStatus)
-          val np = Promise[(AnyStatus, AnyStatus)]
-          val m = contestMonitorsFu.putIfAbsent(contestId,np).getOrElse(np)
+          val m = newOrUpdatedPromise(contestId)
             if (m.isCompleted) {
               contestMonitorsFu.put(contestId, Promise.successful(contestStatus))
             } else {
