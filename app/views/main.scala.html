@@ -41,12 +41,40 @@
     <script type="text/javascript">
     $.material.init()
 
+    document.addEventListener('DOMContentLoaded', function () {
+      if (Notification.permission !== "granted")
+        Notification.requestPermission();
+    });
+
+    function notifyMe(wat) {
+      if (!Notification) {
+        alert('Desktop notifications not available in your browser. Try Chromium.');
+        return;
+      }
+
+  if (Notification.permission !== "granted")
+    Notification.requestPermission();
+  else {
+    var notification = new Notification('Notification title', {
+      icon: 'http://cdn.sstatic.net/stackexchange/img/logos/so/so-icon.png',
+      body: "Hey there! You've been notified!",
+    });
+
+    notification.onclick = function () {
+      window.open("http://stackoverflow.com/a/13328397/1269037");
+    };
+
+  }
+
+}
+
     $(function() {
 			var WS = window['MozWebSocket'] ? MozWebSocket : WebSocket
             var chatSocket = new WS("@routes.Application.socket.webSocketURL()")
 
             var receiveEvent = function(event) {
                 console.log(event)
+                notifyMe(event)
             }
 
             chatSocket.onmessage = receiveEvent

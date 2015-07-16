@@ -156,7 +156,7 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
   import play.api.mvc._
   import play.api.libs.iteratee._
 
-  def socket =  WebSocket.tryAccept[String] { request =>
+  def socket = WebSocket.tryAccept[String] { request =>
 
     println(request)
     // log the message to stdout and send response back to client
