@@ -1,4 +1,4 @@
-@(submits: Seq[Submits.ScoredSubmit[Submit, SchoolCell]])
+@(submits: Seq[AnyStatusSubmit])
 
 @if(submits.isEmpty) {
 <p>Подходов не обнаружено.</p>
@@ -10,14 +10,20 @@
     </thead>
     <tbody>
     @for(s <- submits) {
-    <tr><td>@s.submit.arrivedStr</td><td>@s.submit.problem</td><td>@s.index</td><td>@s.submit.ext</td>
-        @if(s.submit.success) {
+    <tr><td>@s.arrivedStr</td><td>@s.problem</td><td>@s.attempt</td><td>@s.ext</td>
+        @if(s.success) {
         <td class="success">
             } else {
         <td>
             }
-            @s.submit.asSchool</td><td>@s.score.score</td><td></td></tr>
+            @s.anyScoreAndStatus match {
+                case sc: Submits.SchoolScoreAndStatus => {
+                    @s.asSchool</td><td>@sc.score</td>
+                }
+            }
+            <td>@s.timeMs</td></tr>
     }
+
     </tbody>
 </table>
 

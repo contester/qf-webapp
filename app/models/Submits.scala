@@ -136,6 +136,16 @@ trait AnyStatusSubmit {
   def finished: Boolean
 
   def anyScoreAndStatus: AnyScoreAndStatus
+
+  def arrivedStr = SecondsToTimeStr(arrived)
+
+  def success = finished && anyScoreAndStatus.compiled && anyScoreAndStatus.taken > 0 && anyScoreAndStatus.passed == anyScoreAndStatus.taken
+
+  def asSchool =
+    if (!finished) "..."
+    else if (!anyScoreAndStatus.compiled) "Compilation failed"
+    else if (anyScoreAndStatus.passed == anyScoreAndStatus.taken) "Полное решение"
+    else s"${anyScoreAndStatus.passed} из ${anyScoreAndStatus.taken}"
 }
 
 object Submits {
