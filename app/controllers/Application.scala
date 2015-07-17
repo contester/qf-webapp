@@ -17,7 +17,7 @@ import play.api.libs.iteratee.{Enumerator, Concurrent}
 import play.api.libs.json.JsValue
 import play.api.mvc.{Action, Controller}
 import slick.driver.JdbcProfile
-import slick.jdbc.GetResult
+import slick.jdbc.{PositionedParameters, SetParameter, GetResult}
 import spire.math.Rational
 import views.html
 
@@ -60,6 +60,9 @@ class HelloActor extends Actor {
 class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvider, monitorModel: Monitor,
                              system: ActorSystem, val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport{
 
+  val dbConfig = dbConfigProvider.get[JdbcProfile]
+
+  import dbConfig.driver.api._
   val helloActor = system.actorOf(HelloActor.props, "hello-actor")
 
   def monitor(id: Int) = Action.async { implicit request =>
@@ -73,8 +76,6 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
   }
 
   private def anyUser(account: LoggedInTeam): Future[Boolean] = Future.successful(true)
-
-  import slick.driver.MySQLDriver.api._
 
   private def getSubmits(team: LoggedInTeam) =
     db.db.run(Submits.getContestTeamSubmits(team.contest.id, team.team.localId))
@@ -119,6 +120,15 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
     }
   }
 
+  implicit object SetByteArray extends SetParameter[Array[Byte]] {
+    override def apply(v1: Array[Byte], v2: PositionedParameters): Unit = v2.setBytes(v1)
+  }
+
+  def submitInsertQuery(contestId: Int, teamId: Int, problemId: String, srcLang: Int, source: Array[Byte], remoteAddr: String) =
+    sqlu"""insert into NewSubmits (Contest, Team, Problem, SrcLang, Source, Computer, Arrived)
+          values ($contestId, $teamId, $problemId, $srcLang, $source, inet_aton($remoteAddr), CURRENT_TIMESTAMP())
+        """
+
   def submitPost = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
 
@@ -141,7 +151,9 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
             println(request.headers.get("X-Forwarded-For"))
             println(request.remoteAddress)
             println(loggedInTeam.contest, loggedInTeam.team, submitData.problem, submitData.compiler, solutionOpt.get.length)
-              Future.successful(Redirect(routes.Application.index))
+            db.db.run(submitInsertQuery(loggedInTeam.contest.id, loggedInTeam.team.localId, submitData.problem, submitData.compiler.toInt, solutionOpt.get, request.remoteAddress)).map { _ =>
+              Redirect(routes.Application.index)
+            }
           }
         )
       }
