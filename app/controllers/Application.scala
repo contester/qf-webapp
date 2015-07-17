@@ -16,7 +16,7 @@ import play.api.libs.Files.TemporaryFile
 import play.api.libs.concurrent.Execution.Implicits.defaultContext
 import play.api.libs.iteratee.{Enumerator, Concurrent}
 import play.api.libs.json.JsValue
-import play.api.mvc.{Action, Controller}
+import play.api.mvc.{RequestHeader, Action, Controller}
 import slick.driver.JdbcProfile
 import slick.jdbc.{PositionedParameters, SetParameter, GetResult}
 import spire.math.Rational
@@ -94,6 +94,7 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
 
   def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
+
     getSubmits(loggedInTeam).flatMap(annot8(_, loggedInTeam.contest.schoolMode)).map { subs =>
       Ok(html.index(loggedInTeam, subs))
     }
@@ -158,30 +159,24 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
     mapping("problem" -> text, "text" -> text)(ClarificationReqData.apply)(ClarificationReqData.unapply)
   }
 
-  def clarifications = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
-      val loggedInTeam = loggedIn
-    getProblems(loggedInTeam.contest.id).flatMap { problems =>
-    getClarifications(loggedInTeam.contest.id).flatMap { clarifications =>
-      getClarificationRequests(loggedInTeam.contest.id, loggedInTeam.team.localId).map { clReq =>
-        Ok(html.clarifications(loggedInTeam, clarifications, clReq, problems, clarificationReqForm))
+  private def clrForm(loggedInTeam: LoggedInTeam, form: Form[ClarificationReqData])(implicit request: RequestHeader) =
+    getProblems(loggedInTeam.contest.id).flatMap { probs =>
+      getClarifications(loggedInTeam.contest.id).flatMap { clars =>
+        getClarificationRequests(loggedInTeam.contest.id, loggedInTeam.team.localId).map { clReq =>
+          html.clarifications(loggedInTeam, clars, clReq, probs, form)
+        }
       }
     }
-  }
+
+  def clarifications = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+    clrForm(loggedIn, clarificationReqForm).map(Ok(_))
   }
 
   def clarificationPost = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
 
     clarificationReqForm.bindFromRequest.fold(
-      formWithErrors => {
-        getProblems(loggedInTeam.contest.id).flatMap { problems =>
-          getClarifications(loggedInTeam.contest.id).flatMap { clarifications =>
-            getClarificationRequests(loggedInTeam.contest.id, loggedInTeam.team.localId).map { clReq =>
-              BadRequest(html.clarifications(loggedInTeam, clarifications, clReq, problems, formWithErrors))
-            }
-          }
-        }
-      },
+      formWithErrors => clrForm(loggedIn, formWithErrors).map(BadRequest(_)),
       clrData => {
         db.db.run(
           sqlu"""insert into ClarificationRequests (Contest, Team, Problem, Request, Arrived) values

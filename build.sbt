@@ -31,6 +31,7 @@ libraryDependencies ++= Seq(
   "mysql" % "mysql-connector-java" % "5.1.36",
   "commons-io" % "commons-io" % "2.4",
   "com.github.nscala-time" %% "nscala-time" % "2.0.0",
+  "org.scala-lang.modules" %% "scala-async" % "0.9.4",
   "org.spire-math" %% "spire" % "0.10.1"
 )
 
