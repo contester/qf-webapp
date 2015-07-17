@@ -148,6 +148,11 @@ trait AnyStatusSubmit {
     else s"${anyScoreAndStatus.passed} из ${anyScoreAndStatus.taken}"
 }
 
+trait SubmitScorer2[S] {
+  def withSubmit(submit: ContestSubmit): SubmitScorer2[S]
+  def score: S
+}
+
 object Submits {
 
   import slick.driver.MySQLDriver.api._
