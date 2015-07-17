@@ -2,6 +2,8 @@ GET / controllers.Application.index
 
 GET /socket controllers.Application.socket
 
+GET /clarifications controllers.Application.clarifications
+
 GET /monitor controllers.Application.monitorDefault
 GET /monitor/ controllers.Application.monitorDefault
 GET /monitor/:id controllers.Application.monitor(id: Int)

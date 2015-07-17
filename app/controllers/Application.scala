@@ -5,6 +5,7 @@ import javax.inject.Inject
 import jp.t2v.lab.play2.auth.{AuthenticationElement, AuthElement, LoginLogout}
 import models._
 import org.apache.commons.io.FileUtils
+import org.joda.time.DateTime
 import play.api.Logger
 import play.api.data.Form
 import play.api.data.Forms._
@@ -56,6 +57,8 @@ class HelloActor extends Actor {
     }
   }
 }
+
+case class Clarification(time: DateTime, problem: String, text: String)
 
 class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvider, monitorModel: Monitor,
                              system: ActorSystem, val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport{
@@ -129,6 +132,22 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
           values ($contestId, $teamId, $problemId, $srcLang, $source, inet_aton($remoteAddr), CURRENT_TIMESTAMP())
         """
 
+  implicit val getClarification = GetResult(r => Clarification(new DateTime(r.nextTimestamp()), r.nextString().toUpperCase, r.nextString()))
+
+  def getClarificationsQuery(contestId: Int) =
+    sql"""select cl_date, cl_task, cl_text from clarifications where cl_is_hidden = '0' and cl_contest_idf = $contestId""".as[Clarification]
+
+  def getClarifications(contestId: Int) =
+    db.db.run(getClarificationsQuery(contestId))
+
+  def clarifications = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+      val loggedInTeam = loggedIn
+    getClarifications(loggedInTeam.contest.id).map { clarifications =>
+      Ok(html.clarifications(loggedInTeam, clarifications))
+
+    }
+  }
+
   def submitPost = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
 
@@ -147,10 +166,6 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
             Future.successful(BadRequest(html.sendsolution(loggedInTeam, formWithErrors, problems, compilers)))
           },
           submitData => {
-            println(request.headers.get("X-Real-IP"))
-            println(request.headers.get("X-Forwarded-For"))
-            println(request.remoteAddress)
-            println(loggedInTeam.contest, loggedInTeam.team, submitData.problem, submitData.compiler, solutionOpt.get.length)
             db.db.run(submitInsertQuery(loggedInTeam.contest.id, loggedInTeam.team.localId, submitData.problem, submitData.compiler.toInt, solutionOpt.get, request.remoteAddress)).map { _ =>
               Redirect(routes.Application.index)
             }
