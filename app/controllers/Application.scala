@@ -137,6 +137,9 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
             Future.successful(BadRequest(html.sendsolution(loggedInTeam, formWithErrors, problems, compilers)))
           },
           submitData => {
+            println(request.headers.get("X-Real-IP"))
+            println(request.headers.get("X-Forwarded-For"))
+            println(request.remoteAddress)
             println(loggedInTeam.contest, loggedInTeam.team, submitData.problem, submitData.compiler, solutionOpt.get.length)
               Future.successful(Redirect(routes.Application.index))
           }
