@@ -1,4 +1,4 @@
-@(submits: Seq[AnyStatusSubmit])
+@(submits: Seq[AnyStatusSubmit], schoolMode: Boolean)
 
 @if(submits.isEmpty) {
 <p>Подходов не обнаружено.</p>
@@ -6,7 +6,11 @@
 
 <table class="table table-hover table-bordered table-responsive">
     <thead>
-    <tr><th>Время</th><th>Задача</th><th>Попытка</th><th>Язык</th><th>Результат</th><th>Баллы</th><th>Время работы</th></tr>
+    <tr><th>Время</th><th>Задача</th><th>Попытка</th><th>Язык</th><th>Результат</th>
+        @if(schoolMode) {
+        <th>Баллы</th>
+        }
+        <th>Время работы</th></tr>
     </thead>
     <tbody>
     @for(s <- submits) {
@@ -20,6 +24,9 @@
                 case sc: Submits.SchoolScoreAndStatus => {
                     @s.asSchool</td><td>@sc.score</td>
                 }
+            case sc: Submits.ACMScoreAndStatus => {
+                @sc.toStatus</td>
+            }
             }
             <td>@s.timeMs</td></tr>
     }

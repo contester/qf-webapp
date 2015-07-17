@@ -172,6 +172,11 @@ object Submits {
       .mapValues(x => scoreSubmits(x.sortBy(_.arrivedTimestamp), scorer)
       .zipWithIndex.map(x => ScoredSubmit(x._1._2, x._1._1, x._2 + 1))).values.toSeq.flatten
 
+  def justIndexSubmits(submits: Seq[Submit]): Seq[(Submit, Int)] =
+    submits.groupBy(x => (x.teamId, x.problem))
+      .mapValues(_.sortBy(_.arrivedSeconds).zipWithIndex.map(x => x._1 -> (x._2 + 1)))
+      .values.flatten.toSeq
+
   def scoreSubmits[S <: ContestSubmit, Sc <: SubmitScore[Sc]](submits: Seq[S], empty: Sc): Seq[(Sc, S)] =
     submits.foldLeft((empty, Seq[(Sc, S)]())) {
       case (state, submit) =>
@@ -222,13 +227,25 @@ object Submits {
     override def anyScoreAndStatus: AnyScoreAndStatus = scoreAndStatus
   }
 
-  case class ACMScoreAndStatus(message: String, test: Option[Int]) extends AnyScoreAndStatus
+  case class ACMScoreAndStatus(message: String, test: Option[Int]) extends AnyScoreAndStatus {
+    def toStatus =
+      s"${message}${test.map(x => s" on test $x").getOrElse("")}"
+  }
 
   def getTestingMaxTimeQuery(testingId: Int) =
     sql"""select max(Timex) from Results where UID = $testingId""".as[Int]
 
+  def getTestingLastFailureQuery(testingId: Int) =
+    sql"""select ResultDesc.Description, Results.Test, ResultDesc.Success from Results, ResultDesc
+         where Results.UID = $testingId and ResultDesc.ID = Results.Result
+         order by Results.Test desc limit 1
+      """.as[(String, Option[Int], Boolean)]
+
   def getTestingMaxTime(db: JdbcBackend#DatabaseDef, testingId: Int)(implicit ec: ExecutionContext): Future[Int] =
     db.run(getTestingMaxTimeQuery(testingId)).map(_.headOption.getOrElse(0))
+
+  def getTestingLastResult(db: JdbcBackend#DatabaseDef, testingId: Int)(implicit ec: ExecutionContext) =
+    db.run(getTestingLastFailureQuery(testingId)).map(_.headOption)
 
   def annotateSchoolSubmit(db: JdbcBackend#DatabaseDef,
                            sub: ScoredSubmit[Submit, SchoolCell])(implicit ec: ExecutionContext): Future[StatusSubmit[SchoolScoreAndStatus]] =
@@ -237,8 +254,34 @@ object Submits {
         sub.submit.compiled, sub.submit.passed, sub.submit.taken, SchoolScoreAndStatus(sub.score.score))
     }
 
-  def annotateSchoolSubmits(db: JdbcBackend#DatabaseDef, submits: Seq[Submit])(implicit ec: ExecutionContext) =
+  def annotateSchoolSubmits(db: JdbcBackend#DatabaseDef, submits: Seq[Submit])(implicit ec: ExecutionContext): Future[Seq[StatusSubmit[SchoolScoreAndStatus]]] =
     Future.sequence(
       indexSubmits[Submit, SchoolCell](submits, SchoolCell.empty).sortBy(_.submit.arrivedSeconds).reverse.map(annotateSchoolSubmit(db, _))
+    )
+
+  def annotateACMSubmit(db: JdbcBackend#DatabaseDef,
+                       sub: (Submit, Int))(implicit ec: ExecutionContext) =
+    if (!sub._1.finished)
+      Future.successful(StatusSubmit(sub._1.arrivedSeconds, sub._1.problem, sub._2, sub._1.ext, 0, sub._1.finished,
+        sub._1.compiled, sub._1.passed, sub._1.taken, ACMScoreAndStatus("Waiting", None)))
+    else sub._1.testingId.map { testingId =>
+      getTestingMaxTime(db, testingId).flatMap { timeMs =>
+        getTestingLastResult(db, testingId).map { resultOption =>
+          val testIdOption = resultOption.flatMap { res =>
+            if (!res._3)
+              res._2
+            else
+              None
+          }
+          StatusSubmit(sub._1.arrivedSeconds, sub._1.problem, sub._2, sub._1.ext, timeMs, sub._1.finished,
+            sub._1.compiled, sub._1.passed, sub._1.taken, ACMScoreAndStatus(resultOption.map(_._1).getOrElse("..."), testIdOption))
+        }
+      }
+    }.getOrElse(Future.successful(StatusSubmit(sub._1.arrivedSeconds, sub._1.problem, sub._2, sub._1.ext, 0, sub._1.finished,
+      sub._1.compiled, sub._1.passed, sub._1.taken, ACMScoreAndStatus("...", None))))
+
+  def annotateACMSubmits(db: JdbcBackend#DatabaseDef, submits: Seq[Submit])(implicit ec: ExecutionContext) =
+    Future.sequence(
+      justIndexSubmits(submits).sortBy(_._1.arrivedSeconds).reverse.map(annotateACMSubmit(db, _))
     )
 }
