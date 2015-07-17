@@ -122,9 +122,6 @@ case class ACMCell(attempt: Int, arrivedSeconds: Int, fullSolution: Boolean) ext
 }
 
 trait AnyScoreAndStatus {
-  def compiled: Boolean
-  def passed: Int
-  def taken: Int
 }
 
 trait AnyStatusSubmit {
@@ -134,18 +131,21 @@ trait AnyStatusSubmit {
   def ext: String
   def timeMs: Int
   def finished: Boolean
+  def compiled: Boolean
+  def passed: Int
+  def taken: Int
 
   def anyScoreAndStatus: AnyScoreAndStatus
 
   def arrivedStr = SecondsToTimeStr(arrived)
 
-  def success = finished && anyScoreAndStatus.compiled && anyScoreAndStatus.taken > 0 && anyScoreAndStatus.passed == anyScoreAndStatus.taken
+  def success = finished && compiled && taken > 0 && passed == taken
 
   def asSchool =
     if (!finished) "..."
-    else if (!anyScoreAndStatus.compiled) "Compilation failed"
-    else if (anyScoreAndStatus.passed == anyScoreAndStatus.taken) "Полное решение"
-    else s"${anyScoreAndStatus.passed} из ${anyScoreAndStatus.taken}"
+    else if (!compiled) "Compilation failed"
+    else if (passed == taken) "Полное решение"
+    else s"${passed} из ${taken}"
 }
 
 trait SubmitScorer2[S] {
@@ -216,11 +216,13 @@ object Submits {
           Problems.ID = Submits.Task order by Arrived0""".as[Submit]
   }
 
-  case class SchoolScoreAndStatus(score: Rational, compiled: Boolean, passed: Int, taken: Int) extends AnyScoreAndStatus
+  case class SchoolScoreAndStatus(score: Rational) extends AnyScoreAndStatus
   case class StatusSubmit[X <: AnyScoreAndStatus](arrived: Int, problem: String, attempt: Int, ext: String,
-    timeMs: Int, finished: Boolean, scoreAndStatus: X) extends AnyStatusSubmit {
+    timeMs: Int, finished: Boolean, compiled: Boolean, passed: Int, taken: Int, scoreAndStatus: X) extends AnyStatusSubmit {
     override def anyScoreAndStatus: AnyScoreAndStatus = scoreAndStatus
   }
+
+  case class ACMScoreAndStatus(message: String, test: Option[Int]) extends AnyScoreAndStatus
 
   def getTestingMaxTimeQuery(testingId: Int) =
     sql"""select max(Timex) from Results where UID = $testingId""".as[Int]
@@ -232,7 +234,7 @@ object Submits {
                            sub: ScoredSubmit[Submit, SchoolCell])(implicit ec: ExecutionContext): Future[StatusSubmit[SchoolScoreAndStatus]] =
     sub.submit.testingId.map(getTestingMaxTime(db, _)).getOrElse(Future.successful(0)).map { timeMs =>
       StatusSubmit(sub.submit.arrivedSeconds, sub.submit.problem, sub.index, sub.submit.ext, timeMs, sub.submit.finished,
-        SchoolScoreAndStatus(sub.score.score, sub.submit.compiled, sub.submit.passed, sub.submit.taken))
+        sub.submit.compiled, sub.submit.passed, sub.submit.taken, SchoolScoreAndStatus(sub.score.score))
     }
 
   def annotateSchoolSubmits(db: JdbcBackend#DatabaseDef, submits: Seq[Submit])(implicit ec: ExecutionContext) =
