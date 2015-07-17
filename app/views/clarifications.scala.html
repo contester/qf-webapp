@@ -1,4 +1,4 @@
-@(loggedIn: LoggedInTeam, clarifications: Seq[Clarification])(implicit request: RequestHeader)
+@(loggedIn: LoggedInTeam, clarifications: Seq[Clarification], clReq: Seq[ClarificationRequest])(implicit request: RequestHeader)
 
 @import helper.Implicits._
 @import b3.vertical.fieldConstructor
@@ -22,5 +22,21 @@
     </tbody>
 </table>
 </div>
+
+<div class="panel panel-info">
+    <div class="panel-heading"><h3 class="panel-title">Ваши вопросы</h3></div>
+    <table class="table">
+        <thead>
+        <tr><th>Время</th><th>Задача</th><th>Текст</th><th>Ответ</th></tr>
+        </thead>
+        <tbody>
+        @for(s <- clReq) {
+        <tr><td>@s.time</td><td>@s.problem</td><td>@s.text</td><td>@s.answer</td></tr>
+        }
+
+        </tbody>
+    </table>
+</div>
+
 
 }

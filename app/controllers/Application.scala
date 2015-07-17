@@ -59,6 +59,7 @@ class HelloActor extends Actor {
 }
 
 case class Clarification(time: DateTime, problem: String, text: String)
+case class ClarificationRequest(time: DateTime, problem: String, text: String, answer: String)
 
 class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvider, monitorModel: Monitor,
                              system: ActorSystem, val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport{
@@ -134,17 +135,29 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
 
   implicit val getClarification = GetResult(r => Clarification(new DateTime(r.nextTimestamp()), r.nextString().toUpperCase, r.nextString()))
 
+  implicit val getClarificationRequest = GetResult(
+    r => ClarificationRequest(new DateTime(r.nextTimestamp()), r.nextString(), r.nextString(), r.nextString())
+  )
+
   def getClarificationsQuery(contestId: Int) =
     sql"""select cl_date, cl_task, cl_text from clarifications where cl_is_hidden = '0' and cl_contest_idf = $contestId""".as[Clarification]
 
   def getClarifications(contestId: Int) =
     db.db.run(getClarificationsQuery(contestId))
 
+  def getClarificationRequests(contestId: Int, teamId: Int) =
+    db.db.run(
+      sql"""select Arrived, Problem, Request, Answer from ClarificationRequests
+           where Contest = $contestId and Team = $teamId""".as[ClarificationRequest]
+    )
+
+
   def clarifications = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
       val loggedInTeam = loggedIn
-    getClarifications(loggedInTeam.contest.id).map { clarifications =>
-      Ok(html.clarifications(loggedInTeam, clarifications))
-
+    getClarifications(loggedInTeam.contest.id).flatMap { clarifications =>
+      getClarificationRequests(loggedInTeam.contest.id, loggedInTeam.team.localId).map { clReq =>
+        Ok(html.clarifications(loggedInTeam, clarifications, clReq))
+      }
     }
   }
 
