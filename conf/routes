@@ -3,6 +3,7 @@ GET / controllers.Application.index
 GET /socket controllers.Application.socket
 
 GET /clarifications controllers.Application.clarifications
+POST /clarifications controllers.Application.clarificationPost
 
 GET /monitor controllers.Application.monitorDefault
 GET /monitor/ controllers.Application.monitorDefault

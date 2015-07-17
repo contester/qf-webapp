@@ -1,4 +1,4 @@
-@(loggedIn: LoggedInTeam, clarifications: Seq[Clarification], clReq: Seq[ClarificationRequest])(implicit request: RequestHeader)
+@(loggedIn: LoggedInTeam, clarifications: Seq[Clarification], clReq: Seq[ClarificationRequest], problems: Seq[(String, String)], form: Form[ClarificationReqData])(implicit flash: Flash, messages: Messages, request: RequestHeader)
 
 @import helper.Implicits._
 @import b3.vertical.fieldConstructor
@@ -7,6 +7,31 @@
 
 <h3>@loggedIn.contest.name</h3>
 <h4>@loggedIn.team.teamFullName</h4>
+
+<div class="panel panel-success">
+    <div class="panel-heading"><h3 class="panel-title">Задать вопрос жюри</h3></div>
+    <div class="panel-body">
+        @b3.form(controllers.routes.Application.clarificationPost) {
+        @form.globalError.map { error =>
+        <div class="alert alert-danger" role="alert">
+            <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
+            <span class="sr-only">Error:</span>
+            @error.message
+        </div>
+        }
+
+        @flash.get("success").map { message =>
+        <div class="alert alert-success" role="alert">
+            @message
+        </div>
+        }
+
+        @b3.select(form("problem"), options = problems, '_label -> "Задача")
+        @b3.textarea(form("text"), '_label -> "Текст вопроса")
+        @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Отправить}
+        }
+    </div>
+</div>
 
 <div class="panel panel-warning">
     <div class="panel-heading"><h3 class="panel-title">Сообщения жюри</h3></div>

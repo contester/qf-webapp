@@ -61,6 +61,8 @@ class HelloActor extends Actor {
 case class Clarification(time: DateTime, problem: String, text: String)
 case class ClarificationRequest(time: DateTime, problem: String, text: String, answer: String)
 
+case class ClarificationReqData(problem: String, text: String)
+
 class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvider, monitorModel: Monitor,
                              system: ActorSystem, val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport{
 
@@ -152,13 +154,45 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
     )
 
 
+  val clarificationReqForm = Form {
+    mapping("problem" -> text, "text" -> text)(ClarificationReqData.apply)(ClarificationReqData.unapply)
+  }
+
   def clarifications = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
       val loggedInTeam = loggedIn
+    getProblems(loggedInTeam.contest.id).flatMap { problems =>
     getClarifications(loggedInTeam.contest.id).flatMap { clarifications =>
       getClarificationRequests(loggedInTeam.contest.id, loggedInTeam.team.localId).map { clReq =>
-        Ok(html.clarifications(loggedInTeam, clarifications, clReq))
+        Ok(html.clarifications(loggedInTeam, clarifications, clReq, problems, clarificationReqForm))
       }
     }
+  }
+  }
+
+  def clarificationPost = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+    val loggedInTeam = loggedIn
+
+    clarificationReqForm.bindFromRequest.fold(
+      formWithErrors => {
+        getProblems(loggedInTeam.contest.id).flatMap { problems =>
+          getClarifications(loggedInTeam.contest.id).flatMap { clarifications =>
+            getClarificationRequests(loggedInTeam.contest.id, loggedInTeam.team.localId).map { clReq =>
+              BadRequest(html.clarifications(loggedInTeam, clarifications, clReq, problems, formWithErrors))
+            }
+          }
+        }
+      },
+      clrData => {
+        db.db.run(
+          sqlu"""insert into ClarificationRequests (Contest, Team, Problem, Request, Arrived) values
+                (${loggedInTeam.contest.id}, ${loggedInTeam.team.localId}, ${clrData.problem}, ${clrData.text},
+                CURRENT_TIMESTAMP())
+              """
+        ).map { _ =>
+          Redirect(routes.Application.clarifications)
+        }
+      }
+    )
   }
 
   def submitPost = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
