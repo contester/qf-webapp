@@ -209,16 +209,18 @@ object Submits {
       r.nextInt(), r.nextInt(), r.nextInt(), r.nextBoolean(), r.nextInt(), r.nextIntOption()
     ))
 
-    sql"""select Submits.ID, Submits.Arrived,
-          Team, Task, Ext, Finished, Compiled,
-          Passed, Taken,
-          unix_timestamp(Submits.Arrived) - unix_timestamp(Contests.Start) as Arrived0,
-          Submits.Arrived > Contests.Finish, Problems.Rating, Submits.TestingID
-          from Contests, Submits, Problems where
-          Submits.Team = $team and
-          Contests.ID = $contest and Submits.Arrived < Contests.End and Submits.Arrived >= Contests.Start and
-          Contests.ID = Submits.Contest and Problems.Contest = Contests.ID and
-          Problems.ID = Submits.Task order by Arrived0""".as[Submit]
+    sql"""select NewSubmits.ID, NewSubmits.Arrived,
+          NewSubmits.Team, NewSubmits.Problem, Languages.Ext, Submits.Finished, Submits.Compiled,
+          Submits.Passed, Submits.Taken,
+          unix_timestamp(NewSubmits.Arrived) - unix_timestamp(Contests.Start) as Arrived0,
+
+          NewSubmits.Arrived > Contests.Finish, Problems.Rating, Submits.TestingID
+          from Contests, Problems, Languages, NewSubmits LEFT join Submits on NewSubmits.ID = Submits.ID where
+          NewSubmits.Team = $team and
+          Contests.ID = $contest and NewSubmits.Arrived < Contests.End and NewSubmits.Arrived >= Contests.Start and
+          Contests.ID = NewSubmits.Contest and Problems.Contest = Contests.ID and
+          Languages.ID = NewSubmits.SrcLang and Languages.Contest = Contests.ID and
+          Problems.ID = NewSubmits.Problem order by Arrived0""".as[Submit]
   }
 
   case class SchoolScoreAndStatus(score: Rational) extends AnyScoreAndStatus

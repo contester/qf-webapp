@@ -24,7 +24,7 @@ import views.html
 
 import scala.concurrent.{Promise, Future}
 
-case class SubmitData(problem: String, compiler: String)
+case class SubmitData(problem: String, compiler: Int)
 
 import akka.actor._
 
@@ -115,7 +115,7 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
     db.db.run(getCompilersQuery(contest))
 
   val submitForm = Form {
-    mapping("problem" -> text, "compiler" -> text)(SubmitData.apply)(SubmitData.unapply)
+    mapping("problem" -> text, "compiler" -> number)(SubmitData.apply)(SubmitData.unapply)
   }
 
   private def compilersForForm(compilers: Seq[Compiler]) =
@@ -141,7 +141,7 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
   def submitInsertQuery(contestId: Int, teamId: Int, problemId: String, srcLang: Int, source: Array[Byte], remoteAddr: String) =
     sqlu"""insert into NewSubmits (Contest, Team, Problem, SrcLang, Source, Computer, Arrived)
           values ($contestId, $teamId, $problemId, $srcLang, $source, inet_aton($remoteAddr), CURRENT_TIMESTAMP())
-        """
+        """.andThen(sql"""select LAST_INSERT_ID()""".as[Long])
 
   implicit val getClarification = GetResult(r => Clarification(new DateTime(r.nextTimestamp()), r.nextString().toUpperCase, r.nextString()))
 
@@ -219,7 +219,8 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
             Future.successful(BadRequest(html.sendsolution(loggedInTeam, formWithErrors, problems, compilersForForm(compilers))))
           },
           submitData => {
-            db.db.run(submitInsertQuery(loggedInTeam.contest.id, loggedInTeam.team.localId, submitData.problem, submitData.compiler.toInt, solutionOpt.get, request.remoteAddress)).map { _ =>
+            db.db.run(submitInsertQuery(loggedInTeam.contest.id, loggedInTeam.team.localId, submitData.problem, submitData.compiler, solutionOpt.get, request.remoteAddress)).map { wat =>
+              println(wat.headOption)
               Redirect(routes.Application.index)
             }
           }
