@@ -1,0 +1,44 @@
+@(loggedIn: LoggedInTeam, form: Form[printing.SubmitData])(implicit flash: Flash, messages: Messages, request: RequestHeader)
+
+@import helper.Implicits._
+@import b3.vertical.fieldConstructor
+
+@main("Contester", tab = "print") {
+
+<div class="panel panel-info">
+    <div class="panel-heading"><h3 class="panel-title">Выполнен вход в систему</h3></div>
+    <table class="table">
+        <tbody>
+        <tr><th scope="row">Выполнен вход как</th><td>@loggedIn.team.teamFullName</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="panel panel-success">
+    <div class="panel-heading"><h3 class="panel-title">Напечатать текст</h3></div>
+    <div class="panel-body">
+        @b3.form(controllers.routes.Printing.post, 'enctype -> "multipart/form-data") {
+        @form.globalError.map { error =>
+        <div class="alert alert-danger" role="alert">
+            <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
+            <span class="sr-only">Error:</span>
+            @error.message
+        </div>
+        }
+
+        @flash.get("success").map { message =>
+        <div class="alert alert-success" role="alert">
+            @message
+        </div>
+        }
+
+        @b3.checkbox(form("textOnly"), '_label -> "Режим печати",
+          '_text -> "Печатать как текст, без учёта синтаксиса языка")
+        @b3.file(form("file"), '_label -> "Файл с текстом для печати")
+        @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Отправить}
+        }
+    </div>
+</div>
+
+
+}
