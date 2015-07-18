@@ -58,6 +58,8 @@ class HelloActor extends Actor {
   }
 }
 
+case class Compiler(id: Int, name: String, ext: String)
+
 case class Clarification(time: DateTime, problem: String, text: String)
 case class ClarificationRequest(time: DateTime, problem: String, text: String, answer: String)
 
@@ -107,7 +109,7 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
     db.db.run(getProblemsQuery(contest)).map(_.map { case (id, name) => id -> s"$id. $name"})
 
   private def getCompilersQuery(contest: Int) =
-    sql"""select ID, Name from Languages where Contest = $contest order by ID""".as[(String, String)]
+    sql"""select ID, Name, Ext from Languages where Contest = $contest order by ID""".as[Compiler]
 
   private def getCompilers(contest: Int) =
     db.db.run(getCompilersQuery(contest))
@@ -116,13 +118,18 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
     mapping("problem" -> text, "compiler" -> text)(SubmitData.apply)(SubmitData.unapply)
   }
 
+  private def compilersForForm(compilers: Seq[Compiler]) =
+    compilers.map(x => x.id.toString -> x.name)
+
+  private def getProblemsAndCompilers(contestId: Int) =
+    getProblems(contestId).zip(getCompilers(contestId))
 
   def submit = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
 
-    getProblems(loggedInTeam.contest.id).flatMap { problems =>
-      getCompilers(loggedInTeam.contest.id).map { compilers =>
-        Ok(html.sendsolution(loggedInTeam, submitForm, problems, compilers))
+    getProblemsAndCompilers(loggedInTeam.contest.id).map {
+      case (problems, compilers) => {
+        Ok(html.sendsolution(loggedInTeam, submitForm, problems, compilersForForm(compilers)))
       }
     }
   }
@@ -140,6 +147,10 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
 
   implicit val getClarificationRequest = GetResult(
     r => ClarificationRequest(new DateTime(r.nextTimestamp()), r.nextString(), r.nextString(), r.nextString())
+  )
+
+  implicit val getCompiler = GetResult(
+    r => Compiler(r.nextInt(), r.nextString(), r.nextString())
   )
 
   def getClarificationsQuery(contestId: Int) =
@@ -193,8 +204,8 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
   def submitPost = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
 
-    getProblems(loggedInTeam.contest.id).flatMap { problems =>
-      getCompilers(loggedInTeam.contest.id).flatMap { compilers =>
+    getProblemsAndCompilers(loggedInTeam.contest.id).flatMap {
+      case (problems, compilers) =>
         val parsed = submitForm.bindFromRequest
         val solutionOpt = request.body.file("file").map { solution =>
           FileUtils.readFileToByteArray(solution.ref.file)
@@ -205,7 +216,7 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
 
         parsed0.fold(
           formWithErrors => {
-            Future.successful(BadRequest(html.sendsolution(loggedInTeam, formWithErrors, problems, compilers)))
+            Future.successful(BadRequest(html.sendsolution(loggedInTeam, formWithErrors, problems, compilersForForm(compilers))))
           },
           submitData => {
             db.db.run(submitInsertQuery(loggedInTeam.contest.id, loggedInTeam.team.localId, submitData.problem, submitData.compiler.toInt, solutionOpt.get, request.remoteAddress)).map { _ =>
@@ -213,7 +224,6 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
             }
           }
         )
-      }
     }
   }
 
