@@ -25,6 +25,7 @@ import views.html
 import scala.concurrent.{Promise, Future}
 
 case class SubmitData(problem: String, compiler: Int)
+case class ServerSideData(compiler: Int)
 
 import akka.actor._
 
@@ -131,6 +132,52 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
       case (problems, compilers) => {
         Ok(html.sendsolution(loggedInTeam, submitForm, problems, compilersForForm(compilers)))
       }
+    }
+  }
+
+  val serverSideForm = Form {
+    mapping("compiler" -> number)(ServerSideData.apply)(ServerSideData.unapply)
+  }
+
+  def sendwithinput = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+    val loggedInTeam = loggedIn
+    getCompilers(loggedInTeam.contest.id).map { compilers =>
+      Ok(html.sendwithinput(loggedInTeam, serverSideForm, compilersForForm(compilers)))
+    }
+  }
+
+  def sendwithinputPost = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
+    val loggedInTeam = loggedIn
+
+    getCompilers(loggedInTeam.contest.id).flatMap { compilers =>
+      val parsed = serverSideForm.bindFromRequest
+      val solutionOpt = request.body.file("file").map { solution =>
+        FileUtils.readFileToByteArray(solution.ref.file)
+      }
+      val inputFileOpt = request.body.file("inputfile").map { ifile =>
+        FileUtils.readFileToByteArray(ifile.ref.file)
+      }
+
+        val parsed0 = if (solutionOpt.isDefined) parsed
+        else parsed.withGlobalError("can't open the file")
+
+        parsed0.fold(
+          formWithErrors => {
+            Future.successful(BadRequest(html.sendwithinput(loggedInTeam, formWithErrors, compilersForForm(compilers))))
+          },
+          submitData => {
+            val cext = compilers.map(x => x.id -> x).toMap.apply(submitData.compiler).ext
+            db.db.run(
+              sqlu"""insert into Eval (Contest, Team, Ext, Source, Input, Arrived) values
+                    (${loggedInTeam.contest.id}, ${loggedInTeam.team.localId}, ${cext}, ${solutionOpt.get},
+                ${inputFileOpt.get}, CURRENT_TIMESTAMP())
+                  """
+            ).map { wat =>
+              println(wat)
+              Redirect(routes.Application.sendwithinput)
+            }
+          }
+        )
     }
   }
 

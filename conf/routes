@@ -5,6 +5,9 @@ GET /socket controllers.Application.socket
 GET /clarifications controllers.Application.clarifications
 POST /clarifications controllers.Application.clarificationPost
 
+GET /sendwithinput controllers.Application.sendwithinput
+POST /sendwithinput controllers.Application.sendwithinputPost
+
 GET /monitor controllers.Application.monitorDefault
 GET /monitor/ controllers.Application.monitorDefault
 GET /monitor/:id controllers.Application.monitor(id: Int)
