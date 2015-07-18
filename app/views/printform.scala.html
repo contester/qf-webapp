@@ -1,4 +1,4 @@
-@(loggedIn: LoggedInTeam, form: Form[printing.SubmitData])(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@(loggedIn: LoggedInTeam, form: Form[printing.SubmitData], jobs: Seq[printing.PrintEntry])(implicit flash: Flash, messages: Messages, request: RequestHeader)
 
 @import helper.Implicits._
 @import b3.vertical.fieldConstructor
@@ -32,12 +32,26 @@
         </div>
         }
 
-        @b3.checkbox(form("textOnly"), '_label -> "Режим печати",
-          '_text -> "Печатать как текст, без учёта синтаксиса языка")
         @b3.file(form("file"), '_label -> "Файл с текстом для печати")
         @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Отправить}
         }
     </div>
+</div>
+
+<div class="panel panel-info">
+    <div class="panel-heading"><h3 class="panel-title">Задания</h3></div>
+    <table class="table table-bordered table-responsive">
+        <thead>
+        <tr><th>Время</th><th>Имя файла</th><th>Результат</th></tr>
+        </thead>
+        <tbody>
+        @for(s <- jobs) {
+        <tr><td>@s.arrived</td><td>@s.filename</td>
+            <td>@s.printed</td></tr>
+        }
+
+        </tbody>
+    </table>
 </div>
 
 

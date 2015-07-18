@@ -12,19 +12,25 @@ import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
 import play.api.mvc.Controller
 import slick.driver.JdbcProfile
-import slick.jdbc.{PositionedParameters, SetParameter}
+import slick.jdbc.{GetResult, PositionedParameters, SetParameter}
 import views.html
 import play.api.libs.concurrent.Execution.Implicits.defaultContext
 
 import scala.concurrent.Future
+import org.joda.time.DateTime
 
 package printing {
-  case class SubmitData(textOnly: Boolean)
+
+
+case class SubmitData(textOnly: Boolean)
+  case class PrintEntry(filename: String, arrived: DateTime, printed: Boolean)
 }
 
 class Printing @Inject() (override val dbConfigProvider: DatabaseConfigProvider,
                              system: ActorSystem, val messagesApi: MessagesApi) extends Controller with AuthElement
       with AuthConfigImpl with I18nSupport {
+  val dbConfig = dbConfigProvider.get[JdbcProfile]
+  import dbConfig.driver.api._
 
   private def anyUser(account: LoggedInTeam): Future[Boolean] = Future.successful(true)
 
@@ -32,14 +38,22 @@ class Printing @Inject() (override val dbConfigProvider: DatabaseConfigProvider,
     mapping("textOnly" -> boolean)(printing.SubmitData.apply)(printing.SubmitData.unapply)
   }
 
+  private implicit val getPrintEntry = GetResult(
+    r => printing.PrintEntry(r.nextString(), new DateTime(r.nextTimestamp()), r.nextBoolean())
+  )
+
+  private def getPrintEntryQuery(contest: Int, team: Int) =
+    sql"""select Filename, Arrived, Printed = 255 from PrintJobs
+         where Contest = $contest and Team = $team order by Arrived desc""".as[printing.PrintEntry]
+
   def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
 
-    Future.successful(Ok(html.printform(loggedInTeam, printForm)))
+    db.db.run(getPrintEntryQuery(loggedInTeam.contest.id, loggedInTeam.team.localId)).map { printJobs =>
+      Ok(html.printform(loggedInTeam, printForm, printJobs))
+    }
   }
 
-  val dbConfig = dbConfigProvider.get[JdbcProfile]
-  import dbConfig.driver.api._
 
   implicit object SetByteArray extends SetParameter[Array[Byte]] {
     override def apply(v1: Array[Byte], v2: PositionedParameters): Unit = v2.setBytes(v1)
@@ -57,8 +71,11 @@ class Printing @Inject() (override val dbConfigProvider: DatabaseConfigProvider,
       else parsed.withGlobalError("can't read file")
 
     parsed0.fold(
-      formWithErrors =>
-        Future.successful(BadRequest(html.printform(loggedInTeam, formWithErrors))),
+      formWithErrors => {
+        db.db.run(getPrintEntryQuery(loggedInTeam.contest.id, loggedInTeam.team.localId)).map { printJobs =>
+          BadRequest(html.printform(loggedInTeam, formWithErrors, printJobs))
+        }
+      },
       submitData => {
         db.db.run(
           sqlu"""insert into PrintJobs (Contest, Team, Filename, DATA, Computer, Arrived) values
