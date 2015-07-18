@@ -27,7 +27,11 @@ import scala.concurrent.{Promise, Future}
 case class SubmitData(problem: String, compiler: Int)
 case class ServerSideData(compiler: Int)
 case class EvalEntry(id: Int, arrived: DateTime, ext: String, source: Array[Byte], input: Array[Byte],
-                     output: Option[Array[Byte]], timex: Int, memory: Long, info: Long, result: Int, status: Option[String])
+                     output: Option[Array[Byte]], timex: Int, memory: Long, info: Long, result: Int, status: Option[String]) {
+  def sourceStr = new String(source, "UTF-8")
+  def inputStr = new String(input, "UTF-8")
+  def outputStr = output.map(new String(_, "UTF-8"))
+}
 
 
 import akka.actor._
@@ -146,7 +150,7 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
     val loggedInTeam = loggedIn
     getCompilers(loggedInTeam.contest.id).zip(getEvals(loggedInTeam.contest.id, loggedInTeam.team.localId)).map {
       case (compilers, evals) =>
-      Ok(html.sendwithinput(loggedInTeam, serverSideForm, compilersForForm(compilers)))
+      Ok(html.sendwithinput(loggedInTeam, serverSideForm, compilersForForm(compilers), evals))
     }
   }
 
@@ -168,7 +172,7 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
 
         parsed0.fold(
           formWithErrors => {
-            Future.successful(BadRequest(html.sendwithinput(loggedInTeam, formWithErrors, compilersForForm(compilers))))
+            Future.successful(BadRequest(html.sendwithinput(loggedInTeam, formWithErrors, compilersForForm(compilers), evals)))
           },
           submitData => {
             val cext = compilers.map(x => x.id -> x).toMap.apply(submitData.compiler).ext

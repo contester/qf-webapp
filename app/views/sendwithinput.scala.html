@@ -1,9 +1,9 @@
-@(loggedIn: LoggedInTeam, form: Form[ServerSideData], languages: Seq[(String, String)])(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@(loggedIn: LoggedInTeam, form: Form[ServerSideData], languages: Seq[(String, String)], evals: Seq[EvalEntry])(implicit flash: Flash, messages: Messages, request: RequestHeader)
 
 @import helper.Implicits._
 @import b3.vertical.fieldConstructor
 
-@main("Contester", tab = "submit") {
+@main("Contester", tab = "sendwithinput") {
 
 <div class="panel panel-info">
     <div class="panel-heading"><h3 class="panel-title">Выполнен вход в систему</h3></div>
@@ -40,5 +40,23 @@
         }
     </div>
 </div>
+
+<div class="panel panel-info">
+    <div class="panel-heading"><h3 class="panel-title">Ваши подходы</h3></div>
+    <table class="table table-bordered table-responsive">
+        <thead>
+        <tr><th>Время</th><th>Исходный текст</th><th>Входной файл</th><th>Статус</th><th>Выходной файл</th>
+        <th>Время работы</th><th>Память</th><th>Код возврата</th></tr>
+        </thead>
+        <tbody>
+        @for(s <- evals) {
+        <tr><td>@s.arrived</td><td><pre>@s.sourceStr</pre></td><td><pre>@s.inputStr</pre></td><td>@s.status.getOrElse("...")</td>
+        <td><pre>@s.outputStr.getOrElse("")</pre></td><td>@s.timex</td><td>@s.memory</td><td>@s.info</td></tr>
+        }
+
+        </tbody>
+    </table>
+</div>
+
 
 }
