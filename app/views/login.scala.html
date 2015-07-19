@@ -38,7 +38,8 @@
 
 <div class="container">
 
-    <div class="well">
+    <div class="row">
+        <div class="col-md-6 well">
     @b3.vertical.form(controllers.routes.AuthForms.authenticate, 'class -> "form-signin") { implicit ifc =>
     <h2 class="form-signin-heading">Пожалуйста, авторизуйтесь.</h2>
 
@@ -60,6 +61,7 @@
     @b3.password(form("password"), '_label -> "Пароль")
     @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Авторизоваться}
     }
+    </div>
     </div>
 
 </div>
