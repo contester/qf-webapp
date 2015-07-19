@@ -33,3 +33,8 @@ object Contests {
   def getCompilers(contest: Int) =
     sql"""select ID, Name, Ext from Languages where Contest = $contest order by ID""".as[Compiler]
 }
+
+object Problems {
+  def toSelect(problems: Seq[Problem]) =
+    problems.map(x => x.id -> s"${x.id}. ${x.name}")
+}

@@ -113,9 +113,6 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
   private def getProblems(contest: Int) =
     db.db.run(Contests.getProblems(contest)).map(_.map(x => x.id -> s"${x.id}. ${x.name}"))
 
-  private def getCompilers(contest: Int) =
-    db.db.run(Contests.getCompilers(contest))
-
   val submitForm = Form {
     mapping("problem" -> text, "compiler" -> number)(SubmitData.apply)(SubmitData.unapply)
   }
@@ -124,7 +121,7 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
     compilers.map(x => x.id.toString -> x.name)
 
   private def getProblemsAndCompilers(contestId: Int) =
-    getProblems(contestId).zip(getCompilers(contestId))
+    getProblems(contestId).zip(db.db.run(Contests.getCompilers(contestId)))
 
   def submit = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
@@ -142,7 +139,7 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
 
   def sendwithinput = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
-    getCompilers(loggedInTeam.contest.id).zip(getEvals(loggedInTeam.contest.id, loggedInTeam.team.localId)).map {
+    db.db.run(loggedInTeam.contest.getCompilers).zip(getEvals(loggedInTeam.contest.id, loggedInTeam.team.localId)).map {
       case (compilers, evals) =>
       Ok(html.sendwithinput(loggedInTeam, serverSideForm, compilersForForm(compilers), evals))
     }
@@ -151,7 +148,7 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
   def sendwithinputPost = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
 
-    getCompilers(loggedInTeam.contest.id).zip(getEvals(loggedInTeam.contest.id, loggedInTeam.team.localId)).flatMap {
+    db.db.run(loggedInTeam.contest.getCompilers).zip(getEvals(loggedInTeam.contest.id, loggedInTeam.team.localId)).flatMap {
       case (compilers, evals) =>
       val parsed = serverSideForm.bindFromRequest
       val solutionOpt = request.body.file("file").map { solution =>
