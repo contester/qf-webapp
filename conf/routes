@@ -5,8 +5,8 @@ GET /socket controllers.Application.socket
 GET /clarifications controllers.Application.clarifications
 POST /clarifications controllers.Application.clarificationPost
 
-GET /sendwithinput controllers.Application.sendwithinput
-POST /sendwithinput controllers.Application.sendwithinputPost
+GET /sendwithinput controllers.ServerSideEval.index
+POST /sendwithinput controllers.ServerSideEval.post
 
 GET /print controllers.Printing.index
 POST /print controllers.Printing.post

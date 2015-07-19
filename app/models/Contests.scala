@@ -17,6 +17,11 @@ case class Problem(id: String, name: String, tests: Int, rating: Int)
 
 case class Compiler(id: Int, name: String, ext: String)
 
+object Compilers {
+  def toSelect(compilers: Seq[Compiler]) =
+    compilers.map(x => x.id.toString -> x.name)
+}
+
 object Contests {
   import slick.driver.MySQLDriver.api._
 

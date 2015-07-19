@@ -1,7 +1,7 @@
 package models
 
-
 import com.github.nscala_time.time.Imports._
+import org.joda.time.DateTime
 import slick.jdbc.JdbcBackend
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -76,4 +76,11 @@ object Users {
 
   def resolve(db: JdbcBackend#DatabaseDef, username: String)(implicit ec: ExecutionContext): Future[Option[LoggedInTeam]] =
     db.run(resolveQuery(username)).map(_.headOption)
+}
+
+case class EvalEntry(id: Int, arrived: DateTime, ext: String, source: Array[Byte], input: Array[Byte],
+                     output: Option[Array[Byte]], timex: Int, memory: Long, info: Long, result: Int, status: Option[String]) {
+  def sourceStr = new String(source, "UTF-8")
+  def inputStr = new String(input, "UTF-8")
+  def outputStr = output.map(new String(_, "UTF-8"))
 }

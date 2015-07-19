@@ -25,14 +25,6 @@ import views.html
 import scala.concurrent.{Promise, Future}
 
 case class SubmitData(problem: String, compiler: Int)
-case class ServerSideData(compiler: Int)
-case class EvalEntry(id: Int, arrived: DateTime, ext: String, source: Array[Byte], input: Array[Byte],
-                     output: Option[Array[Byte]], timex: Int, memory: Long, info: Long, result: Int, status: Option[String]) {
-  def sourceStr = new String(source, "UTF-8")
-  def inputStr = new String(input, "UTF-8")
-  def outputStr = output.map(new String(_, "UTF-8"))
-}
-
 
 import akka.actor._
 
@@ -133,53 +125,6 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
     }
   }
 
-  val serverSideForm = Form {
-    mapping("compiler" -> number)(ServerSideData.apply)(ServerSideData.unapply)
-  }
-
-  def sendwithinput = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
-    val loggedInTeam = loggedIn
-    db.db.run(loggedInTeam.contest.getCompilers).zip(getEvals(loggedInTeam.contest.id, loggedInTeam.team.localId)).map {
-      case (compilers, evals) =>
-      Ok(html.sendwithinput(loggedInTeam, serverSideForm, compilersForForm(compilers), evals))
-    }
-  }
-
-  def sendwithinputPost = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
-    val loggedInTeam = loggedIn
-
-    db.db.run(loggedInTeam.contest.getCompilers).zip(getEvals(loggedInTeam.contest.id, loggedInTeam.team.localId)).flatMap {
-      case (compilers, evals) =>
-      val parsed = serverSideForm.bindFromRequest
-      val solutionOpt = request.body.file("file").map { solution =>
-        FileUtils.readFileToByteArray(solution.ref.file)
-      }
-      val inputFileOpt = request.body.file("inputfile").map { ifile =>
-        FileUtils.readFileToByteArray(ifile.ref.file)
-      }
-
-        val parsed0 = if (solutionOpt.isDefined) parsed
-        else parsed.withGlobalError("can't open the file")
-
-        parsed0.fold(
-          formWithErrors => {
-            Future.successful(BadRequest(html.sendwithinput(loggedInTeam, formWithErrors, compilersForForm(compilers), evals)))
-          },
-          submitData => {
-            val cext = compilers.map(x => x.id -> x).toMap.apply(submitData.compiler).ext
-            db.db.run(
-              sqlu"""insert into Eval (Contest, Team, Ext, Source, Input, Arrived) values
-                    (${loggedInTeam.contest.id}, ${loggedInTeam.team.localId}, ${cext}, ${solutionOpt.get},
-                ${inputFileOpt.get}, CURRENT_TIMESTAMP())
-                  """
-            ).map { wat =>
-              println(wat)
-              Redirect(routes.Application.sendwithinput)
-            }
-          }
-        )
-    }
-  }
 
   def submitInsertQuery(contestId: Int, teamId: Int, problemId: String, srcLang: Int, source: Array[Byte], remoteAddr: String) =
     sqlu"""insert into NewSubmits (Contest, Team, Problem, SrcLang, Source, Computer, Arrived)
@@ -241,19 +186,6 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
     )
   }
 
-  implicit val getEval = GetResult(r =>
-    EvalEntry(r.nextInt(), new DateTime(r.nextTimestamp()), r.nextString(), r.nextBytes(), r.nextBytes(),
-      r.nextBytesOption(), r.nextInt(), r.nextLong(), r.nextLong(), r.nextInt(), r.nextStringOption())
-  )
-
-  def evalQuery(contest: Int, team: Int) =
-    sql"""SELECT e.ID, e.Arrived, e.Ext, substring(e.Source, 1, 110) as Source, substring(e.Input, 1, 110) as Input,
-    substring(e.Output, 1, 110) as Output, e.Timex, e.Memory, e.Info, e.Result, r.Description as Status
-    FROM Eval e LEFT JOIN ResultDesc r ON e.Result=r.ID WHERE e.Team=$team
-    AND e.Contest=$contest ORDER BY Arrived DESC""".as[EvalEntry]
-
-  def getEvals(contest: Int, team: Int) =
-    db.db.run(evalQuery(contest, team))
 
   def submitPost = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
