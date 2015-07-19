@@ -5,8 +5,7 @@
 
 @main("Contester", tab = "index", loggedInOpt=Some(loggedIn)) {
 
-<h3>@loggedIn.contest.name</h3>
-<h4>@loggedIn.team.teamFullName</h4>
+@contestteaminfo(loggedIn)
 
 <div class="panel panel-success">
     <div class="panel-body">

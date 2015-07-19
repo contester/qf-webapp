@@ -5,15 +5,7 @@
 
 @main("Contester", tab = "sendwithinput") {
 
-<div class="panel panel-info">
-    <div class="panel-heading"><h3 class="panel-title">Выполнен вход в систему</h3></div>
-    <table class="table">
-        <tbody>
-        <tr><th scope="row">Выполнен вход как</th><td>@loggedIn.team.teamFullName</td></tr>
-        </tbody>
-    </table>
-</div>
-
+@contestteaminfo(loggedIn)
 
 <div class="panel panel-success">
     <div class="panel-heading"><h3 class="panel-title">Запустить решение на сервере</h3></div>

@@ -20,9 +20,7 @@ import scala.concurrent.Future
 import org.joda.time.DateTime
 
 package printing {
-
-
-case class SubmitData(textOnly: Boolean)
+  case class SubmitData(textOnly: Boolean)
   case class PrintEntry(filename: String, arrived: DateTime, printed: Boolean)
 }
 

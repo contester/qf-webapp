@@ -1,0 +1,7 @@
+@(loggedIn: LoggedInTeam)
+
+<div class="jumbotron">
+    <h2>@loggedIn.contest.name</h2>
+    <h3>@loggedIn.team.teamFullName</h3>
+    @contestinfoshort(loggedIn.contest)
+</div>

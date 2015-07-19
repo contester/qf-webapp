@@ -1,23 +1,9 @@
 @(contest: Contest, status: models.AnyStatus, current: Int)
 
 @import spire.math.Rational
-@import com.github.nscala_time.time.Imports._
-@import org.joda.time.format.PeriodFormat
 
 <h3>@contest.name</h3>
-@if(contest.frozen) {
-<p class="text-warning">Монитор заморожен</p>
-}
-@if(contest.finished) {
-<p class="text-info">Соревнование закончено</p>
-} else {
-@if(contest.started) {
-<p>До окончания соревнования: @(PeriodFormat.getDefault().print((DateTime.now to contest.endTime).toPeriod))</p>
-} else {
-<p>До начала соревнования: @(PeriodFormat.getDefault().print((DateTime.now to contest.startTime).toPeriod))</p>
-}
-}
-
+@contestinfoshort(contest)
 
 @if(contest.started) {
 
