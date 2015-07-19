@@ -45,6 +45,7 @@ class AuthForms @Inject() (val messagesApi: MessagesApi, val dbConfigProvider: D
       formWithErrors => Future.successful(BadRequest(html.login(formWithErrors))),
       user => doAuth(user.username, user.password).flatMap {
         case Some(found) =>
+          println(found)
           gotoLoginSucceeded(found.username)
 
         case None => Future.successful(BadRequest(html.login(loginForm.fill(AuthData(user.username, ""))

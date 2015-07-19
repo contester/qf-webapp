@@ -1,7 +1,7 @@
 package models
 
 import controllers.{AuthWrapper, routes}
-import jp.t2v.lab.play2.auth.AuthConfig
+import jp.t2v.lab.play2.auth.{TokenAccessor, CookieTokenAccessor, AuthConfig}
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.mvc.{Result, RequestHeader}
 import play.api.mvc.Results.{Redirect, Forbidden}
@@ -90,4 +90,13 @@ trait AuthConfigImpl extends AuthConfig {
    * You should alter this procedure to suit your application.
    */
   def authorize(user: User, authority: Authority)(implicit ctx: ExecutionContext): Future[Boolean] = authority(user)
+
+  override lazy val tokenAccessor: TokenAccessor = new CookieTokenAccessor(
+    cookieName = "PLAY2AUTH_SESS_ID",
+    cookieSecureOption = false,
+    cookieHttpOnlyOption = true,
+    cookieDomainOption = None,
+    cookiePathOption = "/",
+    cookieMaxAge = Some(sessionTimeoutInSeconds)
+  )
 }
