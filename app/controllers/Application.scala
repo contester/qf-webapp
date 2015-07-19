@@ -190,9 +190,7 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
     }
   }
 
-  implicit object SetByteArray extends SetParameter[Array[Byte]] {
-    override def apply(v1: Array[Byte], v2: PositionedParameters): Unit = v2.setBytes(v1)
-  }
+  import utils.Db._
 
   def submitInsertQuery(contestId: Int, teamId: Int, problemId: String, srcLang: Int, source: Array[Byte], remoteAddr: String) =
     sqlu"""insert into NewSubmits (Contest, Team, Problem, SrcLang, Source, Computer, Arrived)

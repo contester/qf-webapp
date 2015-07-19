@@ -52,10 +52,7 @@ class Printing @Inject() (override val dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-
-  implicit object SetByteArray extends SetParameter[Array[Byte]] {
-    override def apply(v1: Array[Byte], v2: PositionedParameters): Unit = v2.setBytes(v1)
-  }
+  import utils.Db._
 
   def post = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
