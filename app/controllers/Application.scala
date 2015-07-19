@@ -76,6 +76,8 @@ case class ClarificationReqData(problem: String, text: String)
 class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvider, monitorModel: Monitor,
                              system: ActorSystem, val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport{
 
+  import utils.Db._
+
   val dbConfig = dbConfigProvider.get[JdbcProfile]
 
   import dbConfig.driver.api._
@@ -189,8 +191,6 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
         )
     }
   }
-
-  import utils.Db._
 
   def submitInsertQuery(contestId: Int, teamId: Int, problemId: String, srcLang: Int, source: Array[Byte], remoteAddr: String) =
     sqlu"""insert into NewSubmits (Contest, Team, Problem, SrcLang, Source, Computer, Arrived)
