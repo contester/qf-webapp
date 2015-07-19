@@ -24,10 +24,13 @@ package printing {
   case class PrintEntry(filename: String, arrived: DateTime, printed: Boolean)
 }
 
-class Printing @Inject() (override val dbConfigProvider: DatabaseConfigProvider,
+class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
+                         val auth: AuthWrapper,
                              system: ActorSystem, val messagesApi: MessagesApi) extends Controller with AuthElement
       with AuthConfigImpl with I18nSupport {
-  val dbConfig = dbConfigProvider.get[JdbcProfile]
+  private val dbConfig = dbConfigProvider.get[JdbcProfile]
+  private val db = dbConfig.db
+  import utils.Db._
   import dbConfig.driver.api._
 
   private def anyUser(account: LoggedInTeam): Future[Boolean] = Future.successful(true)
@@ -47,12 +50,10 @@ class Printing @Inject() (override val dbConfigProvider: DatabaseConfigProvider,
   def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
 
-    db.db.run(getPrintEntryQuery(loggedInTeam.contest.id, loggedInTeam.team.localId)).map { printJobs =>
+    db.run(getPrintEntryQuery(loggedInTeam.contest.id, loggedInTeam.team.localId)).map { printJobs =>
       Ok(html.printform(loggedInTeam, printForm, printJobs))
     }
   }
-
-  import utils.Db._
 
   def post = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
@@ -67,12 +68,12 @@ class Printing @Inject() (override val dbConfigProvider: DatabaseConfigProvider,
 
     parsed0.fold(
       formWithErrors => {
-        db.db.run(getPrintEntryQuery(loggedInTeam.contest.id, loggedInTeam.team.localId)).map { printJobs =>
+        db.run(getPrintEntryQuery(loggedInTeam.contest.id, loggedInTeam.team.localId)).map { printJobs =>
           BadRequest(html.printform(loggedInTeam, formWithErrors, printJobs))
         }
       },
       submitData => {
-        db.db.run(
+        db.run(
           sqlu"""insert into PrintJobs (Contest, Team, Filename, DATA, Computer, Arrived) values
                     (${loggedInTeam.contest.id}, ${loggedInTeam.team.localId}, ${solutionOpt.get._1},
             ${solutionOpt.get._2}, ${request.remoteAddress}, CURRENT_TIMESTAMP())

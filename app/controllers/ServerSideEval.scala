@@ -25,13 +25,14 @@ package serversideeval {
 case class ServerSideData(compiler: Int)
 }
 
-class ServerSideEval @Inject() (override val dbConfigProvider: DatabaseConfigProvider,
+class ServerSideEval @Inject() (val dbConfigProvider: DatabaseConfigProvider,
+                               val auth: AuthWrapper,
                              system: ActorSystem, val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport {
+  private val dbConfig = dbConfigProvider.get[JdbcProfile]
+  private val db = dbConfig.db
   import utils.Db._
-  import controllers.serversideeval.ServerSideData
-
-  val dbConfig = dbConfigProvider.get[JdbcProfile]
   import dbConfig.driver.api._
+  import controllers.serversideeval.ServerSideData
 
   private def anyUser(account: LoggedInTeam): Future[Boolean] = Future.successful(true)
 
@@ -51,12 +52,12 @@ class ServerSideEval @Inject() (override val dbConfigProvider: DatabaseConfigPro
     AND e.Contest=$contest ORDER BY Arrived DESC""".as[EvalEntry]
 
   private def getEvals(contest: Int, team: Int) =
-    db.db.run(evalQuery(contest, team))
+    db.run(evalQuery(contest, team))
 
 
   def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
-    db.db.run(loggedInTeam.contest.getCompilers).zip(getEvals(loggedInTeam.contest.id, loggedInTeam.team.localId)).map {
+    db.run(loggedInTeam.contest.getCompilers).zip(getEvals(loggedInTeam.contest.id, loggedInTeam.team.localId)).map {
       case (compilers, evals) =>
         Ok(html.sendwithinput(loggedInTeam, serverSideForm, Compilers.toSelect(compilers), evals))
     }
@@ -65,7 +66,7 @@ class ServerSideEval @Inject() (override val dbConfigProvider: DatabaseConfigPro
   def post = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
 
-    db.db.run(loggedInTeam.contest.getCompilers).zip(getEvals(loggedInTeam.contest.id, loggedInTeam.team.localId)).flatMap {
+    db.run(loggedInTeam.contest.getCompilers).zip(getEvals(loggedInTeam.contest.id, loggedInTeam.team.localId)).flatMap {
       case (compilers, evals) =>
         val parsed = serverSideForm.bindFromRequest
         val solutionOpt = request.body.file("file").map { solution =>
@@ -84,7 +85,7 @@ class ServerSideEval @Inject() (override val dbConfigProvider: DatabaseConfigPro
           },
           submitData => {
             val cext = compilers.map(x => x.id -> x).toMap.apply(submitData.compiler).ext
-            db.db.run(
+            db.run(
               sqlu"""insert into Eval (Contest, Team, Ext, Source, Input, Arrived) values
                     (${loggedInTeam.contest.id}, ${loggedInTeam.team.localId}, ${cext}, ${solutionOpt.get},
                 ${inputFileOpt.get}, CURRENT_TIMESTAMP())

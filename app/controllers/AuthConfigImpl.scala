@@ -1,6 +1,6 @@
 package models
 
-import controllers.routes
+import controllers.{AuthWrapper, routes}
 import jp.t2v.lab.play2.auth.AuthConfig
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.mvc.{Result, RequestHeader}
@@ -11,10 +11,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.reflect.{ClassTag, classTag}
 
 trait AuthConfigImpl extends AuthConfig {
-
-  def dbConfigProvider: DatabaseConfigProvider
-
-  val db = dbConfigProvider.get[JdbcProfile]
+  def auth: AuthWrapper
 
   /**
    * A type that is used to identify a user.
@@ -54,7 +51,7 @@ trait AuthConfigImpl extends AuthConfig {
    * You can alter the procedure to suit your application.
    */
   def resolveUser(id: Id)(implicit ctx: ExecutionContext): Future[Option[User]] =
-    Users.resolve(db.db, id)
+    auth.resolve(id)
 
   /**
    * Where to redirect the user after a successful login.

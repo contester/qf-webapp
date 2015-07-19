@@ -63,15 +63,18 @@ case class ClarificationRequest(time: DateTime, problem: String, text: String, a
 
 case class ClarificationReqData(problem: String, text: String)
 
-class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvider, monitorModel: Monitor,
-                             system: ActorSystem, val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport{
+class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
+                             monitorModel: Monitor,
+                             system: ActorSystem,
+                             val auth: AuthWrapper,
+                             val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport{
 
+  private val dbConfig = dbConfigProvider.get[JdbcProfile]
+  private val db = dbConfig.db
   import utils.Db._
-
-  val dbConfig = dbConfigProvider.get[JdbcProfile]
-
   import dbConfig.driver.api._
-  val helloActor = system.actorOf(HelloActor.props, "hello-actor")
+
+  private val helloActor = system.actorOf(HelloActor.props, "hello-actor")
 
   def monitor(id: Int) = Action.async { implicit request =>
     monitorModel.getMonitor(id, false).map(x => Ok(html.monitor(x.contest, x.status)))
@@ -86,13 +89,13 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
   private def anyUser(account: LoggedInTeam): Future[Boolean] = Future.successful(true)
 
   private def getSubmits(team: LoggedInTeam) =
-    db.db.run(Submits.getContestTeamSubmits(team.contest.id, team.team.localId))
+    db.run(Submits.getContestTeamSubmits(team.contest.id, team.team.localId))
 
   private def annot8(submits: Seq[Submit], schoolMode: Boolean) =
     if (schoolMode)
-      Submits.annotateSchoolSubmits(db.db, submits)
+      Submits.annotateSchoolSubmits(db, submits)
     else
-      Submits.annotateACMSubmits(db.db, submits)
+      Submits.annotateACMSubmits(db, submits)
 
   def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
@@ -103,7 +106,7 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
   }
 
   private def getProblems(contest: Int) =
-    db.db.run(Contests.getProblems(contest)).map(_.map(x => x.id -> s"${x.id}. ${x.name}"))
+    db.run(Contests.getProblems(contest)).map(Problems.toSelect(_))
 
   val submitForm = Form {
     mapping("problem" -> text, "compiler" -> number)(SubmitData.apply)(SubmitData.unapply)
@@ -113,7 +116,7 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
     compilers.map(x => x.id.toString -> x.name)
 
   private def getProblemsAndCompilers(contestId: Int) =
-    getProblems(contestId).zip(db.db.run(Contests.getCompilers(contestId)))
+    getProblems(contestId).zip(db.run(Contests.getCompilers(contestId)))
 
   def submit = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
@@ -142,10 +145,10 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
     sql"""select cl_date, cl_task, cl_text from clarifications where cl_is_hidden = '0' and cl_contest_idf = $contestId""".as[Clarification]
 
   def getClarifications(contestId: Int) =
-    db.db.run(getClarificationsQuery(contestId))
+    db.run(getClarificationsQuery(contestId))
 
   def getClarificationRequests(contestId: Int, teamId: Int) =
-    db.db.run(
+    db.run(
       sql"""select Arrived, Problem, Request, Answer from ClarificationRequests
            where Contest = $contestId and Team = $teamId""".as[ClarificationRequest]
     )
@@ -174,7 +177,7 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
     clarificationReqForm.bindFromRequest.fold(
       formWithErrors => clrForm(loggedIn, formWithErrors).map(BadRequest(_)),
       clrData => {
-        db.db.run(
+        db.run(
           sqlu"""insert into ClarificationRequests (Contest, Team, Problem, Request, Arrived) values
                 (${loggedInTeam.contest.id}, ${loggedInTeam.team.localId}, ${clrData.problem}, ${clrData.text},
                 CURRENT_TIMESTAMP())
@@ -205,7 +208,7 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
             Future.successful(BadRequest(html.sendsolution(loggedInTeam, formWithErrors, problems, compilersForForm(compilers))))
           },
           submitData => {
-            db.db.run(submitInsertQuery(loggedInTeam.contest.id, loggedInTeam.team.localId, submitData.problem, submitData.compiler, solutionOpt.get, request.remoteAddress)).map { wat =>
+            db.run(submitInsertQuery(loggedInTeam.contest.id, loggedInTeam.team.localId, submitData.problem, submitData.compiler, solutionOpt.get, request.remoteAddress)).map { wat =>
               println(wat.headOption)
               Redirect(routes.Application.index)
             }

@@ -10,16 +10,21 @@ import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
 import play.api.libs.concurrent.Execution.Implicits.defaultContext
 import play.api.mvc.{Action, Controller}
+import slick.driver.JdbcProfile
 import views.html
 
 import scala.concurrent.Future
 
 case class AuthData(username: String, password: String)
 
-class AuthForms @Inject() (val messagesApi: MessagesApi, override val dbConfigProvider: DatabaseConfigProvider)
+class AuthForms @Inject() (val messagesApi: MessagesApi, val dbConfigProvider: DatabaseConfigProvider, val auth: AuthWrapper)
   extends Controller with LoginLogout with AuthConfigImpl with I18nSupport {
 
-  val loginForm = Form {
+  private val dbConfig = dbConfigProvider.get[JdbcProfile]
+  private val db = dbConfig.db
+  import dbConfig.driver.api._
+
+  private val loginForm = Form {
     mapping("username" -> text, "password" -> text)(AuthData.apply)(AuthData.unapply)
   }
 
@@ -33,7 +38,7 @@ class AuthForms @Inject() (val messagesApi: MessagesApi, override val dbConfigPr
 
   def doAuth(username: String, password: String) =
     //Users.authenticate(db.db, username, password)
-    Users.resolve(db.db, username)
+    Users.resolve(db, username)
 
   def authenticate = Action.async { implicit request =>
     loginForm.bindFromRequest.fold(
