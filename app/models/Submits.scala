@@ -6,7 +6,11 @@ import spire.math.{FixedScale, FixedPoint, Rational}
 
 import scala.concurrent.{ExecutionContext, Future}
 
-trait AbstractSubmit {
+trait SubmitId {
+  def submitId: Int
+}
+
+trait ContestSubmit {
   def arrivedTimestamp: DateTime
   def teamId: Int
   def problem: String
@@ -23,13 +27,7 @@ trait AbstractSubmit {
     else if (!compiled) "Compilation failed"
     else if (passed == taken) "Полное решение"
     else s"$passed из $taken"
-}
 
-trait SubmitId {
-  def submitId: Int
-}
-
-trait ContestSubmit extends AbstractSubmit {
   def arrivedSeconds: Int
   def afterFreeze: Boolean
   def problemRating: Int
@@ -163,7 +161,7 @@ object Submits {
     submits.groupBy(x => (x.teamId, x.problem))
       .mapValues(x => scorer(x.sortBy(_.arrivedSeconds)))
 
-  case class ScoredSubmit[S <: AbstractSubmit, Sc <: SubmitScore[Sc]](submit: S, score: Sc, index: Int)
+  case class ScoredSubmit[S <: ContestSubmit, Sc <: SubmitScore[Sc]](submit: S, score: Sc, index: Int)
 
   implicit def dateTimeOrdering: Ordering[DateTime] = Ordering.fromLessThan(_ isBefore _)
 
