@@ -2,8 +2,8 @@ GET / controllers.Application.index
 
 GET /socket controllers.Application.socket
 
-GET /clarifications controllers.Application.clarifications
-POST /clarifications controllers.Application.clarificationPost
+GET /clarifications controllers.QandA.index
+POST /clarifications controllers.QandA.post
 
 GET /sendwithinput controllers.ServerSideEval.index
 POST /sendwithinput controllers.ServerSideEval.post

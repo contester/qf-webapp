@@ -58,11 +58,6 @@ class HelloActor extends Actor {
   }
 }
 
-case class Clarification(time: DateTime, problem: String, text: String)
-case class ClarificationRequest(time: DateTime, problem: String, text: String, answer: String)
-
-case class ClarificationReqData(problem: String, text: String)
-
 class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
                              monitorModel: Monitor,
                              system: ActorSystem,
@@ -133,62 +128,6 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
     sqlu"""insert into NewSubmits (Contest, Team, Problem, SrcLang, Source, Computer, Arrived)
           values ($contestId, $teamId, $problemId, $srcLang, $source, inet_aton($remoteAddr), CURRENT_TIMESTAMP())
         """.andThen(sql"""select LAST_INSERT_ID()""".as[Long])
-
-  implicit val getClarification = GetResult(r => Clarification(new DateTime(r.nextTimestamp()), r.nextString().toUpperCase, r.nextString()))
-
-  implicit val getClarificationRequest = GetResult(
-    r => ClarificationRequest(new DateTime(r.nextTimestamp()), r.nextString(), r.nextString(), r.nextString())
-  )
-
-
-  def getClarificationsQuery(contestId: Int) =
-    sql"""select cl_date, cl_task, cl_text from clarifications where cl_is_hidden = '0' and cl_contest_idf = $contestId""".as[Clarification]
-
-  def getClarifications(contestId: Int) =
-    db.run(getClarificationsQuery(contestId))
-
-  def getClarificationRequests(contestId: Int, teamId: Int) =
-    db.run(
-      sql"""select Arrived, Problem, Request, Answer from ClarificationRequests
-           where Contest = $contestId and Team = $teamId""".as[ClarificationRequest]
-    )
-
-
-  val clarificationReqForm = Form {
-    mapping("problem" -> text, "text" -> text)(ClarificationReqData.apply)(ClarificationReqData.unapply)
-  }
-
-  private def clrForm(loggedInTeam: LoggedInTeam, form: Form[ClarificationReqData])(implicit request: RequestHeader) =
-    getProblems(loggedInTeam.contest.id).flatMap { probs =>
-      getClarifications(loggedInTeam.contest.id).flatMap { clars =>
-        getClarificationRequests(loggedInTeam.contest.id, loggedInTeam.team.localId).map { clReq =>
-          html.clarifications(loggedInTeam, clars, clReq, probs, form)
-        }
-      }
-    }
-
-  def clarifications = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
-    clrForm(loggedIn, clarificationReqForm).map(Ok(_))
-  }
-
-  def clarificationPost = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
-    val loggedInTeam = loggedIn
-
-    clarificationReqForm.bindFromRequest.fold(
-      formWithErrors => clrForm(loggedIn, formWithErrors).map(BadRequest(_)),
-      clrData => {
-        db.run(
-          sqlu"""insert into ClarificationRequests (Contest, Team, Problem, Request, Arrived) values
-                (${loggedInTeam.contest.id}, ${loggedInTeam.team.localId}, ${clrData.problem}, ${clrData.text},
-                CURRENT_TIMESTAMP())
-              """
-        ).map { _ =>
-          Redirect(routes.Application.clarifications)
-        }
-      }
-    )
-  }
-
 
   def submitPost = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn

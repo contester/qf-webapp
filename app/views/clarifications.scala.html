@@ -10,7 +10,7 @@
 <div class="panel panel-success">
     <div class="panel-heading"><h3 class="panel-title">Задать вопрос жюри</h3></div>
     <div class="panel-body">
-        @b3.form(controllers.routes.Application.clarificationPost) {
+        @b3.form(controllers.routes.QandA.post) {
         @form.globalError.map { error =>
         <div class="alert alert-danger" role="alert">
             <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
