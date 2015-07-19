@@ -66,8 +66,6 @@ class HelloActor extends Actor {
   }
 }
 
-case class Compiler(id: Int, name: String, ext: String)
-
 case class Clarification(time: DateTime, problem: String, text: String)
 case class ClarificationRequest(time: DateTime, problem: String, text: String, answer: String)
 
@@ -112,17 +110,11 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
     }
   }
 
-  private def getProblemsQuery(contest: Int) =
-    sql"""select ID, Name from Problems where Contest = $contest order by ID""".as[(String, String)]
-
   private def getProblems(contest: Int) =
-    db.db.run(getProblemsQuery(contest)).map(_.map { case (id, name) => id -> s"$id. $name"})
-
-  private def getCompilersQuery(contest: Int) =
-    sql"""select ID, Name, Ext from Languages where Contest = $contest order by ID""".as[Compiler]
+    db.db.run(Contests.getProblems(contest)).map(_.map(x => x.id -> s"${x.id}. ${x.name}"))
 
   private def getCompilers(contest: Int) =
-    db.db.run(getCompilersQuery(contest))
+    db.db.run(Contests.getCompilers(contest))
 
   val submitForm = Form {
     mapping("problem" -> text, "compiler" -> number)(SubmitData.apply)(SubmitData.unapply)
@@ -203,9 +195,6 @@ class Application @Inject() (override val dbConfigProvider: DatabaseConfigProvid
     r => ClarificationRequest(new DateTime(r.nextTimestamp()), r.nextString(), r.nextString(), r.nextString())
   )
 
-  implicit val getCompiler = GetResult(
-    r => Compiler(r.nextInt(), r.nextString(), r.nextString())
-  )
 
   def getClarificationsQuery(contestId: Int) =
     sql"""select cl_date, cl_task, cl_text from clarifications where cl_is_hidden = '0' and cl_contest_idf = $contestId""".as[Clarification]

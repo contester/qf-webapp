@@ -167,11 +167,6 @@ class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, lifecycle: Ap
 
   val db = dbConfig.db
 
-  implicit val getProblem = GetResult(r => Problem(r.nextString().toUpperCase, r.nextString(), r.nextInt(), r.nextInt()))
-
-  def getContestProblems(contest: Int) =
-    sql"""select ID, Name, Tests, Rating from Problems where Contest = $contest order by ID""".as[Problem]
-
   implicit val getLocalTeam = GetResult(r =>
     LocalTeam(r.nextInt(), r.nextString(), r.nextIntOption(), r.nextString(), r.nextBoolean()))
 
@@ -182,7 +177,7 @@ class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, lifecycle: Ap
        """.as[LocalTeam]
 
   def getStatus(db: Database, contest: Int, schoolMode: Boolean)(implicit ec: ExecutionContext): Future[(AnyStatus, AnyStatus)] = {
-    db.run(getContestProblems(contest)).flatMap { problems =>
+    db.run(Contests.getProblems(contest)).flatMap { problems =>
       db.run(getContestTeams(contest)).flatMap { teams =>
         db.run(Submits.getContestSubmits(contest)).map { submits =>
           val sub0 = submits.filter(!_.afterFreeze)
