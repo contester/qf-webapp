@@ -35,22 +35,22 @@ class ServerSideEval @Inject() (override val dbConfigProvider: DatabaseConfigPro
 
   private def anyUser(account: LoggedInTeam): Future[Boolean] = Future.successful(true)
 
-  val serverSideForm = Form {
+  private val serverSideForm = Form {
     mapping("compiler" -> number)(ServerSideData.apply)(ServerSideData.unapply)
   }
 
-  implicit val getEval = GetResult(r =>
+  implicit private val getEval = GetResult(r =>
     EvalEntry(r.nextInt(), new DateTime(r.nextTimestamp()), r.nextString(), r.nextBytes(), r.nextBytes(),
       r.nextBytesOption(), r.nextInt(), r.nextLong(), r.nextLong(), r.nextInt(), r.nextStringOption())
   )
 
-  def evalQuery(contest: Int, team: Int) =
+  private def evalQuery(contest: Int, team: Int) =
     sql"""SELECT e.ID, e.Arrived, e.Ext, substring(e.Source, 1, 110) as Source, substring(e.Input, 1, 110) as Input,
     substring(e.Output, 1, 110) as Output, e.Timex, e.Memory, e.Info, e.Result, r.Description as Status
     FROM Eval e LEFT JOIN ResultDesc r ON e.Result=r.ID WHERE e.Team=$team
     AND e.Contest=$contest ORDER BY Arrived DESC""".as[EvalEntry]
 
-  def getEvals(contest: Int, team: Int) =
+  private def getEvals(contest: Int, team: Int) =
     db.db.run(evalQuery(contest, team))
 
 
