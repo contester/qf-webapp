@@ -35,10 +35,6 @@ trait ContestSubmit {
   def arrivedStr = SecondsToTimeStr(arrivedSeconds)
 }
 
-trait Indexed {
-  def index: Int
-}
-
 case class Submit(submitId: Int, arrivedTimestamp: DateTime, teamId: Int,
                   problem: String, ext: String, finished: Boolean,
                    compiled: Boolean, passed: Int, taken: Int, arrivedSeconds: Int,
