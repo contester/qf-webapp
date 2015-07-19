@@ -87,7 +87,7 @@ object Foo {
         }
 
         teamId -> cells
-    }.toMap
+    }
 
     val teamRows = teams.map { team =>
       val cells = rows.getOrElse(team.localId, Seq()).toMap
