@@ -1,7 +1,9 @@
 package controllers
 
-import javax.inject.Inject
+import javax.inject.{Named, Inject, Singleton}
 
+import actors.StatusActor.{Connected, Join}
+import akka.actor.{ActorRef, ActorSystem}
 import jp.t2v.lab.play2.auth.{AuthenticationElement, AuthElement, LoginLogout}
 import models._
 import org.apache.commons.io.FileUtils
@@ -26,41 +28,11 @@ import scala.concurrent.{Promise, Future}
 
 case class SubmitData(problem: String, compiler: Int)
 
-import akka.actor._
 
-object HelloActor {
-  def props = Props[HelloActor]
-
-  case class SayHello(name: String)
-}
-
-case class Join(username: String)
-case class Connected(enumerator:Enumerator[String])
-
-class HelloActor extends Actor {
-  import HelloActor._
-  import scala.concurrent.duration._
-
-  import context.dispatcher
-  val tick =
-    context.system.scheduler.schedule(60 seconds, 60 seconds, self, "tick")
-
-  val (chatEnumerator, chatChannel) = Concurrent.broadcast[String]
-
-  def receive = {
-    case Join(username) => {
-      sender ! Connected(chatEnumerator)
-    }
-    case "tick" => {
-      println("tick")
-      //chatChannel.push("blah")
-    }
-  }
-}
-
+@Singleton
 class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
                              monitorModel: Monitor,
-                             system: ActorSystem,
+                             @Named("status-actor") statusActor: ActorRef,
                              val auth: AuthWrapper,
                              val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport{
 
@@ -68,8 +40,6 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   private val db = dbConfig.db
   import utils.Db._
   import dbConfig.driver.api._
-
-  private val helloActor = system.actorOf(HelloActor.props, "hello-actor")
 
   def monitor(id: Int) = Action.async { implicit request =>
     monitorModel.getMonitor(id, false).map(x => Ok(html.monitor(x.contest, x.status)))
@@ -168,11 +138,13 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
         println(user)
         val in = Iteratee.foreach[String] {
           msg => println(msg)
+        }.map { x =>
+          println("disconnected", x)
         }
         import scala.concurrent.duration._
         import akka.pattern.ask
 
-        (helloActor.ask(Join("foo"))(5 seconds)).map {
+        (statusActor.ask(Join("foo"))(5 seconds)).map {
           case Connected(out) =>
             Right((in, out))
           case _ => Left(BadRequest("foo"))
