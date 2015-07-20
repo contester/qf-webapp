@@ -1,7 +1,7 @@
 package models
 
 import controllers.{AuthWrapper, routes}
-import jp.t2v.lab.play2.auth.{TokenAccessor, CookieTokenAccessor, AuthConfig}
+import jp.t2v.lab.play2.auth._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.mvc.{Result, RequestHeader}
 import play.api.mvc.Results.{Redirect, Forbidden}
@@ -99,4 +99,6 @@ trait AuthConfigImpl extends AuthConfig {
     cookiePathOption = "/",
     cookieMaxAge = Some(sessionTimeoutInSeconds)
   )
+
+  override lazy val idContainer: AsyncIdContainer[Id] = AsyncIdContainer(new CookieIdContainer[Id])
 }
