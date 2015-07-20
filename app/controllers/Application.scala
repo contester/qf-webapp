@@ -1,31 +1,21 @@
 package controllers
 
-import javax.inject.{Named, Inject, Singleton}
+import javax.inject.{Inject, Singleton}
 
 import actors.NarrowActor
-import actors.StatusActor.{Connected, Join}
-import akka.actor.{ActorRef, ActorSystem}
-import jp.t2v.lab.play2.auth.{AuthenticationElement, AuthElement, LoginLogout}
+import jp.t2v.lab.play2.auth.AuthElement
 import models._
 import org.apache.commons.io.FileUtils
-import org.joda.time.DateTime
-import play.api.Logger
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
-import play.api.inject.ApplicationLifecycle
-import play.api.libs.Files.TemporaryFile
 import play.api.libs.concurrent.Execution.Implicits.defaultContext
-import play.api.libs.iteratee.{Enumerator, Concurrent}
-import play.api.libs.json.JsValue
-import play.api.mvc.{RequestHeader, Action, Controller}
+import play.api.mvc.{Action, Controller}
 import slick.driver.JdbcProfile
-import slick.jdbc.{PositionedParameters, SetParameter, GetResult}
-import spire.math.Rational
 import views.html
 
-import scala.concurrent.{Promise, Future}
+import scala.concurrent.Future
 
 case class SubmitData(problem: String, compiler: Int)
 
@@ -33,14 +23,13 @@ case class SubmitData(problem: String, compiler: Int)
 @Singleton
 class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
                              monitorModel: Monitor,
-                             @Named("status-actor") statusActor: ActorRef,
                              val auth: AuthWrapper,
                              val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport{
 
   private val dbConfig = dbConfigProvider.get[JdbcProfile]
   private val db = dbConfig.db
-  import utils.Db._
   import dbConfig.driver.api._
+  import utils.Db._
 
   def monitor(id: Int) = Action.async { implicit request =>
     monitorModel.getMonitor(id, false).map(x => Ok(html.monitor(x.contest, x.status)))
@@ -127,10 +116,8 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-  import play.api.mvc._
-  import play.api.libs.iteratee._
-
   import play.api.Play.current
+  import play.api.mvc._
 
   def socket = WebSocket.tryAcceptWithActor[String, String] { implicit request =>
     authorized(anyUser).flatMap {

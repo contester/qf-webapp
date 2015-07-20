@@ -1,11 +1,7 @@
 package actors
 
-import javax.inject.Inject
-
-import akka.actor.{ActorRef, Actor, Props}
-import play.api.db.slick.DatabaseConfigProvider
-import play.api.libs.iteratee.{Concurrent, Enumerator}
-import slick.driver.JdbcProfile
+import akka.actor.{Actor, ActorRef, Props}
+import play.api.libs.iteratee.Enumerator
 
 object NarrowActor {
   def props(out: ActorRef, foo: String) = Props(classOf[NarrowActor], out, foo)
@@ -15,10 +11,9 @@ object NarrowActor {
 }
 
 class NarrowActor(out: ActorRef, foo: String) extends Actor {
-  import NarrowActor._
-  import scala.concurrent.duration._
-
   import context.dispatcher
+
+  import scala.concurrent.duration._
   val tick =
     context.system.scheduler.schedule(60 seconds, 60 seconds, self, "tick")
 
