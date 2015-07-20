@@ -2,6 +2,7 @@ package controllers
 
 import javax.inject.{Named, Inject, Singleton}
 
+import actors.NarrowActor
 import actors.StatusActor.{Connected, Join}
 import akka.actor.{ActorRef, ActorSystem}
 import jp.t2v.lab.play2.auth.{AuthenticationElement, AuthElement, LoginLogout}
@@ -129,26 +130,14 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   import play.api.mvc._
   import play.api.libs.iteratee._
 
-  def socket = WebSocket.tryAccept[String] { implicit request =>
-    println(request)
+  import play.api.Play.current
 
+  def socket = WebSocket.tryAcceptWithActor[String, String] { implicit request =>
     authorized(anyUser).flatMap {
       case Left(result) => Future.successful(Left(result))
       case Right((user, resultUpdater)) => {
         println(user)
-        val in = Iteratee.foreach[String] {
-          msg => println(msg)
-        }.map { x =>
-          println("disconnected", x)
-        }
-        import scala.concurrent.duration._
-        import akka.pattern.ask
-
-        (statusActor.ask(Join("foo"))(5 seconds)).map {
-          case Connected(out) =>
-            Right((in, out))
-          case _ => Left(BadRequest("foo"))
-        }
+        Future.successful(Right(NarrowActor.props(_, user.username)))
       }
     }
  }

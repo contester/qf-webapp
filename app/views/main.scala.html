@@ -58,7 +58,7 @@
   else {
     var notification = new Notification('Notification title', {
       icon: '@routes.Assets.at("icpc_logo.png")',
-      body: "Hey there! You've been notified!",
+      body: wat,
     });
 
     notification.addEventListener('click', function () {
@@ -79,7 +79,7 @@
 
             var receiveEvent = function(event) {
                 console.log(event)
-                notifyMe(event)
+                notifyMe(event.data)
             }
 
             chatSocket.onmessage = receiveEvent
