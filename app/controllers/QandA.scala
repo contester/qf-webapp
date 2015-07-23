@@ -19,8 +19,6 @@ import play.api.libs.concurrent.Execution.Implicits.defaultContext
 
 import scala.concurrent.Future
 
-case class Clarification(time: DateTime, problem: String, text: String)
-case class ClarificationRequest(time: DateTime, problem: String, text: String, answer: String)
 
 case class ClarificationReqData(problem: String, text: String)
 
@@ -36,33 +34,14 @@ class QandA @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   private def anyUser(account: LoggedInTeam): Future[Boolean] = Future.successful(true)
 
-  implicit private val getClarification = GetResult(r => Clarification(new DateTime(r.nextTimestamp()), r.nextString().toUpperCase, r.nextString()))
-
-  implicit private val getClarificationRequest = GetResult(
-    r => ClarificationRequest(new DateTime(r.nextTimestamp()), r.nextString(), r.nextString(), r.nextString())
-  )
-
-  private def getClarificationsQuery(contestId: Int) =
-    sql"""select cl_date, cl_task, cl_text from clarifications where cl_is_hidden = '0' and cl_contest_idf = $contestId""".as[Clarification]
-
-  private def getClarifications(contestId: Int) =
-    db.run(getClarificationsQuery(contestId))
-
-  private def getClarificationRequests(contestId: Int, teamId: Int) =
-    db.run(
-      sql"""select Arrived, Problem, Request, Answer from ClarificationRequests
-           where Contest = $contestId and Team = $teamId""".as[ClarificationRequest]
-    )
-
-
   private val clarificationReqForm = Form {
     mapping("problem" -> text, "text" -> text)(ClarificationReqData.apply)(ClarificationReqData.unapply)
   }
 
   private def clrForm(loggedInTeam: LoggedInTeam, form: Form[ClarificationReqData])(implicit request: RequestHeader) =
     db.run(loggedInTeam.contest.getProblems).flatMap { probs =>
-      getClarifications(loggedInTeam.contest.id).flatMap { clars =>
-        getClarificationRequests(loggedInTeam.contest.id, loggedInTeam.team.localId).map { clReq =>
+      db.run(loggedInTeam.contest.getClarifications).flatMap { clars =>
+        db.run(loggedInTeam.getClarificationRequests).map { clReq =>
           html.clarifications(loggedInTeam, clars, clReq, Problems.toSelect(probs), form)
         }
       }

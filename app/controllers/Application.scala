@@ -11,6 +11,7 @@ import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
 import play.api.libs.concurrent.Execution.Implicits.defaultContext
+import play.api.libs.json.JsValue
 import play.api.mvc.{Action, Controller}
 import slick.driver.JdbcProfile
 import views.html
@@ -119,7 +120,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   import play.api.Play.current
   import play.api.mvc._
 
-  def socket = WebSocket.tryAcceptWithActor[String, String] { implicit request =>
+  def socket = WebSocket.tryAcceptWithActor[JsValue, JsValue] { implicit request =>
     authorized(anyUser).flatMap {
       case Left(result) => Future.successful(Left(result))
       case Right((user, resultUpdater)) => {

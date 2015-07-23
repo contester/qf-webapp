@@ -2,7 +2,7 @@ package models
 
 import com.github.nscala_time.time.Imports._
 import org.joda.time.DateTime
-import slick.jdbc.JdbcBackend
+import slick.jdbc.{GetResult, JdbcBackend}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -21,7 +21,21 @@ trait Team {
 
 case class LocalTeam(localId: Int, schoolName: String, teamNum: Option[Int], teamName: String, notRated: Boolean) extends Team
 
-case class LoggedInTeam(username: String, contest: Contest, team: LocalTeam)
+case class LoggedInTeam(username: String, contest: Contest, team: LocalTeam) {
+  def getClarificationRequests = LoggedInTeam.getClarificationRequests(contest.id, team.localId)
+}
+
+object LoggedInTeam {
+  implicit private val getClarificationRequest = GetResult(
+    r => ClarificationRequest(new DateTime(r.nextTimestamp()), r.nextString(), r.nextString(), r.nextString())
+  )
+
+  import slick.driver.MySQLDriver.api._
+
+  def getClarificationRequests(contestId: Int, teamId: Int) =
+    sql"""select Arrived, Problem, Request, Answer from ClarificationRequests
+         where Contest = $contestId and Team = $teamId""".as[ClarificationRequest]
+}
 
 object Users {
   import slick.jdbc.GetResult
