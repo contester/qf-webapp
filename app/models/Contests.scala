@@ -27,6 +27,13 @@ object Compilers {
 object Contests {
   import slick.driver.MySQLDriver.api._
 
+  implicit val convertContests = GetResult(r => Contest(r.nextInt(), r.nextString(), r.nextBoolean(),
+    new DateTime(r.nextTimestamp()), new DateTime(r.nextTimestamp()), new DateTime(r.nextTimestamp()),
+    new DateTime(r.nextTimestamp())))
+
+  val getContests =
+    sql"""select ID, Name, SchoolMode, Start, End, Finish, Expose from Contests""".as[Contest]
+
   implicit private val getProblem = GetResult(r => Problem(r.nextString().toUpperCase, r.nextString(),
     r.nextInt(), r.nextInt()))
 

@@ -2,15 +2,18 @@ package controllers
 
 import javax.inject.{Inject, Singleton}
 
-import actors.NarrowActor
+import actors.{StatusActor, NarrowActor}
+import akka.actor.ActorSystem
 import jp.t2v.lab.play2.auth.AuthElement
 import models._
 import org.apache.commons.io.FileUtils
+import play.api.Logger
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
 import play.api.libs.concurrent.Execution.Implicits.defaultContext
+import play.api.libs.iteratee.Iteratee
 import play.api.libs.json.JsValue
 import play.api.mvc.{Action, Controller}
 import slick.driver.JdbcProfile
@@ -24,6 +27,7 @@ case class SubmitData(problem: String, compiler: Int)
 @Singleton
 class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
                              monitorModel: Monitor,
+                             system: ActorSystem,
                              val auth: AuthWrapper,
                              val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport{
 
@@ -120,12 +124,25 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   import play.api.Play.current
   import play.api.mvc._
 
-  def socket = WebSocket.tryAcceptWithActor[JsValue, JsValue] { implicit request =>
+  val statusActor = system.actorOf(StatusActor.props(db), "status-actor")
+
+  def socket = WebSocket.tryAccept[JsValue] { implicit request =>
     authorized(anyUser).flatMap {
       case Left(result) => Future.successful(Left(result))
       case Right((user, resultUpdater)) => {
-        println(user)
-        Future.successful(Right(NarrowActor.props(_, user.username)))
+        val in = Iteratee.foreach[JsValue] {
+          msg => Logger.debug(msg.toString())
+        }.map { msg =>
+          Logger.debug(s"Disconnected: $user ($msg)")
+        }
+        import scala.concurrent.duration._
+        import akka.pattern.ask
+
+        statusActor.ask(StatusActor.Join(user))(5 seconds).map {
+          case StatusActor.Connected(out) =>
+            Right((in, out))
+          case _ => Left(BadRequest("foo"))
+        }
       }
     }
  }
