@@ -32,6 +32,7 @@ object StatusActor {
           Json.obj(
             "name" -> c.name,
             "started" -> c.started,
+            "frozen" -> c.frozen,
             "timeval" -> (DateTime.now to c.endTime).toDurationMillis
           )
         } else {
@@ -39,6 +40,7 @@ object StatusActor {
             "name" -> c.name,
             "started" -> c.started,
             "ended" -> c.finished,
+            "frozen" -> c.frozen,
             "timeval" -> 0
           )
         }

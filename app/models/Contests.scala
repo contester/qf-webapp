@@ -10,6 +10,16 @@ case class Contest(id: Int, name: String, schoolMode: Boolean, startTime: DateTi
   def finished = DateTime.now >= endTime
   def started = DateTime.now >= startTime
 
+  def timevalHMS =
+    Contests.formatHMS(if (started) {
+      if (!finished)
+        (DateTime.now to endTime).toDurationMillis
+      else
+        0L
+    } else
+      (DateTime.now to startTime).toDurationMillis
+      )
+
   def getProblems = Contests.getProblems(id)
   def getCompilers = Contests.getCompilers(id)
   def getClarifications = Contests.getClarifications(id)
@@ -26,6 +36,16 @@ object Compilers {
 
 object Contests {
   import slick.driver.MySQLDriver.api._
+
+  def formatHMS(ms: Long) = {
+    val s = ms / 1000
+    val seconds = s % 60
+    val m = s / 60
+    val minutes = m % 60
+    val hours = m / 60
+
+    f"$hours%02d:$minutes%02d:$seconds%02d"
+  }
 
   implicit val convertContests = GetResult(r => Contest(r.nextInt(), r.nextString(), r.nextBoolean(),
     new DateTime(r.nextTimestamp()), new DateTime(r.nextTimestamp()), new DateTime(r.nextTimestamp()),

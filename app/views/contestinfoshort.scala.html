@@ -5,5 +5,5 @@
 <p id="contest-timer" @if(contest.finished){ hidden }>
     <span id="contest-ending-in" @if(!contest.started) { hidden }>До окончания соревнования:</span>
     <span id="contest-starting-in" @if(contest.started) { hidden }>До начала соревнования:</span>
-    <span id="contest-timer-counter"></span>
+    <span id="contest-timer-counter">@contest.timevalHMS</span>
 </p>
