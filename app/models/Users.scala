@@ -19,7 +19,8 @@ trait Team {
   }
 }
 
-case class LocalTeam(localId: Int, schoolName: String, teamNum: Option[Int], teamName: String, notRated: Boolean) extends Team
+case class LocalTeam(localId: Int, schoolName: String, teamNum: Option[Int], teamName: String,
+                     notRated: Boolean, noPrint: Boolean, disabled: Boolean) extends Team
 
 case class LoggedInTeam(username: String, contest: Contest, team: LocalTeam) {
   def getClarificationRequests = LoggedInTeam.getClarificationRequests(contest.id, team.localId)
@@ -46,7 +47,8 @@ object Users {
     Contest(r.nextInt(), r.nextString(), r.nextBoolean(),
       new DateTime(r.nextTimestamp()), new DateTime(r.nextTimestamp()), new DateTime(r.nextTimestamp()),
       new DateTime(r.nextTimestamp())),
-    LocalTeam(r.nextInt(), r.nextString(), r.nextIntOption(), r.nextString(), r.nextBoolean())))
+    LocalTeam(r.nextInt(), r.nextString(), r.nextIntOption(), r.nextString(), r.nextBoolean(),
+    r.nextBoolean(), r.nextBoolean())))
 
 
   def authQuery(username: String, password: String) =
@@ -59,7 +61,9 @@ object Users {
           Schools.Name as SchoolName,
           Teams.Num as TeamNum,
           Teams.Name as TeamName,
-          Participants.NotRated
+          Participants.NotRated,
+          Participants.NoPrint,
+          Participants.Disabled
           from Assignments, Participants, Contests, Teams, Schools
          where Assignments.Username = $username and Assignments.Password = $password
          and Assignments.Contest = Contests.ID and Participants.Contest = Contests.ID and

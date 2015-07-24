@@ -105,16 +105,22 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
         }
 
         val parsed0 = if (solutionOpt.isDefined) parsed
-          else parsed.withGlobalError("can't open the file")
+        else parsed.withGlobalError("can't open the file")
 
         parsed0.fold(
           formWithErrors => {
-            Future.successful(BadRequest(html.sendsolution(loggedInTeam, formWithErrors, problems, compilersForForm(compilers))))
+            Future.successful(BadRequest(html.sendsolution(loggedInTeam, formWithErrors, problems,
+              compilersForForm(compilers))))
           },
           submitData => {
-            db.run(submitInsertQuery(loggedInTeam.contest.id, loggedInTeam.team.localId, submitData.problem, submitData.compiler, solutionOpt.get, request.remoteAddress)).map { wat =>
-              println(wat.headOption)
-              Redirect(routes.Application.index)
+            if (loggedIn.contest.finished || !loggedIn.contest.started) {
+              Future.successful(BadRequest(html.sendsolution(loggedInTeam, parsed0.withGlobalError("Contest is not running"),
+                problems, compilersForForm(compilers))))
+            } else {
+              db.run(submitInsertQuery(loggedInTeam.contest.id, loggedInTeam.team.localId, submitData.problem,
+                submitData.compiler, solutionOpt.get, request.remoteAddress)).map { wat =>
+                Redirect(routes.Application.index)
+              }
             }
           }
         )

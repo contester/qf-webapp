@@ -145,6 +145,10 @@
                 if (obj.kind == 'contest') {
                     updateContestTimes(obj.data);
                 }
+
+                if (obj.msgid) {
+                    chatSocket.send(JSON.stringify({ 'kind': 'ack', 'msgid': msgid }))
+                }
             }
 
             chatSocket.onmessage = receiveEvent
