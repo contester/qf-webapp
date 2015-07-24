@@ -14,14 +14,36 @@ object StatusActor {
   def props(db: JdbcBackend#DatabaseDef) = Props(classOf[StatusActor], db)
 
   case object Tick
+  case object RefreshTick
   case class Join(loggedInTeam: LoggedInTeam)
   case class Connected(enumerator: Enumerator[JsValue])
 
   implicit val contestWrites = new Writes[Contest] {
-    def writes(c: Contest) = Json.obj(
-      "name" -> c.name,
-      "started" -> c.started
-    )
+    def writes(c: Contest) = {
+      import com.github.nscala_time.time.Imports._
+      if (!c.started) {
+        Json.obj(
+          "name" -> c.name,
+          "started" -> c.started,
+          "timeval" -> (DateTime.now to c.startTime).toDurationMillis
+        )
+      } else {
+        if (!c.finished) {
+          Json.obj(
+            "name" -> c.name,
+            "started" -> c.started,
+            "timeval" -> (DateTime.now to c.endTime).toDurationMillis
+          )
+        } else {
+          Json.obj(
+            "name" -> c.name,
+            "started" -> c.started,
+            "ended" -> c.finished,
+            "timeval" -> 0
+          )
+        }
+      }
+    }
   }
 }
 
@@ -31,7 +53,10 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
 
   import scala.concurrent.duration._
   val tick =
-    context.system.scheduler.schedule(10 seconds, 10 seconds, self, Tick)
+    context.system.scheduler.schedule(0 seconds, 10 seconds, self, Tick)
+
+  val refreshTick =
+    context.system.scheduler.schedule(30 seconds, 30 seconds, self, RefreshTick)
 
   import com.github.nscala_time.time.Imports._
   var lastTimestamp = DateTime.now
@@ -50,9 +75,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
 
   def receive = {
     case Tick => {
-
       db.run(Contests.getContests).map { contests =>
-        println(contests)
         for (c <- contests) {
           contestStates.get(c.id) match {
             case Some(oldState) => {
@@ -67,8 +90,13 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
           }
         }
       }
+    }
 
-      //out ! foo
+    case RefreshTick => {
+      contestStates.foreach {
+        case (contestId, c) =>
+          newCBr(contestId)._2.push(contestToJson(c))
+      }
     }
 
     case Join(loggedInTeam) => {

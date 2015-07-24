@@ -1,17 +1,9 @@
 @(contest: Contest)
 
-@import com.github.nscala_time.time.Imports._
-@import org.joda.time.format.PeriodFormat
-
-@if(contest.frozen) {
-<p class="text-warning">Монитор заморожен</p>
-}
-@if(contest.finished) {
-<p class="text-info">Соревнование закончено</p>
-} else {
-@if(contest.started) {
-<p>До окончания соревнования: @(PeriodFormat.getDefault().print((DateTime.now to contest.endTime).toPeriod))</p>
-} else {
-<p>До начала соревнования: @(PeriodFormat.getDefault().print((DateTime.now to contest.startTime).toPeriod))</p>
-}
-}
+<p id="contest-frozen" class="text-warning" @if(!contest.frozen) { hidden }>Монитор заморожен</p>
+<p id="contest-ended" class="text-info" @if(!contest.finished){ hidden }>Соревнование закончено</p>
+<p id="contest-timer" @if(contest.finished){ hidden }>
+    <span id="contest-ending-in" @if(!contest.started) { hidden }>До окончания соревнования:</span>
+    <span id="contest-starting-in" @if(contest.started) { hidden }>До начала соревнования:</span>
+    <span id="contest-timer-counter"></span>
+</p>
