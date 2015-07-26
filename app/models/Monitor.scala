@@ -242,7 +242,6 @@ class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, lifecycle: Ap
 
   def rebuildMonitorsLoop: Unit =
     rebuildMonitors.onComplete { result =>
-      println(result)
       if (!done)
         timer.newTimeout(new TimerTask {
           override def run(timeout: Timeout): Unit = rebuildMonitorsLoop
