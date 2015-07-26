@@ -2,7 +2,7 @@ package controllers
 
 import javax.inject.{Inject, Singleton}
 
-import actors.{StatusActor, NarrowActor}
+import actors.StatusActor
 import akka.actor.ActorSystem
 import jp.t2v.lab.play2.auth.AuthElement
 import models._

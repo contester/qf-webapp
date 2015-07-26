@@ -168,11 +168,13 @@ class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, lifecycle: Ap
   val db = dbConfig.db
 
   implicit val getLocalTeam = GetResult(r =>
-    LocalTeam(r.nextInt(), r.nextString(), r.nextIntOption(), r.nextString(), r.nextBoolean()))
+    LocalTeam(r.nextInt(), r.nextString(), r.nextIntOption(), r.nextString(), r.nextBoolean(),
+    r.nextBoolean(), r.nextBoolean()))
 
 
   def getContestTeams(contest: Int) =
-    sql"""select Participants.LocalID, Schools.Name, Teams.Num, Teams.Name, Participants.NotRated from Participants, Schools, Teams where
+    sql"""select Participants.LocalID, Schools.Name, Teams.Num, Teams.Name, Participants.NotRated,
+           Participants.NoPrint, Participants.Disabled from Participants, Schools, Teams where
          Participants.Contest = $contest and Teams.ID = Participants.Team and Schools.ID = Teams.School
        """.as[LocalTeam]
 

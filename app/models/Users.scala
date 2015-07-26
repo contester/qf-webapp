@@ -84,7 +84,9 @@ object Users {
           Schools.Name as SchoolName,
           Teams.Num as TeamNum,
           Teams.Name as TeamName,
-          Participants.NotRated
+          Participants.NotRated,
+          Participants.NoPrint,
+          Participants.Disabled
           from Assignments, Participants, Contests, Teams, Schools
          where Assignments.Username = $username
          and Assignments.Contest = Contests.ID and Participants.Contest = Contests.ID and

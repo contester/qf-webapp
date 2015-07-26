@@ -17,6 +17,7 @@ object StatusActor {
   case object RefreshTick
   case class Join(loggedInTeam: LoggedInTeam)
   case class Connected(enumerator: Enumerator[JsValue])
+  case class NewContestState(c: Contest)
 
   implicit val contestWrites = new Writes[Contest] {
     def writes(c: Contest) = {
@@ -76,20 +77,24 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     Json.obj("kind" -> "contest", "data" -> Json.toJson(c))
 
   def receive = {
+    case NewContestState(c) => {
+      contestStates.get(c.id) match {
+        case Some(oldState) => {
+          if (oldState != c) {
+            contestStates.put(c.id, c)
+            newCBr(c.id)._2.push(contestToJson(c))
+          }
+        }
+        case None =>
+          contestStates.put(c.id, c)
+          newCBr(c.id)._2.push(contestToJson(c))
+      }
+    }
+
     case Tick => {
       db.run(Contests.getContests).map { contests =>
         for (c <- contests) {
-          contestStates.get(c.id) match {
-            case Some(oldState) => {
-              if (oldState != c) {
-                contestStates.put(c.id, c)
-                newCBr(c.id)._2.push(contestToJson(c))
-              }
-            }
-            case None =>
-              contestStates.put(c.id, c)
-              newCBr(c.id)._2.push(contestToJson(c))
-          }
+          self ! NewContestState(c)
         }
       }
     }
