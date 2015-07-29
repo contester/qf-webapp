@@ -35,6 +35,20 @@ libraryDependencies ++= Seq(
   "org.spire-math" %% "spire" % "0.10.1"
 )
 
+resolvers ++= Seq(
+  "SpinGo OSS" at "http://spingo-oss.s3.amazonaws.com/repositories/releases"
+)
+
+val opRabbitVersion = "1.0.0-M11"
+
+libraryDependencies ++= Seq(
+  "com.spingo" %% "op-rabbit-core"        % opRabbitVersion,
+  "com.spingo" %% "op-rabbit-play-json"   % opRabbitVersion,
+  "com.spingo" %% "op-rabbit-json4s"      % opRabbitVersion,
+  "com.spingo" %% "op-rabbit-airbrake"    % opRabbitVersion,
+  "com.spingo" %% "op-rabbit-akka-stream" % opRabbitVersion
+)
+
 routesGenerator := InjectedRoutesGenerator
 
 // Exclude commons-logging because it conflicts with the jcl-over-slf4j
