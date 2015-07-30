@@ -17,7 +17,7 @@ import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
 import play.api.libs.concurrent.Execution.Implicits.defaultContext
 import play.api.libs.iteratee.Iteratee
-import play.api.libs.json.{JsPath, Reads, Json, JsValue}
+import play.api.libs.json._
 import play.api.mvc.{Action, Controller}
 import slick.driver.JdbcProfile
 import views.html
@@ -45,43 +45,12 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   val rabbitMq = system.actorOf(Props[RabbitControl])
   import com.spingo.op_rabbit.PlayJsonSupport._
+  import play.api.libs.functional.syntax._
 
-  import play.api.libs.functional.syntax._ // Combinator syntax
+  implicit val submitObjectFormat = Json.format[SubmitObject]
+  implicit val finishedTestingFormat = Json.format[FinishedTesting]
 
 
-  implicit val submitObjectReads: Reads[SubmitObject] = (
-    (JsPath \ "id").read[Int] and
-      (JsPath \ "team").read[Int] and
-      (JsPath \ "contest").read[Int] and
-      (JsPath \ "problem").read[String] and
-      (JsPath \ "schoolMode").read[Boolean]
-    )(SubmitObject.apply _)
-
-  implicit val finishedTestingReads: Reads[FinishedTesting] = (
-    (JsPath \ "submit").read[SubmitObject] and
-      (JsPath \ "testingId").read[Int] and
-      (JsPath \ "compiled").read[Boolean] and
-      (JsPath \ "passed").read[Int] and
-      (JsPath \ "taken").read[Int]
-    )(FinishedTesting.apply _)
-
-  //implicit val submitObjectFormat = Json.format[SubmitObject]
-  //implicit val finishedTestingFormat = Json.format[FinishedTesting]
-
-  val subscription = new Subscription {
-    // A qos of 3 will cause up to 3 concurrent messages to be processed at any given time.
-    def config = channel(qos = 1) {
-      consume(queue("contester.finished")) {
-        body(as[SubmitObject]) { submit =>
-          // do work; this body is executed in a separate thread, as provided by the implicit execution context
-          Logger.info(s"Received $submit")
-          ack()
-        }
-      }
-    }
-  }
-
-  rabbitMq ! subscription
 
   def monitor(id: Int) = Action.async { implicit request =>
     monitorModel.getMonitor(id, false).map(x => Ok(html.monitor(x.contest, x.status)))
@@ -178,6 +147,22 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   import play.api.mvc._
 
   val statusActor = system.actorOf(StatusActor.props(db), "status-actor")
+
+  val subscription = new Subscription {
+    // A qos of 3 will cause up to 3 concurrent messages to be processed at any given time.
+    def config = channel(qos = 1) {
+      consume(queue("contester.finished")) {
+        body(as[FinishedTesting]) { submit =>
+          // do work; this body is executed in a separate thread, as provided by the implicit execution context
+          Logger.info(s"Received $submit")
+          ack()
+        }
+      }
+    }
+  }
+
+  rabbitMq ! subscription
+
 
   def socket = WebSocket.tryAccept[JsValue] { implicit request =>
     authorized(anyUser).flatMap {
