@@ -10,20 +10,20 @@ import slick.driver.JdbcProfile
 import scala.concurrent.{ExecutionContext, Future}
 import scala.reflect.{ClassTag, classTag}
 
-trait AuthConfigImpl extends AuthConfig {
+trait AdminAuthConfigImpl extends AuthConfig {
   def auth: AuthWrapper
 
   /**
    * A type that is used to identify a user.
    * `String`, `Int`, `Long` and so on.
    */
-  type Id = String
+  type Id = Admin
 
   /**
    * A type that represents a user in your application.
    * `User`, `Account` and so on.
    */
-  type User = LoggedInTeam
+  type User = Admin
 
   /**
    * A type that is defined by every action for authorization.
@@ -51,7 +51,7 @@ trait AuthConfigImpl extends AuthConfig {
    * You can alter the procedure to suit your application.
    */
   def resolveUser(id: Id)(implicit ctx: ExecutionContext): Future[Option[User]] =
-    auth.resolve(id)
+    auth.resolveAdmin(id)
 
   /**
    * Where to redirect the user after a successful login.
@@ -69,12 +69,13 @@ trait AuthConfigImpl extends AuthConfig {
    * If the user is not logged in and tries to access a protected resource then redirct them as follows:
    */
   def authenticationFailed(request: RequestHeader)(implicit ctx: ExecutionContext): Future[Result] =
-    Future.successful(Redirect(routes.AuthForms.login))
+    Future.successful(Redirect(routes.AdminAuthForms.login))
 
   /**
    * If authorization failed (usually incorrect password) redirect the user as follows:
    */
-  override def authorizationFailed(request: RequestHeader, user: User, authority: Option[Authority])(implicit context: ExecutionContext): Future[Result] = {
+  override def authorizationFailed(request: RequestHeader, user: User,
+                                   authority: Option[Authority])(implicit context: ExecutionContext): Future[Result] = {
     Future.successful(Forbidden("no permission"))
   }
 
@@ -92,13 +93,18 @@ trait AuthConfigImpl extends AuthConfig {
   def authorize(user: User, authority: Authority)(implicit ctx: ExecutionContext): Future[Boolean] = authority(user)
 
   override lazy val tokenAccessor: TokenAccessor = new CookieTokenAccessor(
-    cookieName = "QF_SESS_ID",
+    cookieName = "QFADMIN_SESS_ID",
     cookieSecureOption = false,
     cookieHttpOnlyOption = true,
     cookieDomainOption = None,
     cookiePathOption = "/",
     cookieMaxAge = Some(sessionTimeoutInSeconds)
   )
+
+  implicit val adminToString = ToString((x: Admin) => x.toString)
+  implicit val adminFromString = new FromString[Admin] {
+    override def apply(id: String): Option[Admin] = Admin.fromString(id)
+  }
 
   override lazy val idContainer: AsyncIdContainer[Id] = AsyncIdContainer(new CookieIdContainer[Id])
 }

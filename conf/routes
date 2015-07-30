@@ -22,4 +22,9 @@ GET /login controllers.AuthForms.login
 POST /login controllers.AuthForms.authenticate
 GET /logout controllers.AuthForms.logout
 
+GET /admin/login controllers.AdminAuthForms.login
+POST /admin/login controllers.AdminAuthForms.authenticate
+GET /admin/logout controllers.AdminAuthForms.logout
+
+
 GET     /assets/*file				controllers.Assets.at(path="/public", file)

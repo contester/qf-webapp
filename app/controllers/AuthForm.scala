@@ -3,7 +3,7 @@ package controllers
 import javax.inject.Inject
 
 import jp.t2v.lab.play2.auth.{AuthElement, LoginLogout}
-import models.{Users, AuthConfigImpl}
+import models.{AdminAuthConfigImpl, Users, AuthConfigImpl}
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
@@ -49,6 +49,42 @@ class AuthForms @Inject() (val messagesApi: MessagesApi, val dbConfigProvider: D
           gotoLoginSucceeded(found.username)
 
         case None => Future.successful(BadRequest(html.login(loginForm.fill(AuthData(user.username, ""))
+          .withGlobalError("Неверное имя пользователя или пароль"))))
+      }
+    )
+  }
+}
+
+class AdminAuthForms @Inject() (val messagesApi: MessagesApi, val dbConfigProvider: DatabaseConfigProvider, val auth: AuthWrapper)
+  extends Controller with LoginLogout with AdminAuthConfigImpl with I18nSupport {
+
+  private val dbConfig = dbConfigProvider.get[JdbcProfile]
+  private val db = dbConfig.db
+  import dbConfig.driver.api._
+
+  private val loginForm = Form {
+    mapping("username" -> text, "password" -> text)(AuthData.apply)(AuthData.unapply)
+  }
+
+  def login = Action { implicit request =>
+    Ok(html.adminlogin(loginForm))
+  }
+
+  def logout = Action.async { implicit request =>
+    gotoLogoutSucceeded.map(_.flashing("success" -> "You've been logged out"))
+  }
+
+  def doAuth(username: String, password: String) =
+    auth.authAdmin(username, password)
+
+  def authenticate = Action.async { implicit request =>
+    loginForm.bindFromRequest.fold(
+      formWithErrors => Future.successful(BadRequest(html.login(formWithErrors))),
+      user => doAuth(user.username, user.password).flatMap {
+        case Some(found) =>
+          gotoLoginSucceeded(found)
+
+        case None => Future.successful(BadRequest(html.adminlogin(loginForm.fill(AuthData(user.username, ""))
           .withGlobalError("Неверное имя пользователя или пароль"))))
       }
     )
