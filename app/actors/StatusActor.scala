@@ -1,6 +1,7 @@
 package actors
 
 import akka.actor.{Props, Actor, ActorRef}
+import controllers.FinishedTesting
 import models.{Contest, Contests, LoggedInTeam}
 import play.api.Logger
 import play.api.libs.iteratee.Concurrent.Channel
@@ -66,6 +67,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
 
   val contestBroadcasts = mutable.Map[Int, (Enumerator[JsValue], Channel[JsValue])]()
   val contestStates = mutable.Map[Int, Contest]()
+  val teamBroadcasts = mutable.Map[(Int, Int), (Enumerator[JsValue], Channel[JsValue])]()
 
 
   private def newCBr(id: Int) =
@@ -73,10 +75,23 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       contestBroadcasts.getOrElseUpdate(id, Concurrent.broadcast[JsValue])
     }
 
+  private def newTeamBr(contest: Int, team: Int) =
+    teamBroadcasts.getOrElseUpdate((contest, team), Concurrent.broadcast[JsValue])
+
+  private def finishedToJson(s: FinishedTesting) =
+    Json.obj("kind" -> "submit", "data" -> Json.toJson(s))
+
   private def contestToJson(c: Contest) =
     Json.obj("kind" -> "contest", "data" -> Json.toJson(c))
 
   def receive = {
+    case finished: FinishedTesting => {
+      Logger.info(s"FT: $finished")
+
+      newTeamBr(finished.submit.contest, finished.submit.team)._2.push(finishedToJson(finished))
+      sender ! ()
+    }
+
     case NewContestState(c) => {
       contestStates.get(c.id) match {
         case Some(oldState) => {
@@ -110,12 +125,13 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       val cid = loggedInTeam.contest.id
 
       val br = newCBr(cid)
+      val tr = newTeamBr(cid, loggedInTeam.team.localId)
       val result = contestStates.get(cid) match {
         case Some(o) => Enumerator[JsValue](contestToJson(o))
         case None => Enumerator.empty[JsValue]
       }
 
-      sender ! Connected(result.andThen(br._1))
+      sender ! Connected(result.andThen(br._1.interleave(tr._1)))
     }
   }
 

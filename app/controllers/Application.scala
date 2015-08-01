@@ -29,7 +29,15 @@ case class SubmitData(problem: String, compiler: Int)
 case class SubmitObject(id: Int, team: Int, contest: Int,  problem: String,
                         schoolMode: Boolean)
 
+object SubmitObject {
+  implicit val submitObjectFormat = Json.format[SubmitObject]
+}
+
 case class FinishedTesting(submit: SubmitObject, testingId: Int, compiled: Boolean, passed: Int, taken: Int)
+
+object FinishedTesting {
+  implicit val finishedTestingFormat = Json.format[FinishedTesting]
+}
 
 @Singleton
 class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
@@ -45,12 +53,6 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   val rabbitMq = system.actorOf(Props[RabbitControl])
   import com.spingo.op_rabbit.PlayJsonSupport._
-  import play.api.libs.functional.syntax._
-
-  implicit val submitObjectFormat = Json.format[SubmitObject]
-  implicit val finishedTestingFormat = Json.format[FinishedTesting]
-
-
 
   def monitor(id: Int) = Action.async { implicit request =>
     monitorModel.getMonitor(id, false).map(x => Ok(html.monitor(x.contest, x.status)))
@@ -146,6 +148,9 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   import play.api.Play.current
   import play.api.mvc._
 
+  import scala.concurrent.duration._
+  import akka.pattern.ask
+
   val statusActor = system.actorOf(StatusActor.props(db), "status-actor")
 
   val subscription = new Subscription {
@@ -155,7 +160,8 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
         body(as[FinishedTesting]) { submit =>
           // do work; this body is executed in a separate thread, as provided by the implicit execution context
           Logger.info(s"Received $submit")
-          ack()
+          val acked = statusActor.ask(submit)(1 minute)
+          ack(acked)
         }
       }
     }
@@ -173,9 +179,6 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
         }.map { msg =>
           Logger.debug(s"Disconnected: $user ($msg)")
         }
-        import scala.concurrent.duration._
-        import akka.pattern.ask
-
         statusActor.ask(StatusActor.Join(user))(5 seconds).map {
           case StatusActor.Connected(out) =>
             Right((in, out))

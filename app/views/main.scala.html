@@ -146,6 +146,10 @@
                     updateContestTimes(obj.data);
                 }
 
+                if (obj.kind == 'submit') {
+                    notifyMe("submit", obj.data)
+                }
+
                 if (obj.msgid) {
                     chatSocket.send(JSON.stringify({ 'kind': 'ack', 'msgid': msgid }))
                 }
