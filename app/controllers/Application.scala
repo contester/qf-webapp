@@ -26,7 +26,7 @@ import scala.concurrent.Future
 
 case class SubmitData(problem: String, compiler: Int)
 
-case class SubmitObject(id: Int, team: Int, contest: Int,  problem: String,
+case class SubmitObject(id: Int, team: Int, contest: Int, problem: String,
                         schoolMode: Boolean)
 
 object SubmitObject {

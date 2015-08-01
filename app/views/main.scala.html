@@ -147,7 +147,7 @@
                 }
 
                 if (obj.kind == 'submit') {
-                    notifyMe("submit", obj.data)
+                    notifyMe("Problem " + obj.data.problem, obj.data.result.message)
                 }
 
                 if (obj.msgid) {

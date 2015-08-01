@@ -1,0 +1,61 @@
+package models
+
+import controllers.FinishedTesting
+import play.api.Logger
+import play.api.libs.json.{JsValue, Writes, Json}
+import slick.jdbc.JdbcBackend
+
+import scala.concurrent.{ExecutionContext, Future}
+
+case class AnnoSubmit(contest: Int, team: Int, problem: String, result: SubmitResult)
+
+trait SubmitResult {
+  def success: Boolean
+  def message: String
+}
+
+case class SchoolSubmitResult(compiled: Boolean, passed: Int, taken: Int) extends SubmitResult {
+  override val success = compiled && (passed == taken) && (passed > 0)
+
+  override def message =
+    if (success)
+      "Полное решение"
+    else if (!compiled)
+      "Ошибка компиляции"
+    else s"$passed из $taken"
+}
+
+case class ACMSubmitResult(success: Boolean, text: String, test: Option[Int]) extends SubmitResult {
+  override def message =
+    if (success)
+      "Accepted"
+    else s"${text}${test.map(x => s" on test $x").getOrElse("")}"
+}
+
+object SubmitResult {
+  implicit val submitResultWrites = new Writes[SubmitResult] {
+    override def writes(o: SubmitResult): JsValue = Json.obj(
+      "success" -> o.success,
+      "message" -> o.message
+    )
+  }
+
+  def annotate(db: JdbcBackend#DatabaseDef, finished: FinishedTesting)(implicit ec: ExecutionContext): Future[AnnoSubmit] = {
+    val result =
+      if (finished.submit.schoolMode)
+        Future.successful(SchoolSubmitResult(finished.compiled, finished.passed, finished.taken))
+      else
+        Submits.getTestingLastResult(db, finished.testingId).map { lastResultOption =>
+          Logger.info(s"$lastResultOption")
+          lastResultOption.map { lastResult =>
+            ACMSubmitResult(lastResult._3, lastResult._1, lastResult._2)
+          }.getOrElse(ACMSubmitResult(false, "", None))
+        }
+
+    result.map(AnnoSubmit(finished.submit.contest, finished.submit.team, finished.submit.problem, _))
+  }
+}
+
+object AnnoSubmit {
+  implicit val formatAnnoSubmit = Json.writes[AnnoSubmit]
+}

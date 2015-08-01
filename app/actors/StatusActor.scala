@@ -2,12 +2,14 @@ package actors
 
 import akka.actor.{Props, Actor, ActorRef}
 import controllers.FinishedTesting
-import models.{Contest, Contests, LoggedInTeam}
+import models._
 import play.api.Logger
 import play.api.libs.iteratee.Concurrent.Channel
 import play.api.libs.iteratee.{Concurrent, Enumerator}
 import play.api.libs.json.{Writes, Json, JsValue}
 import slick.jdbc.JdbcBackend
+import slick.jdbc.JdbcBackend.DatabaseDef
+
 
 import scala.collection.mutable
 
@@ -78,7 +80,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   private def newTeamBr(contest: Int, team: Int) =
     teamBroadcasts.getOrElseUpdate((contest, team), Concurrent.broadcast[JsValue])
 
-  private def finishedToJson(s: FinishedTesting) =
+  private def finishedToJson(s: AnnoSubmit) =
     Json.obj("kind" -> "submit", "data" -> Json.toJson(s))
 
   private def contestToJson(c: Contest) =
@@ -88,8 +90,16 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     case finished: FinishedTesting => {
       Logger.info(s"FT: $finished")
 
-      newTeamBr(finished.submit.contest, finished.submit.team)._2.push(finishedToJson(finished))
+      SubmitResult.annotate(db, finished).map { annotated =>
+        self ! annotated
+      }
+
       sender ! ()
+    }
+
+    case annotated: AnnoSubmit => {
+      Logger.info(s"${finishedToJson(annotated)}")
+      newTeamBr(annotated.contest, annotated.team)._2.push(finishedToJson(annotated))
     }
 
     case NewContestState(c) => {
