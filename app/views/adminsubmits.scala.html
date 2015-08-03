@@ -1,0 +1,35 @@
+@(submits: Seq[AnyStatusSubmit], schoolMode: Boolean)(implicit request: RequestHeader)
+
+@adminmain("Contester", tab = "index") {
+
+<table class="table table-hover table-bordered table-responsive">
+    <thead>
+    <tr><th>Время</th><th>Задача</th><th>Попытка</th><th>Язык</th><th>Результат</th>
+        @if(schoolMode) {
+        <th>Баллы</th>
+        }
+        <th>Время работы</th></tr>
+    </thead>
+    <tbody>
+    @for(s <- submits) {
+    <tr><td>@s.arrivedStr</td><td>@s.problem</td><td>@s.attempt</td><td>@s.ext</td>
+        @if(s.success) {
+        <td class="success">
+            } else {
+        <td>
+            }
+            @s.anyScoreAndStatus match {
+            case sc: Submits.SchoolScoreAndStatus => {
+            @s.asSchool</td><td>@sc.score</td>
+        }
+        case sc: Submits.ACMScoreAndStatus => {
+        @sc.toStatus</td>
+        }
+        }
+        <td>@s.timeMs</td></tr>
+    }
+
+    </tbody>
+</table>
+
+}

@@ -158,7 +158,6 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
     def config = channel(qos = 1) {
       consume(queue("contester.finished")) {
         body(as[FinishedTesting]) { submit =>
-          // do work; this body is executed in a separate thread, as provided by the implicit execution context
           Logger.info(s"Received $submit")
           val acked = statusActor.ask(submit)(1 minute)
           ack(acked)
