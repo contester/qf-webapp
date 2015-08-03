@@ -30,8 +30,6 @@ class MonitorActor(db: JdbcBackend#DatabaseDef) extends Actor {
       .zip(db.run(Submits.getContestSubmits(cid)))
       .map {
       case ((problems, teams), submits) =>
-        val submitsBeforeFreeze = submits.filter(!_.afterFreeze)
-
         val calcStatus: (Seq[Submit]) => AnyStatus with Product with Serializable =
           if (contest.schoolMode)
             School.calculateStatus(problems, teams, _)
