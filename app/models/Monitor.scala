@@ -3,6 +3,8 @@ package models
 import java.util.concurrent.TimeUnit
 import javax.inject.{Singleton, Inject}
 
+import actors.{MonitorActor, StatusActor}
+import akka.actor.ActorSystem
 import models.Foo.{RankedRow, MonitorRow}
 import org.jboss.netty.util.{Timeout, TimerTask, HashedWheelTimer}
 import play.api.db.slick.DatabaseConfigProvider
@@ -155,100 +157,31 @@ object ACM {
     Status(problems.map(_.id), Foo.groupAndRank(teams, submits, getCell(_), getScore(_)))
 }
 
+case class StoredContestStatus(contest: Contest, frozen: AnyStatus, exposed: AnyStatus) {
+  private[this] def status(overrideFreeze: Boolean) =
+    if (contest.frozen && !overrideFreeze)
+      frozen
+    else
+      exposed
+
+  def monitor(overrideFreeze: Boolean) =
+    ContestMonitor(contest, status(overrideFreeze))
+}
+
 @Singleton
-class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, lifecycle: ApplicationLifecycle) {
+class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, system: ActorSystem, lifecycle: ApplicationLifecycle) {
   val dbConfig = dbConfigProvider.get[JdbcProfile]
   import dbConfig.driver.api._
 
-  lifecycle.addStopHook { () =>
-    done = true
-    Future.successful()
-  }
-
   val db = dbConfig.db
 
-  implicit val getLocalTeam = GetResult(r =>
-    LocalTeam(r.nextInt(), r.nextString(), r.nextIntOption(), r.nextString(), r.nextBoolean(),
-    r.nextBoolean(), r.nextBoolean()))
+  val monitorActor = system.actorOf(MonitorActor.props(db), "monitor-actor")
 
+  def getMonitor(id: Int, overrideFreeze: Boolean): Future[Option[ContestMonitor]] = {
+    import akka.pattern.ask
+    import scala.concurrent.duration._
 
-  def getContestTeams(contest: Int) =
-    sql"""select Participants.LocalID, Schools.Name, Teams.Num, Teams.Name, Participants.NotRated,
-           Participants.NoPrint, Participants.Disabled from Participants, Schools, Teams where
-         Participants.Contest = $contest and Teams.ID = Participants.Team and Schools.ID = Teams.School
-       """.as[LocalTeam]
-
-  def getStatus(db: Database, contest: Int, schoolMode: Boolean)(implicit ec: ExecutionContext): Future[(AnyStatus, AnyStatus)] = {
-    db.run(Contests.getProblems(contest)).flatMap { problems =>
-      db.run(getContestTeams(contest)).flatMap { teams =>
-        db.run(Submits.getContestSubmits(contest)).map { submits =>
-          val sub0 = submits.filter(!_.afterFreeze)
-          if (schoolMode)
-            (School.calculateStatus(problems, teams, sub0), School.calculateStatus(problems, teams, submits))
-          else
-            (ACM.calculateStatus(problems, teams, sub0),
-              ACM.calculateStatus(problems, teams, submits))
-        }
-      }
-    }
+    monitorActor.ask(MonitorActor.Get(id))(30 seconds).mapTo[Option[StoredContestStatus]]
+      .map(_.map(_.monitor(overrideFreeze)))
   }
-
-  case class StoredContestStatus(contest: Contest, frozen: AnyStatus, exposed: AnyStatus) {
-    private[this] def status(overrideFreeze: Boolean) =
-      if (contest.frozen && !overrideFreeze)
-        frozen
-      else
-        exposed
-
-    def monitor(overrideFreeze: Boolean) =
-      ContestMonitor(contest, status(overrideFreeze))
-  }
-
-  val contestMonitorsFu = {
-    import scala.collection.JavaConverters._
-    import java.util.concurrent.ConcurrentHashMap
-    new ConcurrentHashMap[Int, Promise[StoredContestStatus]]().asScala
-  }
-
-  def getMonitor(id: Int, overrideFreeze: Boolean): Future[ContestMonitor] =
-    newOrUpdatedPromise(id).future.map(_.monitor(overrideFreeze))
-
-  private def newOrUpdatedPromise(id: Int) = {
-    val np = Promise[StoredContestStatus]
-    contestMonitorsFu.putIfAbsent(id, np).getOrElse(np)
-  }
-
-  import com.github.nscala_time.time.Imports._
-
-  def getContestState(contest: Int, schoolMode: Boolean) =
-    getStatus(db, contest, schoolMode)
-
-  def rebuildMonitors: Future[Unit] =
-    dbConfig.db.run(Contests.getContests).flatMap { contests =>
-      Future.sequence(contests.map(x => getContestState(x.id, x.schoolMode).map(y => (x, y))))
-    }.map { statuses =>
-      statuses.foreach {
-        case (contest, contestStatus) =>
-          val m = newOrUpdatedPromise(contest.id)
-            if (m.isCompleted) {
-              contestMonitorsFu.put(contest.id, Promise.successful(StoredContestStatus(contest, contestStatus._1, contestStatus._2)))
-            } else {
-              m.success(StoredContestStatus(contest, contestStatus._1, contestStatus._2))
-            }
-      }
-    }
-
-  var done = false
-
-  val timer = new HashedWheelTimer()
-
-  def rebuildMonitorsLoop: Unit =
-    rebuildMonitors.onComplete { result =>
-      if (!done)
-        timer.newTimeout(new TimerTask {
-          override def run(timeout: Timeout): Unit = rebuildMonitorsLoop
-        }, 20, TimeUnit.SECONDS)
-    }
-
-  rebuildMonitorsLoop
 }

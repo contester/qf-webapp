@@ -55,13 +55,13 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   import com.spingo.op_rabbit.PlayJsonSupport._
 
   def monitor(id: Int) = Action.async { implicit request =>
-    monitorModel.getMonitor(id, false).map(x => Ok(html.monitor(x.contest, x.status)))
+    monitorModel.getMonitor(id, false).map(x => Ok(html.monitor(x.get.contest, x.get.status)))
   }
 
   def monitorDefault = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
     monitorModel.getMonitor(loggedInTeam.contest.id, false).map(x => {
-      Ok(html.loggedinmonitor(x.contest, x.status, loggedInTeam))})
+      Ok(html.loggedinmonitor(x.get.contest, x.get.status, loggedInTeam))})
   }
 
   private def anyUser(account: LoggedInTeam): Future[Boolean] = Future.successful(true)

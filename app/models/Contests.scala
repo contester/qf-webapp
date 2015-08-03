@@ -73,6 +73,17 @@ object Contests {
   def getClarifications(contestId: Int) =
     sql"""select cl_date, cl_task, cl_text from clarifications where cl_is_hidden = '0' and
          cl_contest_idf = $contestId""".as[Clarification]
+
+  implicit val getLocalTeam = GetResult(r =>
+    LocalTeam(r.nextInt(), r.nextString(), r.nextIntOption(), r.nextString(), r.nextBoolean(),
+      r.nextBoolean(), r.nextBoolean()))
+
+
+  def getTeams(contest: Int) =
+    sql"""select Participants.LocalID, Schools.Name, Teams.Num, Teams.Name, Participants.NotRated,
+           Participants.NoPrint, Participants.Disabled from Participants, Schools, Teams where
+         Participants.Contest = $contest and Teams.ID = Participants.Team and Schools.ID = Teams.School
+       """.as[LocalTeam]
 }
 
 object Problems {
