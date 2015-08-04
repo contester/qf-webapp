@@ -1,7 +1,7 @@
 @(contest: Contest, status: models.AnyStatus, loggedIn: LoggedInTeam)(implicit request: RequestHeader)
 
 
-@main("Monitor", tab = "monitor", notifySocket=Some(routes.Application.socket.webSocketURL())) {
+@main("Monitor", tab = "monitor", variant=TeamDisplayMode, notifySocket=Some(routes.Application.socket.webSocketURL())) {
 
 @monitortable(contest, status, loggedIn.team.localId)
 

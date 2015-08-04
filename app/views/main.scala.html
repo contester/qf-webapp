@@ -1,5 +1,6 @@
 @(title: String, tab: String = "", styles: Html = Html(""), scripts: Html = Html(""),
-  modals: Html = Html(""), notifySocket: Option[String]=None)(content: Html)(implicit request: RequestHeader)
+  modals: Html = Html(""), variant: DisplayMode=EmptyDisplayMode,
+  notifySocket: Option[String]=None)(content: Html)(implicit request: RequestHeader)
 
 @navlink(myid: String, myhref: String, mytext: String) = {
     @if(myid == tab) {
@@ -9,7 +10,7 @@
     }
 }
 
-@teamNavlinks() = {
+@teamNavlinks = {
 @navlink("index", "/", "Подходы")
 @navlink("submit", "/submit", "Отправить")
 @navlink("monitor", "/monitor", "Монитор")
@@ -64,37 +65,18 @@
 
     @for(s <- notifySocket) {
         document.addEventListener('DOMContentLoaded', maybeCheckNotifyPermission);
-        listenOnSocket("@routes.Application.socket.webSocketURL()");
+        listenOnSocket("@s");
     }
     </script>
     @scripts
 </head>
 <body>
 
-<nav class="navbar navbar-fixed-top">
-  <div class="container-fluid">
-    <!-- Brand and toggle get grouped for better mobile display -->
-    <div class="navbar-header">
-      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1">
-        <span class="sr-only">Toggle navigation</span>
-        <span class="icon-bar"></span>
-        <span class="icon-bar"></span>
-        <span class="icon-bar"></span>
-      </button>
-      <a class="navbar-brand" href="#"><img alt="Contester" src="@routes.Assets.at("icpc_logo.png")" height="100%"></a>
-    </div>
-
-    <!-- Collect the nav links, forms, and other content for toggling -->
-    <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
-          <ul class="nav navbar-nav">
-              @teamNavlinks()
-      </ul>
-      <ul class="nav navbar-nav navbar-right">
-        <a href="/logout" class="btn btn-default navbar-btn" type="button"><span class="glyphicon glyphicon-remove"></span> Выйти</a>
-      </ul>
-    </div><!-- /.navbar-collapse -->
-  </div><!-- /.container-fluid -->
-</nav>
+@{variant match {
+    case TeamDisplayMode => navbar(teamNavlinks)
+case AdminDisplayMode =>navbar(teamNavlinks, true)
+}
+}
 
 <div class="container">
     @content
