@@ -142,6 +142,23 @@ trait AnyStatusSubmit {
     else s"${passed} из ${taken}"
 }
 
+trait HasTestingId {
+  def testingId: Int
+}
+
+case class ResultEntry(test: Int, result: Int, time: Int, memory: Int, info: Int, testerExitCode: Int,
+                       testerOutput: String, testerError: String)
+
+object ResultEntry {
+  import slick.driver.MySQLDriver.api._
+
+  implicit val getResultEntry = GetResult(r =>
+    ResultEntry(r.nextInt(), r.nextInt(), r.nextInt(), r.nextInt(), r.nextInt(), r.nextInt(), r.nextString(), r.nextString())
+  )
+}
+
+case class SubmitDetails(submit: Option[AnyStatusSubmit], details: Seq[ResultEntry])
+
 object Submits {
 
   import slick.driver.MySQLDriver.api._
@@ -275,4 +292,9 @@ object Submits {
     Future.sequence(
       justIndexSubmits(submits).sortBy(_._1.arrivedSeconds).reverse.map(annotateACMSubmit(db, _))
     )
+
+  def loadSubmitDetails(db: JdbcBackend#DatabaseDef, testingId: Int)(implicit ec: ExecutionContext) =
+    db.run(
+      sql"""select Test, Result, Timex, Memory, Info, TesterExitCode, TesterOutput, TesterError
+           from Results where UID = $testingId order by Test""".as[ResultEntry])
 }

@@ -1,0 +1,19 @@
+@(loggedIn: LoggedInTeam, sub: SubmitDetails)(implicit request: RequestHeader)
+
+@main("Contester", tab = "", variant=TeamDisplayMode, notifySocket=Some(routes.Application.socket.webSocketURL())) {
+
+@contestteaminfo(loggedIn)
+
+<table class="table table-hover table-bordered table-responsive">
+    <thead>
+    <tr><th>Тест</th><th>Результат</th></tr>
+    </thead>
+    <tbody>
+    @for(s <- sub.details) {
+    <tr><td>@s.test</td><td>@s.toString</td></tr>
+    }
+
+    </tbody>
+</table>
+
+}
