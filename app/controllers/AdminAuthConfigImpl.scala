@@ -57,13 +57,13 @@ trait AdminAuthConfigImpl extends AuthConfig {
    * Where to redirect the user after a successful login.
    */
   def loginSucceeded(request: RequestHeader)(implicit ctx: ExecutionContext): Future[Result] =
-    Future.successful(Redirect(routes.Application.index))
+    Future.successful(Redirect(routes.AdminApplication.index))
 
   /**
    * Where to redirect the user after logging out
    */
   def logoutSucceeded(request: RequestHeader)(implicit ctx: ExecutionContext): Future[Result] =
-    Future.successful(Redirect(routes.Application.index))
+    Future.successful(Redirect(routes.AdminApplication.index))
 
   /**
    * If the user is not logged in and tries to access a protected resource then redirct them as follows:
