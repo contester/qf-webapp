@@ -59,4 +59,10 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
       Ok(html.adminsubmits(subs, false))
     }
   }
+
+  def submits(contestId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+    db.run(Submits.getContestSubmits(contestId)).flatMap(x => annot8(x, false)).map { subs =>
+      Ok(html.adminsubmits(subs, false))
+    }
+  }
 }

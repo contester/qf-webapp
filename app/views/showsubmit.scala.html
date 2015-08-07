@@ -1,6 +1,6 @@
 @(loggedIn: LoggedInTeam, subopt: Option[SubmitDetails])(implicit request: RequestHeader)
 
-@main("Contester", tab = "", variant=TeamDisplayMode, notifySocket=Some(routes.Application.socket.webSocketURL())) {
+@main("Contester", tab = "", variant=TeamDisplayMode) {
 
 @contestteaminfo(loggedIn)
 

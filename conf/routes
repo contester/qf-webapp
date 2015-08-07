@@ -24,6 +24,8 @@ GET /logout controllers.AuthForms.logout
 
 GET /admin controllers.AdminApplication.index
 
+GET /admin/submits/:contestId controllers.AdminApplication.submits(contestId: Int)
+
 GET /showsubmit/:id controllers.Application.showSubmit(id: Int)
 
 GET /admin/login controllers.AdminAuthForms.login

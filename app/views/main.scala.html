@@ -1,6 +1,11 @@
 @(title: String, tab: String = "", styles: Html = Html(""), scripts: Html = Html(""),
-  modals: Html = Html(""), variant: DisplayMode=EmptyDisplayMode,
-  notifySocket: Option[String]=None)(content: Html)(implicit request: RequestHeader)
+  modals: Html = Html(""), variant: DisplayMode=EmptyDisplayMode)(content: Html)(implicit request: RequestHeader)
+
+@notifySocket = @{variant match {
+case TeamDisplayMode => Some(routes.Application.socket.webSocketURL())
+case _ => None
+}
+}
 
 @navlink(myid: String, myhref: String, mytext: String) = {
     @if(myid == tab) {
