@@ -1,19 +1,20 @@
-@(loggedIn: LoggedInTeam, sub: SubmitDetails)(implicit request: RequestHeader)
+@(loggedIn: LoggedInTeam, subopt: Option[SubmitDetails])(implicit request: RequestHeader)
 
 @main("Contester", tab = "", variant=TeamDisplayMode, notifySocket=Some(routes.Application.socket.webSocketURL())) {
 
 @contestteaminfo(loggedIn)
 
+@for(sub <- subopt) {
 <table class="table table-hover table-bordered table-responsive">
     <thead>
-    <tr><th>Тест</th><th>Результат</th></tr>
+    <tr><th>Тест</th><th>Результат</th><th>Время</th><th>Память</th></tr>
     </thead>
     <tbody>
     @for(s <- sub.details) {
-    <tr><td>@s.test</td><td>@s.toString</td></tr>
+    <tr><td>@s.test</td><td>@s.result</td><td>@s.time</td><td>@s.memory</td></tr>
     }
 
     </tbody>
 </table>
-
+}
 }

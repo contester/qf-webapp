@@ -3,6 +3,7 @@ package models
 import org.joda.time.DateTime
 import slick.jdbc.{JdbcBackend, GetResult}
 import spire.math.{FixedScale, FixedPoint, Rational}
+import scala.async.Async.{async, await}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -157,7 +158,7 @@ object ResultEntry {
   )
 }
 
-case class SubmitDetails(submit: Option[AnyStatusSubmit], details: Seq[ResultEntry])
+case class SubmitDetails(submit: Submit, details: Seq[ResultEntry])
 
 object Submits {
 
@@ -293,8 +294,38 @@ object Submits {
       justIndexSubmits(submits).sortBy(_._1.arrivedSeconds).reverse.map(annotateACMSubmit(db, _))
     )
 
+  def loadSubmitByID(db: JdbcBackend#DatabaseDef, submitId: Int)(implicit ec: ExecutionContext) = {
+    implicit val getSubmitResult = GetResult(r => Submit(
+      r.nextInt(), new DateTime(r.nextTimestamp()), r.nextInt(), r.nextString(), r.nextString(), r.nextBoolean(),
+      r.nextBoolean(),
+      r.nextInt(), r.nextInt(), r.nextInt(), r.nextBoolean(), r.nextInt(), r.nextIntOption()
+    ))
+
+    db.run(sql"""select NewSubmits.ID, NewSubmits.Arrived,
+          NewSubmits.Team, NewSubmits.Problem, Languages.Ext, Submits.Finished, Submits.Compiled,
+          Submits.Passed, Submits.Taken,
+          unix_timestamp(NewSubmits.Arrived) - unix_timestamp(Contests.Start) as Arrived0,
+
+          NewSubmits.Arrived > Contests.Finish, Problems.Rating, Submits.TestingID
+          from Contests, Problems, Languages, NewSubmits LEFT join Submits on NewSubmits.ID = Submits.ID where
+          NewSubmits.ID = $submitId and NewSubmits.Arrived < Contests.End and NewSubmits.Arrived >= Contests.Start and
+          Contests.ID = NewSubmits.Contest and Problems.Contest = Contests.ID and
+          Languages.ID = NewSubmits.SrcLang and Languages.Contest = Contests.ID and
+          Problems.ID = NewSubmits.Problem order by Arrived0""".as[Submit]).map(_.headOption)
+  }
+
   def loadSubmitDetails(db: JdbcBackend#DatabaseDef, testingId: Int)(implicit ec: ExecutionContext) =
     db.run(
       sql"""select Test, Result, Timex, Memory, Info, TesterExitCode, TesterOutput, TesterError
            from Results where UID = $testingId order by Test""".as[ResultEntry])
+
+  def loadSubmitAndDetails(db: JdbcBackend#DatabaseDef, submitId: Int)(implicit ec: ExecutionContext): Future[Option[SubmitDetails]] =
+    loadSubmitByID(db, submitId)
+      .flatMap { submitOption =>
+      submitOption.map { submit =>
+        submit.testingId.map(loadSubmitDetails(db, _))
+          .getOrElse(Future.successful(Nil))
+          .map(details => Some(SubmitDetails(submit, details)))
+      }.getOrElse(Future.successful(None))
+    }
 }
