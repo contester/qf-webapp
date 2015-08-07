@@ -45,15 +45,32 @@ object SubmitResult {
       if (finished.submit.schoolMode)
         Future.successful(SchoolSubmitResult(finished.compiled, finished.passed, finished.taken))
       else
-        Submits.getTestingLastResult(db, finished.testingId).map { lastResultOption =>
+        Submits.loadSubmitDetails(db, finished.testingId).map { details =>
+          val lastResultOption = Submits.getTestingLastResult(details)
           Logger.info(s"$lastResultOption")
           lastResultOption.map { lastResult =>
-            ACMSubmitResult(lastResult._3, lastResult._1, lastResult._2)
+            ACMSubmitResult(success(lastResult.result), message(lastResult.result), Some(lastResult.test))
           }.getOrElse(ACMSubmitResult(false, "", None))
         }
 
     result.map(AnnoSubmit(finished.submit.contest, finished.submit.team, finished.submit.problem, _))
   }
+
+  val message = Map(
+    1 -> "Compilation successful",
+    2 -> "Compilation failed",
+    10 -> "Accepted",
+    11 -> "Time limit exceeded",
+    12 -> "Runtime error",
+    13 -> "Wrong answer",
+    14 -> "Wrong answer",
+    15 -> "Memory limit exceeded",
+    16 -> "Tester error",
+    21 -> "Rejected"
+  )
+
+  def success(code: Int) =
+    code == 10 || code == 2
 }
 
 object AnnoSubmit {

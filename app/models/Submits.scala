@@ -241,24 +241,22 @@ object Submits {
       s"${message}${test.map(x => s" on test $x").getOrElse("")}"
   }
 
-  def getTestingMaxTimeQuery(testingId: Int) =
-    sql"""select max(Timex) from Results where UID = $testingId""".as[Int]
+  def trOption(items: Seq[ResultEntry]): Option[Seq[ResultEntry]] =
+    if (items.nonEmpty)
+      Some(items)
+    else
+      None
 
-  def getTestingLastFailureQuery(testingId: Int) =
-    sql"""select ResultDesc.Description, Results.Test, ResultDesc.Success from Results, ResultDesc
-         where Results.UID = $testingId and ResultDesc.ID = Results.Result
-         order by Results.Test desc limit 1
-      """.as[(String, Option[Int], Boolean)]
+  def getTestingMaxTime(details: Seq[ResultEntry]) =
+    trOption(details).map(_.map(_.time).max).getOrElse(0)
 
-  def getTestingMaxTime(db: JdbcBackend#DatabaseDef, testingId: Int)(implicit ec: ExecutionContext): Future[Int] =
-    db.run(getTestingMaxTimeQuery(testingId)).map(_.headOption.getOrElse(0))
-
-  def getTestingLastResult(db: JdbcBackend#DatabaseDef, testingId: Int)(implicit ec: ExecutionContext) =
-    db.run(getTestingLastFailureQuery(testingId)).map(_.headOption)
+  def getTestingLastResult(details: Seq[ResultEntry]) =
+    trOption(details).map(_.maxBy(_.test))
 
   def annotateSchoolSubmit(db: JdbcBackend#DatabaseDef,
                            sub: ScoredSubmit[Submit, SchoolCell])(implicit ec: ExecutionContext): Future[StatusSubmit[SchoolScoreAndStatus]] =
-    sub.submit.testingId.map(getTestingMaxTime(db, _)).getOrElse(Future.successful(0)).map { timeMs =>
+    sub.submit.testingId.map(loadSubmitDetails(db, _)).getOrElse(Future.successful(Nil)).map { details =>
+      val timeMs = getTestingMaxTime(details)
       StatusSubmit(sub.submit.arrivedSeconds, sub.submit.problem, sub.index, sub.submit.ext, timeMs, sub.submit.finished,
         sub.submit.compiled, sub.submit.passed, sub.submit.taken, SchoolScoreAndStatus(sub.score.score))
     }
@@ -274,18 +272,19 @@ object Submits {
       Future.successful(StatusSubmit(sub._1.arrivedSeconds, sub._1.problem, sub._2, sub._1.ext, 0, sub._1.finished,
         sub._1.compiled, sub._1.passed, sub._1.taken, ACMScoreAndStatus("Waiting", None)))
     else sub._1.testingId.map { testingId =>
-      getTestingMaxTime(db, testingId).flatMap { timeMs =>
-        getTestingLastResult(db, testingId).map { resultOption =>
+      loadSubmitDetails(db, testingId).map { details =>
+        val timeMs = getTestingMaxTime(details)
+        val resultOption = getTestingLastResult(details)
           val testIdOption = resultOption.flatMap { res =>
-            if (!res._3)
-              res._2
+            if (res.test != 0 && !SubmitResult.success(res.result))
+              Some(res.test)
             else
               None
           }
           StatusSubmit(sub._1.arrivedSeconds, sub._1.problem, sub._2, sub._1.ext, timeMs, sub._1.finished,
-            sub._1.compiled, sub._1.passed, sub._1.taken, ACMScoreAndStatus(resultOption.map(_._1).getOrElse("..."), testIdOption))
+            sub._1.compiled, sub._1.passed, sub._1.taken, ACMScoreAndStatus(resultOption.map(x => SubmitResult.message(x.result)).getOrElse("..."), testIdOption))
         }
-      }
+
     }.getOrElse(Future.successful(StatusSubmit(sub._1.arrivedSeconds, sub._1.problem, sub._2, sub._1.ext, 0, sub._1.finished,
       sub._1.compiled, sub._1.passed, sub._1.taken, ACMScoreAndStatus("...", None))))
 
