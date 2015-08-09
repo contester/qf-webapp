@@ -7,10 +7,6 @@ import scala.async.Async.{async, await}
 
 import scala.concurrent.{ExecutionContext, Future}
 
-trait SubmitId {
-  def submitId: Int
-}
-
 trait ContestSubmit {
   def arrivedTimestamp: DateTime
   def teamId: Int
@@ -39,7 +35,7 @@ trait ContestSubmit {
 case class Submit(submitId: Int, arrivedTimestamp: DateTime, teamId: Int,
                   problem: String, ext: String, finished: Boolean,
                    compiled: Boolean, passed: Int, taken: Int, arrivedSeconds: Int,
-                  afterFreeze: Boolean, problemRating: Int, testingId: Option[Int]) extends ContestSubmit with SubmitId
+                  afterFreeze: Boolean, problemRating: Int, testingId: Option[Int]) extends ContestSubmit
 
 trait SubmitScore[S] {
   def withSubmit(submit: ContestSubmit): S
