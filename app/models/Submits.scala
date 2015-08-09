@@ -129,14 +129,14 @@ trait HasTestingId {
   def testingId: Int
 }
 
-case class ResultEntry(test: Int, result: Int, time: Int, memory: Int, info: Int, testerExitCode: Int,
+case class ResultEntry(test: Int, result: Int, time: Int, memory: Long, info: Int, testerExitCode: Int,
                        testerOutput: String, testerError: String)
 
 object ResultEntry {
   import slick.driver.MySQLDriver.api._
 
   implicit val getResultEntry = GetResult(r =>
-    ResultEntry(r.nextInt(), r.nextInt(), r.nextInt(), r.nextInt(), r.nextInt(), r.nextInt(), r.nextString(), r.nextString())
+    ResultEntry(r.nextInt(), r.nextInt(), r.nextInt(), r.nextLong(), r.nextInt(), r.nextInt(), r.nextString(), r.nextString())
   )
 }
 
