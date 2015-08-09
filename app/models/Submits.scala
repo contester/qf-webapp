@@ -130,7 +130,9 @@ trait HasTestingId {
 }
 
 case class ResultEntry(test: Int, result: Int, time: Int, memory: Long, info: Int, testerExitCode: Int,
-                       testerOutput: String, testerError: String)
+                       testerOutput: String, testerError: String) {
+  def resultString = SubmitResult.message(result)
+}
 
 object ResultEntry {
   import slick.driver.MySQLDriver.api._
