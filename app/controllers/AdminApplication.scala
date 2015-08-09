@@ -54,15 +54,20 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
       Submits.annotateACMSubmits(db, submits)
 
   def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
-
-    db.run(Submits.getContestSubmits(1)).flatMap(x => annot8(x.take(20), false)).map { subs =>
-      Ok(html.adminsubmits(subs, false))
+    db.run(Contests.getTeams(1)).zip(
+      db.run(Submits.getContestSubmits(1)).flatMap(x => annot8(x.take(20), false))).map {
+      case (teams, subs) =>
+        val teamMap = teams.map(x => x.localId -> x).toMap
+        Ok(html.adminsubmits(subs, teamMap, false))
     }
   }
 
   def submits(contestId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
-    db.run(Submits.getContestSubmits(contestId)).flatMap(x => annot8(x, false)).map { subs =>
-      Ok(html.adminsubmits(subs, false))
+    db.run(Contests.getTeams(contestId)).zip(
+    db.run(Submits.getContestSubmits(contestId)).flatMap(x => annot8(x, false))).map {
+      case (teams, subs) =>
+        val teamMap = teams.map(x => x.localId -> x).toMap
+        Ok(html.adminsubmits(subs, teamMap, false))
     }
   }
 }

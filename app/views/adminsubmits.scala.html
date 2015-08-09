@@ -1,10 +1,10 @@
-@(submits: Seq[AnyStatusSubmit], schoolMode: Boolean)(implicit request: RequestHeader)
+@(submits: Seq[AnyStatusSubmit], teams: Map[Int, LocalTeam], schoolMode: Boolean)(implicit request: RequestHeader)
 
 @main("Contester", tab = "submits", variant=AdminDisplayMode) {
 
 <table class="table table-hover table-bordered table-responsive">
     <thead>
-    <tr><th>Время</th><th>Задача</th><th>Попытка</th><th>Язык</th><th>Результат</th>
+    <tr><th>ID</th><th>Время</th><th>Команда</th><th>Задача</th><th>Результат</th>
         @if(schoolMode) {
         <th>Баллы</th>
         }
@@ -12,7 +12,7 @@
     </thead>
     <tbody>
     @for(s <- submits) {
-    <tr><td>@s.arrivedStr</td><td>@s.problem</td><td>@s.attempt</td><td>@s.ext</td>
+    <tr><td>@s.submit.submitId.id</td><td>@s.arrivedStr</td><td>@teams(s.submit.submitId.teamId).teamFullName</td><td>@s.problem</td>
         @if(s.success) {
         <td class="success">
             } else {
