@@ -3,6 +3,7 @@ package actors
 import akka.actor.{Props, Actor}
 import akka.actor.Actor.Receive
 import models._
+import play.api.Logger
 import slick.jdbc.JdbcBackend
 
 import scala.collection.mutable

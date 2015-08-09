@@ -80,6 +80,7 @@ case _ => None
 @{variant match {
     case TeamDisplayMode => navbar(teamNavlinks)
 case AdminDisplayMode =>navbar(teamNavlinks, true)
+case _ => Html("")
 }
 }
 

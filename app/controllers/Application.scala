@@ -1,6 +1,5 @@
 package controllers
 
-import java.sql.Timestamp
 import javax.inject.{Inject, Singleton}
 
 import actors.StatusActor

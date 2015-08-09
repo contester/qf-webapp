@@ -7,6 +7,7 @@ import actors.{MonitorActor, StatusActor}
 import akka.actor.ActorSystem
 import models.Foo.{RankedRow, MonitorRow}
 import org.jboss.netty.util.{Timeout, TimerTask, HashedWheelTimer}
+import play.api.Logger
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.inject.ApplicationLifecycle
 import play.api.mvc.{Action, Controller}
@@ -81,9 +82,9 @@ object Foo {
   def groupAndRank[ScoreType, CellType](teams: Seq[LocalTeam], submits: Seq[Submit],
                                                                getCell: (Seq[Submit]) => CellType,
                                                                getScore: (Seq[CellType]) => ScoreType)(implicit ord: Ordering[ScoreType]): Seq[RankedRow[ScoreType, CellType]] = {
-    val rows = submits.groupBy(_.teamId).map {
+    val rows = submits.groupBy(_.submitId.teamId).map {
       case (teamId, s0) =>
-        val cells: Map[String, CellType] = s0.groupBy(_.problem).map {
+        val cells: Map[String, CellType] = s0.groupBy(_.submitId.problem.id).map {
           case (problemId, s1) =>
             problemId -> getCell(s1)
         }
