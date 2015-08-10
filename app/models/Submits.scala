@@ -125,10 +125,6 @@ trait AnyStatusSubmit {
     else s"${passed} из ${taken}"
 }
 
-trait HasTestingId {
-  def testingId: Int
-}
-
 case class ResultEntry(test: Int, result: Int, time: Int, memory: Long, info: Int, testerExitCode: Int,
                        testerOutput: String, testerError: String) {
   def resultString = SubmitResult.message(result)

@@ -14,6 +14,11 @@ trait SubmitResult {
   def message: String
 }
 
+trait SubmitStats {
+  def timeMs: Int
+  def memory: Long
+}
+
 case class SchoolSubmitResult(compiled: Boolean, passed: Int, taken: Int) extends SubmitResult {
   override val success = compiled && (passed == taken) && (passed > 0)
 
