@@ -1,5 +1,6 @@
 package models
 
+import models.Bar.SubmitScorer
 import org.joda.time.DateTime
 import slick.jdbc.{JdbcBackend, GetResult}
 import spire.math.{FixedScale, FixedPoint, Rational}
@@ -25,10 +26,6 @@ case class Submit(submitId: SubmitId, status: SubmitTopLevel, testingId: Option[
 }
 
 trait Score
-
-trait SubmitScorer {
-  def withSubmit(submit: Submit): (SubmitScorer, Option[Score])
-}
 
 trait CellScore[Cell] {
   def withCell(cell: Cell): CellScore[Cell]
@@ -65,26 +62,32 @@ object RationalToScoreStr {
     else FixedPoint(r).toString(scale)
 }
 
-case class SchoolScore(value: Rational) extends AnyVal with Score {
+object Bar {
+  type SubmitScorer[Cell, Score] = (Cell, Submit) => (Cell, Option[Score])
+}
+
+object SchoolScorer {
+  def apply(cell: SchoolCell, submit: Submit) =
+    if (!submit.status.compiled)
+      (cell, None)
+    else {
+      val newScore = SchoolCell.calculate(submit.submitId.problem.rating,
+        Rational(submit.status.passed, submit.status.taken), cell.attempt + 1)
+
+      (SchoolCell(cell.attempt + 1, cell.score.max(newScore), cell.fullSolution || submit.success),
+        if (newScore > cell.score) Some(SchoolScore(newScore))
+        else None)
+    }
+}
+
+case class SchoolScore(value: Rational) extends Score {
   override def toString: String = RationalToScoreStr(value)
 }
 
-case class SchoolCell(attempt: Int, score: Rational, fullSolution: Boolean) extends SubmitScorer {
+case class SchoolCell(attempt: Int, score: Rational, fullSolution: Boolean) {
   override def toString =
     if (attempt == 0) ""
     else RationalToScoreStr(score)
-
-  override def withSubmit(submit: Submit) =
-    if (!submit.status.compiled)
-      (this, None)
-    else {
-      val newScore = SchoolCell.calculate(submit.submitId.problem.rating,
-        Rational(submit.status.passed, submit.status.taken), attempt + 1)
-
-      (SchoolCell(attempt + 1, score.max(newScore), fullSolution || submit.success),
-        if (newScore > score) Some(SchoolScore(newScore))
-        else None)
-    }
 }
 
 object ACMCell {
@@ -95,22 +98,25 @@ object SecondsToTimeStr {
   def apply(time: Int) = "%02d:%02d".format(time / 3600, (time / 60) % 60)
 }
 
-case class ACMScore(value: Int) extends AnyVal with Score
+case class ACMScore(value: Int) extends Score
 
-case class ACMCell(attempt: Int, arrivedSeconds: Int, fullSolution: Boolean) extends SubmitScorer {
+object ACMScorer {
+  def apply(cell: ACMCell, submit: Submit) =
+    if (!submit.status.compiled || cell.fullSolution)
+      (cell, None)
+    else
+      (ACMCell(cell.attempt + 1, submit.submitId.arrived.seconds, submit.success),
+        Some(ACMScore(cell.arrivedSeconds / 60 + (cell.attempt - 1) * 20)))
+
+}
+
+case class ACMCell(attempt: Int, arrivedSeconds: Int, fullSolution: Boolean) {
   def score = if (fullSolution) (arrivedSeconds / 60 + (attempt - 1) * 20) else 0
 
   override def toString =
     if (attempt == 0) ""
     else if (fullSolution) ("+" + (if (attempt == 1) "" else (attempt - 1).toString))
     else s"-$attempt"
-
-  override def withSubmit(submit: Submit) =
-    if (!submit.status.compiled || fullSolution)
-      (this, None)
-    else
-      (ACMCell(attempt + 1, submit.submitId.arrived.seconds, submit.success),
-        Some(ACMScore(arrivedSeconds / 60 + (attempt - 1) * 20)))
 }
 
 case class ResultEntry(test: Int, result: Int, time: Int, memory: Long, info: Int, testerExitCode: Int,
@@ -148,15 +154,15 @@ object Submits {
       .mapValues(indexGrouped)
       .values.flatten.toSeq
 
-  def scoreGrouped(submits: Seq[Submit], empty: SubmitScorer): (SubmitScorer, Seq[(Submit, Option[Score])]) =
+  def scoreGrouped[Cell](submits: Seq[Submit], empty: Cell, scorer: SubmitScorer[Cell, Score]): (Cell, Seq[(Submit, Option[Score])]) =
     submits.foldLeft((empty, Seq[(Submit, Option[Score])]())) {
       case (state, submit) =>
-        val next = state._1.withSubmit(submit)
+        val next = scorer(state._1, submit)
         (next._1, state._2 :+(submit, next._2))
     }
 
-  def indexAndScoreGrouped(submits: Seq[Submit], empty: SubmitScorer) = {
-    val scored = scoreGrouped(submits, empty)
+  def indexAndScoreGrouped[Cell](submits: Seq[Submit], empty: Cell, scorer: SubmitScorer[Cell, Score]) = {
+    val scored = scoreGrouped(submits, empty, scorer)
     val indexed = indexGrouped(scored._2).map {
       case ((submit, score), index) => (submit, score, index)
     }
@@ -226,8 +232,8 @@ object Submits {
 
   def annotateGrouped(db: JdbcBackend#DatabaseDef, schoolMode: Boolean, submits: Seq[Submit])(implicit ec: ExecutionContext) = {
     val empty = if (schoolMode) SchoolCell.empty else ACMCell.empty
-
-    val scored = scoreGrouped(submits, empty)
+    val scored = if (schoolMode) scoreGrouped(submits, empty, SchoolScorer.apply)
+      else scoreGrouped(submits, empty, ACMScorer.apply)
     val indexed = indexGrouped(scored._2)
 
     Future.sequence(

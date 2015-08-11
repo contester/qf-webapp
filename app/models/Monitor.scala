@@ -112,7 +112,7 @@ object School {
 
   object Cell {
     def apply(submits: Seq[Submit]): SchoolCell =
-      Submits.indexAndScoreGrouped(submits, SchoolCell.empty)._1
+      Submits.indexAndScoreGrouped(submits, SchoolCell.empty, SchoolScorer.apply)._1
   }
 
   object Score {
@@ -143,7 +143,7 @@ object ACM {
   }
 
   def getCell(submits: Seq[Submit]): ACMCell =
-    Submits.indexSubmits(submits, ACMCell.empty).lastOption.map(_.score).getOrElse(ACMCell.empty)
+    Submits.indexAndScoreGrouped(submits, ACMCell.empty, ACMScorer.apply)._1
 
   def cellFold(state: Score, cell: ACMCell) =
     if (cell.fullSolution)
