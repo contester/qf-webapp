@@ -71,6 +71,13 @@ object SubmitResult {
       annotate2(schoolMode, submit, details)
     }
 
+  def annotateFinished(db: JdbcBackend#DatabaseDef, finished: FinishedTesting)(implicit ec: ExecutionContext): Future[AnnoSubmit] =
+    Submits.loadSubmitByID(db, finished.submit.id).map(_.get).flatMap { submit =>
+      annotate(db, finished.submit.schoolMode, submit).map { submitResult =>
+        AnnoSubmit(finished.submit.contest, finished.submit.team, finished.submit.problem, submitResult)
+      }
+    }
+
   val message = Map(
     1 -> "Compilation successful",
     2 -> "Compilation failed",

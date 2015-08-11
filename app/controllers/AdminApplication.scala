@@ -10,7 +10,6 @@ import play.api.libs.concurrent.Execution.Implicits.defaultContext
 import com.spingo.op_rabbit.RabbitControl
 import com.spingo.op_rabbit.consumer.Subscription
 import jp.t2v.lab.play2.auth.AuthElement
-import models.Submits.{ACMScoreAndStatus, SchoolScoreAndStatus, StatusSubmit}
 import models._
 import org.apache.commons.io.FileUtils
 import play.api.Logger
@@ -48,10 +47,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   private def anyUser(account: Admin): Future[Boolean] = Future.successful(true)
 
   private def annot8(submits: Seq[Submit], schoolMode: Boolean) =
-    if (schoolMode)
-      Submits.annotateSchoolSubmits(db, submits)
-    else
-      Submits.annotateACMSubmits(db, submits)
+    Submits.groupAndAnnotate(db, schoolMode, submits)
 
   def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     db.run(Contests.getTeams(1)).zip(

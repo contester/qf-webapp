@@ -90,7 +90,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     case finished: FinishedTesting => {
       Logger.info(s"FT: $finished")
 
-      SubmitResult.annotate(db, finished).map { annotated =>
+      SubmitResult.annotateFinished(db, finished).map { annotated =>
         self ! annotated
       }
 

@@ -1,6 +1,5 @@
 package models
 
-import models.Bar.SubmitScorer
 import org.joda.time.DateTime
 import slick.jdbc.{JdbcBackend, GetResult}
 import spire.math.{FixedScale, FixedPoint, Rational}
@@ -23,6 +22,10 @@ case class SubmitTopLevel(finished: Boolean, compiled: Boolean, passed: Int, tak
 case class Submit(submitId: SubmitId, status: SubmitTopLevel, testingId: Option[Int]) {
   def success = status.success
   def afterFreeze = submitId.arrived.afterFreeze
+}
+
+trait SubmitScorer[Cell] {
+  def apply(cell: Cell, submit: Submit): (Cell, Option[Score])
 }
 
 trait Score
@@ -62,11 +65,7 @@ object RationalToScoreStr {
     else FixedPoint(r).toString(scale)
 }
 
-object Bar {
-  type SubmitScorer[Cell, Score] = (Cell, Submit) => (Cell, Option[Score])
-}
-
-object SchoolScorer {
+object SchoolScorer extends SubmitScorer[SchoolCell] {
   def apply(cell: SchoolCell, submit: Submit) =
     if (!submit.status.compiled)
       (cell, None)
@@ -100,7 +99,7 @@ object SecondsToTimeStr {
 
 case class ACMScore(value: Int) extends Score
 
-object ACMScorer {
+object ACMScorer extends SubmitScorer[ACMCell] {
   def apply(cell: ACMCell, submit: Submit) =
     if (!submit.status.compiled || cell.fullSolution)
       (cell, None)
@@ -142,7 +141,7 @@ object Submits {
 
   //implicit def dateTimeOrdering: Ordering[DateTime] = Ordering.fromLessThan(_ isBefore _)
 
-  private def groupByTP(submits: Seq[Submit]) =
+  def groupByTP(submits: Seq[Submit]) =
     submits.groupBy(x => (x.submitId.teamId, x.submitId.problem.id))
       .mapValues(_.sortBy(_.submitId.arrived.seconds))
 
@@ -154,14 +153,14 @@ object Submits {
       .mapValues(indexGrouped)
       .values.flatten.toSeq
 
-  def scoreGrouped[Cell](submits: Seq[Submit], empty: Cell, scorer: SubmitScorer[Cell, Score]): (Cell, Seq[(Submit, Option[Score])]) =
+  def scoreGrouped[Cell](submits: Seq[Submit], empty: Cell, scorer: SubmitScorer[Cell]): (Cell, Seq[(Submit, Option[Score])]) =
     submits.foldLeft((empty, Seq[(Submit, Option[Score])]())) {
       case (state, submit) =>
         val next = scorer(state._1, submit)
         (next._1, state._2 :+(submit, next._2))
     }
 
-  def indexAndScoreGrouped[Cell](submits: Seq[Submit], empty: Cell, scorer: SubmitScorer[Cell, Score]) = {
+  def indexAndScoreGrouped[Cell](submits: Seq[Submit], empty: Cell, scorer: SubmitScorer[Cell]) = {
     val scored = scoreGrouped(submits, empty, scorer)
     val indexed = indexGrouped(scored._2).map {
       case ((submit, score), index) => (submit, score, index)
@@ -231,9 +230,8 @@ object Submits {
     trOption(details).map(_.maxBy(_.test))
 
   def annotateGrouped(db: JdbcBackend#DatabaseDef, schoolMode: Boolean, submits: Seq[Submit])(implicit ec: ExecutionContext) = {
-    val empty = if (schoolMode) SchoolCell.empty else ACMCell.empty
-    val scored = if (schoolMode) scoreGrouped(submits, empty, SchoolScorer.apply)
-      else scoreGrouped(submits, empty, ACMScorer.apply)
+    val scored = if (schoolMode) scoreGrouped[SchoolCell](submits, SchoolCell.empty, SchoolScorer)
+      else scoreGrouped(submits, ACMCell.empty, ACMScorer)
     val indexed = indexGrouped(scored._2)
 
     Future.sequence(
@@ -244,6 +242,12 @@ object Submits {
           }
       })
   }
+
+  def groupAndAnnotate(db: JdbcBackend#DatabaseDef, schoolMode: Boolean, submits: Seq[Submit])(implicit ec: ExecutionContext) =
+    Future.sequence(groupByTP(submits).values.map { grouped =>
+      annotateGrouped(db, schoolMode, grouped)
+    }).map(_.flatten.toSeq.sortBy(-_._1.submitId.arrived.seconds))
+
 
   def loadSubmitByID(db: JdbcBackend#DatabaseDef, submitId: Int)(implicit ec: ExecutionContext) = {
     db.run(sql"""select NewSubmits.ID,

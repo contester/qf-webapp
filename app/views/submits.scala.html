@@ -1,4 +1,4 @@
-@(submits: Seq[AnyStatusSubmit], schoolMode: Boolean)
+@(submits: Seq[(Submit, Int, Option[Score], SubmitResult)], schoolMode: Boolean)
 
 @if(submits.isEmpty) {
 <p>Подходов не обнаружено.</p>
@@ -14,21 +14,15 @@
     </thead>
     <tbody>
     @for(s <- submits) {
-    <tr><td>@s.arrivedStr</td><td>@s.problem</td><td>@s.attempt</td><td>@s.ext</td>
-        @if(s.success) {
+    <tr><td>@s._1.submitId.arrived.asString</td><td>@s._1.submitId.problem.id</td><td>@s._2</td><td>@s._1.submitId.ext</td>
+        @if(s._4.success) {
         <td class="success">
             } else {
         <td>
             }
-            @s.anyScoreAndStatus match {
-                case sc: Submits.SchoolScoreAndStatus => {
-                    @s.asSchool</td><td>@sc.score</td>
-                }
-            case sc: Submits.ACMScoreAndStatus => {
-                @sc.toStatus</td>
-            }
-            }
-            <td>@s.timeMs</td></tr>
+            @s._4.message</td><td>@s._3</td>
+</td>
+            <td></td></tr>
     }
 
     </tbody>

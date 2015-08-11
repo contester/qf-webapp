@@ -1,4 +1,4 @@
-@(loggedIn: LoggedInTeam, subs: Seq[AnyStatusSubmit])(implicit request: RequestHeader)
+@(loggedIn: LoggedInTeam, subs: Seq[(Submit, Int, Option[Score], SubmitResult)])(implicit request: RequestHeader)
 
 @import helper.Implicits._
 @import b3.vertical.fieldConstructor

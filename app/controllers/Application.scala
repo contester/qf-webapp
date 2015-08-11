@@ -68,16 +68,10 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   private def getSubmits(team: LoggedInTeam) =
     db.run(Submits.getContestTeamSubmits(team.contest.id, team.team.localId))
 
-  private def annot8(submits: Seq[Submit], schoolMode: Boolean) =
-    if (schoolMode)
-      Submits.annotateSchoolSubmits(db, submits)
-    else
-      Submits.annotateACMSubmits(db, submits)
-
   def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
 
-    getSubmits(loggedInTeam).flatMap(annot8(_, loggedInTeam.contest.schoolMode)).map { subs =>
+    getSubmits(loggedInTeam).flatMap(Submits.groupAndAnnotate(db, loggedInTeam.contest.schoolMode, _)).map { subs =>
       Ok(html.index(loggedInTeam, subs))
     }
   }

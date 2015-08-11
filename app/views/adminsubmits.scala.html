@@ -1,4 +1,4 @@
-@(submits: Seq[AnyStatusSubmit], teams: Map[Int, LocalTeam], schoolMode: Boolean)(implicit request: RequestHeader)
+@(submits: Seq[(Submit, Int, Option[Score], SubmitResult)], teams: Map[Int, LocalTeam], schoolMode: Boolean)(implicit request: RequestHeader)
 
 @main("Contester", tab = "submits", variant=AdminDisplayMode) {
 
@@ -12,21 +12,15 @@
     </thead>
     <tbody>
     @for(s <- submits) {
-    <tr><td>@s.submit.submitId.id</td><td>@s.arrivedStr</td><td>@teams(s.submit.submitId.teamId).teamFullName</td><td>@s.problem</td>
-        @if(s.success) {
+    <tr><td>@s._1.submitId.id</td><td>@s._1.submitId.arrived.asString</td><td>@teams(s._1.submitId.teamId).teamFullName</td><td>@s._1.submitId.problem</td>
+        @if(s._4.success) {
         <td class="success">
             } else {
         <td>
             }
-            @s.anyScoreAndStatus match {
-            case sc: Submits.SchoolScoreAndStatus => {
-            @s.asSchool</td><td>@sc.score</td>
-        }
-        case sc: Submits.ACMScoreAndStatus => {
-        @sc.toStatus</td>
-        }
-        }
-        <td>@s.timeMs</td></tr>
+            @s._4.message
+            </td><td>@s._4</td>
+        <td></td></tr>
     }
 
     </tbody>
