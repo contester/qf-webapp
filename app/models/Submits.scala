@@ -103,10 +103,10 @@ object ACMScorer extends SubmitScorer[ACMCell] {
   def apply(cell: ACMCell, submit: Submit) =
     if (!submit.status.compiled || cell.fullSolution)
       (cell, None)
-    else
-      (ACMCell(cell.attempt + 1, submit.submitId.arrived.seconds, submit.success),
-        Some(ACMScore(cell.arrivedSeconds / 60 + (cell.attempt - 1) * 20)))
-
+    else {
+      val result = ACMCell(cell.attempt + 1, submit.submitId.arrived.seconds, submit.success)
+      (result, if (submit.success) Some(ACMScore(result.score)) else None)
+    }
 }
 
 case class ACMCell(attempt: Int, arrivedSeconds: Int, fullSolution: Boolean) {
