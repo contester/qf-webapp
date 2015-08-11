@@ -133,6 +133,8 @@ object ResultEntry {
 
 case class SubmitDetails(submit: Submit, details: Seq[ResultEntry])
 
+case class FullyDescribedSubmit(submit: Submit, index: Int, score: Option[Score], result: SubmitResult, stats: SubmitStats)
+
 object Submits {
 
   import slick.driver.MySQLDriver.api._
@@ -223,8 +225,10 @@ object Submits {
     else
       None
 
-  def getTestingMaxTime(details: Seq[ResultEntry]) =
-    trOption(details).map(_.map(_.time).max).getOrElse(0)
+  def getTestingStats(details: Seq[ResultEntry]) =
+    trOption(details.filter(_.test != 0)).map { detlist =>
+      SubmitStats(detlist.map(_.time).max, detlist.map(_.memory).max)
+    }.getOrElse(SubmitStats(0, 0))
 
   def getTestingLastResult(details: Seq[ResultEntry]) =
     trOption(details).map(_.maxBy(_.test))
@@ -237,8 +241,9 @@ object Submits {
     Future.sequence(
       indexed.map {
         case ((submit, optScore), index) =>
-          SubmitResult.annotate(db, schoolMode, submit).map { submitResult =>
-            (submit, index, optScore, submitResult)
+          SubmitResult.annotate(db, schoolMode, submit).map {
+            case (submitResult, submitStats) =>
+            FullyDescribedSubmit(submit, index, optScore, submitResult, submitStats)
           }
       })
   }
@@ -246,7 +251,7 @@ object Submits {
   def groupAndAnnotate(db: JdbcBackend#DatabaseDef, schoolMode: Boolean, submits: Seq[Submit])(implicit ec: ExecutionContext) =
     Future.sequence(groupByTP(submits).values.map { grouped =>
       annotateGrouped(db, schoolMode, grouped)
-    }).map(_.flatten.toSeq.sortBy(-_._1.submitId.arrived.seconds))
+    }).map(_.flatten.toSeq.sortBy(-_.submit.submitId.arrived.seconds))
 
 
   def loadSubmitByID(db: JdbcBackend#DatabaseDef, submitId: Int)(implicit ec: ExecutionContext) = {

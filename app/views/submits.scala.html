@@ -1,4 +1,4 @@
-@(submits: Seq[(Submit, Int, Option[Score], SubmitResult)], schoolMode: Boolean)
+@(submits: Seq[FullyDescribedSubmit], schoolMode: Boolean)
 
 @if(submits.isEmpty) {
 <p>Подходов не обнаружено.</p>
@@ -7,22 +7,20 @@
 <table class="table table-hover table-bordered table-responsive">
     <thead>
     <tr><th>Время</th><th>Задача</th><th>Попытка</th><th>Язык</th><th>Результат</th>
-        @if(schoolMode) {
         <th>Баллы</th>
-        }
         <th>Время работы</th></tr>
     </thead>
     <tbody>
     @for(s <- submits) {
-    <tr><td>@s._1.submitId.arrived.asString</td><td>@s._1.submitId.problem.id</td><td>@s._2</td><td>@s._1.submitId.ext</td>
-        @if(s._4.success) {
+    <tr><td>@s.submit.submitId.arrived.asString</td><td>@s.submit.submitId.problem.id</td><td>@s.index</td><td>@s.submit.submitId.ext</td>
+        @if(s.result.success) {
         <td class="success">
             } else {
         <td>
             }
-            @s._4.message</td><td>@s._3</td>
+            @s.result.message</td><td>@s.score.getOrElse("")</td>
 </td>
-            <td></td></tr>
+            <td>@s.stats.timeMs</td></tr>
     }
 
     </tbody>

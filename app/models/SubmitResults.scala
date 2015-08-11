@@ -14,10 +14,7 @@ trait SubmitResult {
   def message: String
 }
 
-trait SubmitStats {
-  def timeMs: Int
-  def memory: Long
-}
+case class SubmitStats(timeMs: Int, memory: Long)
 
 case object SubmitAccepted extends SubmitResult {
   override val success = true
@@ -64,17 +61,19 @@ object SubmitResult {
     }
 
 
-  def annotate(db: JdbcBackend#DatabaseDef, schoolMode: Boolean, submit: Submit)(implicit ec: ExecutionContext): Future[SubmitResult] =
+  def annotate(db: JdbcBackend#DatabaseDef, schoolMode: Boolean, submit: Submit)(implicit ec: ExecutionContext): Future[(SubmitResult, SubmitStats)] =
     submit.testingId.map { tid =>
       Submits.loadSubmitDetails(db, tid)
     }.getOrElse(Future.successful(Nil)).map { details =>
-      annotate2(schoolMode, submit, details)
+      val sr = annotate2(schoolMode, submit, details)
+      val st = Submits.getTestingStats(details)
+      (sr, st)
     }
 
   def annotateFinished(db: JdbcBackend#DatabaseDef, finished: FinishedTesting)(implicit ec: ExecutionContext): Future[AnnoSubmit] =
     Submits.loadSubmitByID(db, finished.submit.id).map(_.get).flatMap { submit =>
       annotate(db, finished.submit.schoolMode, submit).map { submitResult =>
-        AnnoSubmit(finished.submit.contest, finished.submit.team, finished.submit.problem, submitResult)
+        AnnoSubmit(finished.submit.contest, finished.submit.team, finished.submit.problem, submitResult._1)
       }
     }
 
