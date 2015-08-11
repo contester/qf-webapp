@@ -112,7 +112,7 @@ object School {
 
   object Cell {
     def apply(submits: Seq[Submit]): SchoolCell =
-      Submits.indexSubmits(submits, SchoolCell.empty).lastOption.map(_.score).getOrElse(SchoolCell.empty)
+      Submits.indexAndScoreGrouped(submits, SchoolCell.empty)._1
   }
 
   object Score {

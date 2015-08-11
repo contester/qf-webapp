@@ -15,18 +15,23 @@ case class RatedProblem(id: String, rating: Int)
 
 case class SubmitId(id: Int, arrived: Arrived, teamId: Int, contestId: Int, problem: RatedProblem, ext: String)
 
-case class Submit(submitId: SubmitId, finished: Boolean,
-                  compiled: Boolean, passed: Int, taken: Int, testingId: Option[Int]) {
+case class SubmitTopLevel(finished: Boolean, compiled: Boolean, passed: Int, taken: Int) {
   def success = finished && compiled && taken > 0 && passed == taken
+}
+
+case class Submit(submitId: SubmitId, status: SubmitTopLevel, testingId: Option[Int]) {
+  def success = status.success
   def afterFreeze = submitId.arrived.afterFreeze
 }
 
-trait SubmitScore[S] {
-  def withSubmit(submit: Submit): S
+trait Score
+
+trait SubmitScorer {
+  def withSubmit(submit: Submit): (SubmitScorer, Option[Score])
 }
 
-trait CellScore[S] {
-  def withCell(cell: S): CellScore[S]
+trait CellScore[Cell] {
+  def withCell(cell: Cell): CellScore[Cell]
 }
 
 object SchoolCell {
@@ -60,17 +65,26 @@ object RationalToScoreStr {
     else FixedPoint(r).toString(scale)
 }
 
-case class SchoolCell(attempt: Int, score: Rational, fullSolution: Boolean) extends SubmitScore[SchoolCell] {
+case class SchoolScore(value: Rational) extends AnyVal with Score {
+  override def toString: String = RationalToScoreStr(value)
+}
+
+case class SchoolCell(attempt: Int, score: Rational, fullSolution: Boolean) extends SubmitScorer {
   override def toString =
     if (attempt == 0) ""
     else RationalToScoreStr(score)
 
-  override def withSubmit(submit: Submit): SchoolCell =
-    if (!submit.compiled)
-      this
-    else
-      SchoolCell(attempt + 1, score.max(SchoolCell.calculate(submit.submitId.problem.rating,
-        Rational(submit.passed, submit.taken), attempt + 1)), fullSolution || submit.success)
+  override def withSubmit(submit: Submit) =
+    if (!submit.status.compiled)
+      (this, None)
+    else {
+      val newScore = SchoolCell.calculate(submit.submitId.problem.rating,
+        Rational(submit.status.passed, submit.status.taken), attempt + 1)
+
+      (SchoolCell(attempt + 1, score.max(newScore), fullSolution || submit.success),
+        if (newScore > score) Some(SchoolScore(newScore))
+        else None)
+    }
 }
 
 object ACMCell {
@@ -81,7 +95,9 @@ object SecondsToTimeStr {
   def apply(time: Int) = "%02d:%02d".format(time / 3600, (time / 60) % 60)
 }
 
-case class ACMCell(attempt: Int, arrivedSeconds: Int, fullSolution: Boolean) extends SubmitScore[ACMCell] {
+case class ACMScore(value: Int) extends AnyVal with Score
+
+case class ACMCell(attempt: Int, arrivedSeconds: Int, fullSolution: Boolean) extends SubmitScorer {
   def score = if (fullSolution) (arrivedSeconds / 60 + (attempt - 1) * 20) else 0
 
   override def toString =
@@ -89,40 +105,12 @@ case class ACMCell(attempt: Int, arrivedSeconds: Int, fullSolution: Boolean) ext
     else if (fullSolution) ("+" + (if (attempt == 1) "" else (attempt - 1).toString))
     else s"-$attempt"
 
-  override def withSubmit(submit: Submit): ACMCell =
-    if (!submit.compiled || fullSolution)
-      this
+  override def withSubmit(submit: Submit) =
+    if (!submit.status.compiled || fullSolution)
+      (this, None)
     else
-      ACMCell(attempt + 1, submit.submitId.arrived.seconds, submit.success)
-}
-
-trait AnyScoreAndStatus {
-}
-
-trait AnyStatusSubmit {
-  def submit: Submit
-
-  def arrived: Int = submit.submitId.arrived.seconds
-  def problem: String = submit.submitId.problem.id
-  def attempt: Int
-  def ext: String = submit.submitId.ext
-  def timeMs: Int
-  def finished: Boolean = submit.finished
-  def compiled: Boolean = submit.compiled
-  def passed: Int = submit.passed
-  def taken: Int = submit.taken
-
-  def anyScoreAndStatus: AnyScoreAndStatus
-
-  def arrivedStr = SecondsToTimeStr(arrived)
-
-  def success = finished && compiled && taken > 0 && passed == taken
-
-  def asSchool =
-    if (!finished) "..."
-    else if (!compiled) "Compilation failed"
-    else if (passed == taken) "Полное решение"
-    else s"${passed} из ${taken}"
+      (ACMCell(attempt + 1, submit.submitId.arrived.seconds, submit.success),
+        Some(ACMScore(arrivedSeconds / 60 + (attempt - 1) * 20)))
 }
 
 case class ResultEntry(test: Int, result: Int, time: Int, memory: Long, info: Int, testerExitCode: Int,
@@ -144,49 +132,50 @@ object Submits {
 
   import slick.driver.MySQLDriver.api._
 
-  type SubmitScorerFunc[Sc] = Seq[Submit] => Sc
+  case class ScoredSubmit[Sc](submit: Submit, score: Score, index: Int)
 
-  def score2[Sc](submits: Seq[Submit], scorer: SubmitScorerFunc[Sc]) =
-    groupByTP(submits)
-      .mapValues(scorer)
-
-  case class ScoredSubmit[Sc <: SubmitScore[Sc]](submit: Submit, score: Sc, index: Int)
-
-  implicit def dateTimeOrdering: Ordering[DateTime] = Ordering.fromLessThan(_ isBefore _)
-
-  def indexSubmits[Sc <: SubmitScore[Sc]](submits: Seq[Submit], scorer: => Sc): Seq[ScoredSubmit[Sc]] =
-    groupByTP(submits)
-      .mapValues(x => scoreSubmits(x, scorer)
-      .zipWithIndex.map(x => ScoredSubmit(x._1._2, x._1._1, x._2 + 1))).values.toSeq.flatten
+  //implicit def dateTimeOrdering: Ordering[DateTime] = Ordering.fromLessThan(_ isBefore _)
 
   private def groupByTP(submits: Seq[Submit]) =
     submits.groupBy(x => (x.submitId.teamId, x.submitId.problem.id))
       .mapValues(_.sortBy(_.submitId.arrived.seconds))
 
+  def indexGrouped[S](values: Seq[S]) =
+    values.zipWithIndex.map(x => x._1 -> (x._2 + 1))
+
   def justIndexSubmits(submits: Seq[Submit]): Seq[(Submit, Int)] =
     groupByTP(submits)
-      .mapValues(_.zipWithIndex.map(x => x._1 -> (x._2 + 1)))
+      .mapValues(indexGrouped)
       .values.flatten.toSeq
 
-  def scoreSubmits[Sc <: SubmitScore[Sc]](submits: Seq[Submit], empty: Sc): Seq[(Sc, Submit)] =
-    submits.foldLeft((empty, Seq[(Sc, Submit)]())) {
+  def scoreGrouped(submits: Seq[Submit], empty: SubmitScorer): (SubmitScorer, Seq[(Submit, Option[Score])]) =
+    submits.foldLeft((empty, Seq[(Submit, Option[Score])]())) {
       case (state, submit) =>
-        val newLeft = state._1.withSubmit(submit)
-        (newLeft, state._2 :+(newLeft, submit))
-    }._2
+        val next = state._1.withSubmit(submit)
+        (next._1, state._2 :+(submit, next._2))
+    }
+
+  def indexAndScoreGrouped(submits: Seq[Submit], empty: SubmitScorer) = {
+    val scored = scoreGrouped(submits, empty)
+    val indexed = indexGrouped(scored._2).map {
+      case ((submit, score), index) => (submit, score, index)
+    }
+    scored._1 -> indexed
+  }
+
+  implicit val getSubmitResult = GetResult(r => Submit(
+    SubmitId(r.nextInt(),
+      Arrived(new DateTime(r.nextTimestamp()), r.nextInt(), r.nextBoolean()),
+      r.nextInt(), r.nextInt(),
+      RatedProblem(r.nextString(), r.nextInt()),
+      r.nextString()),
+    SubmitTopLevel(
+      r.nextBoolean(),
+      r.nextBoolean(),
+      r.nextInt(), r.nextInt()), r.nextIntOption()
+  ))
 
   def getContestSubmits(contest: Int) = {
-    implicit val getSubmitResult = GetResult(r => Submit(
-      SubmitId(r.nextInt(),
-        Arrived(new DateTime(r.nextTimestamp()), r.nextInt(), r.nextBoolean()),
-        r.nextInt(), r.nextInt(),
-        RatedProblem(r.nextString(), r.nextInt()),
-        r.nextString()),
-      r.nextBoolean(),
-      r.nextBoolean(),
-      r.nextInt(), r.nextInt(), r.nextIntOption()
-    ))
-
     sql"""select NewSubmits.ID,
           NewSubmits.Arrived,
           unix_timestamp(NewSubmits.Arrived) - unix_timestamp(Contests.Start) as ArrivedSeconds,
@@ -205,17 +194,6 @@ object Submits {
   }
 
   def getContestTeamSubmits(contest: Int, team: Int) = {
-    implicit val getSubmitResult = GetResult(r => Submit(
-      SubmitId(r.nextInt(),
-        Arrived(new DateTime(r.nextTimestamp()), r.nextInt(), r.nextBoolean()),
-        r.nextInt(), r.nextInt(),
-        RatedProblem(r.nextString(), r.nextInt()),
-        r.nextString()),
-      r.nextBoolean(),
-      r.nextBoolean(),
-      r.nextInt(), r.nextInt(), r.nextIntOption()
-    ))
-
     sql"""select NewSubmits.ID,
           NewSubmits.Arrived,
           unix_timestamp(NewSubmits.Arrived) - unix_timestamp(Contests.Start) as ArrivedSeconds,
@@ -234,18 +212,7 @@ object Submits {
           Problems.ID = NewSubmits.Problem order by ArrivedSeconds""".as[Submit]
   }
 
-  case class SchoolScoreAndStatus(score: Rational) extends AnyScoreAndStatus
-  case class StatusSubmit[X <: AnyScoreAndStatus](submit: Submit, attempt: Int,
-    timeMs: Int, scoreAndStatus: X) extends AnyStatusSubmit {
-    override def anyScoreAndStatus: AnyScoreAndStatus = scoreAndStatus
-  }
-
-  case class ACMScoreAndStatus(message: String, test: Option[Int]) extends AnyScoreAndStatus {
-    def toStatus =
-      s"${message}${test.map(x => s" on test $x").getOrElse("")}"
-  }
-
-  def trOption(items: Seq[ResultEntry]): Option[Seq[ResultEntry]] =
+  private def trOption(items: Seq[ResultEntry]): Option[Seq[ResultEntry]] =
     if (items.nonEmpty)
       Some(items)
     else
@@ -257,55 +224,22 @@ object Submits {
   def getTestingLastResult(details: Seq[ResultEntry]) =
     trOption(details).map(_.maxBy(_.test))
 
-  def annotateSchoolSubmit(db: JdbcBackend#DatabaseDef,
-                           sub: ScoredSubmit[SchoolCell])(implicit ec: ExecutionContext): Future[StatusSubmit[SchoolScoreAndStatus]] =
-    sub.submit.testingId.map(loadSubmitDetails(db, _)).getOrElse(Future.successful(Nil)).map { details =>
-      val timeMs = getTestingMaxTime(details)
-      StatusSubmit(sub.submit, sub.index, timeMs, SchoolScoreAndStatus(sub.score.score))
-    }
+  def annotateGrouped(db: JdbcBackend#DatabaseDef, schoolMode: Boolean, submits: Seq[Submit])(implicit ec: ExecutionContext) = {
+    val empty = if (schoolMode) SchoolCell.empty else ACMCell.empty
 
-  def annotateSchoolSubmits(db: JdbcBackend#DatabaseDef, submits: Seq[Submit])(implicit ec: ExecutionContext): Future[Seq[StatusSubmit[SchoolScoreAndStatus]]] =
+    val scored = scoreGrouped(submits, empty)
+    val indexed = indexGrouped(scored._2)
+
     Future.sequence(
-      indexSubmits[SchoolCell](submits, SchoolCell.empty).sortBy(_.submit.submitId.arrived.seconds)
-        .reverse.map(annotateSchoolSubmit(db, _))
-    )
-
-  def annotateACMSubmit(db: JdbcBackend#DatabaseDef,
-                       sub: (Submit, Int))(implicit ec: ExecutionContext) =
-    if (!sub._1.finished)
-      Future.successful(StatusSubmit(sub._1, sub._2, 0, ACMScoreAndStatus("Waiting", None)))
-    else sub._1.testingId.map { testingId =>
-      loadSubmitDetails(db, testingId).map { details =>
-        val timeMs = getTestingMaxTime(details)
-        val resultOption = getTestingLastResult(details)
-          val testIdOption = resultOption.flatMap { res =>
-            if (res.test != 0 && !SubmitResult.success(res.result))
-              Some(res.test)
-            else
-              None
+      indexed.map {
+        case ((submit, optScore), index) =>
+          SubmitResult.annotate(db, schoolMode, submit).map { submitResult =>
+            (submit, index, optScore, submitResult)
           }
-          StatusSubmit(sub._1, sub._2, timeMs, ACMScoreAndStatus(resultOption.map(x => SubmitResult.message(x.result)).getOrElse("..."), testIdOption))
-        }
-
-    }.getOrElse(Future.successful(StatusSubmit(sub._1, sub._2, 0, ACMScoreAndStatus("...", None))))
-
-  def annotateACMSubmits(db: JdbcBackend#DatabaseDef, submits: Seq[Submit])(implicit ec: ExecutionContext) =
-    Future.sequence(
-      justIndexSubmits(submits).sortBy(_._1.submitId.arrived.seconds).reverse.map(annotateACMSubmit(db, _))
-    )
+      })
+  }
 
   def loadSubmitByID(db: JdbcBackend#DatabaseDef, submitId: Int)(implicit ec: ExecutionContext) = {
-    implicit val getSubmitResult = GetResult(r => Submit(
-      SubmitId(r.nextInt(),
-        Arrived(new DateTime(r.nextTimestamp()), r.nextInt(), r.nextBoolean()),
-        r.nextInt(), r.nextInt(),
-        RatedProblem(r.nextString(), r.nextInt()),
-        r.nextString()),
-      r.nextBoolean(),
-      r.nextBoolean(),
-      r.nextInt(), r.nextInt(), r.nextIntOption()
-    ))
-
     db.run(sql"""select NewSubmits.ID,
           NewSubmits.Arrived,
           unix_timestamp(NewSubmits.Arrived) - unix_timestamp(Contests.Start) as ArrivedSeconds,

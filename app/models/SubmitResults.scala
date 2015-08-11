@@ -19,22 +19,28 @@ trait SubmitStats {
   def memory: Long
 }
 
-case class SchoolSubmitResult(compiled: Boolean, passed: Int, taken: Int) extends SubmitResult {
-  override val success = compiled && (passed == taken) && (passed > 0)
-
-  override def message =
-    if (success)
-      "Полное решение"
-    else if (!compiled)
-      "Ошибка компиляции"
-    else s"$passed из $taken"
+case object SubmitAccepted extends SubmitResult {
+  override val success = true
+  override val message = "Accepted"
 }
 
-case class ACMSubmitResult(success: Boolean, text: String, test: Option[Int]) extends SubmitResult {
+case object SubmitCompileError extends SubmitResult {
+  override val success = false
+  override val message = "Compilation failed"
+}
+
+case class SubmitPartialResult(passed: Int, taken: Int) extends SubmitResult {
+  override val success = false
+
+  override val message =
+    s"$passed из $taken"
+}
+
+case class SubmitACMPartialResult(text: String, test: Option[Int]) extends SubmitResult {
+  override val success = false
+
   override def message =
-    if (success)
-      "Accepted"
-    else s"${text}${test.map(x => s" on test $x").getOrElse("")}"
+    s"${text}${test.map(x => s" on test $x").getOrElse("")}"
 }
 
 object SubmitResult {
@@ -45,21 +51,25 @@ object SubmitResult {
     )
   }
 
-  def annotate(db: JdbcBackend#DatabaseDef, finished: FinishedTesting)(implicit ec: ExecutionContext): Future[AnnoSubmit] = {
-    val result =
-      if (finished.submit.schoolMode)
-        Future.successful(SchoolSubmitResult(finished.compiled, finished.passed, finished.taken))
-      else
-        Submits.loadSubmitDetails(db, finished.testingId).map { details =>
-          val lastResultOption = Submits.getTestingLastResult(details)
-          Logger.info(s"$lastResultOption")
-          lastResultOption.map { lastResult =>
-            ACMSubmitResult(success(lastResult.result), message(lastResult.result), Some(lastResult.test))
-          }.getOrElse(ACMSubmitResult(false, "", None))
-        }
+  def annotate2(schoolMode: Boolean, submit: Submit, details: Seq[ResultEntry]): SubmitResult =
+    if (submit.success)
+      SubmitAccepted
+    else if (!submit.status.compiled)
+      SubmitCompileError
+    else if (schoolMode)
+      SubmitPartialResult(submit.status.passed, submit.status.taken)
+    else {
+      val lr = Submits.getTestingLastResult(details).map(x => (x.resultString, x.test)).getOrElse(("unknown", 0))
+      SubmitACMPartialResult(lr._1, Some(lr._2))
+    }
 
-    result.map(AnnoSubmit(finished.submit.contest, finished.submit.team, finished.submit.problem, _))
-  }
+
+  def annotate(db: JdbcBackend#DatabaseDef, schoolMode: Boolean, submit: Submit)(implicit ec: ExecutionContext): Future[SubmitResult] =
+    submit.testingId.map { tid =>
+      Submits.loadSubmitDetails(db, tid)
+    }.getOrElse(Future.successful(Nil)).map { details =>
+      annotate2(schoolMode, submit, details)
+    }
 
   val message = Map(
     1 -> "Compilation successful",
