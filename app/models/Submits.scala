@@ -97,7 +97,9 @@ object SecondsToTimeStr {
   def apply(time: Int) = "%02d:%02d".format(time / 3600, (time / 60) % 60)
 }
 
-case class ACMScore(value: Int) extends Score
+case class ACMScore(value: Int) extends Score {
+  override def toString: String = value.toString
+}
 
 object ACMScorer extends SubmitScorer[ACMCell] {
   def apply(cell: ACMCell, submit: Submit) =
