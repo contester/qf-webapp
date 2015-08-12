@@ -11,7 +11,7 @@
     <tbody>
     @for(s <- submits) {
     <tr><th scope="row">@s.submit.submitId.id</th><td>@s.submit.submitId.arrived.asString</td>
-        <td>@teams(s.submit.submitId.teamId).teamFullName</td><td>@s.submit.submitId.problem</td>
+        <td>@teams(s.submit.submitId.teamId).teamFullName</td><td>@s.submit.submitId.problem.id</td>
         @if(s.result.success) {
         <td class="success">
             } else {
