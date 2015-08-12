@@ -1,5 +1,7 @@
 @(navlinks: Html, admin: Boolean=false)
 
+@logoutLink = @{if(admin) { "/admin/logout" } else { "/logout" }}
+
 <nav class="navbar navbar-fixed-top @if(admin){navbar-warning}">
     <div class="container-fluid">
         <!-- Brand and toggle get grouped for better mobile display -->
@@ -19,7 +21,7 @@
                 @navlinks
             </ul>
             <ul class="nav navbar-nav navbar-right">
-                <a href="/logout" class="btn btn-default navbar-btn" type="button"><span class="glyphicon glyphicon-remove"></span> Выйти</a>
+                <a href="@logoutLink" class="btn btn-default navbar-btn" type="button"><span class="glyphicon glyphicon-remove"></span> Выйти</a>
             </ul>
         </div><!-- /.navbar-collapse -->
     </div><!-- /.container-fluid -->

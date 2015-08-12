@@ -20,7 +20,7 @@ import play.api.i18n.{I18nSupport, MessagesApi}
 import play.api.libs.iteratee.Iteratee
 import play.api.libs.json.JsValue
 import play.api.mvc.BodyParsers.parse
-import play.api.mvc.{Action, Controller}
+import play.api.mvc.{RequestHeader, Action, Controller}
 import slick.driver.JdbcProfile
 import views.html
 
@@ -49,21 +49,23 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   private def annot8(submits: Seq[Submit], schoolMode: Boolean) =
     Submits.groupAndAnnotate(db, schoolMode, submits)
 
-  def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
-    db.run(Contests.getTeams(1)).zip(
-      db.run(Submits.getContestSubmits(1)).flatMap(x => annot8(x.take(20), false))).map {
-      case (teams, subs) =>
-        val teamMap = teams.map(x => x.localId -> x).toMap
-        Ok(html.adminsubmits(subs, teamMap, false))
+  private def showSubs(contestId: Int, limit: Option[Int])(implicit request: RequestHeader) =
+    db.run(Contests.getContest(contestId)).map(_.headOption).zip(
+      db.run(Contests.getTeams(contestId)).map(_.map(x => x.localId -> x).toMap)
+    ).zip(db.run(Submits.getContestSubmits(contestId))).flatMap {
+      case ((Some(contest), teamMap), submits) =>
+        Submits.groupAndAnnotate(db, contest.schoolMode, submits).map { fullyDescribedSubmits =>
+          Ok(html.adminsubmits(fullyDescribedSubmits, teamMap))
+        }
+      case _ =>
+        Future.successful(Ok(html.adminsubmits(Nil, Map())))
     }
+
+  def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+    showSubs(1, Some(20))
   }
 
   def submits(contestId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
-    db.run(Contests.getTeams(contestId)).zip(
-    db.run(Submits.getContestSubmits(contestId)).flatMap(x => annot8(x, false))).map {
-      case (teams, subs) =>
-        val teamMap = teams.map(x => x.localId -> x).toMap
-        Ok(html.adminsubmits(subs, teamMap, false))
-    }
+    showSubs(contestId, None)
   }
 }

@@ -54,6 +54,9 @@ object Contests {
   val getContests =
     sql"""select ID, Name, SchoolMode, Start, End, Finish, Expose from Contests""".as[Contest]
 
+  def getContest(contestId: Int) =
+    sql"""select ID, Name, SchoolMode, Start, End, Finish, Expose from Contests where ID = $contestId""".as[Contest]
+
   implicit private val getProblem = GetResult(r => Problem(r.nextString().toUpperCase, r.nextString(),
     r.nextInt(), r.nextInt()))
 

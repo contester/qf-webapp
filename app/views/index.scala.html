@@ -9,7 +9,33 @@
 
 <div class="panel panel-success">
     <div class="panel-body">
-        @submits(subs, loggedIn.contest.schoolMode)
+        @if(subs.isEmpty) {
+        <p>Подходов не обнаружено.</p>
+        } else {
+
+        <table class="table table-hover table-bordered table-responsive">
+            <thead>
+            <tr><th>Время</th><th>Задача</th><th>Попытка</th><th>Язык</th><th>Результат</th>
+                <th>Баллы</th>
+                <th>Время работы</th>
+            <th>Память</th></tr>
+            </thead>
+            <tbody>
+            @for(s <- subs) {
+            <tr><td>@s.submit.submitId.arrived.asString</td><td>@s.submit.submitId.problem.id</td><td>@s.index</td><td>@s.submit.submitId.ext</td>
+                @if(s.result.success) {
+                <td class="success">
+                    } else {
+                <td>
+                    }
+                    @s.result.message</td><td>@s.score.getOrElse("")</td>
+                </td>
+                <td>@s.stats.timeMs</td><td>@s.stats.memory</td></tr>
+            }
+            </tbody>
+        </table>
+
+        }
     </div>
 </div>
 
