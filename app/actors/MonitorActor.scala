@@ -1,6 +1,6 @@
 package actors
 
-import akka.actor.{Actor, Props}
+import akka.actor.{Stash, Actor, Props}
 import models._
 import slick.jdbc.JdbcBackend
 

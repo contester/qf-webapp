@@ -4,7 +4,7 @@ import javax.inject.{Inject, Singleton}
 
 import actors.StatusActor
 import akka.actor.{Props, ActorSystem}
-import com.spingo.op_rabbit.{UTF8StringMarshaller, RabbitControl}
+import com.spingo.op_rabbit.{QueueMessage, UTF8StringMarshaller, RabbitControl}
 import com.spingo.op_rabbit.consumer.Subscription
 import jp.t2v.lab.play2.auth.AuthElement
 import models._
@@ -36,6 +36,12 @@ case class FinishedTesting(submit: SubmitObject, testingId: Int, compiled: Boole
 
 object FinishedTesting {
   implicit val finishedTestingFormat = Json.format[FinishedTesting]
+}
+
+case class SubmitMessage(id: Int)
+
+object SubmitMessage {
+  implicit val formatSubmitMessage = Json.format[SubmitMessage]
 }
 
 @Singleton
@@ -103,7 +109,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   def submitInsertQuery(contestId: Int, teamId: Int, problemId: String, srcLang: Int, source: Array[Byte], remoteAddr: String) =
     sqlu"""insert into NewSubmits (Contest, Team, Problem, SrcLang, Source, Computer, Arrived)
           values ($contestId, $teamId, $problemId, $srcLang, $source, inet_aton($remoteAddr), CURRENT_TIMESTAMP())
-        """.andThen(sql"""select LAST_INSERT_ID()""".as[Long])
+        """.andThen(sql"""select LAST_INSERT_ID()""".as[Long]).withPinnedSession
 
   def submitPost = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
@@ -130,6 +136,9 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
             } else {
               db.run(submitInsertQuery(loggedInTeam.contest.id, loggedInTeam.team.localId, submitData.problem,
                 submitData.compiler, solutionOpt.get, request.remoteAddress)).map { wat =>
+
+                rabbitMq ! QueueMessage(SubmitMessage(wat.head.toInt), queue = "contester.submitrequests")
+
                 Redirect(routes.Application.index)
               }
             }
