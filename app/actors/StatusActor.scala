@@ -1,15 +1,13 @@
 package actors
 
-import akka.actor.{Props, Actor, ActorRef}
+import akka.actor.{Actor, Props}
 import controllers.FinishedTesting
 import models._
 import play.api.Logger
 import play.api.libs.iteratee.Concurrent.Channel
 import play.api.libs.iteratee.{Concurrent, Enumerator}
-import play.api.libs.json.{Writes, Json, JsValue}
+import play.api.libs.json.{JsValue, Json, Writes}
 import slick.jdbc.JdbcBackend
-import slick.jdbc.JdbcBackend.DatabaseDef
-
 
 import scala.collection.mutable
 

@@ -2,10 +2,8 @@ package models
 
 import controllers.{AuthWrapper, routes}
 import jp.t2v.lab.play2.auth._
-import play.api.db.slick.DatabaseConfigProvider
-import play.api.mvc.{Result, RequestHeader}
-import play.api.mvc.Results.{Redirect, Forbidden}
-import slick.driver.JdbcProfile
+import play.api.mvc.Results.{Forbidden, Redirect}
+import play.api.mvc.{RequestHeader, Result}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.reflect.{ClassTag, classTag}

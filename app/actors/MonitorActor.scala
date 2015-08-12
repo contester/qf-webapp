@@ -1,9 +1,7 @@
 package actors
 
-import akka.actor.{Props, Actor}
-import akka.actor.Actor.Receive
+import akka.actor.{Actor, Props}
 import models._
-import play.api.Logger
 import slick.jdbc.JdbcBackend
 
 import scala.collection.mutable
@@ -19,8 +17,8 @@ object MonitorActor {
 
 class MonitorActor(db: JdbcBackend#DatabaseDef) extends Actor {
   import MonitorActor._
-
   import context.dispatcher
+
   import scala.concurrent.duration._
 
   private def getContestMonitor(contest: Contest)(implicit ec: ExecutionContext) = {

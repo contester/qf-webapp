@@ -1,9 +1,8 @@
 package models
 
 import org.joda.time.DateTime
-import slick.jdbc.{JdbcBackend, GetResult}
-import spire.math.{FixedScale, FixedPoint, Rational}
-import scala.async.Async.{async, await}
+import slick.jdbc.{GetResult, JdbcBackend}
+import spire.math.{FixedPoint, FixedScale, Rational}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -126,7 +125,6 @@ case class ResultEntry(test: Int, result: Int, time: Int, memory: Long, info: In
 }
 
 object ResultEntry {
-  import slick.driver.MySQLDriver.api._
 
   implicit val getResultEntry = GetResult(r =>
     ResultEntry(r.nextInt(), r.nextInt(), r.nextInt(), r.nextLong(), r.nextInt(), r.nextInt(), r.nextString(), r.nextString())

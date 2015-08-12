@@ -4,20 +4,20 @@ import javax.inject.Inject
 
 import akka.actor.ActorSystem
 import jp.t2v.lab.play2.auth.AuthElement
-import models.{LoggedInTeam, AuthConfigImpl}
+import models.{AuthConfigImpl, LoggedInTeam}
 import org.apache.commons.io.FileUtils
+import org.joda.time.DateTime
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
+import play.api.libs.concurrent.Execution.Implicits.defaultContext
 import play.api.mvc.Controller
 import slick.driver.JdbcProfile
-import slick.jdbc.{GetResult, PositionedParameters, SetParameter}
+import slick.jdbc.GetResult
 import views.html
-import play.api.libs.concurrent.Execution.Implicits.defaultContext
 
 import scala.concurrent.Future
-import org.joda.time.DateTime
 
 package printing {
   case class SubmitData(textOnly: Boolean)
@@ -30,8 +30,8 @@ class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
       with AuthConfigImpl with I18nSupport {
   private val dbConfig = dbConfigProvider.get[JdbcProfile]
   private val db = dbConfig.db
-  import utils.Db._
   import dbConfig.driver.api._
+  import utils.Db._
 
   private def anyUser(account: LoggedInTeam): Future[Boolean] = Future.successful(true)
 

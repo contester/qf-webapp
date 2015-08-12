@@ -3,13 +3,11 @@ package controllers
 import java.security.MessageDigest
 import javax.inject.{Inject, Singleton}
 
-import akka.util.ByteString
 import models.{Admin, Users}
 import play.api.db.slick.DatabaseConfigProvider
 import slick.driver.JdbcProfile
-import slick.jdbc.JdbcBackend
 
-import scala.concurrent.{Future, ExecutionContext}
+import scala.concurrent.ExecutionContext
 
 object Hasher {
   val hasher = MessageDigest.getInstance("SHA-1")

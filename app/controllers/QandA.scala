@@ -2,20 +2,16 @@ package controllers
 
 import javax.inject.Inject
 
-import akka.actor.ActorSystem
 import jp.t2v.lab.play2.auth.AuthElement
-import models.{Problems, LoggedInTeam, AuthConfigImpl, Monitor}
-import org.joda.time.DateTime
+import models.{AuthConfigImpl, LoggedInTeam, Monitor, Problems}
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
-import play.api.mvc.{RequestHeader, Controller}
-import slick.driver.JdbcProfile
-import slick.jdbc.GetResult
-import views.html
 import play.api.libs.concurrent.Execution.Implicits.defaultContext
-
+import play.api.mvc.{Controller, RequestHeader}
+import slick.driver.JdbcProfile
+import views.html
 
 import scala.concurrent.Future
 
@@ -29,7 +25,6 @@ class QandA @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   private val dbConfig = dbConfigProvider.get[JdbcProfile]
   private val db = dbConfig.db
-  import utils.Db._
   import dbConfig.driver.api._
 
   private def anyUser(account: LoggedInTeam): Future[Boolean] = Future.successful(true)

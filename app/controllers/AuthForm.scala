@@ -2,8 +2,8 @@ package controllers
 
 import javax.inject.Inject
 
-import jp.t2v.lab.play2.auth.{AuthElement, LoginLogout}
-import models.{AdminAuthConfigImpl, Users, AuthConfigImpl}
+import jp.t2v.lab.play2.auth.LoginLogout
+import models.{AdminAuthConfigImpl, AuthConfigImpl, Users}
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
@@ -22,7 +22,6 @@ class AuthForms @Inject() (val messagesApi: MessagesApi, val dbConfigProvider: D
 
   private val dbConfig = dbConfigProvider.get[JdbcProfile]
   private val db = dbConfig.db
-  import dbConfig.driver.api._
 
   private val loginForm = Form {
     mapping("username" -> text, "password" -> text)(AuthData.apply)(AuthData.unapply)
@@ -60,7 +59,6 @@ class AdminAuthForms @Inject() (val messagesApi: MessagesApi, val dbConfigProvid
 
   private val dbConfig = dbConfigProvider.get[JdbcProfile]
   private val db = dbConfig.db
-  import dbConfig.driver.api._
 
   private val loginForm = Form {
     mapping("username" -> text, "password" -> text)(AuthData.apply)(AuthData.unapply)

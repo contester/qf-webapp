@@ -1,31 +1,19 @@
 package controllers
 
-import java.lang.Compiler
 import javax.inject.{Inject, Singleton}
 
-import actors.StatusActor
-import akka.actor.{Props, ActorSystem}
-import play.api.libs.concurrent.Execution.Implicits.defaultContext
-
+import akka.actor.{ActorSystem, Props}
 import com.spingo.op_rabbit.RabbitControl
-import com.spingo.op_rabbit.consumer.Subscription
 import jp.t2v.lab.play2.auth.AuthElement
 import models._
-import org.apache.commons.io.FileUtils
-import play.api.Logger
-import play.api.data.Form
-import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
-import play.api.libs.iteratee.Iteratee
-import play.api.libs.json.JsValue
-import play.api.mvc.BodyParsers.parse
-import play.api.mvc.{RequestHeader, Action, Controller}
+import play.api.libs.concurrent.Execution.Implicits.defaultContext
+import play.api.mvc.{Controller, RequestHeader}
 import slick.driver.JdbcProfile
 import views.html
 
 import scala.concurrent.Future
-import scala.text
 
 @Singleton
 class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
@@ -36,8 +24,6 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   private val dbConfig = dbConfigProvider.get[JdbcProfile]
   private val db = dbConfig.db
-  import dbConfig.driver.api._
-  import utils.Db._
 
   val rabbitMq = system.actorOf(Props[RabbitControl])
   def monitor(id: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
