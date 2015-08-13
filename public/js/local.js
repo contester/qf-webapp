@@ -112,7 +112,7 @@ function listenOnSocket(path) {
                 }
 
                 if (obj.msgid) {
-                    chatSocket.send(JSON.stringify({ 'kind': 'ack', 'msgid': msgid }))
+                    chatSocket.send(JSON.stringify({ 'kind': 'ack', 'msgid': obj.msgid }))
                 }
             }
 

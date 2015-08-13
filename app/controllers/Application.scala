@@ -177,7 +177,12 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
       case Left(result) => Future.successful(Left(result))
       case Right((user, resultUpdater)) => {
         val in = Iteratee.foreach[JsValue] {
-          msg => Logger.debug(msg.toString())
+          msg => {
+            Logger.info(msg.toString())
+            msg.\("msgid").toOption.foreach { v =>
+              statusActor ! StatusActor.Ack(user, v.as[Int])
+            }
+          }
         }.map { msg =>
           Logger.debug(s"Disconnected: $user ($msg)")
         }

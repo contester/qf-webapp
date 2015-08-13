@@ -19,6 +19,7 @@ object StatusActor {
   case class Join(loggedInTeam: LoggedInTeam)
   case class Connected(enumerator: Enumerator[JsValue])
   case class NewContestState(c: Contest)
+  case class Ack(loggedInTeam: LoggedInTeam, msgid: Int)
 
   implicit val contestWrites = new Writes[Contest] {
     def writes(c: Contest) = {
@@ -69,6 +70,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   val contestStates = mutable.Map[Int, Contest]()
   val teamBroadcasts = mutable.Map[(Int, Int), (Enumerator[JsValue], Channel[JsValue])]()
 
+  val unacked = mutable.Map[(Int, Int), mutable.Map[Int, JsValue]]()
 
   private def newCBr(id: Int) =
     synchronized {
@@ -84,6 +86,11 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   private def contestToJson(c: Contest) =
     Json.obj("kind" -> "contest", "data" -> Json.toJson(c))
 
+  var iid: Int = 1
+
+  private def getUnacked(contest: Int, team: Int) =
+    unacked.getOrElseUpdate((contest, team), mutable.Map[Int, JsValue]())
+
   def receive = {
     case finished: FinishedTesting => {
       Logger.info(s"FT: $finished")
@@ -95,9 +102,22 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       sender ! ()
     }
 
+    case Ack(loggedInTeam, msgid) => {
+      val m = getUnacked(loggedInTeam.contest.id, loggedInTeam.team.localId)
+      m.-=(msgid)
+    }
+
     case annotated: AnnoSubmit => {
       Logger.info(s"${finishedToJson(annotated)}")
-      newTeamBr(annotated.contest, annotated.team)._2.push(finishedToJson(annotated))
+
+      val m = getUnacked(annotated.contest, annotated.team)
+
+      val j = Json.toJson(annotated)
+      iid+=1
+      m += (iid -> j)
+      val jj = Json.obj("kind" -> "submit", "msgid" -> iid, "data" -> j)
+
+      newTeamBr(annotated.contest, annotated.team)._2.push(jj)
     }
 
     case NewContestState(c) => {
@@ -139,7 +159,13 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
         case None => Enumerator.empty[JsValue]
       }
 
-      sender ! Connected(result.andThen(br._1.interleave(tr._1)))
+      val stored = getUnacked(loggedInTeam.contest.id, loggedInTeam.team.localId).map {
+        case (msgid, j) => Json.obj("kind" -> "submit", "msgid" -> msgid, "data" -> j)
+      }
+
+      val eStored = if (stored.isEmpty) Enumerator.empty[JsValue] else Enumerator.enumerate[JsValue](stored)
+
+      sender ! Connected(result.andThen(eStored).andThen(br._1.interleave(tr._1)))
     }
   }
 
