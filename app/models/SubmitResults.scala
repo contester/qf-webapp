@@ -16,6 +16,12 @@ trait SubmitResult {
 
 case class SubmitStats(timeMs: Int, memory: Long)
 
+case object SubmitWaiting extends SubmitResult {
+  override val success: Boolean = false
+
+  override val message: String = "..."
+}
+
 case object SubmitAccepted extends SubmitResult {
   override val success = true
   override val message = "Accepted"
@@ -49,7 +55,9 @@ object SubmitResult {
   }
 
   def annotate2(schoolMode: Boolean, submit: Submit, details: Seq[ResultEntry]): SubmitResult =
-    if (submit.success)
+    if (!submit.status.finished)
+      SubmitWaiting
+    else if (submit.success)
       SubmitAccepted
     else if (!submit.status.compiled)
       SubmitCompileError
