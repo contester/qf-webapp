@@ -137,6 +137,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
               db.run(submitInsertQuery(loggedInTeam.contest.id, loggedInTeam.team.localId, submitData.problem,
                 submitData.compiler, solutionOpt.get, request.remoteAddress)).map { wat =>
 
+                Logger.info(s"$wat")
                 rabbitMq ! QueueMessage(SubmitMessage(wat.head.toInt), queue = "contester.submitrequests")
 
                 Redirect(routes.Application.index)

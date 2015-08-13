@@ -3,9 +3,11 @@ package controllers
 import javax.inject.{Inject, Singleton}
 
 import akka.actor.{ActorSystem, Props}
-import com.spingo.op_rabbit.RabbitControl
+import com.spingo.op_rabbit.{QueueMessage, RabbitControl}
 import jp.t2v.lab.play2.auth.AuthElement
 import models._
+import play.api.data.Form
+import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
 import play.api.libs.concurrent.Execution.Implicits.defaultContext
@@ -14,6 +16,8 @@ import slick.driver.JdbcProfile
 import views.html
 
 import scala.concurrent.Future
+
+case class RejudgeSubmitRange(range: String)
 
 @Singleton
 class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
@@ -24,6 +28,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   private val dbConfig = dbConfigProvider.get[JdbcProfile]
   private val db = dbConfig.db
+  import com.spingo.op_rabbit.PlayJsonSupport._
 
   val rabbitMq = system.actorOf(Props[RabbitControl])
   def monitor(id: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
@@ -51,7 +56,60 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     showSubs(1, Some(20))
   }
 
+  case class IdRange(left: Option[Int], right: Option[Int]) extends Function[Int, Boolean] {
+    def apply(id: Int) =
+      left.map(_ <= id).getOrElse(true) &&
+      right.map(_ >= id).getOrElse(true)
+  }
+
+  val rangeRe = "(\\d*)\\.\\.(\\d*)".r
+
+  def parseItem(item: String): Either[Int, IdRange] =
+    if (item.contains("..")) {
+      item match {
+        case rangeRe(left, right) =>
+          Right(IdRange(if (left.isEmpty) None else Some(left.toInt), if (right.isEmpty) None else Some(right.toInt)))
+      }
+    } else Left(item.toInt)
+
+  import slick.driver.MySQLDriver.api._
+
+  def rejudgeRangeEx(range: String) = {
+    val items = range.split(',').map(parseItem)
+    val numbers = items.filter(_.isLeft).map(_.left.get).toSet
+    val ranges = items.filter(_.isRight).map(_.right.get)
+
+    val checks: Seq[Function[Int, Boolean]] = ranges.toSeq.+:(numbers)
+
+    db.run(sql"""select ID from NewSubmits order by ID""".as[Int]).map { submits =>
+      for (id <- submits) {
+        if (checks.exists(x => x(id))) {
+          rabbitMq ! QueueMessage(SubmitMessage(id), queue = "contester.submitrequests")
+        }
+      }
+      ()
+    }
+  }
+
+
   def submits(contestId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     showSubs(contestId, None)
+  }
+
+  val rejudgeSubmitRangeForm = Form {
+    mapping("range" -> text)(RejudgeSubmitRange.apply)(RejudgeSubmitRange.unapply)
+  }
+
+  def rejudgePage = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+    Future.successful(Ok(html.adminrejudge(rejudgeSubmitRangeForm)))
+  }
+
+  def rejudgeRange = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
+    rejudgeSubmitRangeForm.bindFromRequest.fold(
+      formWithErrors => Future.successful(BadRequest(html.adminrejudge(formWithErrors))),
+      data => rejudgeRangeEx(data.range).map { _ =>
+        Redirect(routes.AdminApplication.rejudgePage)
+      }
+    )
   }
 }
