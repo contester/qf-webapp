@@ -37,9 +37,6 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   private def anyUser(account: Admin): Future[Boolean] = Future.successful(true)
 
-  private def annot8(submits: Seq[Submit], schoolMode: Boolean) =
-    Submits.groupAndAnnotate(db, schoolMode, submits)
-
   private def showSubs(contestId: Int, limit: Option[Int])(implicit request: RequestHeader) =
     db.run(Contests.getContest(contestId)).map(_.headOption).zip(
       db.run(Contests.getTeams(contestId)).map(_.map(x => x.localId -> x).toMap)

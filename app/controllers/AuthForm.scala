@@ -80,7 +80,7 @@ class AdminAuthForms @Inject() (val messagesApi: MessagesApi, val dbConfigProvid
       formWithErrors => Future.successful(BadRequest(html.login(formWithErrors))),
       user => doAuth(user.username, user.password).flatMap {
         case Some(found) =>
-          gotoLoginSucceeded(found)
+          gotoLoginSucceeded(found.toId)
 
         case None => Future.successful(BadRequest(html.adminlogin(loginForm.fill(AuthData(user.username, ""))
           .withGlobalError("Неверное имя пользователя или пароль"))))

@@ -3,7 +3,7 @@ package controllers
 import java.security.MessageDigest
 import javax.inject.{Inject, Singleton}
 
-import models.{Admin, Users}
+import models.{AdminId, Admin, Users}
 import play.api.db.slick.DatabaseConfigProvider
 import slick.driver.JdbcProfile
 
@@ -28,9 +28,9 @@ class AuthWrapper @Inject() (dbConfigProvider: DatabaseConfigProvider) {
   def resolve(username: String)(implicit ctx: ExecutionContext) =
     db.run(Users.resolveQuery(username)).map(_.headOption)
 
-  def resolveAdmin(admin: Admin)(implicit ctx: ExecutionContext) =
+  def resolveAdmin(admin: AdminId)(implicit ctx: ExecutionContext) =
     db.run(Admin.query(admin.username, admin.passwordHash)).map(_.headOption)
 
   def authAdmin(username: String, password: String)(implicit ctx: ExecutionContext) =
-    resolveAdmin(Admin(username, Hasher.getSha1(password)))
+    resolveAdmin(AdminId(username, Hasher.getSha1(password)))
 }

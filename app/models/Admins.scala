@@ -2,8 +2,24 @@ package models
 
 import slick.jdbc.GetResult
 
+case class AdminId(username: String, passwordHash: String) {
+  override def toString = s"$username:$passwordHash"
+}
+
 case class Admin(username: String, passwordHash: String) {
   override def toString = s"$username:$passwordHash"
+
+  def toId = AdminId(username, passwordHash)
+}
+
+object AdminId {
+  def fromString(s: String) = {
+    val splits = s.split(':')
+    if (splits.length == 2)
+      Some(AdminId(splits(0), splits(1)))
+    else
+      None
+  }
 }
 
 object Admin {

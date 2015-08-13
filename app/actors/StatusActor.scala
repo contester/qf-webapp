@@ -64,7 +64,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     context.system.scheduler.schedule(30 seconds, 30 seconds, self, RefreshTick)
 
   import com.github.nscala_time.time.Imports._
-  var lastTimestamp = DateTime.now
 
   val contestBroadcasts = mutable.Map[Int, (Enumerator[JsValue], Channel[JsValue])]()
   val contestStates = mutable.Map[Int, Contest]()

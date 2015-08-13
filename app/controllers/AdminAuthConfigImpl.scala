@@ -17,7 +17,7 @@ trait AdminAuthConfigImpl extends AuthConfig {
    * A type that is used to identify a user.
    * `String`, `Int`, `Long` and so on.
    */
-  type Id = Admin
+  type Id = AdminId
 
   /**
    * A type that represents a user in your application.
@@ -101,9 +101,9 @@ trait AdminAuthConfigImpl extends AuthConfig {
     cookieMaxAge = Some(sessionTimeoutInSeconds)
   )
 
-  implicit val adminToString = ToString((x: Admin) => x.toString)
-  implicit val adminFromString = new FromString[Admin] {
-    override def apply(id: String): Option[Admin] = Admin.fromString(id)
+  implicit val adminIdToString = ToString((x: AdminId) => x.toString)
+  implicit val adminIdFromString = new FromString[AdminId] {
+    override def apply(id: String): Option[AdminId] = AdminId.fromString(id)
   }
 
   override lazy val idContainer: AsyncIdContainer[Id] = AsyncIdContainer(new CookieIdContainer[Id])
