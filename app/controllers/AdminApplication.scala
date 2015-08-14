@@ -43,10 +43,10 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     ).zip(db.run(Submits.getContestSubmits(contestId))).flatMap {
       case ((Some(contest), teamMap), submits) =>
         Submits.groupAndAnnotate(db, contest.schoolMode, limit.map(submits.take).getOrElse(submits)).map { fullyDescribedSubmits =>
-          Ok(html.adminsubmits(fullyDescribedSubmits, teamMap))
+          Ok(html.admin.submits(fullyDescribedSubmits, teamMap))
         }
       case _ =>
-        Future.successful(Ok(html.adminsubmits(Nil, Map())))
+        Future.successful(Ok(html.admin.submits(Nil, Map())))
     }
 
   def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
@@ -98,12 +98,12 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   }
 
   def rejudgePage = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
-    Future.successful(Ok(html.adminrejudge(rejudgeSubmitRangeForm)))
+    Future.successful(Ok(html.admin.rejudge(rejudgeSubmitRangeForm)))
   }
 
   def rejudgeRange = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
     rejudgeSubmitRangeForm.bindFromRequest.fold(
-      formWithErrors => Future.successful(BadRequest(html.adminrejudge(formWithErrors))),
+      formWithErrors => Future.successful(BadRequest(html.admin.rejudge(formWithErrors))),
       data => rejudgeRangeEx(data.range).map { _ =>
         Redirect(routes.AdminApplication.rejudgePage)
       }
