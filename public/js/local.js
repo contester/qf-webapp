@@ -6,30 +6,30 @@ function maybeCheckNotifyPermission() {
     return true;
 }
 
-    function notifyMe(n_title, n_body) {
-      if (!Notification) {
+function notifyMe(n_title, n_icon, n_body) {
+    if (!Notification) {
         alert('Desktop notifications not available in your browser. Try Chromium.');
         return;
-      }
+    }
 
-  if (Notification.permission !== "granted")
-    Notification.requestPermission();
-  else {
-    var notification = new Notification(n_title, {
-      icon: '@routes.Assets.at("icpc_logo.png")',
-      body: n_body,
-    });
+    if (Notification.permission !== "granted")
+        Notification.requestPermission();
+    else {
+        var notification = new Notification(n_title, {
+          icon: n_icon,
+          body: n_body,
+        });
 
-    notification.addEventListener('click', function () {
-    window.focus()
+        notification.addEventListener('click', function () {
+            window.focus()
             this.close()
-    })
+        });
 
-    window.setTimeout(function() {
-        notification.close()
-        }, 120000)
+        window.setTimeout(function() {
+            notification.close()
+            }, 120000);
 
-  }
+    }
 
 }
 
@@ -51,13 +51,13 @@ function maybeCheckNotifyPermission() {
     var vticker;
     var ctstate;
 
-    function updateContestTimes(e) {
+    function updateContestTimes(e, iconbase) {
         if (vticker) {
             clearInterval(vticker);
         }
 
         if (ctstate && !ctstate.started && e.started) {
-            notifyMe('Соревнование началось', e.name);
+            notifyMe(e.name, iconbase, 'Соревнование началось');
             location.reload();
         }
 
@@ -95,7 +95,7 @@ function maybeCheckNotifyPermission() {
         }
     }
 
-function listenOnSocket(path) {
+function listenOnSocket(path, iconbase) {
 
     $(function() {
             var chatSocket = new ReconnectingWebSocket(path)
@@ -104,11 +104,16 @@ function listenOnSocket(path) {
                 var obj = JSON.parse(event.data);
 
                 if (obj.kind == 'contest') {
-                    updateContestTimes(obj.data);
+                    updateContestTimes(obj.data, iconbase + 'icpc_logo.png');
                 }
 
                 if (obj.kind == 'submit') {
-                    notifyMe("Problem " + obj.data.problem, obj.data.result.message)
+                    var icon = iconbase + 'error-icon.gif';
+                    if (obj.data.result.success) {
+                        icon = iconbase + 'baloons/baloon-' + obj.data.problem.toLowerCase() + '.png';
+                    }
+
+                    notifyMe("Problem " + obj.data.problem, icon, obj.data.result.message)
                 }
 
                 if (obj.msgid) {

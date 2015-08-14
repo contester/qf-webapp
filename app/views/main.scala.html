@@ -75,7 +75,7 @@ case _ => None
 
     @for(s <- notifySocket) {
         document.addEventListener('DOMContentLoaded', maybeCheckNotifyPermission);
-        listenOnSocket("@s");
+        listenOnSocket("@s", '@routes.Assets.at("images/")');
     }
     </script>
     @scripts
