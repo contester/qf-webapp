@@ -109,4 +109,8 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
       }
     )
   }
+
+  def showSubmit(submitId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+    Submits.getSubmitById(db, submitId).map(x => Ok(html.admin.showsubmit(x)))
+  }
 }

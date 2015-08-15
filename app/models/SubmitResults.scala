@@ -69,13 +69,13 @@ object SubmitResult {
     }
 
 
-  def annotate(db: JdbcBackend#DatabaseDef, schoolMode: Boolean, submit: Submit)(implicit ec: ExecutionContext): Future[(SubmitResult, SubmitStats)] =
+  def annotate(db: JdbcBackend#DatabaseDef, schoolMode: Boolean, submit: Submit)(implicit ec: ExecutionContext): Future[(SubmitResult, Seq[ResultEntry], SubmitStats)] =
     submit.testingId.map { tid =>
       Submits.loadSubmitDetails(db, tid)
     }.getOrElse(Future.successful(Nil)).map { details =>
       val sr = annotate2(schoolMode, submit, details)
       val st = Submits.getTestingStats(details)
-      (sr, st)
+      (sr, details, st)
     }
 
   def annotateFinished(db: JdbcBackend#DatabaseDef, finished: FinishedTesting)(implicit ec: ExecutionContext): Future[AnnoSubmit] =

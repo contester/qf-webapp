@@ -25,11 +25,12 @@ GET /logout controllers.AuthForms.logout
 GET /admin controllers.AdminApplication.index
 
 GET /admin/submits/:contestId controllers.AdminApplication.submits(contestId: Int)
+GET /admin/monitor/:contestId controllers.AdminApplication.monitor(contestId: Int)
 
 GET /admin/rejudge controllers.AdminApplication.rejudgePage
 POST /admin/rejudgeRange controllers.AdminApplication.rejudgeRange
 
-GET /showsubmit/:id controllers.Application.showSubmit(id: Int)
+GET /admin/showsubmit/:id controllers.AdminApplication.showSubmit(id: Int)
 
 GET /admin/login controllers.AdminAuthForms.login
 POST /admin/login controllers.AdminAuthForms.authenticate

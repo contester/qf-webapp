@@ -131,9 +131,11 @@ object ResultEntry {
   )
 }
 
-case class SubmitDetails(submit: Submit, details: Seq[ResultEntry])
+case class SubmitDetails(fsub: FullyDescribedSubmit, source: Array[Byte]) {
+  def sourceStr = new String(source, "UTF-8")
+}
 
-case class FullyDescribedSubmit(submit: Submit, index: Int, score: Option[Score], result: SubmitResult, stats: SubmitStats)
+case class FullyDescribedSubmit(submit: Submit, index: Int, score: Option[Score], result: SubmitResult, stats: SubmitStats, details: Seq[ResultEntry])
 
 object Submits {
 
@@ -219,6 +221,25 @@ object Submits {
           Problems.ID = NewSubmits.Problem order by ArrivedSeconds""".as[Submit]
   }
 
+  def getContestTeamProblemSubmits(contest: Int, team: Int, problem: String) = {
+    sql"""select NewSubmits.ID,
+          NewSubmits.Arrived,
+          unix_timestamp(NewSubmits.Arrived) - unix_timestamp(Contests.Start) as ArrivedSeconds,
+          NewSubmits.Arrived > Contests.Finish as AfterFreeze,
+          NewSubmits.Team, NewSubmits.Contest,
+          NewSubmits.Problem, Problems.Rating,
+          Languages.Ext, Submits.Finished, Submits.Compiled,
+          Submits.Passed, Submits.Taken,
+
+          Submits.TestingID
+          from Contests, Problems, Languages, NewSubmits LEFT join Submits on NewSubmits.ID = Submits.ID where
+          NewSubmits.Team = $team and NewSubmits.Problem = $problem and
+          Contests.ID = $contest and NewSubmits.Arrived < Contests.End and NewSubmits.Arrived >= Contests.Start and
+          Contests.ID = NewSubmits.Contest and Problems.Contest = Contests.ID and
+          Languages.ID = NewSubmits.SrcLang and Languages.Contest = Contests.ID and
+          Problems.ID = NewSubmits.Problem order by ArrivedSeconds""".as[Submit]
+  }
+
   private def trOption(items: Seq[ResultEntry]): Option[Seq[ResultEntry]] =
     if (items.nonEmpty)
       Some(items)
@@ -242,8 +263,8 @@ object Submits {
       indexed.map {
         case ((submit, optScore), index) =>
           SubmitResult.annotate(db, schoolMode, submit).map {
-            case (submitResult, submitStats) =>
-            FullyDescribedSubmit(submit, index, optScore, submitResult, submitStats)
+            case (submitResult, submitDetails, submitStats) =>
+            FullyDescribedSubmit(submit, index, optScore, submitResult, submitStats, submitDetails)
           }
       })
   }
@@ -253,6 +274,35 @@ object Submits {
       annotateGrouped(db, schoolMode, grouped)
     }).map(_.flatten.toSeq.sortBy(-_.submit.submitId.arrived.seconds))
 
+
+  implicit def o2f[A](o: Option[Future[A]])(implicit ec: ExecutionContext): Future[Option[A]] =
+    o.map(_.map(Some(_))).getOrElse(Future.successful(None))
+
+  import utils.Db._
+
+  case class SubmitSourceShort(contest: Int, team: Int, problem: String, source: Array[Byte])
+  object SubmitSourceShort {
+    implicit val getResult = GetResult(r =>
+      SubmitSourceShort(r.nextInt(), r.nextInt(), r.nextString(), r.nextBytes())
+    )
+  }
+
+  def getSubmitById(db: JdbcBackend#DatabaseDef, submitId: Int)(implicit ec: ExecutionContext): Future[Option[SubmitDetails]] = {
+    db.run(sql"""select Contest, Team, Problem, Source from NewSubmits where ID = $submitId""".as[SubmitSourceShort])
+      .map(_.headOption).flatMap { maybeSubmit =>
+      maybeSubmit map { short =>
+        db.run(sql"select SchoolMode from Contests where ID = ${short.contest}".as[Boolean]).map(_.headOption).flatMap { maybeSchoolMode =>
+          maybeSchoolMode map({ schoolMode =>
+            db.run(getContestTeamProblemSubmits(short.contest, short.team, short.problem))
+              .flatMap(submits =>
+              groupAndAnnotate(db, schoolMode, submits)).map { submits =>
+              submits.find(_.submit.submitId.id == submitId).map(SubmitDetails(_, short.source))
+            }
+          })
+        }.map(_.flatten)
+      }
+    }.map(_.flatten)
+  }
 
   def loadSubmitByID(db: JdbcBackend#DatabaseDef, submitId: Int)(implicit ec: ExecutionContext) = {
     db.run(sql"""select NewSubmits.ID,
@@ -276,14 +326,4 @@ object Submits {
     db.run(
       sql"""select Test, Result, Timex, Memory, Info, TesterExitCode, TesterOutput, TesterError
            from Results where UID = $testingId order by Test""".as[ResultEntry])
-
-  def loadSubmitAndDetails(db: JdbcBackend#DatabaseDef, submitId: Int)(implicit ec: ExecutionContext): Future[Option[SubmitDetails]] =
-    loadSubmitByID(db, submitId)
-      .flatMap { submitOption =>
-      submitOption.map { submit =>
-        submit.testingId.map(loadSubmitDetails(db, _))
-          .getOrElse(Future.successful(Nil))
-          .map(details => Some(SubmitDetails(submit, details)))
-      }.getOrElse(Future.successful(None))
-    }
 }

@@ -194,12 +194,4 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
       }
     }
  }
-
-  def showSubmit(id: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
-    val loggedInTeam = loggedIn
-    Submits.loadSubmitAndDetails(db, id).map { subs =>
-      Ok(html.showsubmit(loggedInTeam, subs))
-    }
-  }
-
 }
