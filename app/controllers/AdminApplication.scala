@@ -13,11 +13,14 @@ import play.api.i18n.{I18nSupport, MessagesApi}
 import play.api.libs.concurrent.Execution.Implicits.defaultContext
 import play.api.mvc.{Controller, RequestHeader}
 import slick.driver.JdbcProfile
+import slick.jdbc.GetResult
 import views.html
+import com.github.nscala_time.time.Imports._
 
 import scala.concurrent.Future
 
 case class RejudgeSubmitRange(range: String)
+case class PostClarification(id: Option[Int], contest: Int, problem: String, text: String, date: Option[DateTime], hidden: Boolean)
 
 @Singleton
 class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
@@ -113,4 +116,66 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   def showSubmit(submitId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     Submits.getSubmitById(db, submitId).map(x => Ok(html.admin.showsubmit(x)))
   }
+
+  val postClarificationForm = Form {
+    mapping("id" -> optional(number),
+      "contest" -> number,
+      "problem" -> text,
+      "text" -> nonEmptyText,
+      "date" -> optional(jodaDate),
+      "hidden" -> boolean
+    )(PostClarification.apply)(PostClarification.unapply)
+  }
+
+  def postNewClarification(contestId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+    Future.successful(Ok(html.admin.postclarification(postClarificationForm, contestId)))
+  }
+
+  case class Clarification1(id: Int, contest: Int, problem: String, text: String, date: DateTime, hidden: Boolean)
+  object Clarification1 {
+    implicit val getResult = GetResult(r =>
+      Clarification1(r.nextInt(), r.nextInt(), r.nextString(), r.nextString(), new DateTime(r.nextTimestamp()),
+        r.nextBoolean())
+    )
+  }
+
+  import utils.Db._
+
+  def postUpdateClarification(clarificationId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+    db.run(
+      sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications
+            where cl_id = $clarificationId""".as[Clarification1])
+      .map(_.headOption).map { clOpt =>
+      clOpt.map { cl =>
+        val clObj = PostClarification(
+          Some(cl.id), cl.contest, cl.problem, cl.text, Some(cl.date), cl.hidden
+        )
+        Ok(html.admin.postclarification(postClarificationForm.fill(clObj), cl.contest))
+      }.getOrElse(Redirect(routes.AdminApplication.postNewClarification(1)))
+    }
+  }
+
+  def postClarification = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
+    postClarificationForm.bindFromRequest.fold(
+      formWithErrors => Future.successful(BadRequest(html.admin.postclarification(formWithErrors, 1))),
+      data => {
+        val cdate = data.date.getOrElse(DateTime.now)
+
+        val cOp = data.id.map { id =>
+          db.run(sqlu"""update clarifications set cl_task = ${data.problem}, cl_text = ${data.text}, cl_date = $cdate,
+              cl_is_hidden = ${data.hidden} where cl_id = $id""").map(_ => None)
+        }.getOrElse(
+            db.run(
+              sqlu"""insert into clarifications (cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden) values
+                 (${data.contest}, ${data.problem}, ${data.text}, $cdate, ${data.hidden})
+                  """.andThen(sql"select last_insert_id".as[Int]).withPinnedSession).map(_.headOption))
+
+        cOp.map { optId =>
+          Redirect(routes.AdminApplication.postNewClarification(1))
+        }
+      }
+    )
+  }
+
+
 }

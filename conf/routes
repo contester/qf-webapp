@@ -30,6 +30,10 @@ GET /admin/monitor/:contestId controllers.AdminApplication.monitor(contestId: In
 GET /admin/rejudge controllers.AdminApplication.rejudgePage
 POST /admin/rejudgeRange controllers.AdminApplication.rejudgeRange
 
+GET /admin/postNewClarification/:contestId controllers.AdminApplication.postNewClarification(contestId: Int)
+GET /admin/updateClarification/:clrId controllers.AdminApplication.postUpdateClarification(clrId: Int)
+POST /admin/postClarification controllers.AdminApplication.postClarification
+
 GET /admin/showsubmit/:id controllers.AdminApplication.showSubmit(id: Int)
 
 GET /admin/login controllers.AdminAuthForms.login
