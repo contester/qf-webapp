@@ -7,7 +7,6 @@ import com.spingo.op_rabbit.{QueueMessage, RabbitControl}
 import jp.t2v.lab.play2.auth.AuthElement
 import models._
 import org.apache.commons.io.FileUtils
-import org.joda.time.DateTime
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
@@ -27,7 +26,9 @@ package serversideeval {
 case class ServerSideData(compiler: Int)
 }
 
-case class ServerSideEvalMessage(id: Int, contest: Int, team: Int, ext: String, source: Array[Byte], input: Array[Byte])
+import com.github.nscala_time.time.Imports.DateTime
+
+case class ServerSideEvalMessage(id: Int, contest: Int, team: Int, ext: String, arrived: DateTime, source: Array[Byte], input: Array[Byte])
 object ServerSideEvalMessage {
   implicit val formatServerSideEvalMessage = Json.format[ServerSideEvalMessage]
 }
@@ -101,10 +102,8 @@ class ServerSideEval @Inject() (val dbConfigProvider: DatabaseConfigProvider,
                 ${inputFile}, CURRENT_TIMESTAMP())
                   """.andThen(sql"select last_insert_id()".as[Int])).withPinnedSession
             ).map { wat =>
-              println(wat)
-
               rabbitMq ! QueueMessage(ServerSideEvalMessage(wat.head, loggedInTeam.contest.id,
-                loggedInTeam.team.localId, cext, solutionOpt.get,
+                loggedInTeam.team.localId, cext, DateTime.now, solutionOpt.get,
                 inputFile), queue = "contester.evalrequests")
 
               Redirect(routes.ServerSideEval.index)
