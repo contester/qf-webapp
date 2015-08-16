@@ -22,6 +22,15 @@ import scala.concurrent.Future
 case class RejudgeSubmitRange(range: String)
 case class PostClarification(id: Option[Int], contest: Int, problem: String, text: String, date: Option[DateTime], hidden: Boolean)
 
+case class Clarification1(id: Int, contest: Int, problem: String, text: String, date: DateTime, hidden: Boolean)
+object Clarification1 {
+  implicit val getResult = GetResult(r =>
+    Clarification1(r.nextInt(), r.nextInt(), r.nextString(), r.nextString(), new DateTime(r.nextTimestamp()),
+      r.nextBoolean())
+  )
+}
+
+
 @Singleton
 class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
                              monitorModel: Monitor,
@@ -117,26 +126,25 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     Submits.getSubmitById(db, submitId).map(x => Ok(html.admin.showsubmit(x)))
   }
 
+  def showQandA(contestId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+    db.run(
+      sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications""".as[Clarification1]).map { clarifications =>
+        Ok(html.admin.qanda(clarifications))
+    }
+  }
+
   val postClarificationForm = Form {
     mapping("id" -> optional(number),
       "contest" -> number,
       "problem" -> text,
       "text" -> nonEmptyText,
       "date" -> optional(jodaDate),
-      "hidden" -> boolean
+      "isHidden" -> boolean
     )(PostClarification.apply)(PostClarification.unapply)
   }
 
   def postNewClarification(contestId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     Future.successful(Ok(html.admin.postclarification(postClarificationForm, contestId)))
-  }
-
-  case class Clarification1(id: Int, contest: Int, problem: String, text: String, date: DateTime, hidden: Boolean)
-  object Clarification1 {
-    implicit val getResult = GetResult(r =>
-      Clarification1(r.nextInt(), r.nextInt(), r.nextString(), r.nextString(), new DateTime(r.nextTimestamp()),
-        r.nextBoolean())
-    )
   }
 
   import utils.Db._

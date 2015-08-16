@@ -28,7 +28,7 @@
         @b3.text(form("problem"), '_label -> "Задача")
         @b3.textarea(form("text"), '_label -> "Clarification text", 'rows -> 6)
         @b3.datetime(form("date"), '_label -> "Timestamp")
-        @b3.checkbox(form("hidden"), '_label -> "Hidden")
+        @b3.checkbox(form("isHidden"), '_text -> "Hidden")
         @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Update}
         }
     </div>

@@ -1,0 +1,19 @@
+@(clarifications: Seq[Clarification1])(implicit request: RequestHeader)
+
+@main("Contester", tab = "qanda", variant=AdminDisplayMode) {
+
+<table class="table table-hover table-bordered table-responsive">
+    <thead>
+    <tr><th>ID</th><th>Contest</th><th>Problem</th><th>Text</th><th>Time</th>
+        <th>Hidden</th></tr>
+    </thead>
+    <tbody>
+    @for(s <- clarifications) {
+    <tr><th scope="row"><a href="@routes.AdminApplication.postUpdateClarification(s.id)">@s.id</a></th>
+        <td>@s.contest</td>
+        <td>@s.problem</td><td>@s.text</td><td>s.date</td><td>s.hidden</td></tr>
+    }
+
+    </tbody>
+</table>
+}

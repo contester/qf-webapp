@@ -33,6 +33,7 @@ POST /admin/rejudgeRange controllers.AdminApplication.rejudgeRange
 GET /admin/postNewClarification/:contestId controllers.AdminApplication.postNewClarification(contestId: Int)
 GET /admin/updateClarification/:clrId controllers.AdminApplication.postUpdateClarification(clrId: Int)
 POST /admin/postClarification controllers.AdminApplication.postClarification
+GET /admin/qanda/:contestId controllers.AdminApplication.showQandA(contestId: Int)
 
 GET /admin/showsubmit/:id controllers.AdminApplication.showSubmit(id: Int)
 
