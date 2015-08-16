@@ -30,6 +30,14 @@ object Clarification1 {
   )
 }
 
+case class ClarificationRequest1(id: Int, contest: Int, team: Int, problem: String, text: String, arrived: DateTime, answer: String, status: Boolean)
+
+object ClarificationRequest1 {
+  implicit val getResult = GetResult(r =>
+    ClarificationRequest1(r.nextInt(), r.nextInt(), r.nextInt(), r.nextString(), r.nextString(), new DateTime(r.nextTimestamp()),
+    r.nextString(), r.nextBoolean())
+  )
+}
 
 @Singleton
 class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
@@ -128,8 +136,12 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   def showQandA(contestId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     db.run(
-      sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications""".as[Clarification1]).map { clarifications =>
-        Ok(html.admin.qanda(clarifications))
+      sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications where cl_contest_idf = $contestId"""
+        .as[Clarification1]).zip(db.run(
+      sql"""select ID, Contest, Team, Problem, Request, Arrived, Answer, Status from ClarificationRequests where Contest = $contestId"""
+        .as[ClarificationRequest1])).map {
+      case (clarifications, clReqs) =>
+        Ok(html.admin.qanda(clarifications, clReqs))
     }
   }
 

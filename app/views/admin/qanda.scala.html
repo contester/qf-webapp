@@ -1,6 +1,10 @@
-@(clarifications: Seq[Clarification1])(implicit request: RequestHeader)
+@(clarifications: Seq[Clarification1], clReqs: Seq[ClarificationRequest1])(implicit request: RequestHeader)
 
 @main("Contester", tab = "qanda", variant=AdminDisplayMode) {
+
+<div class="panel panel-success">
+    <div class="panel-heading"><h3 class="panel-title">Clarifications</h3></div>
+    <div class="panel-body">
 
 <table class="table table-hover table-bordered table-responsive">
     <thead>
@@ -11,9 +15,30 @@
     @for(s <- clarifications) {
     <tr><th scope="row"><a href="@routes.AdminApplication.postUpdateClarification(s.id)">@s.id</a></th>
         <td>@s.contest</td>
-        <td>@s.problem</td><td>@s.text</td><td>s.date</td><td>s.hidden</td></tr>
+        <td>@s.problem</td><td>@s.text</td><td>@s.date</td><td>@s.hidden</td></tr>
     }
 
     </tbody>
 </table>
+    </div>
+</div>
+
+<div class="panel panel-success">
+    <div class="panel-heading"><h3 class="panel-title">Clarification requests</h3></div>
+    <div class="panel-body">
+<table class="table table-hover table-bordered table-responsive">
+    <thead>
+    <tr><th>ID</th><th>Contest</th><th>Team</th><th>Problem</th><th>Text</th><th>Time</th>
+        <th>Answer</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+    @for(s <- clReqs) {
+    <tr><th scope="row"><a href="@routes.AdminApplication.postUpdateClarification(s.id)">@s.id</a></th>
+        <td>@s.contest</td><td>@s.team</td>
+        <td>@s.problem</td><td>@s.text</td><td>@s.arrived</td><td>@s.answer</td><td>@s.status</td></tr>
+    }
+
+    </tbody>
+</table>
+        </div></div>
 }
