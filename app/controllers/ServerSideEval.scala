@@ -28,9 +28,10 @@ case class ServerSideData(compiler: Int)
 
 import com.github.nscala_time.time.Imports.DateTime
 
-case class ServerSideEvalMessage(id: Int, contest: Int, team: Int, ext: String, arrived: DateTime, source: Array[Byte], input: Array[Byte])
-object ServerSideEvalMessage {
-  implicit val formatServerSideEvalMessage = Json.format[ServerSideEvalMessage]
+case class ServerSideEvalID(id: Int)
+
+object ServerSideEvalID {
+  implicit val formatServerSideEvalMessage = Json.format[ServerSideEvalID]
 }
 
 class ServerSideEval @Inject() (val dbConfigProvider: DatabaseConfigProvider,
@@ -102,9 +103,9 @@ class ServerSideEval @Inject() (val dbConfigProvider: DatabaseConfigProvider,
                 ${inputFile}, CURRENT_TIMESTAMP())
                   """.andThen(sql"select last_insert_id()".as[Int])).withPinnedSession
             ).map { wat =>
-              rabbitMq ! QueueMessage(ServerSideEvalMessage(wat.head, loggedInTeam.contest.id,
-                loggedInTeam.team.localId, cext, DateTime.now, solutionOpt.get,
-                inputFile), queue = "contester.evalrequests")
+              wat.foreach { wid =>
+                rabbitMq ! QueueMessage(ServerSideEvalID(wid), queue = "contester.evalrequests")
+              }
 
               Redirect(routes.ServerSideEval.index)
             }
