@@ -7,13 +7,14 @@ import play.api.Logger
 import play.api.libs.iteratee.Concurrent.Channel
 import play.api.libs.iteratee.{Concurrent, Enumerator}
 import play.api.libs.json.{JsValue, Json, Writes}
-import slick.jdbc.JdbcBackend
+import slick.jdbc.{GetResult, JdbcBackend}
 
 import scala.collection.mutable
 
 object StatusActor {
   def props(db: JdbcBackend#DatabaseDef) = Props(classOf[StatusActor], db)
 
+  case object Init
   case object Tick
   case object RefreshTick
   case class Join(loggedInTeam: LoggedInTeam)
@@ -52,6 +53,16 @@ object StatusActor {
   }
 }
 
+case class Message2(id: Int, contest: Int, team: Int, kind: String, data: JsValue) {
+  def asKJson = Json.obj("kind" -> kind, "msgid" -> id, "data" -> data)
+}
+
+object Message2 {
+  implicit val getResult = GetResult(r =>
+    Message2(r.nextInt(), r.nextInt(), r.nextInt(), r.nextString(), Json.parse(r.nextString()))
+  )
+}
+
 class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   import StatusActor._
   import context.dispatcher
@@ -63,13 +74,15 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   val refreshTick =
     context.system.scheduler.schedule(30 seconds, 30 seconds, self, RefreshTick)
 
+  context.system.scheduler.scheduleOnce(0 seconds, self, Init)
+
   import com.github.nscala_time.time.Imports._
 
   val contestBroadcasts = mutable.Map[Int, (Enumerator[JsValue], Channel[JsValue])]()
   val contestStates = mutable.Map[Int, Contest]()
   val teamBroadcasts = mutable.Map[(Int, Int), (Enumerator[JsValue], Channel[JsValue])]()
 
-  val unacked = mutable.Map[(Int, Int), mutable.Map[Int, (String, JsValue)]]()
+  val unacked = mutable.Map[(Int, Int), mutable.Map[Int, Message2]]()
 
   private def newCBr(id: Int) =
     synchronized {
@@ -79,25 +92,37 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   private def newTeamBr(contest: Int, team: Int) =
     teamBroadcasts.getOrElseUpdate((contest, team), Concurrent.broadcast[JsValue])
 
-  private def finishedToJson(s: AnnoSubmit) =
-    Json.obj("kind" -> "submit", "data" -> Json.toJson(s))
-
   private def contestToJson(c: Contest) =
     Json.obj("kind" -> "contest", "data" -> Json.toJson(c))
 
-  var iid: Int = 1
-
   private def getUnacked(contest: Int, team: Int) =
-    unacked.getOrElseUpdate((contest, team), mutable.Map[Int, (String, JsValue)]())
+    unacked.getOrElseUpdate((contest, team), mutable.Map[Int, Message2]())
 
-  private def pushPersistent(contest: Int, team: Int, kind: String, data: JsValue) = {
-    val m = getUnacked(contest, team)
-    iid+=1
-    m += (iid -> (kind, data))
-    newTeamBr(contest, team)._2.push(Json.obj("kind" -> kind, "msgid" -> iid, "data" -> data))
-  }
+  import slick.driver.MySQLDriver.api._
+
+  private def pushPersistent(contest: Int, team: Int, kind: String, data: JsValue) =
+    db.run(
+      sqlu"""insert into Messages2 (Contest, Team, Kind, Value) values ($contest, $team, $kind, ${Json.stringify(data)})"""
+        .andThen(sql"select last_insert_id()".as[Int]).withPinnedSession).map { iid =>
+      for (id <- iid) {
+        self ! Message2(id, contest, team, kind, data)
+      }
+    }
+
+  private def loadPersistentMessages =
+    db.run(
+      sql"""select ID, Contest, Team, Kind, Value from Messages2 where Seen != 1""".as[Message2]
+    ).map { msgs =>
+      for(msg <- msgs) {
+        self ! msg
+      }
+    }
 
   def receive = {
+    case Init => {
+      loadPersistentMessages
+    }
+
     case finished: FinishedTesting => {
       Logger.info(s"FT: $finished")
 
@@ -109,19 +134,23 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     }
 
     case Ack(loggedInTeam, msgid) => {
-      val m = getUnacked(loggedInTeam.contest.id, loggedInTeam.team.localId)
-      m.-=(msgid)
+      getUnacked(loggedInTeam.contest.id, loggedInTeam.team.localId) -= msgid
+      db.run(sqlu"update Messages2 set Seen = 1 where ID = $msgid")
     }
 
     case annotated: AnnoSubmit => {
-      Logger.info(s"${finishedToJson(annotated)}")
-
       pushPersistent(annotated.contest, annotated.team, "submit", Json.toJson(annotated))
     }
 
     case evalDone: CustomTestResult => {
       pushPersistent(evalDone.contest, evalDone.team, "custom", Json.toJson(evalDone))
       sender ! ()
+    }
+
+    case msg2: Message2 => {
+      val m = getUnacked(msg2.contest, msg2.team)
+      m += (msg2.id -> msg2)
+      newTeamBr(msg2.contest, msg2.team)._2.push(msg2.asKJson)
     }
 
     case NewContestState(c) => {
@@ -164,7 +193,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       }
 
       val stored = getUnacked(loggedInTeam.contest.id, loggedInTeam.team.localId).map {
-        case (msgid, (kind, data)) => Json.obj("kind" -> kind, "msgid" -> msgid, "data" -> data)
+        case (msgid, msg) => msg.asKJson
       }
 
       val eStored = if (stored.isEmpty) Enumerator.empty[JsValue] else Enumerator.enumerate[JsValue](stored)
