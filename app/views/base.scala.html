@@ -1,7 +1,5 @@
-@(title: String, styles: Html = Html(""), scripts: Html = Html(""), navbar: Html = Html(""))(content: Html)
-
+@(title: String, styles: Html = Html(""), scripts: Html = Html(""))(body: Html)
 <!DOCTYPE html>
-
 <html>
 <head>
     <title>@title</title>
@@ -23,11 +21,4 @@
     $.material.init()
     </script>
     @scripts
-</head>
-<body>
-@navbar
-<div class="container">
-    @content
-</div>
-</body>
-</html>
+</head><body>@body</body></html>
