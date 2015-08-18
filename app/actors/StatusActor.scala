@@ -1,7 +1,7 @@
 package actors
 
 import akka.actor.{Actor, Props}
-import controllers.FinishedTesting
+import controllers.{CustomTestResult, FinishedTesting}
 import models._
 import play.api.Logger
 import play.api.libs.iteratee.Concurrent.Channel
@@ -69,7 +69,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   val contestStates = mutable.Map[Int, Contest]()
   val teamBroadcasts = mutable.Map[(Int, Int), (Enumerator[JsValue], Channel[JsValue])]()
 
-  val unacked = mutable.Map[(Int, Int), mutable.Map[Int, JsValue]]()
+  val unacked = mutable.Map[(Int, Int), mutable.Map[Int, (String, JsValue)]]()
 
   private def newCBr(id: Int) =
     synchronized {
@@ -88,7 +88,14 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   var iid: Int = 1
 
   private def getUnacked(contest: Int, team: Int) =
-    unacked.getOrElseUpdate((contest, team), mutable.Map[Int, JsValue]())
+    unacked.getOrElseUpdate((contest, team), mutable.Map[Int, (String, JsValue)]())
+
+  private def pushPersistent(contest: Int, team: Int, kind: String, data: JsValue) = {
+    val m = getUnacked(contest, team)
+    iid+=1
+    m += (iid -> (kind, data))
+    newTeamBr(contest, team)._2.push(Json.obj("kind" -> kind, "msgid" -> iid, "data" -> data))
+  }
 
   def receive = {
     case finished: FinishedTesting => {
@@ -109,14 +116,12 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     case annotated: AnnoSubmit => {
       Logger.info(s"${finishedToJson(annotated)}")
 
-      val m = getUnacked(annotated.contest, annotated.team)
+      pushPersistent(annotated.contest, annotated.team, "submit", Json.toJson(annotated))
+    }
 
-      val j = Json.toJson(annotated)
-      iid+=1
-      m += (iid -> j)
-      val jj = Json.obj("kind" -> "submit", "msgid" -> iid, "data" -> j)
-
-      newTeamBr(annotated.contest, annotated.team)._2.push(jj)
+    case evalDone: CustomTestResult => {
+      pushPersistent(evalDone.contest, evalDone.team, "custom", Json.toJson(evalDone))
+      sender ! ()
     }
 
     case NewContestState(c) => {
@@ -159,7 +164,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       }
 
       val stored = getUnacked(loggedInTeam.contest.id, loggedInTeam.team.localId).map {
-        case (msgid, j) => Json.obj("kind" -> "submit", "msgid" -> msgid, "data" -> j)
+        case (msgid, (kind, data)) => Json.obj("kind" -> kind, "msgid" -> msgid, "data" -> data)
       }
 
       val eStored = if (stored.isEmpty) Enumerator.empty[JsValue] else Enumerator.enumerate[JsValue](stored)

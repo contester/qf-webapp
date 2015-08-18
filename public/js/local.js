@@ -116,6 +116,10 @@ function listenOnSocket(path, iconbase) {
                     notifyMe("Problem " + obj.data.problem, icon, obj.data.result.message)
                 }
 
+                if (obj.kind == 'custom') {
+                    notifyMe("Server-side test", iconbase + 'icpc_logo.png', 'Completed.');
+                }
+
                 if (obj.msgid) {
                     chatSocket.send(JSON.stringify({ 'kind': 'ack', 'msgid': obj.msgid }))
                 }

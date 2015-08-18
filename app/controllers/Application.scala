@@ -44,6 +44,12 @@ object SubmitMessage {
   implicit val formatSubmitMessage = Json.format[SubmitMessage]
 }
 
+case class CustomTestResult(id: Int, contest:Int, team: Int)
+
+object CustomTestResult {
+  implicit val formatCustomTestResult = Json.format[CustomTestResult]
+}
+
 @Singleton
 class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
                              monitorModel: Monitor,
@@ -171,6 +177,17 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   rabbitMq ! subscription
 
+  rabbitMq ! new Subscription {
+    def config = channel(qos = 1) {
+      consume(queue("contester.evals")) {
+        body(as[CustomTestResult]) { submit =>
+          Logger.info(s"Received $submit")
+          val acked = statusActor.ask(submit)(1 minute)
+          ack(acked)
+        }
+      }
+    }
+  }
 
   def socket = WebSocket.tryAccept[JsValue] { implicit request =>
     authorized(anyUser).flatMap {
