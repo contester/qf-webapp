@@ -34,6 +34,8 @@ GET /admin/postNewClarification/:contestId controllers.AdminApplication.postNewC
 GET /admin/updateClarification/:clrId controllers.AdminApplication.postUpdateClarification(clrId: Int)
 POST /admin/postClarification controllers.AdminApplication.postClarification
 GET /admin/qanda/:contestId controllers.AdminApplication.showQandA(contestId: Int)
+POST /admin/postAnswer/:clrId controllers.AdminApplication.postAnswer(clrId: Int)
+GET /admin/postAnswer/:clrId controllers.AdminApplication.postAnswerForm(clrId: Int)
 
 GET /admin/showsubmit/:id controllers.AdminApplication.showSubmit(id: Int)
 

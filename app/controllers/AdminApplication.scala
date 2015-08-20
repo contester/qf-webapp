@@ -30,7 +30,8 @@ object Clarification1 {
   )
 }
 
-case class ClarificationRequest1(id: Int, contest: Int, team: Int, problem: String, text: String, arrived: DateTime, answer: String, status: Boolean)
+case class ClarificationRequest1(id: Int, contest: Int, team: Int, problem: String, text: String, arrived: DateTime,
+                                 answer: String, status: Boolean)
 
 object ClarificationRequest1 {
   implicit val getResult = GetResult(r =>
@@ -38,6 +39,8 @@ object ClarificationRequest1 {
     r.nextString(), r.nextBoolean())
   )
 }
+
+case class ClarificationResponse(answer: String)
 
 @Singleton
 class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
@@ -197,5 +200,43 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     )
   }
 
+  private val clarificationResponseForm = Form {
+    mapping("answer" -> text)(ClarificationResponse.apply)(ClarificationResponse.unapply)
+  }
 
+  private def getClrById(clrId: Int) =
+    db.run(sql"""select ID, Contest, Team, Problem, Request, Arrived, Answer, Status from ClarificationRequests where ID = $clrId"""
+      .as[ClarificationRequest1]).map(_.headOption)
+
+  private val answerList = Map(
+    "No comments" -> "No comments",
+    "Yes" -> "Yes",
+    "No" -> "No",
+    "Pending" -> "Pending"
+  )
+
+  def postAnswerForm(clrId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+    getClrById(clrId).map { optClr =>
+      optClr.map { clr =>
+        BadRequest(html.admin.postanswer(
+          clarificationResponseForm.fill(ClarificationResponse(clr.answer)), clr, answerList.toSeq))
+      }.getOrElse(Redirect(routes.AdminApplication.showQandA(1)))
+    }
+  }
+
+  def postAnswer(clrId: Int) = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
+    getClrById(clrId).flatMap { optClr =>
+      optClr.map { clr =>
+        clarificationResponseForm.bindFromRequest.fold(
+          formWithErrors => Future.successful(BadRequest(html.admin.postanswer(formWithErrors, clr, answerList.toSeq))),
+          data => {
+            db.run(sqlu"""update ClarificationRequests set Answer = ${data.answer}, Status = 1 where ID = $clrId""").map { _ =>
+              Redirect(routes.AdminApplication.showQandA(clr.contest))
+            }
+          }
+        )
+      }.getOrElse(Future.successful(Redirect(routes.AdminApplication.showQandA(1))))
+    }
+
+  }
 }

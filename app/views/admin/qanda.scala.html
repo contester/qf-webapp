@@ -33,7 +33,7 @@
     </thead>
     <tbody>
     @for(s <- clReqs) {
-    <tr><th scope="row"><a href="@routes.AdminApplication.postUpdateClarification(s.id)">@s.id</a></th>
+    <tr><th scope="row"><a href="@routes.AdminApplication.postAnswerForm(s.id)">@s.id</a></th>
         <td>@s.contest</td><td>@s.team</td>
         <td>@s.problem</td><td>@s.text</td><td>@s.arrived</td><td>@s.answer</td><td>@s.status</td></tr>
     }

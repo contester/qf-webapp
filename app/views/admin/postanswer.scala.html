@@ -1,0 +1,33 @@
+@(form: Form[ClarificationResponse], clr: ClarificationRequest1, answers: Seq[(String, String)])(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@import helper.Implicits._
+@import b3.vertical.fieldConstructor
+@main("Contester", tab = "postClarification", variant=AdminDisplayMode) {
+@flash.get("success").map { message =>
+<div class="alert alert-success" role="alert">
+    @message
+</div>
+}
+<div class="panel panel-success">
+    <div class="panel-heading"><h3 class="panel-title">Answer</h3></div>
+    <div class="panel-body">
+        @b3.form(controllers.routes.AdminApplication.postAnswer(clr.id), 'enctype -> "multipart/form-data") {
+        @form.globalError.map { error =>
+        <div class="alert alert-danger" role="alert">
+            <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
+            <span class="sr-only">Error:</span>
+            @error.message
+        </div>
+        }
+
+        @b3.static("ID"){ @clr.id }
+        @b3.static("Contest"){ @clr.contest }
+        @b3.static("Team"){ @clr.team }
+        @b3.static("Problem"){ @clr.problem }
+        @b3.static("Question"){ @clr.text }
+        @b3.static("Timestamp"){ @clr.arrived }
+        @b3.select(form("answer"), options=answers, '_label -> "Answer")
+        @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Update}
+        }
+    </div>
+</div>
+}

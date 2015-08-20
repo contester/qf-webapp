@@ -65,7 +65,7 @@ class AdminAuthForms @Inject() (val messagesApi: MessagesApi, val dbConfigProvid
   }
 
   def login = Action { implicit request =>
-    Ok(html.adminlogin(loginForm))
+    Ok(html.admin.login(loginForm))
   }
 
   def logout = Action.async { implicit request =>
