@@ -61,6 +61,16 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   private def anyUser(account: Admin): Future[Boolean] = Future.successful(true)
 
+  private def spectator(contestId: Int)(account: Admin): Future[Boolean] =
+    Future.successful(account.canSpectate(contestId))
+
+  import slick.driver.MySQLDriver.api._
+
+  private def canSeeSubmit(submitId: Int)(account: Admin): Future[Boolean] =
+    db.run(sql"""select Contest from NewSubmits where ID = $submitId""".as[Int]).map { cids =>
+      cids.exists(account.canSpectate(_))
+    }
+
   private def showSubs(contestId: Int, limit: Option[Int])(implicit request: RequestHeader) =
     db.run(Contests.getContest(contestId)).map(_.headOption).zip(
       db.run(Contests.getTeams(contestId)).map(_.map(x => x.localId -> x).toMap)
@@ -99,7 +109,6 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
       }
     } else com.google.common.collect.Range.singleton[Integer](item.toInt)
 
-  import slick.driver.MySQLDriver.api._
 
   private def rejudgeRangeEx(range: String) = {
     val checks = {
@@ -118,7 +127,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-  def submits(contestId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+  def submits(contestId: Int) = AsyncStack(AuthorityKey -> spectator(contestId)) { implicit request =>
     showSubs(contestId, None)
   }
 
@@ -144,7 +153,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     Future.successful(Redirect(routes.AdminApplication.index))
   }
 
-  def showSubmit(submitId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+  def showSubmit(submitId: Int) = AsyncStack(AuthorityKey -> canSeeSubmit(submitId)) { implicit request =>
     Submits.getSubmitById(db, submitId).map(x => Ok(html.admin.showsubmit(x)))
   }
 
