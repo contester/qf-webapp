@@ -133,6 +133,11 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     )
   }
 
+  def rejudgeSubmit(submitId: Int) = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
+    rabbitMq ! QueueMessage(SubmitMessage(submitId), queue = "contester.submitrequests")
+    Future.successful(Redirect(routes.AdminApplication.index))
+  }
+
   def showSubmit(submitId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     Submits.getSubmitById(db, submitId).map(x => Ok(html.admin.showsubmit(x)))
   }
