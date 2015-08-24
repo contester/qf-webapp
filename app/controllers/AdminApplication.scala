@@ -3,6 +3,7 @@ package controllers
 import javax.inject.{Inject, Singleton}
 
 import akka.actor.{ActorSystem, Props}
+import com.google.common.collect.ImmutableRangeSet
 import com.spingo.op_rabbit.{QueueMessage, RabbitControl}
 import jp.t2v.lab.play2.auth.AuthElement
 import models._
@@ -76,41 +77,46 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     showSubs(1, Some(20))
   }
 
-  case class IdRange(left: Option[Int], right: Option[Int]) extends Function[Int, Boolean] {
-    def apply(id: Int) =
-      left.map(_ <= id).getOrElse(true) &&
-      right.map(_ >= id).getOrElse(true)
-  }
+  private val rangeRe = "(\\d*)\\.\\.(\\d*)".r
 
-  val rangeRe = "(\\d*)\\.\\.(\\d*)".r
-
-  def parseItem(item: String): Either[Int, IdRange] =
+  private def parseItem(item: String): com.google.common.collect.Range[Integer] =
     if (item.contains("..")) {
       item match {
         case rangeRe(left, right) =>
-          Right(IdRange(if (left.isEmpty) None else Some(left.toInt), if (right.isEmpty) None else Some(right.toInt)))
+          if (left.isEmpty) {
+            if (right.isEmpty) {
+              com.google.common.collect.Range.all[Integer]()
+            } else {
+              com.google.common.collect.Range.atMost[Integer](right.toInt)
+            }
+          } else {
+            if (right.isEmpty) {
+              com.google.common.collect.Range.atLeast[Integer](left.toInt)
+            } else {
+              com.google.common.collect.Range.closed[Integer](left.toInt, right.toInt)
+            }
+          }
       }
-    } else Left(item.toInt)
+    } else com.google.common.collect.Range.singleton[Integer](item.toInt)
 
   import slick.driver.MySQLDriver.api._
 
-  def rejudgeRangeEx(range: String) = {
-    val items = range.split(',').map(parseItem)
-    val numbers = items.filter(_.isLeft).map(_.left.get).toSet
-    val ranges = items.filter(_.isRight).map(_.right.get)
-
-    val checks: Seq[Function[Int, Boolean]] = ranges.toSeq.+:(numbers)
+  private def rejudgeRangeEx(range: String) = {
+    val checks = {
+      val builder = ImmutableRangeSet.builder[Integer]()
+      range.split(',').map(parseItem).foreach(builder.add)
+      builder.build()
+    }
 
     db.run(sql"""select ID from NewSubmits order by ID""".as[Int]).map { submits =>
       for (id <- submits) {
-        if (checks.exists(x => x(id))) {
+        if (checks.contains(id)) {
           rabbitMq ! QueueMessage(SubmitMessage(id), queue = "contester.submitrequests")
         }
       }
       ()
     }
   }
-
 
   def submits(contestId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     showSubs(contestId, None)
