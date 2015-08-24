@@ -64,6 +64,9 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   private def spectator(contestId: Int)(account: Admin): Future[Boolean] =
     Future.successful(account.canSpectate(contestId))
 
+  private def administrator(contestId: Int)(account: Admin): Future[Boolean] =
+    Future.successful(account.canModify(contestId))
+
   import slick.driver.MySQLDriver.api._
 
   private def getSubmitCid(submitId: Int) =
@@ -79,20 +82,20 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
       cids.exists(account.canModify(_))
     }
 
-  private def showSubs(contestId: Int, limit: Option[Int])(implicit request: RequestHeader) =
+  private def showSubs(contestId: Int, limit: Option[Int], account: Admin)(implicit request: RequestHeader) =
     db.run(Contests.getContest(contestId)).map(_.headOption).zip(
       db.run(Contests.getTeams(contestId)).map(_.map(x => x.localId -> x).toMap)
     ).zip(db.run(Submits.getContestSubmits(contestId))).flatMap {
       case ((Some(contest), teamMap), submits) =>
         Submits.groupAndAnnotate(db, contest.schoolMode, limit.map(submits.take).getOrElse(submits)).map { fullyDescribedSubmits =>
-          Ok(html.admin.submits(fullyDescribedSubmits, teamMap))
+          Ok(html.admin.submits(fullyDescribedSubmits, teamMap, contest, account))
         }
       case _ =>
-        Future.successful(Ok(html.admin.submits(Nil, Map())))
+        Future.successful(Redirect(routes.AdminApplication.index))
     }
 
   def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
-    showSubs(1, Some(20))
+    showSubs(1, Some(20), loggedIn)
   }
 
   private val rangeRe = "(\\d*)\\.\\.(\\d*)".r
@@ -138,7 +141,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   }
 
   def submits(contestId: Int) = AsyncStack(AuthorityKey -> spectator(contestId)) { implicit request =>
-    showSubs(contestId, None)
+    showSubs(contestId, None, loggedIn)
   }
 
   val rejudgeSubmitRangeForm = Form {
@@ -269,6 +272,5 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
         )
       }.getOrElse(Future.successful(Redirect(routes.AdminApplication.showQandA(1))))
     }
-
   }
 }
