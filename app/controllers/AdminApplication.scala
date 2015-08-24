@@ -66,9 +66,17 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   import slick.driver.MySQLDriver.api._
 
+  private def getSubmitCid(submitId: Int) =
+    db.run(sql"""select Contest from NewSubmits where ID = $submitId""".as[Int])
+
   private def canSeeSubmit(submitId: Int)(account: Admin): Future[Boolean] =
-    db.run(sql"""select Contest from NewSubmits where ID = $submitId""".as[Int]).map { cids =>
+    getSubmitCid(submitId).map { cids =>
       cids.exists(account.canSpectate(_))
+    }
+
+  private def canRejudgeSubmit(submitId: Int)(account: Admin): Future[Boolean] =
+    getSubmitCid(submitId).map { cids =>
+      cids.exists(account.canModify(_))
     }
 
   private def showSubs(contestId: Int, limit: Option[Int])(implicit request: RequestHeader) =
@@ -110,20 +118,22 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     } else com.google.common.collect.Range.singleton[Integer](item.toInt)
 
 
-  private def rejudgeRangeEx(range: String) = {
+  private def rejudgeRangeEx(range: String, account: Admin): Future[Seq[Int]] = {
     val checks = {
       val builder = ImmutableRangeSet.builder[Integer]()
       range.split(',').map(parseItem).foreach(builder.add)
       builder.build()
     }
 
-    db.run(sql"""select ID from NewSubmits order by ID""".as[Int]).map { submits =>
-      for (id <- submits) {
-        if (checks.contains(id)) {
-          rabbitMq ! QueueMessage(SubmitMessage(id), queue = "contester.submitrequests")
-        }
+    db.run(sql"""select ID, Contest from NewSubmits order by ID""".as[(Int, Int)]).map { submits =>
+      val filtered = submits.filter { id =>
+        checks.contains(id._1) && account.canModify(id._2)
       }
-      ()
+
+      for (id <- filtered) {
+        rabbitMq ! QueueMessage(SubmitMessage(id._1), queue = "contester.submitrequests")
+      }
+      filtered.map(_._1)
     }
   }
 
@@ -142,8 +152,10 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   def rejudgeRange = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
     rejudgeSubmitRangeForm.bindFromRequest.fold(
       formWithErrors => Future.successful(BadRequest(html.admin.rejudge(formWithErrors))),
-      data => rejudgeRangeEx(data.range).map { _ =>
-        Redirect(routes.AdminApplication.rejudgePage)
+      data => rejudgeRangeEx(data.range, loggedIn).map { rejudged =>
+        Redirect(routes.AdminApplication.rejudgePage).flashing(
+          "success" -> rejudged.mkString(" ")
+        )
       }
     )
   }
