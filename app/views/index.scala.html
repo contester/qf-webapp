@@ -15,14 +15,15 @@
 
         <table class="table table-hover table-bordered table-responsive">
             <thead>
-            <tr><th>Время</th><th>Задача</th><th>Попытка</th><th>Язык</th><th>Результат</th>
+            <tr><th>ID</th><th>Время</th><th>Задача</th><th>Попытка</th><th>Язык</th><th>Результат</th>
                 <th>Баллы</th>
                 <th>Время работы</th>
             <th>Память</th></tr>
             </thead>
             <tbody>
             @for(s <- subs) {
-            <tr><td>@s.submit.submitId.arrived.asString</td><td>@s.submit.submitId.problem.id</td><td>@s.index</td><td>@s.submit.submitId.ext</td>
+            <tr><th scope="row"><a href="@routes.Application.showSubmit(s.submit.submitId.id)">@s.submit.submitId.id</a></th>
+                <td>@s.submit.submitId.arrived.asString</td><td>@s.submit.submitId.problem.id</td><td>@s.index</td><td>@s.submit.submitId.ext</td>
                 @if(s.result.success) {
                 <td class="success">
                     } else {

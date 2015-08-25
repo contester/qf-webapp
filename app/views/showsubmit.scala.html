@@ -5,15 +5,22 @@
 @contestteaminfo(loggedIn)
 
 @for(sub <- subopt) {
-<table class="table table-hover table-bordered table-responsive">
-    <thead>
-    <tr><th>Тест</th><th>Результат</th><th>Время</th><th>Память</th></tr>
-    </thead>
-    <tbody>
-    @for(s <- sub.fsub.details) {
-    <tr><td>@s.test</td><td>@s.resultString</td><td>@s.time</td><td>@s.memory</td></tr>
-    }
-    </tbody>
-</table>
+<div class="row">
+    <div class="col-md-6 well">
+        <pre>@sub.sourceStr</pre>
+    </div>
+    <div class="col-md-6 well">
+        <table class="table table-hover table-bordered table-responsive">
+            <thead>
+            <tr><th>Тест</th><th>Результат</th><th>Время</th><th>Память</th></tr>
+            </thead>
+            <tbody>
+            @for(s <- sub.fsub.details) {
+            <tr><td>@s.test</td><td>@s.resultString</td><td>@s.time</td><td>@s.memory</td></tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
 }
 }

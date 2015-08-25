@@ -77,6 +77,13 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   private def anyUser(account: LoggedInTeam): Future[Boolean] = Future.successful(true)
 
+  private def canSeeSubmit(submitId: Int)(account: LoggedInTeam): Future[Boolean] =
+    db.run(sql"select Contest, Team from NewSubmits where ID = $submitId".as[(Int, Int)]).map { cids =>
+      cids.exists {
+        case (contestId, teamId) => account.contest.id == contestId && account.team.localId == teamId
+      }
+    }
+
   private def getSubmits(team: LoggedInTeam) =
     db.run(Submits.getContestTeamSubmits(team.contest.id, team.team.localId))
 
@@ -162,7 +169,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   val statusActor = system.actorOf(StatusActor.props(db), "status-actor")
 
-  val subscription = new Subscription {
+  rabbitMq ! new Subscription {
     // A qos of 3 will cause up to 3 concurrent messages to be processed at any given time.
     def config = channel(qos = 1) {
       consume(queue("contester.finished")) {
@@ -174,8 +181,6 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
       }
     }
   }
-
-  rabbitMq ! subscription
 
   rabbitMq ! new Subscription {
     def config = channel(qos = 1) {
@@ -211,4 +216,8 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
       }
     }
  }
+
+  def showSubmit(submitId: Int) = AsyncStack(AuthorityKey -> canSeeSubmit(submitId)) { implicit request =>
+    Submits.getSubmitById(db, submitId).map(x => Ok(html.showsubmit(loggedIn, x)))
+  }
 }
