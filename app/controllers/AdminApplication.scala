@@ -163,9 +163,14 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     )
   }
 
-  def rejudgeSubmit(submitId: Int) = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
+  def rejudgeSubmit(submitId: Int) = AsyncStack(parse.multipartFormData, AuthorityKey -> canRejudgeSubmit(submitId)) { implicit request =>
     rabbitMq ! QueueMessage(SubmitMessage(submitId), queue = "contester.submitrequests")
-    Future.successful(Redirect(routes.AdminApplication.index))
+    db.run(sql"select Contest from NewSubmits where ID = $submitId".as[Int]).map { cids =>
+      cids.headOption match {
+        case Some(contestId) => Redirect(routes.AdminApplication.submits(contestId))
+        case None => Redirect(routes.AdminApplication.index)
+      }
+    }
   }
 
   def showSubmit(submitId: Int) = AsyncStack(AuthorityKey -> canSeeSubmit(submitId)) { implicit request =>
