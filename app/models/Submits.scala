@@ -125,7 +125,6 @@ case class ResultEntry(test: Int, result: Int, time: Int, memory: Long, info: In
 }
 
 object ResultEntry {
-
   implicit val getResultEntry = GetResult(r =>
     ResultEntry(r.nextInt(), r.nextInt(), r.nextInt(), r.nextLong(), r.nextInt(), r.nextInt(), r.nextString(), r.nextString())
   )
@@ -313,7 +312,6 @@ object Submits {
           NewSubmits.Problem, Problems.Rating,
           Languages.Ext, Submits.Finished, Submits.Compiled,
           Submits.Passed, Submits.Taken,
-
           Submits.TestingID
           from Contests, Problems, Languages, NewSubmits LEFT join Submits on NewSubmits.ID = Submits.ID where
           NewSubmits.ID = $submitId and NewSubmits.Arrived < Contests.End and NewSubmits.Arrived >= Contests.Start and
