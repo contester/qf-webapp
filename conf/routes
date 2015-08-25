@@ -29,7 +29,7 @@ GET /admin/monitor/:contestId controllers.AdminApplication.monitor(contestId: In
 
 GET /admin/rejudge controllers.AdminApplication.rejudgePage
 POST /admin/rejudgeRange controllers.AdminApplication.rejudgeRange
-POST /admin/rejudgeSubmit/:submitId controllers.AdminApplication.rejudgeSubmit(submitId: Int)
+POST     /admin/rejudgeSubmit/:submitId controllers.AdminApplication.rejudgeSubmit(submitId: Int)
 
 GET /admin/postNewClarification/:contestId controllers.AdminApplication.postNewClarification(contestId: Int)
 GET /admin/updateClarification/:clrId controllers.AdminApplication.postUpdateClarification(clrId: Int)
