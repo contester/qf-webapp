@@ -11,13 +11,12 @@ import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
-import play.api.libs.concurrent.Execution.Implicits.defaultContext
 import play.api.mvc.{RequestHeader, Controller}
 import slick.driver.JdbcProfile
 import slick.jdbc.GetResult
 import views.html
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 package printing {
   case class SubmitData(textOnly: Boolean)
@@ -47,17 +46,19 @@ class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
     sql"""select Filename, Arrived, Printed = 255 from PrintJobs
          where Contest = $contest and Team = $team order by Arrived desc""".as[printing.PrintEntry]
 
-  private def getPrintForm(loggedIn: LoggedInTeam, form: Form[printing.SubmitData])(implicit request: RequestHeader) =
+  private def getPrintForm(loggedIn: LoggedInTeam, form: Form[printing.SubmitData])(implicit request: RequestHeader, ec: ExecutionContext) =
     db.run(getPrintEntryQuery(loggedIn.contest.id, loggedIn.team.localId)).map { printJobs =>
       html.printform(loggedIn, form, printJobs)
     }
 
   def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+    implicit val ec = StackActionExecutionContext
     getPrintForm(loggedIn, printForm).map(Ok(_))
   }
 
   def post = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
+    implicit val ec = StackActionExecutionContext
 
     val parsed = printForm.bindFromRequest
     val solutionOpt = request.body.file("file").map { solution =>
