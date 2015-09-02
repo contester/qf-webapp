@@ -17,18 +17,20 @@ import scala.concurrent.Future
 
 case class AuthData(username: String, password: String)
 
+object AuthData {
+  val form = Form {
+    mapping("username" -> text, "password" -> text)(AuthData.apply)(AuthData.unapply)
+  }
+}
+
 class AuthForms @Inject() (val messagesApi: MessagesApi, val dbConfigProvider: DatabaseConfigProvider, val auth: AuthWrapper)
   extends Controller with LoginLogout with AuthConfigImpl with I18nSupport {
 
   private val dbConfig = dbConfigProvider.get[JdbcProfile]
   private val db = dbConfig.db
 
-  private val loginForm = Form {
-    mapping("username" -> text, "password" -> text)(AuthData.apply)(AuthData.unapply)
-  }
-
   def login = Action { implicit request =>
-    Ok(html.login(loginForm))
+    Ok(html.login(AuthData.form))
   }
 
   def logout = Action.async { implicit request =>
@@ -40,14 +42,13 @@ class AuthForms @Inject() (val messagesApi: MessagesApi, val dbConfigProvider: D
     Users.resolve(db, username)
 
   def authenticate = Action.async { implicit request =>
-    loginForm.bindFromRequest.fold(
+    AuthData.form.bindFromRequest.fold(
       formWithErrors => Future.successful(BadRequest(html.login(formWithErrors))),
       user => doAuth(user.username, user.password).flatMap {
         case Some(found) =>
-          println(found)
           gotoLoginSucceeded(found.username)
 
-        case None => Future.successful(BadRequest(html.login(loginForm.fill(AuthData(user.username, ""))
+        case None => Future.successful(BadRequest(html.login(AuthData.form.fill(AuthData(user.username, ""))
           .withGlobalError("Неверное имя пользователя или пароль"))))
       }
     )
@@ -60,12 +61,8 @@ class AdminAuthForms @Inject() (val messagesApi: MessagesApi, val dbConfigProvid
   private val dbConfig = dbConfigProvider.get[JdbcProfile]
   private val db = dbConfig.db
 
-  private val loginForm = Form {
-    mapping("username" -> text, "password" -> text)(AuthData.apply)(AuthData.unapply)
-  }
-
   def login = Action { implicit request =>
-    Ok(html.admin.login(loginForm))
+    Ok(html.admin.login(AuthData.form))
   }
 
   def logout = Action.async { implicit request =>
@@ -76,13 +73,13 @@ class AdminAuthForms @Inject() (val messagesApi: MessagesApi, val dbConfigProvid
     auth.authAdmin(username, password)
 
   def authenticate = Action.async { implicit request =>
-    loginForm.bindFromRequest.fold(
+    AuthData.form.bindFromRequest.fold(
       formWithErrors => Future.successful(BadRequest(html.login(formWithErrors))),
       user => doAuth(user.username, user.password).flatMap {
         case Some(found) =>
           gotoLoginSucceeded(found.toId)
 
-        case None => Future.successful(BadRequest(html.admin.login(loginForm.fill(AuthData(user.username, ""))
+        case None => Future.successful(BadRequest(html.admin.login(AuthData.form.fill(AuthData(user.username, ""))
           .withGlobalError("Неверное имя пользователя или пароль"))))
       }
     )
