@@ -12,14 +12,12 @@ import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
 import play.api.libs.json.Json
-import play.api.mvc.Controller
+import play.api.mvc.{RequestHeader, Controller}
 import slick.driver.JdbcProfile
 import slick.jdbc.GetResult
 import views.html
-import play.api.libs.concurrent.Execution.Implicits.defaultContext
 
-
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 package serversideeval {
 
@@ -66,20 +64,26 @@ class ServerSideEval @Inject() (val dbConfigProvider: DatabaseConfigProvider,
   private def getEvals(contest: Int, team: Int) =
     db.run(evalQuery(contest, team))
 
+  private def getEvalForm(loggedInTeam: LoggedInTeam, compilers:Seq[Compiler],
+                          form: Form[ServerSideData])(implicit request: RequestHeader, ec: ExecutionContext) =
+    getEvals(loggedInTeam.contest.id, loggedInTeam.team.localId).map { evals =>
+        html.sendwithinput(loggedInTeam, form, Compilers.toSelect(compilers), evals)
+    }
 
   def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
-    db.run(loggedInTeam.contest.getCompilers).zip(getEvals(loggedInTeam.contest.id, loggedInTeam.team.localId)).map {
-      case (compilers, evals) =>
-        Ok(html.sendwithinput(loggedInTeam, serverSideForm, Compilers.toSelect(compilers), evals))
+    implicit val ec = StackActionExecutionContext
+
+    db.run(loggedInTeam.contest.getCompilers).flatMap { compilers =>
+      getEvalForm(loggedIn, compilers, serverSideForm).map(Ok(_))
     }
   }
 
   def post = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
+    implicit val ec = StackActionExecutionContext
 
-    db.run(loggedInTeam.contest.getCompilers).zip(getEvals(loggedInTeam.contest.id, loggedInTeam.team.localId)).flatMap {
-      case (compilers, evals) =>
+    db.run(loggedInTeam.contest.getCompilers).flatMap { compilers =>
         val parsed = serverSideForm.bindFromRequest
         val solutionOpt = request.body.file("file").map { solution =>
           FileUtils.readFileToByteArray(solution.ref.file)
@@ -92,9 +96,7 @@ class ServerSideEval @Inject() (val dbConfigProvider: DatabaseConfigProvider,
         else parsed.withGlobalError("can't open the file")
 
         parsed0.fold(
-          formWithErrors => {
-            Future.successful(BadRequest(html.sendwithinput(loggedInTeam, formWithErrors, Compilers.toSelect(compilers), evals)))
-          },
+          formWithErrors => getEvalForm(loggedInTeam, compilers, formWithErrors).map(BadRequest(_)),
           submitData => {
             val cext = compilers.map(x => x.id -> x).toMap.apply(submitData.compiler).ext
             db.run(
