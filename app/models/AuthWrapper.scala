@@ -10,7 +10,7 @@ import slick.driver.JdbcProfile
 import scala.concurrent.ExecutionContext
 
 object Hasher {
-  val hasher = MessageDigest.getInstance("SHA-1")
+  private val hasher = MessageDigest.getInstance("SHA-1")
 
   def bytesToString(x: Array[Byte]) = x.map("%02X" format _).mkString
 
