@@ -14,14 +14,13 @@ import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
-import play.api.libs.concurrent.Execution.Implicits.defaultContext
 import play.api.libs.iteratee.Iteratee
 import play.api.libs.json._
 import play.api.mvc.{Action, Controller}
 import slick.driver.JdbcProfile
 import views.html
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 case class SubmitData(problem: String, compiler: Int)
 
@@ -66,36 +65,41 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   import com.spingo.op_rabbit.PlayJsonSupport._
 
   def monitor(id: Int) = Action.async { implicit request =>
+    import play.api.libs.concurrent.Execution.Implicits.defaultContext
     monitorModel.getMonitor(id, false).map(x => Ok(html.monitor(x.get.contest, x.get.status)))
   }
 
   def monitorDefault = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
+    implicit val ec = StackActionExecutionContext
     monitorModel.getMonitor(loggedInTeam.contest.id, false).map(x => {
       Ok(html.loggedinmonitor(x.get.contest, x.get.status, loggedInTeam))})
   }
 
   private def anyUser(account: LoggedInTeam): Future[Boolean] = Future.successful(true)
 
-  private def canSeeSubmit(submitId: Int)(account: LoggedInTeam): Future[Boolean] =
+  private def canSeeSubmit(submitId: Int)(account: LoggedInTeam): Future[Boolean] = {
+    import play.api.libs.concurrent.Execution.Implicits.defaultContext
     db.run(sql"select Contest, Team from NewSubmits where ID = $submitId".as[(Int, Int)]).map { cids =>
       cids.exists {
         case (contestId, teamId) => account.contest.id == contestId && account.team.localId == teamId
       }
     }
+  }
 
   private def getSubmits(team: LoggedInTeam) =
     db.run(Submits.getContestTeamSubmits(team.contest.id, team.team.localId))
 
   def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
+    implicit val ec = StackActionExecutionContext
 
     getSubmits(loggedInTeam).flatMap(Submits.groupAndAnnotate(db, loggedInTeam.contest.schoolMode, _)).map { subs =>
       Ok(html.index(loggedInTeam, subs))
     }
   }
 
-  private def getProblems(contest: Int) =
+  private def getProblems(contest: Int)(implicit ec: ExecutionContext) =
     db.run(Contests.getProblems(contest)).map(Problems.toSelect(_))
 
   val submitForm = Form {
@@ -105,11 +109,12 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   private def compilersForForm(compilers: Seq[Compiler]) =
     compilers.map(x => x.id.toString -> x.name)
 
-  private def getProblemsAndCompilers(contestId: Int) =
+  private def getProblemsAndCompilers(contestId: Int)(implicit ec: ExecutionContext) =
     getProblems(contestId).zip(db.run(Contests.getCompilers(contestId)))
 
   def submit = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
+    implicit val ec = StackActionExecutionContext
 
     getProblemsAndCompilers(loggedInTeam.contest.id).map {
       case (problems, compilers) => {
@@ -126,6 +131,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   def submitPost = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
+    implicit val ec = StackActionExecutionContext
 
     getProblemsAndCompilers(loggedInTeam.contest.id).flatMap {
       case (problems, compilers) =>
@@ -170,6 +176,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   val statusActor = system.actorOf(StatusActor.props(db), "status-actor")
 
   rabbitMq ! new Subscription {
+    import play.api.libs.concurrent.Execution.Implicits.defaultContext
     // A qos of 3 will cause up to 3 concurrent messages to be processed at any given time.
     def config = channel(qos = 1) {
       consume(queue("contester.finished")) {
@@ -183,6 +190,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   }
 
   rabbitMq ! new Subscription {
+    import play.api.libs.concurrent.Execution.Implicits.defaultContext
     def config = channel(qos = 1) {
       consume(queue("contester.evals")) {
         body(as[CustomTestResult]) { submit =>
@@ -195,6 +203,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   }
 
   def socket = WebSocket.tryAccept[JsValue] { implicit request =>
+    import play.api.libs.concurrent.Execution.Implicits.defaultContext
     authorized(anyUser).flatMap {
       case Left(result) => Future.successful(Left(result))
       case Right((user, resultUpdater)) => {
@@ -218,6 +227,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
  }
 
   def showSubmit(submitId: Int) = AsyncStack(AuthorityKey -> canSeeSubmit(submitId)) { implicit request =>
+    implicit val ec = StackActionExecutionContext
     Submits.getSubmitById(db, submitId).map(x => Ok(html.showsubmit(loggedIn, x)))
   }
 }
