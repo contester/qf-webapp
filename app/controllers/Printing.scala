@@ -12,7 +12,7 @@ import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
 import play.api.libs.concurrent.Execution.Implicits.defaultContext
-import play.api.mvc.Controller
+import play.api.mvc.{RequestHeader, Controller}
 import slick.driver.JdbcProfile
 import slick.jdbc.GetResult
 import views.html
@@ -47,12 +47,13 @@ class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
     sql"""select Filename, Arrived, Printed = 255 from PrintJobs
          where Contest = $contest and Team = $team order by Arrived desc""".as[printing.PrintEntry]
 
-  def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
-    val loggedInTeam = loggedIn
-
-    db.run(getPrintEntryQuery(loggedInTeam.contest.id, loggedInTeam.team.localId)).map { printJobs =>
-      Ok(html.printform(loggedInTeam, printForm, printJobs))
+  private def getPrintForm(loggedIn: LoggedInTeam, form: Form[printing.SubmitData])(implicit request: RequestHeader) =
+    db.run(getPrintEntryQuery(loggedIn.contest.id, loggedIn.team.localId)).map { printJobs =>
+      html.printform(loggedIn, form, printJobs)
     }
+
+  def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+    getPrintForm(loggedIn, printForm).map(Ok(_))
   }
 
   def post = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
@@ -67,11 +68,7 @@ class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
       else parsed.withGlobalError("can't read file")
 
     parsed0.fold(
-      formWithErrors => {
-        db.run(getPrintEntryQuery(loggedInTeam.contest.id, loggedInTeam.team.localId)).map { printJobs =>
-          BadRequest(html.printform(loggedInTeam, formWithErrors, printJobs))
-        }
-      },
+      formWithErrors => getPrintForm(loggedIn, formWithErrors).map(BadRequest(_)),
       submitData => {
         db.run(
           sqlu"""insert into PrintJobs (Contest, Team, Filename, DATA, Computer, Arrived) values
