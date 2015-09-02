@@ -8,12 +8,11 @@ import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
-import play.api.libs.concurrent.Execution.Implicits.defaultContext
 import play.api.mvc.{Controller, RequestHeader}
 import slick.driver.JdbcProfile
 import views.html
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 
 case class ClarificationReqData(problem: String, text: String)
@@ -33,7 +32,7 @@ class QandA @Inject() (dbConfigProvider: DatabaseConfigProvider,
     mapping("problem" -> text, "text" -> text)(ClarificationReqData.apply)(ClarificationReqData.unapply)
   }
 
-  private def clrForm(loggedInTeam: LoggedInTeam, form: Form[ClarificationReqData])(implicit request: RequestHeader) =
+  private def clrForm(loggedInTeam: LoggedInTeam, form: Form[ClarificationReqData])(implicit request: RequestHeader, ec: ExecutionContext) =
     db.run(loggedInTeam.contest.getProblems).flatMap { probs =>
       db.run(loggedInTeam.contest.getClarifications).flatMap { clars =>
         db.run(loggedInTeam.getClarificationRequests).map { clReq =>
@@ -43,11 +42,13 @@ class QandA @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
 
   def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+    implicit val ec = StackActionExecutionContext
     clrForm(loggedIn, clarificationReqForm).map(Ok(_))
   }
 
   def post = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     val loggedInTeam = loggedIn
+    implicit val ec = StackActionExecutionContext
 
     clarificationReqForm.bindFromRequest.fold(
       formWithErrors => clrForm(loggedIn, formWithErrors).map(BadRequest(_)),
