@@ -11,14 +11,13 @@ import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
-import play.api.libs.concurrent.Execution.Implicits.defaultContext
 import play.api.mvc.{Controller, RequestHeader}
 import slick.driver.JdbcProfile
 import slick.jdbc.GetResult
 import views.html
 import com.github.nscala_time.time.Imports._
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 case class RejudgeSubmitRange(range: String)
 case class PostClarification(id: Option[Int], contest: Int, problem: String, text: String, date: Option[DateTime], hidden: Boolean)
@@ -56,6 +55,8 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   val rabbitMq = system.actorOf(Props[RabbitControl])
   def monitor(id: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+    implicit val ec = StackActionExecutionContext
+
     monitorModel.getMonitor(id, true).map(x => Ok(html.monitor(x.get.contest, x.get.status)))
   }
 
@@ -72,17 +73,23 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   private def getSubmitCid(submitId: Int) =
     db.run(sql"""select Contest from NewSubmits where ID = $submitId""".as[Int])
 
-  private def canSeeSubmit(submitId: Int)(account: Admin): Future[Boolean] =
+  private def canSeeSubmit(submitId: Int)(account: Admin): Future[Boolean] = {
+    import play.api.libs.concurrent.Execution.Implicits.defaultContext
+
     getSubmitCid(submitId).map { cids =>
       cids.exists(account.canSpectate(_))
     }
+  }
 
-  private def canRejudgeSubmit(submitId: Int)(account: Admin): Future[Boolean] =
+  private def canRejudgeSubmit(submitId: Int)(account: Admin): Future[Boolean] = {
+    import play.api.libs.concurrent.Execution.Implicits.defaultContext
+
     getSubmitCid(submitId).map { cids =>
       cids.exists(account.canModify(_))
     }
+  }
 
-  private def showSubs(contestId: Int, limit: Option[Int], account: Admin)(implicit request: RequestHeader) =
+  private def showSubs(contestId: Int, limit: Option[Int], account: Admin)(implicit request: RequestHeader, ec: ExecutionContext) =
     db.run(Contests.getContest(contestId)).map(_.headOption).zip(
       db.run(Contests.getTeams(contestId)).map(_.map(x => x.localId -> x).toMap)
     ).zip(db.run(Submits.getContestSubmits(contestId))).flatMap {
@@ -95,6 +102,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
 
   def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+    implicit val ec = StackActionExecutionContext
     showSubs(1, Some(20), loggedIn)
   }
 
@@ -121,7 +129,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     } else com.google.common.collect.Range.singleton[Integer](item.toInt)
 
 
-  private def rejudgeRangeEx(range: String, account: Admin): Future[Seq[Int]] = {
+  private def rejudgeRangeEx(range: String, account: Admin)(implicit ec: ExecutionContext): Future[Seq[Int]] = {
     val checks = {
       val builder = ImmutableRangeSet.builder[Integer]()
       range.split(',').map(parseItem).foreach(builder.add)
@@ -141,6 +149,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   }
 
   def submits(contestId: Int) = AsyncStack(AuthorityKey -> spectator(contestId)) { implicit request =>
+    implicit val ec = StackActionExecutionContext
     showSubs(contestId, None, loggedIn)
   }
 
@@ -153,6 +162,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   }
 
   def rejudgeRange = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
+    implicit val ec = StackActionExecutionContext
     rejudgeSubmitRangeForm.bindFromRequest.fold(
       formWithErrors => Future.successful(BadRequest(html.admin.rejudge(formWithErrors))),
       data => rejudgeRangeEx(data.range, loggedIn).map { rejudged =>
@@ -164,6 +174,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   }
 
   def rejudgeSubmit(submitId: Int) = AsyncStack(parse.multipartFormData, AuthorityKey -> canRejudgeSubmit(submitId)) { implicit request =>
+    implicit val ec = StackActionExecutionContext
     rabbitMq ! QueueMessage(SubmitMessage(submitId), queue = "contester.submitrequests")
     db.run(sql"select Contest from NewSubmits where ID = $submitId".as[Int]).map { cids =>
       cids.headOption match {
@@ -174,10 +185,12 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   }
 
   def showSubmit(submitId: Int) = AsyncStack(AuthorityKey -> canSeeSubmit(submitId)) { implicit request =>
+    implicit val ec = StackActionExecutionContext
     Submits.getSubmitById(db, submitId).map(x => Ok(html.admin.showsubmit(x)))
   }
 
   def showQandA(contestId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+    implicit val ec = StackActionExecutionContext
     db.run(
       sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications where cl_contest_idf = $contestId"""
         .as[Clarification1]).zip(db.run(
@@ -205,6 +218,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   import utils.Db._
 
   def postUpdateClarification(clarificationId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+    implicit val ec = StackActionExecutionContext
     db.run(
       sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications
             where cl_id = $clarificationId""".as[Clarification1])
@@ -219,6 +233,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   }
 
   def postClarification = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
+    implicit val ec = StackActionExecutionContext
     postClarificationForm.bindFromRequest.fold(
       formWithErrors => Future.successful(BadRequest(html.admin.postclarification(formWithErrors, 1))),
       data => {
@@ -244,7 +259,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     mapping("answer" -> text)(ClarificationResponse.apply)(ClarificationResponse.unapply)
   }
 
-  private def getClrById(clrId: Int) =
+  private def getClrById(clrId: Int)(implicit ec: ExecutionContext) =
     db.run(sql"""select ID, Contest, Team, Problem, Request, Arrived, Answer, Status from ClarificationRequests where ID = $clrId"""
       .as[ClarificationRequest1]).map(_.headOption)
 
@@ -256,6 +271,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   )
 
   def postAnswerForm(clrId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+    implicit val ec = StackActionExecutionContext
     getClrById(clrId).map { optClr =>
       optClr.map { clr =>
         BadRequest(html.admin.postanswer(
@@ -265,6 +281,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   }
 
   def postAnswer(clrId: Int) = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
+    implicit val ec = StackActionExecutionContext
     getClrById(clrId).flatMap { optClr =>
       optClr.map { clr =>
         clarificationResponseForm.bindFromRequest.fold(
