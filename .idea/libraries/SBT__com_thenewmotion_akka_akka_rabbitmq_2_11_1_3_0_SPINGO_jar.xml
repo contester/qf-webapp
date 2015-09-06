@@ -1,0 +1,13 @@
+<component name="libraryTable">
+  <library name="SBT: com.thenewmotion.akka:akka-rabbitmq_2.11:1.3.0-SPINGO:jar">
+    <CLASSES>
+      <root url="jar://$USER_HOME$/.ivy2/cache/com.thenewmotion.akka/akka-rabbitmq_2.11/jars/akka-rabbitmq_2.11-1.3.0-SPINGO.jar!/" />
+    </CLASSES>
+    <JAVADOC>
+      <root url="jar://$USER_HOME$/.ivy2/cache/com.thenewmotion.akka/akka-rabbitmq_2.11/docs/akka-rabbitmq_2.11-1.3.0-SPINGO-javadoc.jar!/" />
+    </JAVADOC>
+    <SOURCES>
+      <root url="jar://$USER_HOME$/.ivy2/cache/com.thenewmotion.akka/akka-rabbitmq_2.11/srcs/akka-rabbitmq_2.11-1.3.0-SPINGO-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>
