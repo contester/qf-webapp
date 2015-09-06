@@ -21,6 +21,12 @@ import scala.concurrent.{ExecutionContext, Future}
 package printing {
   case class SubmitData(textOnly: Boolean)
   case class PrintEntry(filename: String, arrived: DateTime, printed: Boolean)
+
+  object PrintEntry {
+    implicit val getResult = GetResult(
+      r => PrintEntry(r.nextString(), new DateTime(r.nextTimestamp()), r.nextBoolean())
+    )
+  }
 }
 
 class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
@@ -38,16 +44,10 @@ class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
     mapping("textOnly" -> boolean)(printing.SubmitData.apply)(printing.SubmitData.unapply)
   }
 
-  private implicit val getPrintEntry = GetResult(
-    r => printing.PrintEntry(r.nextString(), new DateTime(r.nextTimestamp()), r.nextBoolean())
-  )
-
-  private def getPrintEntryQuery(contest: Int, team: Int) =
-    sql"""select Filename, Arrived, Printed = 255 from PrintJobs
-         where Contest = $contest and Team = $team order by Arrived desc""".as[printing.PrintEntry]
-
   private def getPrintForm(loggedIn: LoggedInTeam, form: Form[printing.SubmitData])(implicit request: RequestHeader, ec: ExecutionContext) =
-    db.run(getPrintEntryQuery(loggedIn.contest.id, loggedIn.team.localId)).map { printJobs =>
+    db.run(sql"""select Filename, Arrived, Printed = 255 from PrintJobs
+         where Contest = ${loggedIn.contest.id} and Team = ${loggedIn.team.localId} order by Arrived desc""".as[printing.PrintEntry]
+      ).map { printJobs =>
       html.printform(loggedIn, form, printJobs)
     }
 
