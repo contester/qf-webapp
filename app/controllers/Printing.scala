@@ -2,7 +2,8 @@ package controllers
 
 import javax.inject.Inject
 
-import akka.actor.ActorSystem
+import akka.actor.{Props, ActorSystem}
+import com.spingo.op_rabbit.{QueueMessage, RabbitControl}
 import jp.t2v.lab.play2.auth.AuthElement
 import models.{AuthConfigImpl, LoggedInTeam}
 import org.apache.commons.io.FileUtils
@@ -19,13 +20,22 @@ import views.html
 import scala.concurrent.{ExecutionContext, Future}
 
 package printing {
-  case class SubmitData(textOnly: Boolean)
-  case class PrintEntry(filename: String, arrived: DateTime, printed: Boolean)
+
+import play.api.libs.json.Json
+
+case class SubmitData(textOnly: Boolean)
+   case class PrintEntry(filename: String, arrived: DateTime, printed: Boolean)
 
   object PrintEntry {
     implicit val getResult = GetResult(
       r => PrintEntry(r.nextString(), new DateTime(r.nextTimestamp()), r.nextBoolean())
     )
+  }
+
+  case class PrintJobID(id: Int)
+
+  object PrintJobID {
+    implicit val format = Json.format[PrintJobID]
   }
 }
 
@@ -37,6 +47,9 @@ class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
   private val db = dbConfig.db
   import dbConfig.driver.api._
   import utils.Db._
+
+  val rabbitMq = system.actorOf(Props[RabbitControl])
+  import com.spingo.op_rabbit.PlayJsonSupport._
 
   private def anyUser(account: LoggedInTeam): Future[Boolean] = Future.successful(true)
 
@@ -72,11 +85,14 @@ class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
       formWithErrors => getPrintForm(loggedIn, formWithErrors).map(BadRequest(_)),
       submitData => {
         db.run(
-          sqlu"""insert into PrintJobs (Contest, Team, Filename, DATA, Computer, Arrived) values
+          (sqlu"""insert into PrintJobs (Contest, Team, Filename, DATA, Computer, Arrived) values
                     (${loggedInTeam.contest.id}, ${loggedInTeam.team.localId}, ${solutionOpt.get._1},
             ${solutionOpt.get._2}, ${request.remoteAddress}, CURRENT_TIMESTAMP())
-                  """
-        ).map { rows =>
+                  """.andThen(sql"select last_insert_id()".as[Int])).withPinnedSession
+        ).map { printJobIds =>
+          printJobIds.foreach { printJobId =>
+            rabbitMq ! QueueMessage(printing.PrintJobID(printJobId), queue = "contester.printrequests")
+          }
           Redirect(routes.Printing.index)
         }
       }
