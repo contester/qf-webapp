@@ -4,7 +4,7 @@ import javax.inject.{Inject, Singleton}
 
 import akka.actor.{ActorSystem, Props}
 import com.google.common.collect.ImmutableRangeSet
-import com.spingo.op_rabbit.{QueueMessage, RabbitControl}
+import com.spingo.op_rabbit.{Message, RabbitControl}
 import jp.t2v.lab.play2.auth.AuthElement
 import models._
 import play.api.data.Form
@@ -142,7 +142,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
       }
 
       for (id <- filtered) {
-        rabbitMq ! QueueMessage(SubmitMessage(id._1), queue = "contester.submitrequests")
+        rabbitMq ! Message.queue(SubmitMessage(id._1), queue = "contester.submitrequests")
       }
       filtered.map(_._1)
     }
@@ -175,7 +175,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   def rejudgeSubmit(submitId: Int) = AsyncStack(parse.multipartFormData, AuthorityKey -> canRejudgeSubmit(submitId)) { implicit request =>
     implicit val ec = StackActionExecutionContext
-    rabbitMq ! QueueMessage(SubmitMessage(submitId), queue = "contester.submitrequests")
+    rabbitMq ! Message.queue(SubmitMessage(submitId), queue = "contester.submitrequests")
     db.run(sql"select Contest from NewSubmits where ID = $submitId".as[Int]).map { cids =>
       cids.headOption match {
         case Some(contestId) => Redirect(routes.AdminApplication.submits(contestId))

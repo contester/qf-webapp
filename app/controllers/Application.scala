@@ -4,8 +4,7 @@ import javax.inject.{Inject, Singleton}
 
 import actors.StatusActor
 import akka.actor.{Props, ActorSystem}
-import com.spingo.op_rabbit.{QueueMessage, UTF8StringMarshaller, RabbitControl}
-import com.spingo.op_rabbit.consumer.Subscription
+import com.spingo.op_rabbit._
 import jp.t2v.lab.play2.auth.AuthElement
 import models._
 import org.apache.commons.io.FileUtils
@@ -157,7 +156,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
                 submitData.compiler, solutionOpt.get, request.remoteAddress)).map { wat =>
 
                 Logger.info(s"$wat")
-                rabbitMq ! QueueMessage(SubmitMessage(wat.head.toInt), queue = "contester.submitrequests")
+                rabbitMq ! Message.queue(SubmitMessage(wat.head.toInt), queue = "contester.submitrequests")
 
                 Redirect(routes.Application.index)
               }
@@ -167,7 +166,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-  import play.api.Play.current
+  //import play.api.Play.current
   import play.api.mvc._
 
   import scala.concurrent.duration._
@@ -175,10 +174,10 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   val statusActor = system.actorOf(StatusActor.props(db), "status-actor")
 
-  rabbitMq ! new Subscription {
-    import play.api.libs.concurrent.Execution.Implicits.defaultContext
-    // A qos of 3 will cause up to 3 concurrent messages to be processed at any given time.
-    def config = channel(qos = 1) {
+  val finishedRef = Subscription.run(rabbitMq) {
+    import Directives._
+    channel(qos = 1) {
+      import play.api.libs.concurrent.Execution.Implicits.defaultContext
       consume(queue("contester.finished")) {
         body(as[FinishedTesting]) { submit =>
           Logger.info(s"Received $submit")
@@ -189,9 +188,10 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-  rabbitMq ! new Subscription {
-    import play.api.libs.concurrent.Execution.Implicits.defaultContext
-    def config = channel(qos = 1) {
+  val finishedEvalRef = Subscription.run(rabbitMq) {
+    import Directives._
+    channel(qos = 1) {
+      import play.api.libs.concurrent.Execution.Implicits.defaultContext
       consume(queue("contester.evals")) {
         body(as[CustomTestResult]) { submit =>
           Logger.info(s"Received $submit")

@@ -3,7 +3,7 @@ package controllers
 import javax.inject.Inject
 
 import akka.actor.{ActorSystem, Props}
-import com.spingo.op_rabbit.{RabbitControl, QueueMessage}
+import com.spingo.op_rabbit.{RabbitControl, Message}
 import jp.t2v.lab.play2.auth.AuthElement
 import models.{AuthConfigImpl, LoggedInTeam, Monitor, Problems}
 import play.api.data.Form
@@ -72,7 +72,7 @@ class QandA @Inject() (dbConfigProvider: DatabaseConfigProvider,
               """.andThen(sql"select last_insert_id()".as[Int])).withPinnedSession
         ).map { clrIds =>
           clrIds.foreach { clrId =>
-            rabbitMq ! QueueMessage(ClarificationRequestId(clrId), queue = "contester.clarificationrequests")
+            rabbitMq ! Message.queue(ClarificationRequestId(clrId), queue = "contester.clarificationrequests")
           }
           Redirect(routes.QandA.index)
         }

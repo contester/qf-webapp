@@ -3,7 +3,7 @@ package controllers
 import javax.inject.Inject
 
 import akka.actor.{Props, ActorSystem}
-import com.spingo.op_rabbit.{QueueMessage, RabbitControl}
+import com.spingo.op_rabbit.{Message, RabbitControl}
 import jp.t2v.lab.play2.auth.AuthElement
 import models._
 import org.apache.commons.io.FileUtils
@@ -106,7 +106,7 @@ class ServerSideEval @Inject() (val dbConfigProvider: DatabaseConfigProvider,
                   """.andThen(sql"select last_insert_id()".as[Int])).withPinnedSession
             ).map { wat =>
               wat.foreach { wid =>
-                rabbitMq ! QueueMessage(ServerSideEvalID(wid), queue = "contester.evalrequests")
+                rabbitMq ! Message.queue(ServerSideEvalID(wid), queue = "contester.evalrequests")
               }
 
               Redirect(routes.ServerSideEval.index)
