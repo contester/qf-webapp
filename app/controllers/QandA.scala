@@ -5,7 +5,7 @@ import javax.inject.Inject
 import akka.actor.{ActorSystem, Props}
 import com.spingo.op_rabbit.{RabbitControl, Message}
 import jp.t2v.lab.play2.auth.AuthElement
-import models.{AuthConfigImpl, LoggedInTeam, Monitor, Problems}
+import models._
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
@@ -38,8 +38,6 @@ class QandA @Inject() (dbConfigProvider: DatabaseConfigProvider,
   val rabbitMq = system.actorOf(Props[RabbitControl])
   import com.spingo.op_rabbit.PlayJsonSupport._
 
-  private def anyUser(account: LoggedInTeam): Future[Boolean] = Future.successful(true)
-
   private val clarificationReqForm = Form {
     mapping("problem" -> text, "text" -> text)(ClarificationReqData.apply)(ClarificationReqData.unapply)
   }
@@ -53,12 +51,12 @@ class QandA @Inject() (dbConfigProvider: DatabaseConfigProvider,
       }
     }
 
-  def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+  def index = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>
     implicit val ec = StackActionExecutionContext
     clrForm(loggedIn, clarificationReqForm).map(Ok(_))
   }
 
-  def post = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+  def post = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>
     val loggedInTeam = loggedIn
     implicit val ec = StackActionExecutionContext
 

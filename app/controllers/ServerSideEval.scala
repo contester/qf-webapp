@@ -44,8 +44,6 @@ class ServerSideEval @Inject() (val dbConfigProvider: DatabaseConfigProvider,
   val rabbitMq = system.actorOf(Props[RabbitControl])
   import com.spingo.op_rabbit.PlayJsonSupport._
 
-  private def anyUser(account: LoggedInTeam): Future[Boolean] = Future.successful(true)
-
   private val serverSideForm = Form {
     mapping("compiler" -> number)(ServerSideData.apply)(ServerSideData.unapply)
   }
@@ -70,7 +68,7 @@ class ServerSideEval @Inject() (val dbConfigProvider: DatabaseConfigProvider,
         html.sendwithinput(loggedInTeam, form, Compilers.toSelect(compilers), evals)
     }
 
-  def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+  def index = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>
     val loggedInTeam = loggedIn
     implicit val ec = StackActionExecutionContext
 
@@ -79,7 +77,7 @@ class ServerSideEval @Inject() (val dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-  def post = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
+  def post = AsyncStack(parse.multipartFormData, AuthorityKey -> UserPermissions.any) { implicit request =>
     val loggedInTeam = loggedIn
     implicit val ec = StackActionExecutionContext
 

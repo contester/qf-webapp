@@ -5,7 +5,7 @@ import javax.inject.Inject
 import akka.actor.{Props, ActorSystem}
 import com.spingo.op_rabbit.{Message, RabbitControl}
 import jp.t2v.lab.play2.auth.AuthElement
-import models.{AuthConfigImpl, LoggedInTeam}
+import models.{UserPermissions, AuthConfigImpl, LoggedInTeam}
 import org.apache.commons.io.FileUtils
 import org.joda.time.DateTime
 import play.api.data.Form
@@ -51,8 +51,6 @@ class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
   val rabbitMq = system.actorOf(Props[RabbitControl])
   import com.spingo.op_rabbit.PlayJsonSupport._
 
-  private def anyUser(account: LoggedInTeam): Future[Boolean] = Future.successful(true)
-
   private val printForm = Form {
     mapping("textOnly" -> boolean)(printing.SubmitData.apply)(printing.SubmitData.unapply)
   }
@@ -64,12 +62,12 @@ class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
       html.printform(loggedIn, form, printJobs)
     }
 
-  def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+  def index = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>
     implicit val ec = StackActionExecutionContext
     getPrintForm(loggedIn, printForm).map(Ok(_))
   }
 
-  def post = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
+  def post = AsyncStack(parse.multipartFormData, AuthorityKey -> UserPermissions.any) { implicit request =>
     val loggedInTeam = loggedIn
     implicit val ec = StackActionExecutionContext
 
