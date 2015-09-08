@@ -63,33 +63,24 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   val rabbitMq = system.actorOf(Props[RabbitControl])
   import com.spingo.op_rabbit.PlayJsonSupport._
 
+  val userPermissions = new UserPermissions(db)
+
   def monitor(id: Int) = Action.async { implicit request =>
     import play.api.libs.concurrent.Execution.Implicits.defaultContext
     monitorModel.getMonitor(id, false).map(x => Ok(html.monitor(x.get.contest, x.get.status)))
   }
 
-  def monitorDefault = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+  def monitorDefault = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>
     val loggedInTeam = loggedIn
     implicit val ec = StackActionExecutionContext
     monitorModel.getMonitor(loggedInTeam.contest.id, false).map(x => {
       Ok(html.loggedinmonitor(x.get.contest, x.get.status, loggedInTeam))})
   }
 
-  private def anyUser(account: LoggedInTeam): Future[Boolean] = Future.successful(true)
-
-  private def canSeeSubmit(submitId: Int)(account: LoggedInTeam): Future[Boolean] = {
-    import play.api.libs.concurrent.Execution.Implicits.defaultContext
-    db.run(sql"select Contest, Team from NewSubmits where ID = $submitId".as[(Int, Int)]).map { cids =>
-      cids.exists {
-        case (contestId, teamId) => account.contest.id == contestId && account.team.localId == teamId
-      }
-    }
-  }
-
   private def getSubmits(team: LoggedInTeam) =
     db.run(Submits.getContestTeamSubmits(team.contest.id, team.team.localId))
 
-  def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+  def index = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>
     val loggedInTeam = loggedIn
     implicit val ec = StackActionExecutionContext
 
@@ -111,7 +102,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   private def getProblemsAndCompilers(contestId: Int)(implicit ec: ExecutionContext) =
     getProblems(contestId).zip(db.run(Contests.getCompilers(contestId)))
 
-  def submit = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+  def submit = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>
     val loggedInTeam = loggedIn
     implicit val ec = StackActionExecutionContext
 
@@ -128,7 +119,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
           values ($contestId, $teamId, $problemId, $srcLang, $source, inet_aton($remoteAddr), CURRENT_TIMESTAMP())
         """.andThen(sql"""select LAST_INSERT_ID()""".as[Long]).withPinnedSession
 
-  def submitPost = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
+  def submitPost = AsyncStack(parse.multipartFormData, AuthorityKey -> UserPermissions.any) { implicit request =>
     val loggedInTeam = loggedIn
     implicit val ec = StackActionExecutionContext
 
@@ -204,7 +195,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   def socket = WebSocket.tryAccept[JsValue] { implicit request =>
     import play.api.libs.concurrent.Execution.Implicits.defaultContext
-    authorized(anyUser).flatMap {
+    authorized(UserPermissions.any).flatMap {
       case Left(result) => Future.successful(Left(result))
       case Right((user, resultUpdater)) => {
         val in = Iteratee.foreach[JsValue] {
@@ -226,7 +217,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
  }
 
-  def showSubmit(submitId: Int) = AsyncStack(AuthorityKey -> canSeeSubmit(submitId)) { implicit request =>
+  def showSubmit(submitId: Int) = AsyncStack(AuthorityKey -> userPermissions.submit(submitId)) { implicit request =>
     implicit val ec = StackActionExecutionContext
     Submits.getSubmitById(db, submitId).map(x => Ok(html.showsubmit(loggedIn, x)))
   }

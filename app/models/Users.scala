@@ -24,6 +24,9 @@ case class LocalTeam(localId: Int, schoolName: String, teamNum: Option[Int], tea
 
 case class LoggedInTeam(username: String, contest: Contest, team: LocalTeam) {
   def getClarificationRequests = LoggedInTeam.getClarificationRequests(contest.id, team.localId)
+
+  def matching(ctid: ContestTeamIds) =
+    ctid.contestId == contest.id && ctid.teamId == team.localId
 }
 
 object LoggedInTeam {
@@ -103,4 +106,27 @@ case class EvalEntry(id: Int, arrived: DateTime, ext: String, source: Array[Byte
   def sourceStr = new String(source, "UTF-8")
   def inputStr = new String(input, "UTF-8")
   def outputStr = output.map(new String(_, "UTF-8"))
+}
+
+case class ContestTeamIds(contestId: Int, teamId: Int)
+
+object ContestTeamIds {
+  implicit val getResult = GetResult(r =>
+    ContestTeamIds(r.nextInt(), r.nextInt())
+  )
+}
+
+class UserPermissions(db: JdbcBackend#DatabaseDef) {
+  import slick.driver.MySQLDriver.api._
+  import play.api.libs.concurrent.Execution.Implicits.defaultContext
+
+  def submit(submitId: Int)(account: LoggedInTeam): Future[Boolean] =
+    db.run(sql"select Contest, Team from NewSubmits where ID = $submitId".as[ContestTeamIds]).map { cids =>
+      cids.exists(account.matching)
+    }
+
+}
+
+object UserPermissions {
+  def any(account: LoggedInTeam): Future[Boolean] = Future.successful(true)
 }
