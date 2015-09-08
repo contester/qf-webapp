@@ -119,14 +119,21 @@ object ContestTeamIds {
 class UserPermissions(db: JdbcBackend#DatabaseDef) {
   import slick.driver.MySQLDriver.api._
   import play.api.libs.concurrent.Execution.Implicits.defaultContext
+  import UserPermissions._
 
   def submit(submitId: Int)(account: LoggedInTeam): Future[Boolean] =
-    db.run(sql"select Contest, Team from NewSubmits where ID = $submitId".as[ContestTeamIds]).map { cids =>
-      cids.exists(account.matching)
-    }
+    matching {
+      db.run(sql"select Contest, Team from NewSubmits where ID = $submitId".as[ContestTeamIds])
+    }(account)
 
 }
 
 object UserPermissions {
   def any(account: LoggedInTeam): Future[Boolean] = Future.successful(true)
+
+  def matching(f: => Future[Seq[ContestTeamIds]])(account: LoggedInTeam) = {
+    import play.api.libs.concurrent.Execution.Implicits.defaultContext
+
+    f.map(_.exists(account.matching))
+  }
 }
