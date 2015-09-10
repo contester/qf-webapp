@@ -137,3 +137,7 @@ object UserPermissions {
     f.map(_.exists(account.matching))
   }
 }
+
+object Permissions {
+  def any[T](account: T): Future[Boolean] = Future.successful(true)
+}

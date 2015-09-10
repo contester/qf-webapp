@@ -51,7 +51,7 @@ class QandA @Inject() (dbConfigProvider: DatabaseConfigProvider,
       }
     }
 
-  def index = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>
+  def index = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
     implicit val ec = StackActionExecutionContext
     clrForm(loggedIn, clarificationReqForm).map(Ok(_))
   }
