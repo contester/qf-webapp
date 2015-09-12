@@ -275,7 +275,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     getClrById(clrId).map { optClr =>
       optClr.map { clr =>
         Ok(html.admin.postanswer(
-          clarificationResponseForm.fill(ClarificationResponse(clr.answer)), clr, answerList.toSeq))
+          clarificationResponseForm.fill(ClarificationResponse(clr.answer)), clr, answerList.toSeq, clr.contest))
       }.getOrElse(Redirect(routes.AdminApplication.showQandA(1)))
     }
   }
@@ -285,7 +285,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     getClrById(clrId).flatMap { optClr =>
       optClr.map { clr =>
         clarificationResponseForm.bindFromRequest.fold(
-          formWithErrors => Future.successful(BadRequest(html.admin.postanswer(formWithErrors, clr, answerList.toSeq))),
+          formWithErrors => Future.successful(BadRequest(html.admin.postanswer(formWithErrors, clr, answerList.toSeq, clr.contest))),
           data => {
             db.run(sqlu"""update ClarificationRequests set Answer = ${data.answer}, Status = 1 where ID = $clrId""").map { _ =>
               Redirect(routes.AdminApplication.showQandA(clr.contest))
