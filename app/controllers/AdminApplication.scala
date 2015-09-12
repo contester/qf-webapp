@@ -197,7 +197,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
       sql"""select ID, Contest, Team, Problem, Request, Arrived, Answer, Status from ClarificationRequests where Contest = $contestId"""
         .as[ClarificationRequest1])).map {
       case (clarifications, clReqs) =>
-        Ok(html.admin.qanda(clarifications, clReqs))
+        Ok(html.admin.qanda(clarifications, clReqs, contestId))
     }
   }
 
@@ -274,7 +274,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     implicit val ec = StackActionExecutionContext
     getClrById(clrId).map { optClr =>
       optClr.map { clr =>
-        BadRequest(html.admin.postanswer(
+        Ok(html.admin.postanswer(
           clarificationResponseForm.fill(ClarificationResponse(clr.answer)), clr, answerList.toSeq))
       }.getOrElse(Redirect(routes.AdminApplication.showQandA(1)))
     }

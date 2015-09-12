@@ -1,0 +1,38 @@
+@(tab: String = "", styles: Html = Html(""), scripts: Html = Html(""), contestId: Int)(content: Html)(implicit request: RequestHeader)
+
+@navlink(myid: String, myhref: play.api.mvc.Call, mytext: String) = {
+@if(myid == tab) {
+<li class="active"><a href="#">@mytext <span class="sr-only">(current)</span></a></li>
+} else {
+<li><a href="@myhref">@mytext</a></li>
+}
+}
+
+@adminNavlinks = {
+@navlink("status", routes.AdminApplication.submits(contestId), "Статус")
+@navlink("monitor", routes.AdminApplication.monitor(contestId), "Монитор")
+@navlink("qanda", routes.AdminApplication.showQandA(contestId), "Вопросы/ответы")
+}
+
+@myStyles = {
+@styles
+<style>
+    body {
+    padding-top: 80px; /* 60px to make the container go all the way to the bottom of the topbar */
+    }
+    .table-vcenter td {
+    vertical-align: middle!important;
+    }
+
+    .btn-nomargin {
+    margin: 0px 0px;
+    }
+</style>
+}
+
+@base("Contester", myStyles) {
+@navbar(adminNavlinks, true)
+<div class="container">
+    @content
+</div>
+}
