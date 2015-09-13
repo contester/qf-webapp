@@ -54,17 +54,11 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   import com.spingo.op_rabbit.PlayJsonSupport._
 
   val rabbitMq = system.actorOf(Props[RabbitControl])
-  def monitor(id: Int) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
+  def monitor(id: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(id)) { implicit request =>
     implicit val ec = StackActionExecutionContext
 
     monitorModel.getMonitor(id, true).map(x => Ok(html.admin.monitor(x.get.contest, x.get.status)))
   }
-
-  private def spectator(contestId: Int)(account: Admin): Future[Boolean] =
-    Future.successful(account.canSpectate(contestId))
-
-  private def administrator(contestId: Int)(account: Admin): Future[Boolean] =
-    Future.successful(account.canModify(contestId))
 
   import slick.driver.MySQLDriver.api._
 
@@ -146,7 +140,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-  def submits(contestId: Int) = AsyncStack(AuthorityKey -> spectator(contestId)) { implicit request =>
+  def submits(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
     implicit val ec = StackActionExecutionContext
     showSubs(contestId, None, loggedIn)
   }
@@ -155,11 +149,11 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     mapping("range" -> text)(RejudgeSubmitRange.apply)(RejudgeSubmitRange.unapply)
   }
 
-  def rejudgePage(contestId: Int) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
+  def rejudgePage(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canModify(contestId)) { implicit request =>
     Future.successful(Ok(html.admin.rejudge(rejudgeSubmitRangeForm, contestId)))
   }
 
-  def rejudgeRange(contestId: Int) = AsyncStack(parse.multipartFormData, AuthorityKey -> Permissions.any) { implicit request =>
+  def rejudgeRange(contestId: Int) = AsyncStack(parse.multipartFormData, AuthorityKey -> AdminPermissions.canModify(contestId)) { implicit request =>
     implicit val ec = StackActionExecutionContext
     rejudgeSubmitRangeForm.bindFromRequest.fold(
       formWithErrors => Future.successful(BadRequest(html.admin.rejudge(formWithErrors, contestId))),
@@ -187,7 +181,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     Submits.getSubmitById(db, submitId).map(x => Ok(html.admin.showsubmit(x, x.map(_.fsub.submit.submitId.contestId).getOrElse(1))))
   }
 
-  def showQandA(contestId: Int) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
+  def showQandA(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
     implicit val ec = StackActionExecutionContext
     db.run(
       sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications where cl_contest_idf = $contestId"""
@@ -209,7 +203,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     )(PostClarification.apply)(PostClarification.unapply)
   }
 
-  def postNewClarification(contestId: Int) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
+  def postNewClarification(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canModify(contestId)) { implicit request =>
     Future.successful(Ok(html.admin.postclarification(postClarificationForm, contestId)))
   }
 

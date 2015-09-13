@@ -2,6 +2,7 @@ package models
 
 import slick.jdbc.GetResult
 
+import scala.concurrent.Future
 import scala.util.Try
 
 case class AdminId(username: String, passwordHash: String) {
@@ -47,4 +48,12 @@ object Admin {
 
   def query(username: String, passwordHash: String) =
     sql"""select Username, Password, Spectator, Administrator from admins where Username = $username and Password = $passwordHash""".as[Admin]
+}
+
+object AdminPermissions {
+  def canModify(contestId: Int)(account: Admin): Future[Boolean] =
+    Future.successful(account.canModify(contestId))
+
+  def canSpectate(contestId: Int)(account: Admin): Future[Boolean] =
+    Future.successful(account.canSpectate(contestId))
 }
