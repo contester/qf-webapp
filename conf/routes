@@ -28,8 +28,8 @@ GET /admin controllers.AdminApplication.index
 GET /admin/submits/:contestId controllers.AdminApplication.submits(contestId: Int)
 GET /admin/monitor/:contestId controllers.AdminApplication.monitor(contestId: Int)
 
-GET /admin/rejudge controllers.AdminApplication.rejudgePage
-POST /admin/rejudgeRange controllers.AdminApplication.rejudgeRange
+GET /admin/rejudge/:contestId controllers.AdminApplication.rejudgePage(contestId: Int)
+POST /admin/rejudgeRange/:contestId controllers.AdminApplication.rejudgeRange(contestId: Int)
 POST /admin/rejudgeSubmit/:submitId controllers.AdminApplication.rejudgeSubmit(submitId: Int)
 
 GET /admin/postNewClarification/:contestId controllers.AdminApplication.postNewClarification(contestId: Int)

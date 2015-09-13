@@ -1,5 +1,5 @@
 @(submits: Seq[FullyDescribedSubmit], teams: Map[Int, LocalTeam], contest: Contest, admin: Admin)(implicit request: RequestHeader)
-@main("Contester", tab = "submits", variant=AdminDisplayMode) {
+@adminmain(tab = "submits", contestId = contest.id) {
 @defining(admin.canModify(contest.id)) { showRejudge =>
 <table class="table table-hover table-bordered table-responsive">
     <thead>

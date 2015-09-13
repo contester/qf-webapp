@@ -157,16 +157,16 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     mapping("range" -> text)(RejudgeSubmitRange.apply)(RejudgeSubmitRange.unapply)
   }
 
-  def rejudgePage = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
-    Future.successful(Ok(html.admin.rejudge(rejudgeSubmitRangeForm)))
+  def rejudgePage(contestId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+    Future.successful(Ok(html.admin.rejudge(rejudgeSubmitRangeForm, contestId)))
   }
 
-  def rejudgeRange = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
+  def rejudgeRange(contestId: Int) = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
     implicit val ec = StackActionExecutionContext
     rejudgeSubmitRangeForm.bindFromRequest.fold(
-      formWithErrors => Future.successful(BadRequest(html.admin.rejudge(formWithErrors))),
+      formWithErrors => Future.successful(BadRequest(html.admin.rejudge(formWithErrors, contestId))),
       data => rejudgeRangeEx(data.range, loggedIn).map { rejudged =>
-        Redirect(routes.AdminApplication.rejudgePage).flashing(
+        Redirect(routes.AdminApplication.rejudgePage(contestId)).flashing(
           "success" -> rejudged.mkString(" ")
         )
       }
@@ -186,7 +186,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   def showSubmit(submitId: Int) = AsyncStack(AuthorityKey -> canSeeSubmit(submitId)) { implicit request =>
     implicit val ec = StackActionExecutionContext
-    Submits.getSubmitById(db, submitId).map(x => Ok(html.admin.showsubmit(x)))
+    Submits.getSubmitById(db, submitId).map(x => Ok(html.admin.showsubmit(x, x.map(_.fsub.submit.submitId.contestId).getOrElse(1))))
   }
 
   def showQandA(contestId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
