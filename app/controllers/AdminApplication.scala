@@ -54,13 +54,11 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   import com.spingo.op_rabbit.PlayJsonSupport._
 
   val rabbitMq = system.actorOf(Props[RabbitControl])
-  def monitor(id: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+  def monitor(id: Int) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
     implicit val ec = StackActionExecutionContext
 
     monitorModel.getMonitor(id, true).map(x => Ok(html.admin.monitor(x.get.contest, x.get.status)))
   }
-
-  private def anyUser(account: Admin): Future[Boolean] = Future.successful(true)
 
   private def spectator(contestId: Int)(account: Admin): Future[Boolean] =
     Future.successful(account.canSpectate(contestId))
@@ -101,7 +99,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
         Future.successful(Redirect(routes.AdminApplication.index))
     }
 
-  def index = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+  def index = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
     implicit val ec = StackActionExecutionContext
     showSubs(1, Some(20), loggedIn)
   }
@@ -157,11 +155,11 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     mapping("range" -> text)(RejudgeSubmitRange.apply)(RejudgeSubmitRange.unapply)
   }
 
-  def rejudgePage(contestId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+  def rejudgePage(contestId: Int) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
     Future.successful(Ok(html.admin.rejudge(rejudgeSubmitRangeForm, contestId)))
   }
 
-  def rejudgeRange(contestId: Int) = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
+  def rejudgeRange(contestId: Int) = AsyncStack(parse.multipartFormData, AuthorityKey -> Permissions.any) { implicit request =>
     implicit val ec = StackActionExecutionContext
     rejudgeSubmitRangeForm.bindFromRequest.fold(
       formWithErrors => Future.successful(BadRequest(html.admin.rejudge(formWithErrors, contestId))),
@@ -189,7 +187,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     Submits.getSubmitById(db, submitId).map(x => Ok(html.admin.showsubmit(x, x.map(_.fsub.submit.submitId.contestId).getOrElse(1))))
   }
 
-  def showQandA(contestId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+  def showQandA(contestId: Int) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
     implicit val ec = StackActionExecutionContext
     db.run(
       sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications where cl_contest_idf = $contestId"""
@@ -211,13 +209,13 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     )(PostClarification.apply)(PostClarification.unapply)
   }
 
-  def postNewClarification(contestId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+  def postNewClarification(contestId: Int) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
     Future.successful(Ok(html.admin.postclarification(postClarificationForm, contestId)))
   }
 
   import utils.Db._
 
-  def postUpdateClarification(clarificationId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+  def postUpdateClarification(clarificationId: Int) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
     implicit val ec = StackActionExecutionContext
     db.run(
       sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications
@@ -232,7 +230,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-  def postClarification = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
+  def postClarification = AsyncStack(parse.multipartFormData, AuthorityKey -> Permissions.any) { implicit request =>
     implicit val ec = StackActionExecutionContext
     postClarificationForm.bindFromRequest.fold(
       formWithErrors => Future.successful(BadRequest(html.admin.postclarification(formWithErrors, 1))),
@@ -270,7 +268,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     "Pending" -> "Pending"
   )
 
-  def postAnswerForm(clrId: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
+  def postAnswerForm(clrId: Int) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
     implicit val ec = StackActionExecutionContext
     getClrById(clrId).map { optClr =>
       optClr.map { clr =>
@@ -280,7 +278,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-  def postAnswer(clrId: Int) = AsyncStack(parse.multipartFormData, AuthorityKey -> anyUser) { implicit request =>
+  def postAnswer(clrId: Int) = AsyncStack(parse.multipartFormData, AuthorityKey -> Permissions.any) { implicit request =>
     implicit val ec = StackActionExecutionContext
     getClrById(clrId).flatMap { optClr =>
       optClr.map { clr =>
