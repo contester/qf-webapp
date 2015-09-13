@@ -57,7 +57,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   def monitor(id: Int) = AsyncStack(AuthorityKey -> anyUser) { implicit request =>
     implicit val ec = StackActionExecutionContext
 
-    monitorModel.getMonitor(id, true).map(x => Ok(html.monitor(x.get.contest, x.get.status)))
+    monitorModel.getMonitor(id, true).map(x => Ok(html.admin.monitor(x.get.contest, x.get.status)))
   }
 
   private def anyUser(account: Admin): Future[Boolean] = Future.successful(true)

@@ -1,0 +1,11 @@
+@(contest: Contest, status: models.AnyStatus)(implicit request: RequestHeader)
+
+@adminmain(tab = "monitor", contestId=contest.id) {
+
+<script>
+    setTimeout(function() { location.reload() }, 60000);
+</script>
+
+@monitortable(contest, status, 0)
+
+}
