@@ -66,6 +66,7 @@ object Message2 {
 class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   import StatusActor._
   import context.dispatcher
+  import scala.language.postfixOps
 
   import scala.concurrent.duration._
   val tick =
@@ -130,7 +131,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
         self ! annotated
       }
 
-      sender ! ()
+      sender ! {}
     }
 
     case Ack(loggedInTeam, msgid) => {
@@ -144,7 +145,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
 
     case evalDone: CustomTestResult => {
       pushPersistent(evalDone.contest, evalDone.team, "custom", Json.toJson(evalDone))
-      sender ! ()
+      sender ! {}
     }
 
     case msg2: Message2 => {

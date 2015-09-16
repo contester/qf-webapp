@@ -12,6 +12,9 @@ mainClass in assembly := Some("play.core.server.NettyServer")
 
 fullClasspath in assembly += Attributed.blank(PlayKeys.playPackageAssets.value)
 
+scalacOptions ++= Seq("-unchecked", "-deprecation", "-optimise", "-explaintypes", "-Xcheckinit",
+  "-Xlint", "-Xfatal-warnings", "-feature")
+
 // Take the first ServerWithStop because it's packaged into two jars
 assemblyMergeStrategy in assembly := {
   case PathList("play", "core", "server", "ServerWithStop.class") => MergeStrategy.first

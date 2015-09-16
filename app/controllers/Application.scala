@@ -59,6 +59,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   private val db = dbConfig.db
   import dbConfig.driver.api._
   import utils.Db._
+  import scala.language.postfixOps
 
   val rabbitMq = system.actorOf(Props[RabbitControl])
   import com.spingo.op_rabbit.PlayJsonSupport._

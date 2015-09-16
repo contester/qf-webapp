@@ -160,7 +160,7 @@ object Submits {
     submits.foldLeft((empty, Seq[(Submit, Option[Score])]())) {
       case (state, submit) =>
         val next = scorer(state._1, submit)
-        (next._1, state._2 :+(submit, next._2))
+        (next._1, state._2 :+((submit, next._2)))
     }
 
   def indexAndScoreGrouped[Cell](submits: Seq[Submit], empty: Cell, scorer: SubmitScorer[Cell]) = {
@@ -274,6 +274,7 @@ object Submits {
     }).map(_.flatten.toSeq.sortBy(-_.submit.submitId.arrived.seconds))
 
 
+  import scala.language.implicitConversions
   implicit def o2f[A](o: Option[Future[A]])(implicit ec: ExecutionContext): Future[Option[A]] =
     o.map(_.map(Some(_))).getOrElse(Future.successful(None))
 

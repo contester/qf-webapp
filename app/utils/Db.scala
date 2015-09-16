@@ -15,4 +15,7 @@ object Db {
   implicit object SetJodaDateTime extends SetParameter[DateTime] {
     override def apply(v1: Imports.DateTime, v2: PositionedParameters): Unit = v2.setTimestamp(new Timestamp(v1.getMillis))
   }
+
+  // TODO: implement fsequence (future sequence)
+  // TODO: new fork-join-executor for database access?
 }

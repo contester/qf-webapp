@@ -20,6 +20,7 @@ class MonitorActor(db: JdbcBackend#DatabaseDef) extends Actor {
   import context.dispatcher
 
   import scala.concurrent.duration._
+  import scala.language.postfixOps
 
   private def getContestMonitor(contest: Contest)(implicit ec: ExecutionContext) = {
     val cid = contest.id

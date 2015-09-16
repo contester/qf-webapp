@@ -67,7 +67,7 @@ object Foo {
           (lastRanked.rank, position + 1)
         else
           (position + 1, position + 1)
-      }.getOrElse(1, 1)
+      }.getOrElse((1, 1))
 
     (state._1 :+ new RankedRow(nextR._1, next.team, next.score, next.cells), nextR._2)
   }
@@ -181,6 +181,7 @@ class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, system: Actor
   def getMonitor(id: Int, overrideFreeze: Boolean): Future[Option[ContestMonitor]] = {
     import akka.pattern.ask
     import scala.concurrent.duration._
+    import scala.language.postfixOps
 
     monitorActor.ask(MonitorActor.Get(id))(30 seconds).mapTo[Option[StoredContestStatus]]
       .map(_.map(_.monitor(overrideFreeze)))
