@@ -1,25 +1,15 @@
 package models
 
-import java.util.concurrent.TimeUnit
-import javax.inject.{Singleton, Inject}
+import javax.inject.{Inject, Singleton}
 
-import actors.{MonitorActor, StatusActor}
+import actors.MonitorActor
 import akka.actor.ActorSystem
-import models.Foo.{RankedRow, MonitorRow}
-import org.jboss.netty.util.{Timeout, TimerTask, HashedWheelTimer}
-import play.api.Logger
+import models.Foo.RankedRow
 import play.api.db.slick.DatabaseConfigProvider
-import play.api.inject.ApplicationLifecycle
-import play.api.mvc.{Action, Controller}
-import play.twirl.api.Html
-import slick.backend.DatabaseConfig
-import slick.dbio.DBIO
 import slick.driver.JdbcProfile
-import slick.jdbc.{JdbcBackend, GetResult}
-import spire.math.{FixedPoint, FixedScale, Rational}
-import views.html
+import spire.math.Rational
 
-import scala.concurrent.{Promise, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 
 case class ContestMonitor(contest: Contest, status: AnyStatus)
 
@@ -173,6 +163,7 @@ class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, system: Actor
 
   def getMonitor(id: Int, overrideFreeze: Boolean)(implicit ec: ExecutionContext): Future[Option[ContestMonitor]] = {
     import akka.pattern.ask
+
     import scala.concurrent.duration._
     import scala.language.postfixOps
 
