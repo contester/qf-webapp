@@ -19,8 +19,6 @@ import slick.jdbc.{JdbcBackend, GetResult}
 import spire.math.{FixedPoint, FixedScale, Rational}
 import views.html
 
-import scala.concurrent.ExecutionContext.Implicits.global
-
 import scala.concurrent.{Promise, ExecutionContext, Future}
 
 case class ContestMonitor(contest: Contest, status: AnyStatus)
@@ -173,7 +171,7 @@ case class StoredContestStatus(contest: Contest, frozen: AnyStatus, exposed: Any
 class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, system: ActorSystem) {
   private[this] val monitorActor = system.actorOf(MonitorActor.props(dbConfigProvider.get[JdbcProfile].db), "monitor-actor")
 
-  def getMonitor(id: Int, overrideFreeze: Boolean): Future[Option[ContestMonitor]] = {
+  def getMonitor(id: Int, overrideFreeze: Boolean)(implicit ec: ExecutionContext): Future[Option[ContestMonitor]] = {
     import akka.pattern.ask
     import scala.concurrent.duration._
     import scala.language.postfixOps
