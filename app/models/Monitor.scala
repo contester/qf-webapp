@@ -170,13 +170,8 @@ case class StoredContestStatus(contest: Contest, frozen: AnyStatus, exposed: Any
 }
 
 @Singleton
-class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, system: ActorSystem, lifecycle: ApplicationLifecycle) {
-  val dbConfig = dbConfigProvider.get[JdbcProfile]
-  import dbConfig.driver.api._
-
-  val db = dbConfig.db
-
-  val monitorActor = system.actorOf(MonitorActor.props(db), "monitor-actor")
+class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, system: ActorSystem) {
+  private[this] val monitorActor = system.actorOf(MonitorActor.props(dbConfigProvider.get[JdbcProfile].db), "monitor-actor")
 
   def getMonitor(id: Int, overrideFreeze: Boolean): Future[Option[ContestMonitor]] = {
     import akka.pattern.ask
