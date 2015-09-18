@@ -18,4 +18,4 @@
     * SubmitAccepted
     * SubmitCompileError
     * SubmitPartialResult(passed: Int, taken: Int)
-    * SubmitACMPartialResult(text: String, test: Option[Int])
+    * SubmitACMPartialResult(text: String, test: Option\[Int\])
