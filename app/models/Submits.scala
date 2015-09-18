@@ -6,10 +6,10 @@ import spire.math.{FixedPoint, FixedScale, Rational}
 
 import scala.concurrent.{ExecutionContext, Future}
 
-
 case class Arrived(timestamp: DateTime, seconds: Int, afterFreeze: Boolean) {
   def asString = SecondsToTimeStr(seconds)
 }
+
 case class RatedProblem(id: String, rating: Int)
 
 case class SubmitId(id: Int, arrived: Arrived, teamId: Int, contestId: Int, problem: RatedProblem, ext: String)
@@ -134,7 +134,8 @@ case class SubmitDetails(fsub: FullyDescribedSubmit, source: Array[Byte]) {
   def sourceStr = new String(source, "UTF-8")
 }
 
-case class FullyDescribedSubmit(submit: Submit, index: Int, score: Option[Score], result: SubmitResult, stats: SubmitStats, details: Seq[ResultEntry])
+case class FullyDescribedSubmit(submit: Submit, index: Int, score: Option[Score], result: SubmitResult,
+                                stats: SubmitStats, details: Seq[ResultEntry])
 
 object Submits {
 
