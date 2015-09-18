@@ -1,8 +1,12 @@
 @(subopt: Option[SubmitDetails], contestId: Int)(implicit request: RequestHeader)
 
-@adminmain(tab = "status", contestId = contestId) {
+@adminmain(tab = "", contestId = contestId) {
 
 @for(sub <- subopt) {
+<div class="jumbotron">
+    <p>По часам: @{sub.fsub.submit.submitId.arrived.timestamp}, по контесту: @sub.fsub.submit.submitId.arrived.asString,
+        @if(sub.fsub.submit.submitId.arrived.afterFreeze){после}else{до} заморозки</p>
+</div>
 <div class="row">
     <div class="col-md-6 well">
         <pre>@sub.sourceStr</pre>
@@ -14,7 +18,7 @@
             </thead>
             <tbody>
             @for(s <- sub.fsub.details) {
-            <tr><td>@s.test</td><td>@s.resultString</td><td>@s.time</td><td>@s.memory</td></tr>
+            <tr><td>@if(s.test!=0){@s.test}</td><td>@s.resultString</td><td>@s.time</td><td>@s.memory</td></tr>
             }
             </tbody>
         </table>
