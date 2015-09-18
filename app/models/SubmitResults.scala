@@ -55,14 +55,14 @@ object SubmitResult {
   }
 
   def annotate2(schoolMode: Boolean, submit: Submit, details: Seq[ResultEntry]): SubmitResult =
-    if (!submit.status.finished)
+    if (!submit.finished)
       SubmitWaiting
     else if (submit.success)
       SubmitAccepted
-    else if (!submit.status.compiled)
+    else if (!submit.compiled)
       SubmitCompileError
     else if (schoolMode)
-      SubmitPartialResult(submit.status.passed, submit.status.taken)
+      SubmitPartialResult(submit.passed, submit.taken)
     else {
       val lr = Submits.getTestingLastResult(details).map(x => (x.resultString, x.test)).getOrElse(("unknown", 0))
       SubmitACMPartialResult(lr._1, Some(lr._2))

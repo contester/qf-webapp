@@ -14,12 +14,8 @@ case class RatedProblem(id: String, rating: Int)
 
 case class SubmitId(id: Int, arrived: Arrived, teamId: Int, contestId: Int, problem: RatedProblem, ext: String)
 
-case class SubmitTopLevel(finished: Boolean, compiled: Boolean, passed: Int, taken: Int) {
-  def success = finished && compiled && taken > 0 && passed == taken
-}
-
-case class Submit(submitId: SubmitId, status: SubmitTopLevel, testingId: Option[Int]) {
-  def success = status.success
+case class Submit(submitId: SubmitId, finished: Boolean, compiled: Boolean, passed: Int, taken: Int, testingId: Option[Int]) {
+  val success = finished && compiled && taken > 0 && passed == taken
   def afterFreeze = submitId.arrived.afterFreeze
 }
 
@@ -66,11 +62,11 @@ object RationalToScoreStr {
 
 object SchoolScorer extends SubmitScorer[SchoolCell] {
   def apply(cell: SchoolCell, submit: Submit) =
-    if (!submit.status.compiled)
+    if (!submit.compiled)
       (cell, None)
     else {
       val newScore = SchoolCell.calculate(submit.submitId.problem.rating,
-        Rational(submit.status.passed, submit.status.taken), cell.attempt + 1)
+        Rational(submit.passed, submit.taken), cell.attempt + 1)
 
       (SchoolCell(cell.attempt + 1, cell.score.max(newScore), cell.fullSolution || submit.success),
         if (newScore > cell.score) Some(SchoolScore(newScore))
@@ -102,7 +98,7 @@ case class ACMScore(value: Int) extends Score {
 
 object ACMScorer extends SubmitScorer[ACMCell] {
   def apply(cell: ACMCell, submit: Submit) =
-    if (!submit.status.compiled || cell.fullSolution)
+    if (!submit.compiled || cell.fullSolution)
       (cell, None)
     else {
       val result = ACMCell(cell.attempt + 1, submit.submitId.arrived.seconds, submit.success)
@@ -178,10 +174,9 @@ object Submits {
       r.nextInt(), r.nextInt(),
       RatedProblem(r.nextString(), r.nextInt()),
       r.nextString()),
-    SubmitTopLevel(
       r.nextBoolean(),
       r.nextBoolean(),
-      r.nextInt(), r.nextInt()), r.nextIntOption()
+      r.nextInt(), r.nextInt(), r.nextIntOption()
   ))
 
   def getContestSubmits(contest: Int) = {
