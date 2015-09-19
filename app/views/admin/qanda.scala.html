@@ -1,6 +1,6 @@
-@(clarifications: Seq[Clarification1], clReqs: Seq[ClarificationRequest1], contestId: Int)(implicit request: RequestHeader)
+@(clarifications: Seq[Clarification1], clReqs: Seq[ClarificationRequest1], contest: SelectedContest)(implicit request: RequestHeader)
 
-@adminmain(tab = "qanda", contestId=contestId) {
+@adminmain(tab = "qanda", contest=contest) {
 
 <div class="panel panel-success">
     <div class="panel-heading"><h3 class="panel-title">Clarifications</h3></div>

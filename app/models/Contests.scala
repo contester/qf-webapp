@@ -25,6 +25,8 @@ case class Contest(id: Int, name: String, schoolMode: Boolean, startTime: DateTi
   def getClarifications = Contests.getClarifications(id)
 }
 
+case class SelectedContest(contest: Contest, contests: Seq[(Int, String)])
+
 case class Problem(id: String, name: String, tests: Int, rating: Int)
 
 case class Compiler(id: Int, name: String, ext: String)

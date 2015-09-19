@@ -1,6 +1,6 @@
-@(subopt: Option[SubmitDetails], contestId: Int)(implicit request: RequestHeader)
+@(subopt: Option[SubmitDetails], contest: SelectedContest)(implicit request: RequestHeader)
 
-@adminmain(tab = "", contestId = contestId) {
+@adminmain(tab = "", contest = contest) {
 
 @for(sub <- subopt) {
 <div class="row">

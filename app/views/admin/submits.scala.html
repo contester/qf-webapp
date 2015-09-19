@@ -1,6 +1,6 @@
-@(submits: Seq[FullyDescribedSubmit], teams: Map[Int, LocalTeam], contest: Contest, admin: Admin)(implicit request: RequestHeader)
-@adminmain(tab = "status", contestId = contest.id) {
-@defining(admin.canModify(contest.id)) { showRejudge =>
+@(submits: Seq[FullyDescribedSubmit], teams: Map[Int, LocalTeam], contest: SelectedContest, admin: Admin)(implicit request: RequestHeader)
+@adminmain(tab = "status", contest = contest) {
+@defining(admin.canModify(contest.contest.id)) { showRejudge =>
 <table class="table table-hover table-bordered table-responsive">
     <thead>
     <tr><th>ID</th>@if(showRejudge){<th>R</th>}<th>Время</th><th>Команда</th><th>Задача</th><th>Результат</th>

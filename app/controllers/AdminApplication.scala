@@ -57,7 +57,9 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   def monitor(id: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(id)) { implicit request =>
     implicit val ec = StackActionExecutionContext
 
-    monitorModel.getMonitor(id, true).map(x => Ok(html.admin.monitor(x.get.contest, x.get.status)))
+    getSelectedContests(id, loggedIn).zip(monitorModel.getMonitor(id, true)).map {
+      case (contest, status) => Ok(html.admin.monitor(contest, status.get.status))
+    }
   }
 
   import slick.driver.MySQLDriver.api._
@@ -82,15 +84,21 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   }
 
   private def showSubs(contestId: Int, limit: Option[Int], account: Admin)(implicit request: RequestHeader, ec: ExecutionContext) =
-    db.run(Contests.getContest(contestId)).map(_.headOption).zip(
+    getSelectedContests(contestId, account).zip(
       db.run(Contests.getTeams(contestId)).map(_.map(x => x.localId -> x).toMap)
     ).zip(db.run(Submits.getContestSubmits(contestId))).flatMap {
-      case ((Some(contest), teamMap), submits) =>
-        Submits.groupAndAnnotate(db, contest.schoolMode, limit.map(submits.take).getOrElse(submits)).map { fullyDescribedSubmits =>
+      case ((contest, teamMap), submits) =>
+        Submits.groupAndAnnotate(db, contest.contest.schoolMode, limit.map(submits.take).getOrElse(submits)).map { fullyDescribedSubmits =>
           Ok(html.admin.submits(fullyDescribedSubmits, teamMap, contest, account))
         }
       case _ =>
         Future.successful(Redirect(routes.AdminApplication.index))
+    }
+
+  private def getSelectedContests(contestId: Int, account: Admin)(implicit ec: ExecutionContext): Future[SelectedContest] =
+    db.run(Contests.getContests).map { contests =>
+      val cmap = contests.map(x => x.id -> x).toMap
+      SelectedContest(cmap(contestId), cmap.mapValues(_.name).toSeq)
     }
 
   def index = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
@@ -150,13 +158,18 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   }
 
   def rejudgePage(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canModify(contestId)) { implicit request =>
-    Future.successful(Ok(html.admin.rejudge(rejudgeSubmitRangeForm, contestId)))
+    implicit val ec = StackActionExecutionContext
+    getSelectedContests(contestId, loggedIn).map { contest =>
+      Ok(html.admin.rejudge(rejudgeSubmitRangeForm, contest))
+    }
   }
 
   def rejudgeRange(contestId: Int) = AsyncStack(parse.multipartFormData, AuthorityKey -> AdminPermissions.canModify(contestId)) { implicit request =>
     implicit val ec = StackActionExecutionContext
     rejudgeSubmitRangeForm.bindFromRequest.fold(
-      formWithErrors => Future.successful(BadRequest(html.admin.rejudge(formWithErrors, contestId))),
+      formWithErrors => getSelectedContests(contestId, loggedIn).map { contest =>
+        BadRequest(html.admin.rejudge(formWithErrors, contest))
+      },
       data => rejudgeRangeEx(data.range, loggedIn).map { rejudged =>
         Redirect(routes.AdminApplication.rejudgePage(contestId)).flashing(
           "success" -> rejudged.mkString(" ")
@@ -178,7 +191,12 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   def showSubmit(submitId: Int) = AsyncStack(AuthorityKey -> canSeeSubmit(submitId)) { implicit request =>
     implicit val ec = StackActionExecutionContext
-    Submits.getSubmitById(db, submitId).map(x => Ok(html.admin.showsubmit(x, x.map(_.fsub.submit.submitId.contestId).getOrElse(1))))
+    Submits.getSubmitById(db, submitId).flatMap { submit =>
+      val cid = submit.map(_.fsub.submit.submitId.contestId).getOrElse(1)
+      getSelectedContests(cid, loggedIn).map { contest =>
+        Ok(html.admin.showsubmit(submit, contest))
+      }
+    }
   }
 
   def showQandA(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
@@ -187,9 +205,9 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
       sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications where cl_contest_idf = $contestId"""
         .as[Clarification1]).zip(db.run(
       sql"""select ID, Contest, Team, Problem, Request, Arrived, Answer, Status from ClarificationRequests where Contest = $contestId"""
-        .as[ClarificationRequest1])).map {
-      case (clarifications, clReqs) =>
-        Ok(html.admin.qanda(clarifications, clReqs, contestId))
+        .as[ClarificationRequest1])).zip(getSelectedContests(contestId, loggedIn)).map {
+      case ((clarifications, clReqs), contest) =>
+        Ok(html.admin.qanda(clarifications, clReqs, contest))
     }
   }
 
@@ -204,7 +222,10 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   }
 
   def postNewClarification(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canModify(contestId)) { implicit request =>
-    Future.successful(Ok(html.admin.postclarification(postClarificationForm, contestId)))
+    implicit val ec = StackActionExecutionContext
+    getSelectedContests(contestId, loggedIn).map { contest =>
+      Ok(html.admin.postclarification(postClarificationForm, contest))
+    }
   }
 
   import utils.Db._
@@ -214,20 +235,24 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     db.run(
       sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications
             where cl_id = $clarificationId""".as[Clarification1])
-      .map(_.headOption).map { clOpt =>
+      .map(_.headOption).flatMap { clOpt =>
       clOpt.map { cl =>
         val clObj = PostClarification(
           Some(cl.id), cl.contest, cl.problem, cl.text, Some(cl.date), cl.hidden
         )
-        Ok(html.admin.postclarification(postClarificationForm.fill(clObj), cl.contest))
-      }.getOrElse(Redirect(routes.AdminApplication.postNewClarification(1)))
+        getSelectedContests(cl.contest, loggedIn).map { contest =>
+          Ok(html.admin.postclarification(postClarificationForm.fill(clObj), contest))
+        }
+      }.getOrElse(Future.successful(Redirect(routes.AdminApplication.postNewClarification(1))))
     }
   }
 
   def postClarification = AsyncStack(parse.multipartFormData, AuthorityKey -> Permissions.any) { implicit request =>
     implicit val ec = StackActionExecutionContext
     postClarificationForm.bindFromRequest.fold(
-      formWithErrors => Future.successful(BadRequest(html.admin.postclarification(formWithErrors, 1))),
+      formWithErrors => getSelectedContests(1, loggedIn).map { contest =>
+        BadRequest(html.admin.postclarification(formWithErrors, contest))
+      },
       data => {
         val cdate = data.date.getOrElse(DateTime.now)
 
@@ -264,11 +289,13 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   def postAnswerForm(clrId: Int) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
     implicit val ec = StackActionExecutionContext
-    getClrById(clrId).map { optClr =>
+    getClrById(clrId).flatMap { optClr =>
       optClr.map { clr =>
-        Ok(html.admin.postanswer(
-          clarificationResponseForm.fill(ClarificationResponse(clr.answer)), clr, answerList.toSeq, clr.contest))
-      }.getOrElse(Redirect(routes.AdminApplication.showQandA(1)))
+        getSelectedContests(clr.contest, loggedIn).map { contest =>
+          Ok(html.admin.postanswer(
+            clarificationResponseForm.fill(ClarificationResponse(clr.answer)), clr, answerList.toSeq, contest))
+        }
+      }.getOrElse(Future.successful(Redirect(routes.AdminApplication.showQandA(1))))
     }
   }
 
@@ -277,7 +304,9 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     getClrById(clrId).flatMap { optClr =>
       optClr.map { clr =>
         clarificationResponseForm.bindFromRequest.fold(
-          formWithErrors => Future.successful(BadRequest(html.admin.postanswer(formWithErrors, clr, answerList.toSeq, clr.contest))),
+          formWithErrors => getSelectedContests(clr.contest, loggedIn).map { contest =>
+            BadRequest(html.admin.postanswer(formWithErrors, clr, answerList.toSeq, contest))
+          },
           data => {
             db.run(sqlu"""update ClarificationRequests set Answer = ${data.answer}, Status = 1 where ID = $clrId""").map { _ =>
               Redirect(routes.AdminApplication.showQandA(clr.contest))

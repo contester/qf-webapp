@@ -1,7 +1,7 @@
-@(form: Form[ClarificationResponse], clr: ClarificationRequest1, answers: Seq[(String, String)], contestId: Int)(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@(form: Form[ClarificationResponse], clr: ClarificationRequest1, answers: Seq[(String, String)], contest: SelectedContest)(implicit flash: Flash, messages: Messages, request: RequestHeader)
 @import helper.Implicits._
 @import b3.vertical.fieldConstructor
-@adminmain(tab = "qanda", contestId=contestId) {
+@adminmain(tab = "qanda", contest=contest) {
 @flash.get("success").map { message =>
 <div class="alert alert-success" role="alert">
     @message

@@ -1,4 +1,4 @@
-@(tab: String = "", styles: Html = Html(""), scripts: Html = Html(""), contestId: Int)(content: Html)(implicit request: RequestHeader)
+@(tab: String = "", styles: Html = Html(""), scripts: Html = Html(""), contest: SelectedContest)(content: Html)(implicit request: RequestHeader)
 
 @navlink(myid: String, myhref: play.api.mvc.Call, mytext: String) = {
 @if(myid == tab) {
@@ -9,10 +9,10 @@
 }
 
 @adminNavlinks = {
-@navlink("status", routes.AdminApplication.submits(contestId), "Статус")
-@navlink("monitor", routes.AdminApplication.monitor(contestId), "Монитор")
-@navlink("qanda", routes.AdminApplication.showQandA(contestId), "Вопросы/ответы")
-@navlink("rejudge", routes.AdminApplication.rejudgePage(contestId), "Rejudge")
+@navlink("status", routes.AdminApplication.submits(contest.contest.id), "Статус")
+@navlink("monitor", routes.AdminApplication.monitor(contest.contest.id), "Монитор")
+@navlink("qanda", routes.AdminApplication.showQandA(contest.contest.id), "Вопросы/ответы")
+@navlink("rejudge", routes.AdminApplication.rejudgePage(contest.contest.id), "Rejudge")
 }
 
 @myStyles = {
