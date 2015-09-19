@@ -3,6 +3,9 @@
 
 @main("Monitor", tab = "monitor", variant=TeamDisplayMode) {
 
+<h3>@contest.name</h3>
+@contestinfoshort(contest)
+
 @monitortable(contest, status, loggedIn.team.localId)
 
 }

@@ -34,6 +34,10 @@
 @base("Contester", myStyles) {
 @navbar(adminNavlinks, true)
 <div class="container">
+    <div class="jumbotron">
+        <h2>@contest.contest.name</h2>
+        @contestinfoshort(contest.contest)
+    </div>
     @content
 </div>
 }
