@@ -13,6 +13,18 @@
 @navlink("monitor", routes.AdminApplication.monitor(contest.contest.id), "Монитор")
 @navlink("qanda", routes.AdminApplication.showQandA(contest.contest.id), "Вопросы/ответы")
 @navlink("rejudge", routes.AdminApplication.rejudgePage(contest.contest.id), "Rejudge")
+<li class="dropdown">
+    <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">
+        @contest.contest.id
+        <span class="caret"></span>
+    </a>
+    <ul class="dropdown-menu" role="menu">
+        @for(c <- contest.contests) {
+            <li role="presentation" @if(c._1 == contest.contest.id){class="active"}>
+                <a href="@if(c._1 == contest.contest.id){#}else{@routes.AdminApplication.submits(c._1)}">@c._2</a></li>
+        }
+    </ul>
+</li>
 }
 
 @myStyles = {
@@ -34,10 +46,6 @@
 @base("Contester", myStyles) {
 @navbar(adminNavlinks, true)
 <div class="container">
-    <div class="jumbotron">
-        <h2>@contest.contest.name</h2>
-        @contestinfoshort(contest.contest)
-    </div>
     @content
 </div>
 }
