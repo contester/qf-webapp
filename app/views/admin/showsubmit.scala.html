@@ -3,9 +3,11 @@
 @adminmain(tab = "", contestId = contestId) {
 
 @for(sub <- subopt) {
-<div class="jumbotron">
-    <p>По часам: @{sub.fsub.submit.submitId.arrived.timestamp}, по контесту: @sub.fsub.submit.submitId.arrived.asString,
-        @if(sub.fsub.submit.submitId.arrived.afterFreeze){после}else{до} заморозки</p>
+<div class="row">
+    <div class="well">
+        <p>По часам: @{sub.fsub.submit.submitId.arrived.timestamp}, по контесту: @sub.fsub.submit.submitId.arrived.asString,
+            @if(sub.fsub.submit.submitId.arrived.afterFreeze){после}else{до} заморозки</p>
+    </div>
 </div>
 <div class="row">
     <div class="col-md-6 well">
