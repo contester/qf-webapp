@@ -178,7 +178,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     )
   }
 
-  def rejudgeSubmit(submitId: Int) = AsyncStack(parse.multipartFormData, AuthorityKey -> canRejudgeSubmit(submitId)) { implicit request =>
+  def rejudgeSubmit(submitId: Int) = AsyncStack(AuthorityKey -> canRejudgeSubmit(submitId)) { implicit request =>
     implicit val ec = StackActionExecutionContext
     rabbitMq ! Message.queue(SubmitMessage(submitId), queue = "contester.submitrequests")
     db.run(sql"select Contest from NewSubmits where ID = $submitId".as[Int]).map { cids =>
