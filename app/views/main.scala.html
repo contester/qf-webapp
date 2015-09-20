@@ -50,7 +50,7 @@
 }
 
 @base(title, myStyles, myScripts) {
-@navbar(teamNavlinks)
+@navbar(Some(routes.AuthForms.logout))(teamNavlinks)
 
 <div class="container">
     @content
