@@ -44,6 +44,7 @@ GET /admin/showsubmit/:id controllers.AdminApplication.showSubmit(id: Int)
 GET /admin/login controllers.AdminAuthForms.login
 POST /admin/login controllers.AdminAuthForms.authenticate
 GET /admin/logout controllers.AdminAuthForms.logout
+GET /admin/feed/:contestId controllers.AdminApplication.feed(contestId: Int)
 
 
 GET     /assets/*file				controllers.Assets.at(path="/public", file)

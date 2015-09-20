@@ -11,7 +11,10 @@ import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
-import play.api.mvc.{Controller, RequestHeader}
+import play.api.libs.EventSource
+import play.api.libs.iteratee.{Enumeratee, Concurrent}
+import play.api.libs.json.JsValue
+import play.api.mvc.{Action, Controller, RequestHeader}
 import slick.driver.JdbcProfile
 import slick.jdbc.GetResult
 import views.html
@@ -54,6 +57,9 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   import com.spingo.op_rabbit.PlayJsonSupport._
 
   val rabbitMq = system.actorOf(Props[RabbitControl])
+
+  val (brdOut, brdChannel) = Concurrent.broadcast[JsValue]
+
   def monitor(id: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(id)) { implicit request =>
     implicit val ec = StackActionExecutionContext
 
@@ -209,6 +215,16 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
       case ((clarifications, clReqs), contest) =>
         Ok(html.admin.qanda(clarifications, clReqs, contest))
     }
+  }
+
+  private def filter(contestId: Int)(implicit ec: ExecutionContext) = Enumeratee.filter[JsValue] {
+    json: JsValue => (json \ "contest").as[Int] == contestId
+  }
+
+  def feed(contestId: Int) = Action {
+    import play.api.libs.concurrent.Execution.Implicits.defaultContext
+
+    Ok.stream(brdOut &> filter(contestId) &> EventSource()).as("text/event-stream")
   }
 
   val postClarificationForm = Form {
