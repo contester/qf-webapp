@@ -224,21 +224,16 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     json: JsValue => (json \ "contest").as[Int] == contestId
   }
 
-  def feed(contestId: Int) = Action.async { implicit request =>
-    import play.api.libs.concurrent.Execution.Implicits.defaultContext
+  def feed(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
+    implicit val ec = StackActionExecutionContext
 
-    authorized(Permissions.any).flatMap {
-      case Left(result) => Future.successful(result)
-      case Right((user, resultUpdater)) =>
-        import scala.concurrent.duration._
-        import akka.pattern.ask
+    import scala.concurrent.duration._
+    import akka.pattern.ask
 
-        statusActorModel.statusActor.ask(StatusActor.JoinAdmin(contestId))(Duration(5, SECONDS)).map {
-          case StatusActor.AdminJoined(e) =>
-            Ok.stream(e &> filter(contestId) &> EventSource()).as("text/event-stream")
-          case _ => BadRequest("foo")
-
-        }
+    statusActorModel.statusActor.ask(StatusActor.JoinAdmin(contestId))(Duration(5, SECONDS)).map {
+      case StatusActor.AdminJoined(e) =>
+        Ok.stream(e &> filter(contestId) &> EventSource()).as("text/event-stream")
+      case _ => BadRequest("foo")
     }
   }
 
