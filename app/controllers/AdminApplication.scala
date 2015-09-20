@@ -2,6 +2,7 @@ package controllers
 
 import javax.inject.{Inject, Singleton}
 
+import actors.StatusActor
 import akka.actor.{ActorSystem, Props}
 import com.google.common.collect.ImmutableRangeSet
 import com.spingo.op_rabbit.{Message, RabbitControl}
@@ -18,9 +19,10 @@ import play.api.mvc.{Action, Controller, RequestHeader}
 import slick.driver.JdbcProfile
 import slick.jdbc.GetResult
 import views.html
-import com.github.nscala_time.time.Imports._
 
 import scala.concurrent.{ExecutionContext, Future}
+
+import com.github.nscala_time.time.Imports._
 
 case class RejudgeSubmitRange(range: String)
 case class PostClarification(id: Option[Int], contest: Int, problem: String, text: String, date: Option[DateTime], hidden: Boolean)
@@ -49,6 +51,7 @@ case class ClarificationResponse(answer: String)
 class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
                              monitorModel: Monitor,
                              system: ActorSystem,
+                             statusActorModel: StatusActorModel,
                              val auth: AuthWrapper,
                              val messagesApi: MessagesApi) extends Controller with AuthElement with AdminAuthConfigImpl with I18nSupport{
 
@@ -221,10 +224,22 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     json: JsValue => (json \ "contest").as[Int] == contestId
   }
 
-  def feed(contestId: Int) = Action {
+  def feed(contestId: Int) = Action.async { implicit request =>
     import play.api.libs.concurrent.Execution.Implicits.defaultContext
 
-    Ok.stream(brdOut &> filter(contestId) &> EventSource()).as("text/event-stream")
+    authorized(Permissions.any).flatMap {
+      case Left(result) => Future.successful(result)
+      case Right((user, resultUpdater)) =>
+        import scala.concurrent.duration._
+        import akka.pattern.ask
+
+        statusActorModel.statusActor.ask(StatusActor.JoinAdmin(contestId))(Duration(5, SECONDS)).map {
+          case StatusActor.AdminJoined(e) =>
+            Ok.stream(e &> filter(contestId) &> EventSource()).as("text/event-stream")
+          case _ => BadRequest("foo")
+
+        }
+    }
   }
 
   val postClarificationForm = Form {

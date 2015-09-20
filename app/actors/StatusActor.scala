@@ -21,6 +21,8 @@ object StatusActor {
   case class Connected(enumerator: Enumerator[JsValue])
   case class NewContestState(c: Contest)
   case class Ack(loggedInTeam: LoggedInTeam, msgid: Int)
+  case class JoinAdmin(c: Int)
+  case class AdminJoined(enumerator: Enumerator[JsValue])
 
   implicit val contestWrites = new Writes[Contest] {
     def writes(c: Contest) = {
@@ -203,6 +205,9 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
 
       sender ! Connected(result.andThen(eStored).andThen(br._1.interleave(tr._1)))
     }
+
+    case JoinAdmin(c: Int) =>
+      sender ! AdminJoined(adminOut)
   }
 
   @throws[Exception](classOf[Exception])
