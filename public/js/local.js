@@ -138,8 +138,17 @@ function listenOnSocket(path, iconbase) {
 
 function listenOnEvents(path) {
     var source = new EventSource(path);
-    source.addEventListener('message', function(ev) {
-        console.log(source)
+
+    source.onopen = function() {
+        console.log("Connection opened");
+    }
+
+    source.onmessage = function(ev) {
+        console.log(ev.data)
+    }
+
+    source.onerror = function(ev) {
+        console.log("Error")
         console.log(ev)
-    });
+    }
 }

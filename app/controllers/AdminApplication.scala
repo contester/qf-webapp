@@ -221,26 +221,24 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
+  /*
   private def filter(contestId: Int)(implicit ec: ExecutionContext) = Enumeratee.filter[JsValue] {
     json: JsValue => {
       Logger.info(s"f: $json")
       (json \ "contest").as[Int] == contestId
       true
     }
-  }
+  }*/
 
-  def feed(contestId: Int) = Action.async { implicit request =>
-    import play.api.libs.concurrent.Execution.Implicits.defaultContext
+  def feed(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
+    implicit val ec = StackActionExecutionContext
 
     import scala.concurrent.duration._
     import akka.pattern.ask
 
     statusActorModel.statusActor.ask(StatusActor.JoinAdmin(contestId))(Duration(5, SECONDS)).map {
       case StatusActor.AdminJoined(e) => {
-        Logger.info(s"Connected admin: $e")
-        val res = Ok.stream(e &> Concurrent.buffer(20) &> EventSource()).as("text/event-stream")
-        Logger.info(s"$res")
-        res
+        Ok.feed(e &> EventSource()).as("text/event-stream")
       }
       case _ => BadRequest("foo")
     }
