@@ -1,4 +1,4 @@
-@(title: String, tab: String = "", styles: Html = Html(""), scripts: Html = Html(""))(content: Html)(implicit request: RequestHeader)
+@(tab: String = "", styles: Html = Html(""), scripts: Html = Html(""))(content: Html)(implicit request: RequestHeader)
 
 @navlink(myid: String, myhref: String, mytext: String) = {
     @if(myid == tab) {
@@ -49,7 +49,7 @@
 </script>
 }
 
-@base(title, myStyles, myScripts) {
+@base("Contester", myStyles, myScripts) {
 @navbar(Some(routes.AuthForms.logout))(teamNavlinks)
 
 <div class="container">
