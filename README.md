@@ -6,6 +6,7 @@
     - client-side  (jquery, 50% done)
     - server-side (ad-hoc) (?)
     - nginx settings (?)
-- (admin) template refactor
-- admin contest id everywhere
 - credentials cache?
+- CHECK USER PASSWORDS
+- diff solutions
+- EventStream for admin?
