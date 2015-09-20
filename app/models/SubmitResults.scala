@@ -54,7 +54,7 @@ object SubmitResult {
     )
   }
 
-  def annotate2(schoolMode: Boolean, submit: Submit, details: Seq[ResultEntry]): SubmitResult =
+  private def annotate2(schoolMode: Boolean, submit: Submit, details: Seq[ResultEntry]): SubmitResult =
     if (!submit.finished)
       SubmitWaiting
     else if (submit.success)

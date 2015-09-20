@@ -112,7 +112,8 @@ function listenOnSocket(path, iconbase) {
                     if (obj.data.result.success) {
                         icon = iconbase + 'baloons/baloon-' + obj.data.problem.toLowerCase() + '.png';
                     }
-
+                    console.log(obj.data.submitId)
+                    $('#result-' + obj.data.submitId).html(obj.data.result.message)
                     notifyMe("Problem " + obj.data.problem, icon, obj.data.result.message)
                 }
 
@@ -140,7 +141,8 @@ function listenOnEvents(path) {
     var source = new EventSource(path);
 
     source.onopen = function() {
-        console.log("Connection opened");
+        $("#connected1").removeClass("badge-error");
+        $("#connected1").text("+");
     }
 
     source.onmessage = function(ev) {
@@ -148,13 +150,19 @@ function listenOnEvents(path) {
     }
 
     source.addEventListener('submit', function(ev) {
-        console.log(ev.data)
         var obj = JSON.parse(event.data);
         $('#result-' + obj.submitId).html(obj.result.message);
     })
 
     source.onerror = function(ev) {
+        $("#connected1").addClass("badge-error");
+        $("#connected1").text("!");
         console.log("Error")
         console.log(ev)
+
+        if (source.readyState == 2) {
+            source.close()
+            window.setTimeout(function() { listenOnEvents(path) }, 1000)
+        }
     }
 }

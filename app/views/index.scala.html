@@ -25,13 +25,13 @@
             <tr><th scope="row"><a href="@routes.Application.showSubmit(s.submit.submitId.id)">@s.submit.submitId.id</a></th>
                 <td>@s.submit.submitId.arrived.asString</td><td>@s.submit.submitId.problem.id</td><td>@s.index</td><td>@s.submit.submitId.ext</td>
                 @if(s.result.success) {
-                <td class="success">
+                <td class="success" id="result-@{s.submit.submitId.id}">
                     } else {
-                <td>
+                <td id="result-@{s.submit.submitId.id}">
                     }
-                    @s.result.message</td><td>@s.score.getOrElse("")</td>
+                    @s.result.message</td><td  id="score-@{s.submit.submitId.id}">@s.score.getOrElse("")</td>
                 </td>
-                <td>@s.stats.timeMs</td><td>@s.stats.memory</td></tr>
+                <td id="time-@{s.submit.submitId.id}">@s.stats.timeMs</td><td  id="memory-@{s.submit.submitId.id}">@s.stats.memory</td></tr>
             }
             </tbody>
         </table>
