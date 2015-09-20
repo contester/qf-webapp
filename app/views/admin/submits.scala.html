@@ -2,10 +2,11 @@
 @adminmain(tab = "status", contest = contest) {
 <script>
     function rejudgePost(target, btnid) {
-        $(btnid).html('...')
+        console.log(btnid);
+        $(btnid).html('...');
         $.post(target, {}, function() {
             $(btnid).html('<span class="glyphicon glyphicon-repeat"></span>')
-        })
+        });
     }
 </script>
 @defining(admin.canModify(contest.contest.id)) { showRejudge =>

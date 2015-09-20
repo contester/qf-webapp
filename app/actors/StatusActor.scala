@@ -211,7 +211,9 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
         case Some(o) => Enumerator[JsValue](contestToJson(o))
         case None => Enumerator.empty[JsValue]
       }
-      sender ! AdminJoined(result.andThen(adminOut))
+      val br = newCBr(c)
+
+      sender ! AdminJoined(result.andThen(br._1.interleave(adminOut)))
     }
   }
 
