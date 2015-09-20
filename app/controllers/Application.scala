@@ -52,6 +52,7 @@ object CustomTestResult {
 class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
                              monitorModel: Monitor,
                              system: ActorSystem,
+                            statusActorModel: StatusActorModel,
                              val auth: AuthWrapper,
                              val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport{
 
@@ -164,8 +165,6 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   import scala.concurrent.duration._
   import akka.pattern.ask
 
-  val statusActor = system.actorOf(StatusActor.props(db), "status-actor")
-
   val finishedRef = Subscription.run(rabbitMq) {
     import Directives._
     channel(qos = 1) {
@@ -173,7 +172,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
       consume(queue("contester.finished")) {
         body(as[FinishedTesting]) { submit =>
           Logger.info(s"Received $submit")
-          val acked = statusActor.ask(submit)(1 minute)
+          val acked = statusActorModel.statusActor.ask(submit)(1 minute)
           ack(acked)
         }
       }
@@ -187,7 +186,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
       consume(queue("contester.evals")) {
         body(as[CustomTestResult]) { submit =>
           Logger.info(s"Received $submit")
-          val acked = statusActor.ask(submit)(1 minute)
+          val acked = statusActorModel.statusActor.ask(submit)(1 minute)
           ack(acked)
         }
       }
@@ -203,13 +202,13 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
           msg => {
             Logger.info(msg.toString())
             msg.\("msgid").toOption.foreach { v =>
-              statusActor ! StatusActor.Ack(user, v.as[Int])
+              statusActorModel.statusActor ! StatusActor.Ack(user, v.as[Int])
             }
           }
         }.map { msg =>
           Logger.debug(s"Disconnected: $user ($msg)")
         }
-        statusActor.ask(StatusActor.Join(user))(5 seconds).map {
+        statusActorModel.statusActor.ask(StatusActor.Join(user))(5 seconds).map {
           case StatusActor.Connected(out) =>
             Right((in, out))
           case _ => Left(BadRequest("foo"))

@@ -54,7 +54,7 @@ object StatusActor {
 }
 
 case class Message2(id: Int, contest: Int, team: Int, kind: String, data: JsValue) {
-  def asKJson = Json.obj("kind" -> kind, "msgid" -> id, "data" -> data)
+  def asKJson = Json.obj("kind" -> kind, "contest" -> contest, "msgid" -> id, "data" -> data)
 }
 
 object Message2 {
@@ -82,6 +82,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   val contestBroadcasts = mutable.Map[Int, (Enumerator[JsValue], Channel[JsValue])]()
   val contestStates = mutable.Map[Int, Contest]()
   val teamBroadcasts = mutable.Map[(Int, Int), (Enumerator[JsValue], Channel[JsValue])]()
+  val (adminOut, adminChannel) = Concurrent.broadcast[JsValue]
 
   val unacked = mutable.Map[(Int, Int), mutable.Map[Int, Message2]]()
 
@@ -149,6 +150,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     }
 
     case msg2: Message2 => {
+      adminChannel.push(msg2.asKJson)
       val m = getUnacked(msg2.contest, msg2.team)
       m += (msg2.id -> msg2)
       newTeamBr(msg2.contest, msg2.team)._2.push(msg2.asKJson)
