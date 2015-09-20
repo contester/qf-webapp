@@ -35,6 +35,8 @@ libraryDependencies ++= Seq(
   "commons-io" % "commons-io" % "2.4",
   "com.github.nscala-time" %% "nscala-time" % "2.0.0",
   "org.scala-lang.modules" %% "scala-async" % "0.9.4",
+  "com.googlecode.htmlcompressor" % "htmlcompressor" % "1.5.2",
+  "rhino" % "js" % "1.7R2",
   "org.spire-math" %% "spire" % "0.10.1",
   "com.google.guava" % "guava" % "18.0"
 )

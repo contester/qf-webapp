@@ -1,0 +1,24 @@
+@(contest: Contest, status: models.AnyStatus)
+
+<html>
+<head>
+    <title>@contest.name</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.4.0/css/font-awesome.min.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
+    <link href="https://stingr.net/cdn2/css/roboto.min.css" rel="stylesheet">
+    <link href="https://stingr.net/cdn2/css/material.min.css" rel="stylesheet">
+    <link href="https://stingr.net/cdn2/css/ripples.min.css" rel="stylesheet">
+    <script src="https://stingr.net/cdn2/js/ripples.min.js"></script>
+    <script src="https://stingr.net/cdn2/js/material.min.js"></script>
+    <script type="text/javascript">
+    $.material.init()
+    setTimeout(function() { location.reload() }, 60000);
+    </script>
+</head><body><div class="container">
+    <h3>@contest.name</h3>
+    @contestinfoshort(contest)
+
+    @monitortable(contest, status, 0)
+</div></body></html>

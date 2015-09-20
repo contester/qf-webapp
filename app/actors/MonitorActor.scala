@@ -1,7 +1,11 @@
 package actors
 
+import java.io.File
+
 import akka.actor.{Stash, Actor, Props}
 import models._
+import org.apache.commons.io.{Charsets, FileUtils}
+import play.twirl.api.HtmlFormat
 import slick.jdbc.JdbcBackend
 
 import scala.collection.mutable
@@ -65,6 +69,9 @@ class MonitorActor(db: JdbcBackend#DatabaseDef) extends Actor {
         f.success(Some(c))
       }
       monitors.put(c.contest.id, c)
+
+      FileUtils.writeStringToFile(new File(s"/ssd/s/qq/${c.contest.id}.html"),
+        Compressor(views.html.staticmonitor(c.contest, c.monitor(false).status).body), Charsets.UTF_8)
     }
 
     case v: ValidContests => {
