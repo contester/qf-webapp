@@ -1,6 +1,6 @@
 @(tab: String = "", styles: Html = Html(""), scripts: Html = Html(""), contest: SelectedContest)(content: Html)(implicit request: RequestHeader)
 
-@navlink(myid: String, mytext: String) = {
+@navlink(myid: String, mytext: Html) = {
 @if(myid == tab) {
 <li class="active"><a href="#">@mytext <span class="sr-only">(current)</span></a></li>
 } else {
@@ -9,10 +9,10 @@
 }
 
 @adminNavlinks = {
-@navlink("status", "Статус")
-@navlink("monitor", "Монитор")
-@navlink("qanda", "Вопросы/ответы")
-@navlink("rejudge", "Rejudge")
+@navlink("status", Html("Статус"))
+@navlink("monitor", Html("Монитор"))
+@navlink("qanda", Html("Вопросы <span id='qanda' class='badge'>1</span>"))
+@navlink("rejudge", Html("Rejudge"))
 <li class="dropdown">
     <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">
         @contest.contest.id
