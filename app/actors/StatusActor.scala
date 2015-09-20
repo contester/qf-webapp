@@ -206,8 +206,13 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       sender ! Connected(result.andThen(eStored).andThen(br._1.interleave(tr._1)))
     }
 
-    case JoinAdmin(c: Int) =>
-      sender ! AdminJoined(adminOut)
+    case JoinAdmin(c: Int) => {
+      val result = contestStates.get(c) match {
+        case Some(o) => Enumerator[JsValue](contestToJson(o))
+        case None => Enumerator.empty[JsValue]
+      }
+      sender ! AdminJoined(result.andThen(adminOut))
+    }
   }
 
   @throws[Exception](classOf[Exception])

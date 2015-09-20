@@ -43,7 +43,16 @@
 </style>
 }
 
-@base("Contester", myStyles) {
+@myScripts = {
+<script type="text/javascript">
+    document.addEventListener('DOMContentLoaded', maybeCheckNotifyPermission)
+    listenOnEvents('@routes.AdminApplication.feed(contest.contest.id)')
+</script>
+}
+
+
+@base("Contester", myStyles, myScripts) {
+
 @navbar(adminNavlinks, true)
 <div class="container">
     @content

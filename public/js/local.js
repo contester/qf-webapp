@@ -135,3 +135,14 @@ function listenOnSocket(path, iconbase) {
         })
 
 }
+
+function listenOnEvents(path) {
+    var source = new EventSource(path)
+    source.onopen = function() {
+        console.log("foo")
+    }
+    source.onmessage = function(ev) {
+        console.log(ev)
+    }
+
+}

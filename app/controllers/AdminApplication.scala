@@ -8,6 +8,7 @@ import com.google.common.collect.ImmutableRangeSet
 import com.spingo.op_rabbit.{Message, RabbitControl}
 import jp.t2v.lab.play2.auth.AuthElement
 import models._
+import play.api.Logger
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
@@ -221,7 +222,11 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   }
 
   private def filter(contestId: Int)(implicit ec: ExecutionContext) = Enumeratee.filter[JsValue] {
-    json: JsValue => (json \ "contest").as[Int] == contestId
+    json: JsValue => {
+      Logger.info(s"f: $json")
+      (json \ "contest").as[Int] == contestId
+      true
+    }
   }
 
   def feed(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
@@ -231,8 +236,12 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     import akka.pattern.ask
 
     statusActorModel.statusActor.ask(StatusActor.JoinAdmin(contestId))(Duration(5, SECONDS)).map {
-      case StatusActor.AdminJoined(e) =>
-        Ok.stream(e &> filter(contestId) &> EventSource()).as("text/event-stream")
+      case StatusActor.AdminJoined(e) => {
+        Logger.info(s"Connected admin: $e")
+        val res = Ok.stream(e &> EventSource()).as("text/event-stream")
+        Logger.info(s"$res")
+        res
+      }
       case _ => BadRequest("foo")
     }
   }
