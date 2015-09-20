@@ -1,11 +1,4 @@
-@(title: String, tab: String = "", styles: Html = Html(""), scripts: Html = Html(""),
-  variant: DisplayMode=EmptyDisplayMode)(content: Html)(implicit request: RequestHeader)
-
-@notifySocket = @{variant match {
-case TeamDisplayMode => Some(routes.Application.socket.webSocketURL())
-case _ => None
-}
-}
+@(title: String, tab: String = "", styles: Html = Html(""), scripts: Html = Html(""))(content: Html)(implicit request: RequestHeader)
 
 @navlink(myid: String, myhref: String, mytext: String) = {
     @if(myid == tab) {
@@ -33,11 +26,6 @@ case _ => None
 </li>
 }
 
-@adminNavlinks = {
-@navlink("index", "/admin", "Статус")
-@navlink("monitor", "/admin/monitor", "Монитор")
-}
-
 @myStyles = {
 @styles
 <style>
@@ -56,21 +44,13 @@ case _ => None
 
 @myScripts = {
 <script type="text/javascript">
-    @for(s <- notifySocket) {
-        document.addEventListener('DOMContentLoaded', maybeCheckNotifyPermission);
-        listenOnSocket("@s", '@routes.Assets.at("images/")');
-    }
+    document.addEventListener('DOMContentLoaded', maybeCheckNotifyPermission);
+    listenOnSocket("@routes.Application.socket.webSocketURL()", '@routes.Assets.at("images/")');
 </script>
 }
 
 @base(title, myStyles, myScripts) {
-
-@{variant match {
-    case TeamDisplayMode => navbar(teamNavlinks)
-case AdminDisplayMode =>navbar(adminNavlinks, true)
-case _ => Html("")
-}
-}
+@navbar(teamNavlinks)
 
 <div class="container">
     @content
