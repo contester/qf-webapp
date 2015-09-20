@@ -26,10 +26,9 @@ object ClarificationRequestId {
 }
 
 class QandA @Inject() (dbConfigProvider: DatabaseConfigProvider,
-                             monitorModel: Monitor,
-                             val auth: AuthWrapper,
+                       val auth: AuthWrapper,
                        system: ActorSystem,
-                             val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport {
+                       val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport {
 
   private val dbConfig = dbConfigProvider.get[JdbcProfile]
   private val db = dbConfig.db
