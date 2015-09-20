@@ -1,8 +1,11 @@
 @(submits: Seq[FullyDescribedSubmit], teams: Map[Int, LocalTeam], contest: SelectedContest, admin: Admin)(implicit request: RequestHeader)
 @adminmain(tab = "status", contest = contest) {
 <script>
-    function rejudgePost(target) {
-        $.post(target, {})
+    function rejudgePost(target, btnid) {
+        $(btnid).html('...')
+        $.post(target, {}, function() {
+            $(btnid).html('<span class="glyphicon glyphicon-repeat"></span>')
+        })
     }
 </script>
 @defining(admin.canModify(contest.contest.id)) { showRejudge =>
@@ -16,7 +19,7 @@
     @for(s <- submits) {
     <tr><th scope="row"><a href="@routes.AdminApplication.showSubmit(s.submit.submitId.id)">@s.submit.submitId.id</a></th>
         @if(showRejudge){<td>
-            <a href="javascript:void(0)" class="btn btn-primary btn-xs btn-nomargin" onclick="rejudgePost('@controllers.routes.AdminApplication.rejudgeSubmit(s.submit.submitId.id)')"><span class="glyphicon glyphicon-repeat"/></a>
+            <a href="javascript:void(0)" class="btn btn-primary btn-xs btn-nomargin" id="rejudge-@{s.submit.submitId.id}" onclick="rejudgePost('@controllers.routes.AdminApplication.rejudgeSubmit(s.submit.submitId.id)', '#rejudge-@{s.submit.submitId.id}')"><span class="glyphicon glyphicon-repeat"></span></a>
         </td>
         }
         <td>@s.submit.submitId.arrived.asString</td>
