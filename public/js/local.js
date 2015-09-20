@@ -147,6 +147,12 @@ function listenOnEvents(path) {
         console.log(ev.data)
     }
 
+    source.addEventListener('submit', function(ev) {
+        console.log(ev.data)
+        var obj = JSON.parse(event.data);
+        $('#result-' + obj.submitId).html(obj.result.message);
+    })
+
     source.onerror = function(ev) {
         console.log("Error")
         console.log(ev)

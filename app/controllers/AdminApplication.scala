@@ -238,7 +238,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
     statusActorModel.statusActor.ask(StatusActor.JoinAdmin(contestId))(Duration(5, SECONDS)).map {
       case StatusActor.AdminJoined(e) => {
-        Ok.feed(e &> EventSource()).as("text/event-stream")
+        Ok.feed(e).as("text/event-stream")
       }
       case _ => BadRequest("foo")
     }

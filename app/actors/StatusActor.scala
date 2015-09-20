@@ -4,8 +4,10 @@ import akka.actor.{Actor, Props}
 import controllers.{CustomTestResult, FinishedTesting}
 import models._
 import play.api.Logger
+import play.api.libs.EventSource
+import play.api.libs.EventSource.{EventIdExtractor, Event}
 import play.api.libs.iteratee.Concurrent.Channel
-import play.api.libs.iteratee.{Concurrent, Enumerator}
+import play.api.libs.iteratee.{Enumeratee, Concurrent, Enumerator}
 import play.api.libs.json.{JsValue, Json, Writes}
 import slick.jdbc.{GetResult, JdbcBackend}
 
@@ -22,7 +24,7 @@ object StatusActor {
   case class NewContestState(c: Contest)
   case class Ack(loggedInTeam: LoggedInTeam, msgid: Int)
   case class JoinAdmin(c: Int)
-  case class AdminJoined(enumerator: Enumerator[JsValue])
+  case class AdminJoined(enumerator: Enumerator[Event])
 
   implicit val contestWrites = new Writes[Contest] {
     def writes(c: Contest) = {
@@ -84,7 +86,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   val contestBroadcasts = mutable.Map[Int, (Enumerator[JsValue], Channel[JsValue])]()
   val contestStates = mutable.Map[Int, Contest]()
   val teamBroadcasts = mutable.Map[(Int, Int), (Enumerator[JsValue], Channel[JsValue])]()
-  val (adminOut, adminChannel) = Concurrent.broadcast[JsValue]
+  val (adminOut, adminChannel) = Concurrent.broadcast[Event]
 
   val unacked = mutable.Map[(Int, Int), mutable.Map[Int, Message2]]()
 
@@ -122,6 +124,9 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       }
     }
 
+  private def toContestEvent: Enumeratee[JsValue, Event] =
+    Enumeratee.map { e => new Event(Json.stringify(e), None, Some("contest"))}
+
   def receive = {
     case Init => {
       loadPersistentMessages
@@ -143,6 +148,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     }
 
     case annotated: AnnoSubmit => {
+      adminChannel.push(new Event(Json.stringify(Json.toJson(annotated)), None, Some("submit")))
       pushPersistent(annotated.contest, annotated.team, "submit", Json.toJson(annotated))
     }
 
@@ -152,7 +158,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     }
 
     case msg2: Message2 => {
-      adminChannel.push(msg2.asKJson)
       val m = getUnacked(msg2.contest, msg2.team)
       m += (msg2.id -> msg2)
       newTeamBr(msg2.contest, msg2.team)._2.push(msg2.asKJson)
@@ -211,9 +216,10 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
         case Some(o) => Enumerator[JsValue](contestToJson(o))
         case None => Enumerator.empty[JsValue]
       }
-      val br = newCBr(c)
+      val res0 = result &> toContestEvent
+      val br = newCBr(c)._1 &> toContestEvent
 
-      sender ! AdminJoined(result.andThen(br._1.interleave(adminOut)))
+      sender ! AdminJoined(res0.andThen(br.interleave(adminOut)))
     }
   }
 

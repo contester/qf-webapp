@@ -7,7 +7,7 @@ import slick.jdbc.JdbcBackend
 
 import scala.concurrent.{ExecutionContext, Future}
 
-case class AnnoSubmit(contest: Int, team: Int, problem: String, result: SubmitResult)
+case class AnnoSubmit(submitId: Int, contest: Int, team: Int, problem: String, result: SubmitResult)
 
 trait SubmitResult {
   def success: Boolean
@@ -81,7 +81,7 @@ object SubmitResult {
   def annotateFinished(db: JdbcBackend#DatabaseDef, finished: FinishedTesting)(implicit ec: ExecutionContext): Future[AnnoSubmit] =
     Submits.loadSubmitByID(db, finished.submit.id).map(_.get).flatMap { submit =>
       annotate(db, finished.submit.schoolMode, submit).map { submitResult =>
-        AnnoSubmit(finished.submit.contest, finished.submit.team, finished.submit.problem, submitResult._1)
+        AnnoSubmit(finished.submit.id, finished.submit.contest, finished.submit.team, finished.submit.problem, submitResult._1)
       }
     }
 
