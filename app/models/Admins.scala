@@ -1,5 +1,6 @@
 package models
 
+import controllers.routes
 import slick.jdbc.GetResult
 
 import scala.concurrent.Future
@@ -56,4 +57,15 @@ object AdminPermissions {
 
   def canSpectate(contestId: Int)(account: Admin): Future[Boolean] =
     Future.successful(account.canSpectate(contestId))
+}
+
+object AdminNavlinkMatch {
+  def apply(tab: String): Function[Int, play.api.mvc.Call] =
+    tab match {
+      case "status" => routes.AdminApplication.submits(_)
+      case "monitor" => routes.AdminApplication.monitor(_)
+      case "qanda" => routes.AdminApplication.showQandA(_)
+      case "rejudge" => routes.AdminApplication.rejudgePage(_)
+      case _ => routes.AdminApplication.submits(_)
+    }
 }
