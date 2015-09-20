@@ -151,7 +151,14 @@ function listenOnEvents(path) {
 
     source.addEventListener('submit', function(ev) {
         var obj = JSON.parse(event.data);
-        $('#result-' + obj.submitId).html(obj.result.message);
+        console.log(obj);
+        var tr = $('#result-' + obj.submitId);
+        if (tr.length) {
+            tr.html(obj.result.message);
+        } else {
+            console.log("huh")
+            $('#submits > tbody').prepend('<tr><th scope="row">' + obj.submitId + '</th></tr>')
+        }
     })
 
     source.onerror = function(ev) {
