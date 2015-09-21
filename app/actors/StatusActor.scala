@@ -63,6 +63,8 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   import com.github.nscala_time.time.Imports._
 
   val (contestOut, contestChannel) = Concurrent.broadcast[Contest]
+  val (userPingOut, userPingChannel) = Concurrent.broadcast[UserEvent]
+  val userPing = UserEvent(None, None, Some("ping"), Json.obj())
 
   val contestStates = mutable.Map[Int, Contest]()
   val teamBroadcasts = mutable.Map[(Int, Int), (Enumerator[JsValue], Channel[JsValue])]()
@@ -86,7 +88,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
         self ! Message2(id, contest, team, kind, data)
       }
     }
-
 
   private def filterAdmin(contestId: Int)(implicit ec: ExecutionContext) = Enumeratee.filter[AdminEvent] {
     ev: AdminEvent => ev.contest.isEmpty || ev.contest.get == contestId
@@ -169,6 +170,10 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       }
     }
 
+    case RefreshTick => {
+      userPingChannel.push(userPing)
+    }
+
     case Join(loggedInTeam) => {
       val cid = loggedInTeam.contest.id
 
@@ -201,7 +206,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       }
       val res0 = result &> toUserEvent
       val br = contestOut &> toUserEvent &> filterUser(contest, team)
-      sender ! UserJoined(res0.andThen(br))
+      sender ! UserJoined(res0.andThen(br.interleave(userPingOut)))
     }
   }
 
