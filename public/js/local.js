@@ -54,7 +54,10 @@ function notifyMe(n_title, n_icon, n_body) {
     function updateContestTimes(e, iconbase) {
         if (vticker) {
             clearInterval(vticker);
+            vticker = null;
         }
+
+        e.started = e.startTimeDelta <= 0;
 
         if (ctstate && !ctstate.started && e.started) {
             notifyMe(e.name, iconbase, 'Соревнование началось');
@@ -62,6 +65,17 @@ function notifyMe(n_title, n_icon, n_body) {
         }
 
         ctstate = e;
+
+        if (!e.started) {
+            e.timeval = e.startTimeDelta
+        } else if (e.freezeTimeDelta > 0 && e.freezeTimeDelta < e.endTimeDelta) {
+            e.timeval = e.freezeTimeDelta
+        } else if (e.endTimeDelta > 0) {
+            e.timeval = e.endTimeDelta
+        } else if (e.exposeTimeDelta > 0) {
+            e.timeval = exposeTimeDelta
+        }
+
         if (e.timeval != 0) {
             ctstate.flip = new Date(Date.now() + e.timeval);
         }

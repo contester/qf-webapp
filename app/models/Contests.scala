@@ -1,7 +1,8 @@
 package models
 
 import com.github.nscala_time.time.Imports._
-import org.joda.time.DateTime
+import play.api.libs.EventSource.{EventIdExtractor, EventDataExtractor}
+import play.api.libs.json.{Json, Writes}
 import slick.jdbc.GetResult
 
 case class Contest(id: Int, name: String, schoolMode: Boolean, startTime: DateTime, endTime: DateTime,
@@ -23,6 +24,36 @@ case class Contest(id: Int, name: String, schoolMode: Boolean, startTime: DateTi
   def getProblems = Contests.getProblems(id)
   def getCompilers = Contests.getCompilers(id)
   def getClarifications = Contests.getClarifications(id)
+}
+
+object Contest {
+  implicit val writes = new Writes[Contest] {
+    def writes(c: Contest) = {
+      import com.github.nscala_time.time.Imports._
+      val now = DateTime.now
+
+      def ntm(x: DateTime) =
+        if (x >= now)
+          (now to x).toDurationMillis
+        else
+          -((x to now).toDurationMillis)
+
+      Json.obj(
+        "id" -> c.id,
+        "name" -> c.name,
+        "schoolMode" -> c.schoolMode,
+        "frozen" -> c.frozen,
+        "startTime" -> c.startTime,
+        "startTimeDelta" -> ntm(c.startTime),
+        "endTime" -> c.endTime,
+        "endTimeDelta" -> ntm(c.endTime),
+        "freezeTime" -> c.freezeTime,
+        "freezeTimeDelta" -> ntm(c.freezeTime),
+        "exposeTime" -> c.exposeTime,
+        "exposeTimeDelta" -> ntm(c.exposeTime)
+      )
+    }
+  }
 }
 
 case class SelectedContest(contest: Contest, contests: Seq[(Int, String)])

@@ -26,36 +26,6 @@ object StatusActor {
   case class JoinAdmin(c: Int)
   case class AdminJoined(enumerator: Enumerator[AdminEvent])
 
-  implicit val contestWrites = new Writes[Contest] {
-    def writes(c: Contest) = {
-      import com.github.nscala_time.time.Imports._
-      if (!c.started) {
-        Json.obj(
-          "name" -> c.name,
-          "started" -> c.started,
-          "timeval" -> (DateTime.now to c.startTime).toDurationMillis
-        )
-      } else {
-        if (!c.finished) {
-          Json.obj(
-            "name" -> c.name,
-            "started" -> c.started,
-            "frozen" -> c.frozen,
-            "timeval" -> (DateTime.now to c.endTime).toDurationMillis
-          )
-        } else {
-          Json.obj(
-            "name" -> c.name,
-            "started" -> c.started,
-            "ended" -> c.finished,
-            "frozen" -> c.frozen,
-            "timeval" -> 0
-          )
-        }
-      }
-    }
-  }
-
   case class AdminEvent(contest: Option[Int], event: Option[String], data: JsValue)
 
   object AdminEvent {
