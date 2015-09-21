@@ -190,30 +190,6 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-  def socket = WebSocket.tryAccept[JsValue] { implicit request =>
-    import play.api.libs.concurrent.Execution.Implicits.defaultContext
-    authorized(UserPermissions.any).flatMap {
-      case Left(result) => Future.successful(Left(result))
-      case Right((user, resultUpdater)) => {
-        val in = Iteratee.foreach[JsValue] {
-          msg => {
-            Logger.info(msg.toString())
-            msg.\("msgid").toOption.foreach { v =>
-              statusActorModel.statusActor ! StatusActor.Ack(user, v.as[Int])
-            }
-          }
-        }.map { msg =>
-          Logger.debug(s"Disconnected: $user ($msg)")
-        }
-        statusActorModel.statusActor.ask(StatusActor.Join(user))(5 seconds).map {
-          case StatusActor.Connected(out) =>
-            Right((in, out))
-          case _ => Left(BadRequest("foo"))
-        }
-      }
-    }
- }
-
   def ackMessage = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>
     implicit val ec = StackActionExecutionContext
 

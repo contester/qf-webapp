@@ -3,7 +3,6 @@ package controllers
 import javax.inject.{Inject, Singleton}
 
 import actors.StatusActor
-import actors.StatusActor.AdminEvent
 import akka.actor.{ActorSystem, Props}
 import com.google.common.collect.ImmutableRangeSet
 import com.spingo.op_rabbit.{Message, RabbitControl}
@@ -223,13 +222,6 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   }
 
 
-  private def filter(contestId: Int)(implicit ec: ExecutionContext) = Enumeratee.filter[AdminEvent] {
-    ev: AdminEvent => {
-      Logger.info(s"f: $ev")
-      ev.contest.map(_ == contestId).getOrElse(true)
-    }
-  }
-
   def feed(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
     implicit val ec = StackActionExecutionContext
 
@@ -238,7 +230,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
     statusActorModel.statusActor.ask(StatusActor.JoinAdmin(contestId))(Duration(5, SECONDS)).map {
       case StatusActor.AdminJoined(e) => {
-        Ok.feed(e &> filter(contestId) &> EventSource()).as("text/event-stream")
+        Ok.feed(e).as("text/event-stream")
       }
       case _ => BadRequest("foo")
     }

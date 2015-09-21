@@ -124,48 +124,7 @@ function notifyMe(n_title, n_icon, n_body) {
         }
     }
 
-function listenOnSocket(path, iconbase, ackMessagePath) {
-    $(function() {
-            var chatSocket = new ReconnectingWebSocket(path)
-
-            var receiveEvent = function(event) {
-                var obj = JSON.parse(event.data);
-
-                if (obj.kind == 'contest') {
-                    updateContestTimes(obj.data, iconbase + 'icpc_logo.png');
-                }
-
-                if (obj.kind == 'submit') {
-                    var icon = iconbase + 'error-icon.gif';
-                    if (obj.data.result.success) {
-                        icon = iconbase + 'baloons/baloon-' + obj.data.problem.toLowerCase() + '.png';
-                    }
-                    console.log(obj.data.submitId)
-                    $('#result-' + obj.data.submitId).html(obj.data.result.message)
-                    notifyMe("Problem " + obj.data.problem, icon, obj.data.result.message)
-                }
-
-                if (obj.kind == 'custom') {
-                    notifyMe("Server-side test", iconbase + 'icpc_logo.png', 'Completed.');
-                }
-
-                if (obj.msgid) {
-                    $.post(ackMessagePath, {'msgid': obj.msgid});
-                }
-            }
-
-            chatSocket.onmessage = receiveEvent
-            chatSocket.onerror = function(ev) {
-                console.log("error " + ev)
-            }
-            chatSocket.onclose = function(ev) {
-                console.log("close " + ev)
-            }
-        })
-
-}
-
-function listenOnEvents(path, iconbase) {
+function listenOnEvents(path, iconbase, ackMessagePath) {
     var source = new EventSource(path);
 
     source.onopen = function() {
@@ -180,12 +139,25 @@ function listenOnEvents(path, iconbase) {
     source.addEventListener('submit', function(ev) {
         var obj = JSON.parse(ev.data);
         console.log(obj);
+
         var tr = $('#result-' + obj.submitId);
         if (tr.length) {
             tr.html(obj.result.message);
         } else {
             console.log("huh")
             $('#submits > tbody').prepend('<tr><th scope="row">' + obj.submitId + '</th></tr>')
+        }
+
+        if (ackMessagePath) {
+            var icon = iconbase + 'error-icon.gif';
+            if (obj.result.success) {
+                icon = iconbase + 'baloons/baloon-' + obj.problem.toLowerCase() + '.png';
+            }
+            console.log(obj.submitId)
+            notifyMe("Problem " + obj.problem, icon, obj.result.message)
+            if (obj.msgid) {
+                $.post(ackMessagePath, {'msgid': obj.msgid});
+            }
         }
     })
 

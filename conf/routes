@@ -1,7 +1,5 @@
 GET / controllers.Application.index
 
-GET /socket controllers.Application.socket
-
 GET /clarifications controllers.QandA.index
 POST /clarifications controllers.QandA.post
 

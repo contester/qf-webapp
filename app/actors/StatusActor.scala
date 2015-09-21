@@ -8,7 +8,7 @@ import play.api.libs.EventSource
 import play.api.libs.EventSource.{EventNameExtractor, EventDataExtractor, EventIdExtractor, Event}
 import play.api.libs.iteratee.Concurrent.Channel
 import play.api.libs.iteratee.{Enumeratee, Concurrent, Enumerator}
-import play.api.libs.json.{JsValue, Json, Writes}
+import play.api.libs.json._
 import slick.jdbc.{GetResult, JdbcBackend}
 
 import scala.collection.mutable
@@ -20,30 +20,27 @@ object StatusActor {
   case object Init
   case object Tick
   case object RefreshTick
-  case class Join(loggedInTeam: LoggedInTeam)
-  case class Connected(enumerator: Enumerator[JsValue])
   case class NewContestState(c: Contest)
   case class Ack(loggedInTeam: LoggedInTeam, msgid: Int)
   case class JoinAdmin(c: Int)
-  case class AdminJoined(enumerator: Enumerator[AdminEvent])
-  case class AdminEvent(contest: Option[Int], event: Option[String], data: JsValue)
+  case class AdminJoined(enumerator: Enumerator[Event])
   case class JoinUser(contest: Int, team: Int)
   case class UserJoined(enumerator: Enumerator[Event])
-
-  object AdminEvent {
-    implicit val eventDataExtractor = EventDataExtractor[AdminEvent](x => Json.stringify(x.data))
-    implicit val eventNameExtractor = EventNameExtractor[AdminEvent](_.event)
-  }
 }
 
 case class Message2(id: Int, contest: Int, team: Int, kind: String, data: JsValue) {
-  def asKJson = Json.obj("kind" -> kind, "contest" -> contest, "msgid" -> id, "data" -> data)
+  //def asKJson = Json.obj("kind" -> kind, "contest" -> contest, "msgid" -> id, "data" -> data)
 }
 
 object Message2 {
   implicit val getResult = GetResult(r =>
     Message2(r.nextInt(), r.nextInt(), r.nextInt(), r.nextString(), Json.parse(r.nextString()))
   )
+
+  implicit val eventNameExtractor = EventNameExtractor[Message2](x => Some(x.kind))
+  implicit val eventDataExtractor = EventDataExtractor[Message2] { msg2 =>
+    Json.stringify(Json.fromJson[JsObject](msg2.data).get + ("msgid" -> JsNumber(msg2.id)))
+  }
 }
 
 class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
@@ -67,13 +64,9 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   val userPing = Event("", None, Some("ping"))
 
   val contestStates = mutable.Map[Int, Contest]()
-  val teamBroadcasts = mutable.Map[(Int, Int), (Enumerator[JsValue], Channel[JsValue])]()
-  val (adminOut, adminChannel) = Concurrent.broadcast[AdminEvent]
-
+  val (msg2Out, msg2Channel) = Concurrent.broadcast[Message2]
   val unacked = mutable.Map[(Int, Int), mutable.Map[Int, Message2]]()
-
-  private def newTeamBr(contest: Int, team: Int) =
-    teamBroadcasts.getOrElseUpdate((contest, team), Concurrent.broadcast[JsValue])
+  val (submitOut, submitChannel) = Concurrent.broadcast[AnnoSubmit]
 
   private def getUnacked(contest: Int, team: Int) =
     unacked.getOrElseUpdate((contest, team), mutable.Map[Int, Message2]())
@@ -89,14 +82,14 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       }
     }
 
-  private def filterAdmin(contestId: Int)(implicit ec: ExecutionContext) = Enumeratee.filter[AdminEvent] {
-    ev: AdminEvent => ev.contest.isEmpty || ev.contest.get == contestId
-  }
-
-  private def toEvent: Enumeratee[Contest, Event] =
+  private val contestToEvent: Enumeratee[Contest, Event] =
     Enumeratee.map { e => Event(Json.stringify(Json.toJson(e)), None, Some("contest"))}
 
   private def filterContest(contestId: Int) = Enumeratee.filter[Contest](_.id == contestId)
+
+  private def filterMessage2(contest: Int, team: Int) = Enumeratee.filter[Message2] { msg =>
+    msg.contest == contest && msg.team == team
+  }
 
   private def loadPersistentMessages =
     db.run(
@@ -107,17 +100,12 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       }
     }
 
-  private def toContestEvent: Enumeratee[Contest, AdminEvent] =
-    Enumeratee.map { e => AdminEvent(Some(e.id), Some("contest"), Json.toJson(e))}
-
   def receive = {
     case Init => {
       loadPersistentMessages
     }
 
     case finished: FinishedTesting => {
-      Logger.info(s"FT: $finished")
-
       SubmitResult.annotateFinished(db, finished).map { annotated =>
         self ! annotated
       }
@@ -131,7 +119,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     }
 
     case annotated: AnnoSubmit => {
-      adminChannel.push(AdminEvent(Some(annotated.contest), Some("submit"), Json.toJson(annotated)))
+      submitChannel.push(annotated)
       pushPersistent(annotated.contest, annotated.team, "submit", Json.toJson(annotated))
     }
 
@@ -143,20 +131,14 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     case msg2: Message2 => {
       val m = getUnacked(msg2.contest, msg2.team)
       m += (msg2.id -> msg2)
-      newTeamBr(msg2.contest, msg2.team)._2.push(msg2.asKJson)
+      msg2Channel.push(msg2)
     }
 
     case NewContestState(c) => {
-      contestStates.get(c.id) match {
-        case Some(oldState) => {
-          if (oldState != c) {
-            contestStates.put(c.id, c)
-            contestChannel.push(c)
-          }
-        }
-        case None =>
-          contestStates.put(c.id, c)
-          contestChannel.push(c)
+      val old = contestStates.get(c.id)
+      if (old.isEmpty || old.get != c) {
+        contestStates.put(c.id, c)
+        contestChannel.push(c)
       }
     }
 
@@ -172,35 +154,28 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       userPingChannel.push(userPing)
     }
 
-    case Join(loggedInTeam) => {
-      val cid = loggedInTeam.contest.id
-
-      val tr = newTeamBr(cid, loggedInTeam.team.localId)
-
-      val stored = getUnacked(loggedInTeam.contest.id, loggedInTeam.team.localId).map {
-        case (msgid, msg) => msg.asKJson
-      }
-
-      val eStored = if (stored.isEmpty) Enumerator.empty[JsValue] else Enumerator.enumerate[JsValue](stored)
-
-      sender ! Connected(eStored.andThen(tr._1))
-    }
-
     case JoinAdmin(c: Int) => {
-      val result = contestStates.get(c) match {
-        case Some(o) => Enumerator[Contest](o)
-        case None => Enumerator.empty[Contest]
-      }
-      val res0 = result &> toContestEvent
-      val br = contestOut &> toContestEvent &> filterAdmin(c)
+      val stored = Enumerator.enumerate(contestStates.get(c)) &> contestToEvent
 
-      sender ! AdminJoined(res0.andThen(br.interleave(adminOut)))
+      sender ! AdminJoined(stored.andThen(
+        Enumerator.interleave(contestOut &> filterContest(c) &> contestToEvent,
+        userPingOut
+        )))
     }
 
     case JoinUser(contest: Int, team: Int) => {
-      sender ! UserJoined(Enumerator.enumerate[Contest](contestStates.get(contest)).through(toEvent).andThen(
-        contestOut.through(filterContest(contest)).through(toEvent).interleave(userPingOut)
-      ))
+      val stored = getUnacked(contest, team).map {
+        case (msgid, msg) => msg
+      }
+
+      val eStored = Enumerator.enumerate(stored) &> EventSource()
+
+
+      sender ! UserJoined(
+        Enumerator.enumerate[Contest](contestStates.get(contest)).through(contestToEvent).andThen(eStored).andThen(
+          Enumerator.interleave(contestOut &> filterContest(contest) &> contestToEvent,
+            msg2Out &> filterMessage2(contest, team) &> EventSource(),
+            userPingOut)))
     }
   }
 
