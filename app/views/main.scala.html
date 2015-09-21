@@ -1,4 +1,4 @@
-@(tab: String = "", styles: Html = Html(""), scripts: Html = Html(""))(content: Html)(implicit request: RequestHeader)
+@(loggedIn: LoggedInTeam, tab: String = "", styles: Html = Html(""), scripts: Html = Html(""))(content: Html)(implicit request: RequestHeader)
 
 @navlink(myid: String, myhref: String, mytext: String) = {
     @if(myid == tab) {
@@ -44,8 +44,11 @@
 
 @myScripts = {
 <script type="text/javascript">
-    document.addEventListener('DOMContentLoaded', maybeCheckNotifyPermission);
-    listenOnSocket("@routes.Application.socket.webSocketURL()", '@routes.Assets.at("images/")');
+    document.addEventListener('DOMContentLoaded', function() {
+        maybeCheckNotifyPermission();
+        listenOnSocket("@routes.Application.socket.webSocketURL()", '@routes.Assets.at("images/")');
+        listenOnEvents('@routes.Application.feed(loggedIn.contest.id, loggedIn.team.localId)', '@routes.Assets.at("images/")');
+    })
 </script>
 }
 

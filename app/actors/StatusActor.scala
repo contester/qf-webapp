@@ -5,13 +5,14 @@ import controllers.{CustomTestResult, FinishedTesting}
 import models._
 import play.api.Logger
 import play.api.libs.EventSource
-import play.api.libs.EventSource.{EventDataExtractor, EventIdExtractor, Event}
+import play.api.libs.EventSource.{EventNameExtractor, EventDataExtractor, EventIdExtractor, Event}
 import play.api.libs.iteratee.Concurrent.Channel
 import play.api.libs.iteratee.{Enumeratee, Concurrent, Enumerator}
 import play.api.libs.json.{JsValue, Json, Writes}
 import slick.jdbc.{GetResult, JdbcBackend}
 
 import scala.collection.mutable
+import scala.concurrent.ExecutionContext
 
 object StatusActor {
   def props(db: JdbcBackend#DatabaseDef) = Props(classOf[StatusActor], db)
@@ -25,12 +26,13 @@ object StatusActor {
   case class Ack(loggedInTeam: LoggedInTeam, msgid: Int)
   case class JoinAdmin(c: Int)
   case class AdminJoined(enumerator: Enumerator[AdminEvent])
-
   case class AdminEvent(contest: Option[Int], event: Option[String], data: JsValue)
+  case class JoinUser(contest: Int, team: Int)
+  case class UserJoined(enumerator: Enumerator[UserEvent])
 
   object AdminEvent {
     implicit val eventDataExtractor = EventDataExtractor[AdminEvent](x => Json.stringify(x.data))
-    implicit val eventIdExtractor = EventIdExtractor[AdminEvent](_.event)
+    implicit val eventNameExtractor = EventNameExtractor[AdminEvent](_.event)
   }
 }
 
@@ -60,23 +62,16 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
 
   import com.github.nscala_time.time.Imports._
 
-  val contestBroadcasts = mutable.Map[Int, (Enumerator[JsValue], Channel[JsValue])]()
+  val (contestOut, contestChannel) = Concurrent.broadcast[Contest]
+
   val contestStates = mutable.Map[Int, Contest]()
   val teamBroadcasts = mutable.Map[(Int, Int), (Enumerator[JsValue], Channel[JsValue])]()
   val (adminOut, adminChannel) = Concurrent.broadcast[AdminEvent]
 
   val unacked = mutable.Map[(Int, Int), mutable.Map[Int, Message2]]()
 
-  private def newCBr(id: Int) =
-    synchronized {
-      contestBroadcasts.getOrElseUpdate(id, Concurrent.broadcast[JsValue])
-    }
-
   private def newTeamBr(contest: Int, team: Int) =
     teamBroadcasts.getOrElseUpdate((contest, team), Concurrent.broadcast[JsValue])
-
-  private def contestToJson(c: Contest) =
-    Json.obj("kind" -> "contest", "data" -> Json.toJson(c))
 
   private def getUnacked(contest: Int, team: Int) =
     unacked.getOrElseUpdate((contest, team), mutable.Map[Int, Message2]())
@@ -92,6 +87,25 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       }
     }
 
+
+  private def filterAdmin(contestId: Int)(implicit ec: ExecutionContext) = Enumeratee.filter[AdminEvent] {
+    ev: AdminEvent => {
+      Logger.info(s"f: $ev")
+      ev.contest.map(_ == contestId).getOrElse(true)
+    }
+  }
+
+  private def toUserEvent: Enumeratee[Contest, UserEvent] =
+    Enumeratee.map { e => UserEvent(Some(e.id), None, Some("contest"), Json.toJson(e))}
+
+  private def filterUser(contestId: Int, teamId: Int)(implicit ec: ExecutionContext) = Enumeratee.filter[UserEvent] {
+    ev: UserEvent => {
+      val xx = ev.contest.isEmpty || (ev.contest.get == contestId && (ev.team.isEmpty || ev.team.get == teamId))
+      Logger.info(s"f: $xx -- $ev")
+      xx
+    }
+  }
+
   private def loadPersistentMessages =
     db.run(
       sql"""select ID, Contest, Team, Kind, Value from Messages2 where Seen != 1""".as[Message2]
@@ -101,8 +115,8 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       }
     }
 
-  private def toContestEvent(cid: Int): Enumeratee[JsValue, AdminEvent] =
-    Enumeratee.map { e => AdminEvent(Some(cid), Some("contest"), e)}
+  private def toContestEvent: Enumeratee[Contest, AdminEvent] =
+    Enumeratee.map { e => AdminEvent(Some(e.id), Some("contest"), Json.toJson(e))}
 
   def receive = {
     case Init => {
@@ -145,12 +159,12 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
         case Some(oldState) => {
           if (oldState != c) {
             contestStates.put(c.id, c)
-            newCBr(c.id)._2.push(contestToJson(c))
+            contestChannel.push(c)
           }
         }
         case None =>
           contestStates.put(c.id, c)
-          newCBr(c.id)._2.push(contestToJson(c))
+          contestChannel.push(c)
       }
     }
 
@@ -162,22 +176,10 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       }
     }
 
-    case RefreshTick => {
-      contestStates.foreach {
-        case (contestId, c) =>
-          newCBr(contestId)._2.push(contestToJson(c))
-      }
-    }
-
     case Join(loggedInTeam) => {
       val cid = loggedInTeam.contest.id
 
-      val br = newCBr(cid)
       val tr = newTeamBr(cid, loggedInTeam.team.localId)
-      val result = contestStates.get(cid) match {
-        case Some(o) => Enumerator[JsValue](contestToJson(o))
-        case None => Enumerator.empty[JsValue]
-      }
 
       val stored = getUnacked(loggedInTeam.contest.id, loggedInTeam.team.localId).map {
         case (msgid, msg) => msg.asKJson
@@ -185,18 +187,28 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
 
       val eStored = if (stored.isEmpty) Enumerator.empty[JsValue] else Enumerator.enumerate[JsValue](stored)
 
-      sender ! Connected(result.andThen(eStored).andThen(br._1.interleave(tr._1)))
+      sender ! Connected(eStored.andThen(tr._1))
     }
 
     case JoinAdmin(c: Int) => {
       val result = contestStates.get(c) match {
-        case Some(o) => Enumerator[JsValue](contestToJson(o))
-        case None => Enumerator.empty[JsValue]
+        case Some(o) => Enumerator[Contest](o)
+        case None => Enumerator.empty[Contest]
       }
-      val res0 = result &> toContestEvent(c)
-      val br = newCBr(c)._1 &> toContestEvent(c)
+      val res0 = result &> toContestEvent
+      val br = contestOut &> toContestEvent &> filterAdmin(c)
 
       sender ! AdminJoined(res0.andThen(br.interleave(adminOut)))
+    }
+
+    case JoinUser(contest: Int, team: Int) => {
+      val result = contestStates.get(contest) match {
+        case Some(o) => Enumerator[Contest](o)
+        case None => Enumerator.empty[Contest]
+      }
+      val res0 = result &> toUserEvent
+      val br = contestOut &> toUserEvent &> filterUser(contest, team)
+      sender ! UserJoined(res0.andThen(br))
     }
   }
 

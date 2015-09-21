@@ -13,6 +13,7 @@ import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
+import play.api.libs.EventSource
 import play.api.libs.iteratee.Iteratee
 import play.api.libs.json._
 import play.api.mvc.{Action, Controller}
@@ -66,11 +67,6 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   import com.spingo.op_rabbit.PlayJsonSupport._
 
   val userPermissions = new UserPermissions(db)
-
-  def monitor(id: Int) = Action.async { implicit request =>
-    import play.api.libs.concurrent.Execution.Implicits.defaultContext
-    monitorModel.getMonitor(id, false).map(x => Ok(html.monitor(x.get.contest, x.get.status)))
-  }
 
   def monitorDefault = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>
     val loggedInTeam = loggedIn
@@ -221,4 +217,19 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
     implicit val ec = StackActionExecutionContext
     Submits.getSubmitById(db, submitId).map(x => Ok(html.showsubmit(loggedIn, x)))
   }
+
+  def feed(contestId: Int, teamId: Int) = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>
+    implicit val ec = StackActionExecutionContext
+
+    import scala.concurrent.duration._
+    import akka.pattern.ask
+
+    statusActorModel.statusActor.ask(StatusActor.JoinUser(contestId, teamId))(Duration(5, SECONDS)).map {
+      case StatusActor.UserJoined(e) => {
+        Ok.feed(e &> EventSource()).as("text/event-stream")
+      }
+      case _ => BadRequest("foo")
+    }
+  }
+
 }

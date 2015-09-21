@@ -13,11 +13,12 @@ POST /print controllers.Printing.post
 
 GET /monitor controllers.Application.monitorDefault
 GET /monitor/ controllers.Application.monitorDefault
-GET /monitor/:id controllers.Application.monitor(id: Int)
 
 GET /submit controllers.Application.submit
 POST /submit controllers.Application.submitPost
 GET /submit/:submitId controllers.Application.showSubmit(submitId: Int)
+
+GET /feed/:contestId/:teamId controllers.Application.feed(contestId: Int, teamId: Int)
 
 GET /login controllers.AuthForms.login
 POST /login controllers.AuthForms.authenticate

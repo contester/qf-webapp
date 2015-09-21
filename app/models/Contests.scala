@@ -1,8 +1,9 @@
 package models
 
 import com.github.nscala_time.time.Imports._
-import play.api.libs.EventSource.{EventIdExtractor, EventDataExtractor}
-import play.api.libs.json.{Json, Writes}
+import play.api.libs.EventSource.{EventNameExtractor, EventIdExtractor, EventDataExtractor}
+import play.api.libs.json.Json.JsValueWrapper
+import play.api.libs.json.{JsValue, Json, Writes}
 import slick.jdbc.GetResult
 
 case class Contest(id: Int, name: String, schoolMode: Boolean, startTime: DateTime, endTime: DateTime,
@@ -54,6 +55,12 @@ object Contest {
       )
     }
   }
+}
+
+case class UserEvent(contest: Option[Int], team: Option[Int], event: Option[String], data: JsValue)
+object UserEvent {
+  implicit val eventDataExtractor = EventDataExtractor[UserEvent](x => Json.stringify(x.data))
+  implicit val eventIdExtractor = EventNameExtractor[UserEvent](_.event)
 }
 
 case class SelectedContest(contest: Contest, contests: Seq[(Int, String)])

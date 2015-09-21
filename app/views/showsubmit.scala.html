@@ -1,6 +1,6 @@
 @(loggedIn: LoggedInTeam, subopt: Option[SubmitDetails])(implicit request: RequestHeader)
 
-@main(tab = "") {
+@main(loggedIn, tab = "") {
 
 @contestteaminfo(loggedIn)
 

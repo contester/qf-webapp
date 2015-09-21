@@ -1,7 +1,7 @@
 @(contest: Contest, status: models.AnyStatus, loggedIn: LoggedInTeam)(implicit request: RequestHeader)
 
 
-@main(tab = "monitor") {
+@main(loggedIn, tab = "monitor") {
 
 <h3>@contest.name</h3>
 @contestinfoshort(contest)

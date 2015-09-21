@@ -165,7 +165,7 @@ function listenOnSocket(path, iconbase) {
 
 }
 
-function listenOnEvents(path) {
+function listenOnEvents(path, iconbase) {
     var source = new EventSource(path);
 
     source.onopen = function() {
@@ -178,7 +178,7 @@ function listenOnEvents(path) {
     }
 
     source.addEventListener('submit', function(ev) {
-        var obj = JSON.parse(event.data);
+        var obj = JSON.parse(ev.data);
         console.log(obj);
         var tr = $('#result-' + obj.submitId);
         if (tr.length) {
@@ -187,6 +187,11 @@ function listenOnEvents(path) {
             console.log("huh")
             $('#submits > tbody').prepend('<tr><th scope="row">' + obj.submitId + '</th></tr>')
         }
+    })
+
+    source.addEventListener('contest', function(ev) {
+        var obj = JSON.parse(ev.data);
+        updateContestTimes(obj, iconbase);
     })
 
     source.onerror = function(ev) {
