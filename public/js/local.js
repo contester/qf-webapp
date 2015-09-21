@@ -48,23 +48,31 @@ function notifyMe(n_title, n_icon, n_body) {
         return pad(hours, 2) + ':' + pad(minutes, 2) + ':' + pad(seconds, 2);
     }
 
-    var vticker;
-    var ctstate;
+    var countdownState = {};
+
+    function startIntervalUpdate() {
+        countdownState.interval = setInterval(function() { intervalUpdateContestTimes() }, 1000);
+    }
 
     function updateContestTimes(e, iconbase) {
-        if (vticker) {
-            clearInterval(vticker);
-            vticker = null;
+        if (countdownState.interval) {
+            clearInterval(countdownState.interval);
+            countdownState.interval = null;
+        }
+
+        if (countdownState.initialOffset) {
+            clearTimeout(countdownState.initialOffset);
+            countdownState.initialOffset = null;
         }
 
         e.started = e.startTimeDelta <= 0;
 
-        if (ctstate && !ctstate.started && e.started) {
+        if (countdownState.contest && !countdownState.contest.started && e.started) {
             notifyMe(e.name, iconbase, 'Соревнование началось');
             location.reload();
         }
 
-        ctstate = e;
+        countdownState.contest = e;
 
         if (!e.started) {
             e.timeval = e.startTimeDelta
@@ -74,21 +82,28 @@ function notifyMe(n_title, n_icon, n_body) {
             e.timeval = e.endTimeDelta
         } else if (e.exposeTimeDelta > 0) {
             e.timeval = exposeTimeDelta
+        } else {
+            e.timeval = 0
         }
 
         if (e.timeval != 0) {
-            ctstate.flip = new Date(Date.now() + e.timeval);
+            e.flip = new Date(Date.now() + e.timeval);
         }
 
         intervalUpdateContestTimes();
 
         if (e.timeval != 0) {
-            vticker = setInterval(function() { intervalUpdateContestTimes() }, 1000);
+            offset = (e.flip - Date.now()) % 1000;
+            if (offset > 10) {
+                countdownState.initialOffset = setTimeout(function() { startIntervalUpdate() }, offset - 1);
+            } else {
+                startIntervalUpdate()
+            }
         }
     }
 
     function intervalUpdateContestTimes() {
-        if (ctstate.started) {
+        if (countdownState.contest.started) {
             $("#contest-starting-in").hide();
             $("#contest-ending-in").show();
         } else {
@@ -96,7 +111,7 @@ function notifyMe(n_title, n_icon, n_body) {
             $("#contest-ending-in").hide();
         }
 
-        if (ctstate.ended) {
+        if (countdownState.contest.ended) {
             $("contest-ended").show();
             $("contest-timer").hide();
         } else {
@@ -104,8 +119,8 @@ function notifyMe(n_title, n_icon, n_body) {
             $("contest-timer").show();
         }
 
-        if (ctstate.flip) {
-            $("#contest-timer-counter").text(formatSeconds(((ctstate.flip - Date.now()) /  1000) >> 0));
+        if (countdownState.contest.flip) {
+            $("#contest-timer-counter").text(formatSeconds(((countdownState.contest.flip - Date.now()) /  1000) >> 0));
         }
     }
 
