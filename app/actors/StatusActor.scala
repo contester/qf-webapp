@@ -5,7 +5,7 @@ import controllers.{CustomTestResult, FinishedTesting}
 import models._
 import play.api.Logger
 import play.api.libs.EventSource
-import play.api.libs.EventSource.{EventIdExtractor, Event}
+import play.api.libs.EventSource.{EventDataExtractor, EventIdExtractor, Event}
 import play.api.libs.iteratee.Concurrent.Channel
 import play.api.libs.iteratee.{Enumeratee, Concurrent, Enumerator}
 import play.api.libs.json.{JsValue, Json, Writes}
@@ -24,7 +24,7 @@ object StatusActor {
   case class NewContestState(c: Contest)
   case class Ack(loggedInTeam: LoggedInTeam, msgid: Int)
   case class JoinAdmin(c: Int)
-  case class AdminJoined(enumerator: Enumerator[Event])
+  case class AdminJoined(enumerator: Enumerator[AdminEvent])
 
   implicit val contestWrites = new Writes[Contest] {
     def writes(c: Contest) = {
@@ -54,6 +54,13 @@ object StatusActor {
         }
       }
     }
+  }
+
+  case class AdminEvent(contest: Option[Int], event: Option[String], data: JsValue)
+
+  object AdminEvent {
+    implicit val eventDataExtractor = EventDataExtractor[AdminEvent](x => Json.stringify(x.data))
+    implicit val eventIdExtractor = EventIdExtractor[AdminEvent](_.event)
   }
 }
 
@@ -86,7 +93,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   val contestBroadcasts = mutable.Map[Int, (Enumerator[JsValue], Channel[JsValue])]()
   val contestStates = mutable.Map[Int, Contest]()
   val teamBroadcasts = mutable.Map[(Int, Int), (Enumerator[JsValue], Channel[JsValue])]()
-  val (adminOut, adminChannel) = Concurrent.broadcast[Event]
+  val (adminOut, adminChannel) = Concurrent.broadcast[AdminEvent]
 
   val unacked = mutable.Map[(Int, Int), mutable.Map[Int, Message2]]()
 
@@ -124,8 +131,8 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       }
     }
 
-  private def toContestEvent: Enumeratee[JsValue, Event] =
-    Enumeratee.map { e => new Event(Json.stringify(e), None, Some("contest"))}
+  private def toContestEvent(cid: Int): Enumeratee[JsValue, AdminEvent] =
+    Enumeratee.map { e => AdminEvent(Some(cid), Some("contest"), e)}
 
   def receive = {
     case Init => {
@@ -148,7 +155,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     }
 
     case annotated: AnnoSubmit => {
-      adminChannel.push(new Event(Json.stringify(Json.toJson(annotated)), None, Some("submit")))
+      adminChannel.push(AdminEvent(Some(annotated.contest), Some("submit"), Json.toJson(annotated)))
       pushPersistent(annotated.contest, annotated.team, "submit", Json.toJson(annotated))
     }
 
@@ -216,8 +223,8 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
         case Some(o) => Enumerator[JsValue](contestToJson(o))
         case None => Enumerator.empty[JsValue]
       }
-      val res0 = result &> toContestEvent
-      val br = newCBr(c)._1 &> toContestEvent
+      val res0 = result &> toContestEvent(c)
+      val br = newCBr(c)._1 &> toContestEvent(c)
 
       sender ! AdminJoined(res0.andThen(br.interleave(adminOut)))
     }

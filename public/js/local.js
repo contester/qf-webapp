@@ -96,7 +96,6 @@ function notifyMe(n_title, n_icon, n_body) {
     }
 
 function listenOnSocket(path, iconbase) {
-
     $(function() {
             var chatSocket = new ReconnectingWebSocket(path)
 
