@@ -89,21 +89,14 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
 
 
   private def filterAdmin(contestId: Int)(implicit ec: ExecutionContext) = Enumeratee.filter[AdminEvent] {
-    ev: AdminEvent => {
-      Logger.info(s"f: $ev")
-      ev.contest.map(_ == contestId).getOrElse(true)
-    }
+    ev: AdminEvent => ev.contest.isEmpty || ev.contest.get == contestId
   }
 
   private def toUserEvent: Enumeratee[Contest, UserEvent] =
     Enumeratee.map { e => UserEvent(Some(e.id), None, Some("contest"), Json.toJson(e))}
 
   private def filterUser(contestId: Int, teamId: Int)(implicit ec: ExecutionContext) = Enumeratee.filter[UserEvent] {
-    ev: UserEvent => {
-      val xx = ev.contest.isEmpty || (ev.contest.get == contestId && (ev.team.isEmpty || ev.team.get == teamId))
-      Logger.info(s"f: $xx -- $ev")
-      xx
-    }
+    ev: UserEvent => ev.contest.isEmpty || (ev.contest.get == contestId && (ev.team.isEmpty || ev.team.get == teamId))
   }
 
   private def loadPersistentMessages =
