@@ -28,7 +28,7 @@ object StatusActor {
   case class AdminJoined(enumerator: Enumerator[AdminEvent])
   case class AdminEvent(contest: Option[Int], event: Option[String], data: JsValue)
   case class JoinUser(contest: Int, team: Int)
-  case class UserJoined(enumerator: Enumerator[UserEvent])
+  case class UserJoined(enumerator: Enumerator[Event])
 
   object AdminEvent {
     implicit val eventDataExtractor = EventDataExtractor[AdminEvent](x => Json.stringify(x.data))
@@ -63,8 +63,8 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   import com.github.nscala_time.time.Imports._
 
   val (contestOut, contestChannel) = Concurrent.broadcast[Contest]
-  val (userPingOut, userPingChannel) = Concurrent.broadcast[UserEvent]
-  val userPing = UserEvent(None, None, Some("ping"), Json.obj())
+  val (userPingOut, userPingChannel) = Concurrent.broadcast[Event]
+  val userPing = Event("", None, Some("ping"))
 
   val contestStates = mutable.Map[Int, Contest]()
   val teamBroadcasts = mutable.Map[(Int, Int), (Enumerator[JsValue], Channel[JsValue])]()
@@ -93,12 +93,10 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     ev: AdminEvent => ev.contest.isEmpty || ev.contest.get == contestId
   }
 
-  private def toUserEvent: Enumeratee[Contest, UserEvent] =
-    Enumeratee.map { e => UserEvent(Some(e.id), None, Some("contest"), Json.toJson(e))}
+  private def toEvent: Enumeratee[Contest, Event] =
+    Enumeratee.map { e => Event(Json.stringify(Json.toJson(e)), None, Some("contest"))}
 
-  private def filterUser(contestId: Int, teamId: Int)(implicit ec: ExecutionContext) = Enumeratee.filter[UserEvent] {
-    ev: UserEvent => ev.contest.isEmpty || (ev.contest.get == contestId && (ev.team.isEmpty || ev.team.get == teamId))
-  }
+  private def filterContest(contestId: Int) = Enumeratee.filter[Contest](_.id == contestId)
 
   private def loadPersistentMessages =
     db.run(
@@ -200,13 +198,9 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     }
 
     case JoinUser(contest: Int, team: Int) => {
-      val result = contestStates.get(contest) match {
-        case Some(o) => Enumerator[Contest](o)
-        case None => Enumerator.empty[Contest]
-      }
-      val res0 = result &> toUserEvent
-      val br = contestOut &> toUserEvent &> filterUser(contest, team)
-      sender ! UserJoined(res0.andThen(br.interleave(userPingOut)))
+      sender ! UserJoined(Enumerator.enumerate[Contest](contestStates.get(contest)).through(toEvent).andThen(
+        contestOut.through(filterContest(contest)).through(toEvent).interleave(userPingOut)
+      ))
     }
   }
 

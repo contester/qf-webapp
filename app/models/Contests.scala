@@ -57,12 +57,6 @@ object Contest {
   }
 }
 
-case class UserEvent(contest: Option[Int], team: Option[Int], event: Option[String], data: JsValue)
-object UserEvent {
-  implicit val eventDataExtractor = EventDataExtractor[UserEvent](x => Json.stringify(x.data))
-  implicit val eventIdExtractor = EventNameExtractor[UserEvent](_.event)
-}
-
 case class SelectedContest(contest: Contest, contests: Seq[(Int, String)])
 
 case class Problem(id: String, name: String, tests: Int, rating: Int)
