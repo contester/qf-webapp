@@ -19,21 +19,7 @@
     </thead>
     <tbody>
     @for(s <- submits) {
-    <tr><th scope="row"><a href="@routes.AdminApplication.showSubmit(s.submit.submitId.id)">@s.submit.submitId.id</a></th>
-        @if(showRejudge){<td>
-            <a href="javascript:void(0)" class="btn btn-primary btn-xs btn-nomargin" id="rejudge-@{s.submit.submitId.id}" onclick="rejudgePost('@controllers.routes.AdminApplication.rejudgeSubmit(s.submit.submitId.id)', '@{s.submit.submitId.id}')"><span class="glyphicon glyphicon-repeat"></span></a>
-        </td>
-        }
-        <td>@s.submit.submitId.arrived.asString</td>
-        <td>@teams(s.submit.submitId.teamId).teamFullName</td><td>@s.submit.submitId.problem.id</td>
-        @if(s.result.success) {
-        <td class="success" id="result-@{s.submit.submitId.id}">
-            } else {
-        <td id="result-@{s.submit.submitId.id}">
-            }
-            @s.result.message
-            </td><td>@s.score.getOrElse("")</td>
-        <td>@s.stats.timeMs</td><td>@s.stats.memory</td></tr>
+    @submitrow(s, teams, showRejudge)
     }
 
     </tbody>
