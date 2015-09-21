@@ -124,7 +124,7 @@ function notifyMe(n_title, n_icon, n_body) {
         }
     }
 
-function listenOnSocket(path, iconbase) {
+function listenOnSocket(path, iconbase, ackMessagePath) {
     $(function() {
             var chatSocket = new ReconnectingWebSocket(path)
 
@@ -150,7 +150,7 @@ function listenOnSocket(path, iconbase) {
                 }
 
                 if (obj.msgid) {
-                    chatSocket.send(JSON.stringify({ 'kind': 'ack', 'msgid': obj.msgid }))
+                    $.post(ackMessagePath, {'msgid': obj.msgid});
                 }
             }
 

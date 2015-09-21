@@ -21,6 +21,7 @@ import slick.driver.JdbcProfile
 import views.html
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 
 case class SubmitData(problem: String, compiler: Int)
 
@@ -212,6 +213,16 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
       }
     }
  }
+
+  def ackMessage = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>
+    implicit val ec = StackActionExecutionContext
+
+    request.body.asFormUrlEncoded.flatMap(_.get("msgid")).flatMap(_.headOption).flatMap(x => Try(x.toInt).toOption).foreach { msgid =>
+      Logger.info(s"Acking: $msgid")
+      statusActorModel.statusActor ! StatusActor.Ack(loggedIn, msgid)
+    }
+    Future.successful(Ok("ok"))
+  }
 
   def showSubmit(submitId: Int) = AsyncStack(AuthorityKey -> userPermissions.submit(submitId)) { implicit request =>
     implicit val ec = StackActionExecutionContext

@@ -46,7 +46,9 @@
 <script type="text/javascript">
     document.addEventListener('DOMContentLoaded', function() {
         maybeCheckNotifyPermission();
-        listenOnSocket("@routes.Application.socket.webSocketURL()", '@routes.Assets.at("images/")');
+        listenOnSocket("@routes.Application.socket.webSocketURL()",
+            '@routes.Assets.at("images/")',
+            '@routes.Application.ackMessage');
         listenOnEvents('@routes.Application.feed(loggedIn.contest.id, loggedIn.team.localId)', '@routes.Assets.at("images/")');
     })
 </script>

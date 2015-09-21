@@ -11,6 +11,8 @@ POST /sendwithinput controllers.ServerSideEval.post
 GET /print controllers.Printing.index
 POST /print controllers.Printing.post
 
+POST /ackMessage controllers.Application.ackMessage
+
 GET /monitor controllers.Application.monitorDefault
 GET /monitor/ controllers.Application.monitorDefault
 
