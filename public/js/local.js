@@ -50,6 +50,7 @@ function notifyMe(n_title, n_icon, n_body) {
 
     var countdownState = {};
     var clrState = {};
+    var pingState = {};
 
     function startIntervalUpdate() {
         countdownState.interval = setInterval(function() { intervalUpdateContestTimes() }, 1000);
@@ -128,9 +129,23 @@ function notifyMe(n_title, n_icon, n_body) {
 function listenOnEvents(path, iconbase, ackMessagePath) {
     var source = new EventSource(path);
 
+    var reconnect = function() {
+        source.close();
+        window.setTimeout(function() { listenOnEvents(path) }, 1000);
+    }
+
+    var resetPingState = function() {
+        if (pingState && pingState.tm) {
+            clearTimeout(pingState.tm);
+            pingState.tm = null;
+        }
+        pingState.tm = setTimeout(function() { reconnect(); }, 60000);
+    }
+
     source.onopen = function() {
         $("#connected1").removeClass("badge-error");
         $("#connected1").text("+");
+        resetPingState();
     }
 
     source.onmessage = function(ev) {
@@ -182,15 +197,22 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
         updateContestTimes(obj, iconbase);
     })
 
+    source.addEventListener('ping', function(ev) {
+        resetPingState();
+    })
+
     source.onerror = function(ev) {
         $("#connected1").addClass("badge-error");
         $("#connected1").text("!");
         console.log("Error")
         console.log(ev)
+        if (pingState && pingState.tm) {
+            clearTimeout(pingState.tm);
+            pingState.tm = null;
+        }
 
         if (source.readyState == 2) {
-            source.close()
-            window.setTimeout(function() { listenOnEvents(path) }, 1000)
+            reconnect();
         }
     }
 }
