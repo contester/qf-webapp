@@ -49,6 +49,7 @@ function notifyMe(n_title, n_icon, n_body) {
     }
 
     var countdownState = {};
+    var clrState = {};
 
     function startIntervalUpdate() {
         countdownState.interval = setInterval(function() { intervalUpdateContestTimes() }, 1000);
@@ -168,6 +169,9 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
         clrp.text(obj.pending);
         if (obj.pending) {
             clrp.show()
+            if (obj.newRequest) {
+                notifyMe("New clarification request", iconbase + 'icpc_logo.png', 'New clarification request')
+            }
         } else {
             clrp.hide()
         }

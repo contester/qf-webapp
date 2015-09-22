@@ -28,6 +28,8 @@ object StatusActor {
   case class UserJoined(enumerator: Enumerator[Event])
   case class ClarificationRequested(contest: Int)
   case class ClarificationAnswered(contest: Int)
+
+  case class ClarificationRequestsStoredState(values: Seq[(Int, Int)])
 }
 
 case class Message2(id: Int, contest: Int, team: Int, kind: String, data: JsValue) {
@@ -69,7 +71,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   val (msg2Out, msg2Channel) = Concurrent.broadcast[Message2]
   val unacked = mutable.Map[(Int, Int), mutable.Map[Int, Message2]]()
   val (submitOut, submitChannel) = Concurrent.broadcast[AnnoSubmit]
-  val pendingClarificationRequests = mutable.Map[Int, ClarificationRequestState]()
+  val pendingClarificationRequests = mutable.Map[Int, Int]().withDefaultValue(0)
   val (clrOut, clrChannel) = Concurrent.broadcast[ClarificationRequestState]
 
   private def getUnacked(contest: Int, team: Int) =
@@ -115,19 +117,10 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
 
   private def loadClarificationRequestState =
     db.run(
-      sql"""select Contest, Count(*) from ClarificationRequests where Answer = 'Pending'""".as[ClarificationRequestState]
+      sql"""select Contest, Count(*) from ClarificationRequests where Answer = 'Pending'""".as[(Int, Int)]
     ).map { msgs =>
-      for (msg <- msgs) {
-        self ! msg
-      }
+      self ! ClarificationRequestsStoredState(msgs)
     }
-
-  private def updateClarificationAndPush(contest: Int, delta: Int) = {
-    val next = ClarificationRequestState(contest,
-      pendingClarificationRequests.getOrElse(contest, ClarificationRequestState(contest, 0)).pending + delta)
-    pendingClarificationRequests.put(contest, next)
-    clrChannel.push(next)
-  }
 
   def receive = {
     case Init => {
@@ -135,20 +128,28 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       loadClarificationRequestState
     }
 
-    case clrState: ClarificationRequestState => {
-      val old = pendingClarificationRequests.get(clrState.contest)
-      if (old.isEmpty || old.get != clrState) {
-        clrChannel.push(clrState)
+    case ClarificationRequestsStoredState(values) => {
+      values.foreach {
+        case (contest, pending) => {
+          pendingClarificationRequests.put(contest, pending).foreach { old =>
+            if (old != pending) {
+              clrChannel.push(ClarificationRequestState(contest, pending, false))
+            }
+          }
+        }
       }
-      pendingClarificationRequests.put(clrState.contest, clrState)
     }
 
     case ClarificationRequested(contest) => {
-      updateClarificationAndPush(contest, 1)
+      val next = pendingClarificationRequests(contest) + 1
+      pendingClarificationRequests.put(contest, next)
+      clrChannel.push(ClarificationRequestState(contest, next, true))
     }
 
     case ClarificationAnswered(contest) => {
-      updateClarificationAndPush(contest, -1)
+      val next = pendingClarificationRequests(contest) - 1
+      pendingClarificationRequests.put(contest, next)
+      clrChannel.push(ClarificationRequestState(contest, next, false))
     }
 
     case finished: FinishedTesting => {
@@ -202,7 +203,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
 
     case JoinAdmin(c: Int) => {
       val contestEvents = Enumerator.enumerate(contestStates.get(c)).andThen(contestOut &> filterContest(c)) &> contestToEvent
-      val clrEvents = Enumerator(pendingClarificationRequests.getOrElse(c, ClarificationRequestState(c, 0)))
+      val clrEvents = Enumerator(ClarificationRequestState(c, pendingClarificationRequests(c), false))
         .andThen(clrOut &> filterClarificationRequests(c)) &> EventSource()
 
       sender ! AdminJoined(
