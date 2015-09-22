@@ -3,6 +3,7 @@ package controllers
 import javax.inject.{Inject, Singleton}
 
 import actors.StatusActor
+import actors.StatusActor.ClarificationAnswered
 import akka.actor.{ActorSystem, Props}
 import com.google.common.collect.ImmutableRangeSet
 import com.spingo.op_rabbit.{Message, RabbitControl}
@@ -334,6 +335,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
           },
           data => {
             db.run(sqlu"""update ClarificationRequests set Answer = ${data.answer}, Status = 1 where ID = $clrId""").map { _ =>
+              statusActorModel.statusActor ! ClarificationAnswered(clr.contest)
               Redirect(routes.AdminApplication.showQandA(clr.contest))
             }
           }

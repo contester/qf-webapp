@@ -2,6 +2,7 @@ package controllers
 
 import javax.inject.Inject
 
+import actors.StatusActor.ClarificationRequested
 import akka.actor.{ActorSystem, Props}
 import com.spingo.op_rabbit.{RabbitControl, Message}
 import jp.t2v.lab.play2.auth.AuthElement
@@ -27,6 +28,7 @@ object ClarificationRequestId {
 
 class QandA @Inject() (dbConfigProvider: DatabaseConfigProvider,
                        val auth: AuthWrapper,
+                       statusActorModel: StatusActorModel,
                        system: ActorSystem,
                        val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport {
 
@@ -71,6 +73,7 @@ class QandA @Inject() (dbConfigProvider: DatabaseConfigProvider,
           clrIds.foreach { clrId =>
             rabbitMq ! Message.queue(ClarificationRequestId(clrId), queue = "contester.clarificationrequests")
           }
+          statusActorModel.statusActor ! ClarificationRequested(loggedInTeam.contest.id)
           Redirect(routes.QandA.index)
         }
       }

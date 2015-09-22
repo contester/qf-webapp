@@ -161,6 +161,18 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
         }
     })
 
+    source.addEventListener('clarificationRequestState', function(ev) {
+        var obj = JSON.parse(ev.data);
+        console.log(obj)
+        var clrp = $("#clrPending")
+        clrp.text(obj.pending);
+        if (obj.pending) {
+            clrp.show()
+        } else {
+            clrp.hide()
+        }
+    })
+
     source.addEventListener('contest', function(ev) {
         var obj = JSON.parse(ev.data);
         updateContestTimes(obj, iconbase);
