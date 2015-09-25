@@ -8,6 +8,7 @@ import jp.t2v.lab.play2.auth.AuthElement
 import models.{UserPermissions, AuthConfigImpl, LoggedInTeam}
 import org.apache.commons.io.FileUtils
 import org.joda.time.DateTime
+import play.api.Logger
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
@@ -79,13 +80,15 @@ class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
     val parsed0 = if (solutionOpt.isDefined) parsed
       else parsed.withGlobalError("can't read file")
 
+    Logger.info(s"Remote addr: ${request.remoteAddress}")
+
     parsed0.fold(
       formWithErrors => getPrintForm(loggedIn, formWithErrors).map(BadRequest(_)),
       submitData => {
         db.run(
           (sqlu"""insert into PrintJobs (Contest, Team, Filename, DATA, Computer, Arrived) values
                     (${loggedInTeam.contest.id}, ${loggedInTeam.team.localId}, ${solutionOpt.get._1},
-            ${solutionOpt.get._2}, ${request.remoteAddress}, CURRENT_TIMESTAMP())
+            ${solutionOpt.get._2}, INET_ATON(${request.remoteAddress}), CURRENT_TIMESTAMP())
                   """.andThen(sql"select last_insert_id()".as[Int])).withPinnedSession
         ).map { printJobIds =>
           printJobIds.foreach { printJobId =>
