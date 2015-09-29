@@ -1,15 +1,22 @@
-@(loggedIn: LoggedInTeam, form: Form[printing.SubmitData], jobs: Seq[printing.PrintEntry])(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@(loggedIn: LoggedInTeam, optLocation: Option[Location], form: Form[printing.SubmitData], jobs: Seq[printing.PrintEntry])(implicit flash: Flash, messages: Messages, request: RequestHeader)
 
 @import helper.Implicits._
 @import b3.vertical.fieldConstructor
 
 @main(loggedIn, tab = "print") {
 
-@contestteaminfo(loggedIn)
+@contestteaminfo(loggedIn, optLocation)
 
 <div class="panel panel-success">
     <div class="panel-heading"><h3 class="panel-title">Напечатать текст</h3></div>
     <div class="panel-body">
+        @if(optLocation.isEmpty) {
+        <div class="alert alert-danger" role="alert">
+            <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
+            <span class="sr-only">Error:</span>
+            Невозможно определить ваше местонахождение. Ничего напечатать не получится.
+        </div>
+        }
         @b3.form(controllers.routes.Printing.post, 'enctype -> "multipart/form-data") {
         @form.globalError.map { error =>
         <div class="alert alert-danger" role="alert">

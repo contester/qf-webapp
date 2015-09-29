@@ -5,7 +5,7 @@ import javax.inject.Inject
 import akka.actor.{Props, ActorSystem}
 import com.spingo.op_rabbit.{Message, RabbitControl}
 import jp.t2v.lab.play2.auth.AuthElement
-import models.{UserPermissions, AuthConfigImpl, LoggedInTeam}
+import models._
 import org.apache.commons.io.FileUtils
 import org.joda.time.DateTime
 import play.api.Logger
@@ -56,16 +56,18 @@ class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
     mapping("textOnly" -> boolean)(printing.SubmitData.apply)(printing.SubmitData.unapply)
   }
 
-  private def getPrintForm(loggedIn: LoggedInTeam, form: Form[printing.SubmitData])(implicit request: RequestHeader, ec: ExecutionContext) =
+  private def getPrintForm(loggedIn: LoggedInTeam, form: Form[printing.SubmitData], location: Option[Location])(implicit request: RequestHeader, ec: ExecutionContext) =
     db.run(sql"""select Filename, Arrived, Printed = 255 from PrintJobs
          where Contest = ${loggedIn.contest.id} and Team = ${loggedIn.team.localId} order by Arrived desc""".as[printing.PrintEntry]
       ).map { printJobs =>
-      html.printform(loggedIn, form, printJobs)
+      html.printform(loggedIn,location, form, printJobs)
     }
 
   def index = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>
     implicit val ec = StackActionExecutionContext
-    getPrintForm(loggedIn, printForm).map(Ok(_))
+    Locator.locate(db, request.remoteAddress).flatMap { location =>
+      getPrintForm(loggedIn, printForm, location).map(Ok(_))
+    }
   }
 
   def post = AsyncStack(parse.multipartFormData, AuthorityKey -> UserPermissions.any) { implicit request =>
@@ -81,23 +83,25 @@ class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
       else parsed.withGlobalError("can't read file")
 
     Logger.info(s"Remote addr: ${request.remoteAddress}")
-
-    parsed0.fold(
-      formWithErrors => getPrintForm(loggedIn, formWithErrors).map(BadRequest(_)),
-      submitData => {
-        db.run(
-          (sqlu"""insert into PrintJobs (Contest, Team, Filename, DATA, Computer, Arrived) values
+    Locator.locate(db, request.remoteAddress).flatMap { location =>
+      parsed0.fold(
+        formWithErrors => getPrintForm(loggedIn, formWithErrors, location).map(BadRequest(_)),
+        submitData => {
+          db.run(
+            (sqlu"""insert into PrintJobs (Contest, Team, Filename, DATA, Computer, Arrived) values
                     (${loggedInTeam.contest.id}, ${loggedInTeam.team.localId}, ${solutionOpt.get._1},
             ${solutionOpt.get._2}, INET_ATON(${request.remoteAddress}), CURRENT_TIMESTAMP())
                   """.andThen(sql"select last_insert_id()".as[Int])).withPinnedSession
-        ).map { printJobIds =>
-          printJobIds.foreach { printJobId =>
-            rabbitMq ! Message.queue(printing.PrintJobID(printJobId), queue = "contester.printrequests")
+          ).map { printJobIds =>
+            printJobIds.foreach { printJobId =>
+              rabbitMq ! Message.queue(printing.PrintJobID(printJobId), queue = "contester.printrequests")
+            }
+            Redirect(routes.Printing.index)
           }
-          Redirect(routes.Printing.index)
         }
-      }
-    )
+      )
+
+    }
   }
 
 }
