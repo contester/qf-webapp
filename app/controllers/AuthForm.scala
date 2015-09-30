@@ -23,11 +23,8 @@ object AuthData {
   }
 }
 
-class AuthForms @Inject() (val messagesApi: MessagesApi, val dbConfigProvider: DatabaseConfigProvider, val auth: AuthWrapper)
+class AuthForms @Inject() (val messagesApi: MessagesApi, val auth: AuthWrapper)
   extends Controller with LoginLogout with AuthConfigImpl with I18nSupport {
-
-  private val dbConfig = dbConfigProvider.get[JdbcProfile]
-  private val db = dbConfig.db
 
   def login = Action { implicit request =>
     Ok(html.login(AuthData.form))
@@ -38,8 +35,8 @@ class AuthForms @Inject() (val messagesApi: MessagesApi, val dbConfigProvider: D
   }
 
   def doAuth(username: String, password: String) =
+    auth.resolve(username)
     //Users.authenticate(db.db, username, password)
-    Users.resolve(db, username)
 
   def authenticate = Action.async { implicit request =>
     AuthData.form.bindFromRequest.fold(
@@ -55,11 +52,8 @@ class AuthForms @Inject() (val messagesApi: MessagesApi, val dbConfigProvider: D
   }
 }
 
-class AdminAuthForms @Inject() (val messagesApi: MessagesApi, val dbConfigProvider: DatabaseConfigProvider, val auth: AuthWrapper)
+class AdminAuthForms @Inject() (val messagesApi: MessagesApi, val auth: AuthWrapper)
   extends Controller with LoginLogout with AdminAuthConfigImpl with I18nSupport {
-
-  private val dbConfig = dbConfigProvider.get[JdbcProfile]
-  private val db = dbConfig.db
 
   def login = Action { implicit request =>
     Ok(html.admin.login(AuthData.form))
