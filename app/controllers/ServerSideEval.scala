@@ -29,19 +29,19 @@ import com.github.nscala_time.time.Imports.DateTime
 case class ServerSideEvalID(id: Int)
 
 object ServerSideEvalID {
-  implicit val formatServerSideEvalMessage = Json.format[ServerSideEvalID]
+  implicit val format = Json.format[ServerSideEvalID]
 }
 
 class ServerSideEval @Inject() (val dbConfigProvider: DatabaseConfigProvider,
-                               val auth: AuthWrapper,
-                             system: ActorSystem, val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport {
+                               val auth: AuthWrapper, rabbitMqModel: RabbitMqModel,
+                             val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport {
   private val dbConfig = dbConfigProvider.get[JdbcProfile]
   private val db = dbConfig.db
   import utils.Db._
   import dbConfig.driver.api._
   import controllers.serversideeval.ServerSideData
 
-  val rabbitMq = system.actorOf(Props[RabbitControl])
+  val rabbitMq = rabbitMqModel.rabbitMq
   import com.spingo.op_rabbit.PlayJsonSupport._
 
   private val serverSideForm = Form {

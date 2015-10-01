@@ -52,7 +52,7 @@ case class ClarificationResponse(answer: String)
 @Singleton
 class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
                              monitorModel: Monitor,
-                             system: ActorSystem,
+                                 rabbitMqModel: RabbitMqModel,
                              statusActorModel: StatusActorModel,
                              val auth: AuthWrapper,
                              val messagesApi: MessagesApi) extends Controller with AuthElement with AdminAuthConfigImpl with I18nSupport{
@@ -61,8 +61,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   private val db = dbConfig.db
   import com.spingo.op_rabbit.PlayJsonSupport._
 
-  val rabbitMq = system.actorOf(Props[RabbitControl])
-
+  private val rabbitMq = rabbitMqModel.rabbitMq
   val (brdOut, brdChannel) = Concurrent.broadcast[JsValue]
 
   def monitor(id: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(id)) { implicit request =>

@@ -41,15 +41,15 @@ case class SubmitData(textOnly: Boolean)
 }
 
 class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
-                         val auth: AuthWrapper,
-                             system: ActorSystem, val messagesApi: MessagesApi) extends Controller with AuthElement
+                         val auth: AuthWrapper, rabbitMqModel: RabbitMqModel,
+                          val messagesApi: MessagesApi) extends Controller with AuthElement
       with AuthConfigImpl with I18nSupport {
   private val dbConfig = dbConfigProvider.get[JdbcProfile]
   private val db = dbConfig.db
   import dbConfig.driver.api._
   import utils.Db._
 
-  val rabbitMq = system.actorOf(Props[RabbitControl])
+  private val rabbitMq = rabbitMqModel.rabbitMq
   import com.spingo.op_rabbit.PlayJsonSupport._
 
   private val printForm = Form {
