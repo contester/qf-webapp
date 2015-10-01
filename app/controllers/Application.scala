@@ -53,7 +53,7 @@ object CustomTestResult {
 @Singleton
 class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
                              monitorModel: Monitor,
-                             system: ActorSystem,
+                            rabbitMqModel: RabbitMqModel,
                             statusActorModel: StatusActorModel,
                              val auth: AuthWrapper,
                              val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport{
@@ -64,7 +64,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   import utils.Db._
   import scala.language.postfixOps
 
-  val rabbitMq = system.actorOf(Props[RabbitControl])
+  private val rabbitMq = rabbitMqModel.rabbitMq
   import com.spingo.op_rabbit.PlayJsonSupport._
 
   val userPermissions = new UserPermissions(db)
