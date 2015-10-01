@@ -4,6 +4,7 @@ import java.security.MessageDigest
 import javax.inject.{Inject, Singleton}
 
 import models.{AdminId, Admin, Users}
+import play.api.Configuration
 import play.api.db.slick.DatabaseConfigProvider
 import slick.driver.JdbcProfile
 
@@ -22,14 +23,17 @@ object Hasher {
 }
 
 @Singleton
-class AuthWrapper @Inject() (dbConfigProvider: DatabaseConfigProvider) {
+class AuthWrapper @Inject() (dbConfigProvider: DatabaseConfigProvider, configuration: Configuration) {
   val db = dbConfigProvider.get[JdbcProfile].db
 
   def resolve(username: String)(implicit ctx: ExecutionContext) =
     db.run(Users.resolveQuery(username)).map(_.headOption)
 
-  def authenticate(username: String, password: String)(implicit ctx: ExecutionContext) =
-    Users.authenticate(db, username, password)
+  def authenticateUser(username: String, password: String)(implicit ctx: ExecutionContext) =
+    if (configuration.getBoolean("qfauth.users").getOrElse(true))
+      Users.authenticate(db, username, password)
+    else
+      resolve(username)
 
   def resolveAdmin(admin: AdminId)(implicit ctx: ExecutionContext) =
     db.run(Admin.query(admin.username, admin.passwordHash)).map(_.headOption)
