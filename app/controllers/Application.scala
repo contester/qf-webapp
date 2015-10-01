@@ -6,6 +6,7 @@ import actors.StatusActor
 import akka.actor.{Props, ActorSystem}
 import com.spingo.op_rabbit._
 import jp.t2v.lab.play2.auth.AuthElement
+import models.ContesterResults.{CustomTestResult, FinishedTesting}
 import models._
 import org.apache.commons.io.FileUtils
 import play.api.Logger
@@ -25,29 +26,10 @@ import scala.util.Try
 
 case class SubmitData(problem: String, compiler: Int)
 
-case class SubmitObject(id: Int, team: Int, contest: Int, problem: String,
-                        schoolMode: Boolean)
-
-object SubmitObject {
-  implicit val submitObjectFormat = Json.format[SubmitObject]
-}
-
-case class FinishedTesting(submit: SubmitObject, testingId: Int, compiled: Boolean, passed: Int, taken: Int)
-
-object FinishedTesting {
-  implicit val finishedTestingFormat = Json.format[FinishedTesting]
-}
-
 case class SubmitMessage(id: Int)
 
 object SubmitMessage {
   implicit val formatSubmitMessage = Json.format[SubmitMessage]
-}
-
-case class CustomTestResult(id: Int, contest:Int, team: Int)
-
-object CustomTestResult {
-  implicit val formatCustomTestResult = Json.format[CustomTestResult]
 }
 
 @Singleton

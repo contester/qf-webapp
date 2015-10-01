@@ -73,7 +73,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   import slick.driver.MySQLDriver.api._
 
-  private def getSubmitCid(submitId: Int) =
+  private def getSubmitCid(submitId: Int)(implicit ec: ExecutionContext) =
     db.run(sql"""select Contest from NewSubmits where ID = $submitId""".as[Int]).map(_.headOption)
 
   private def canSeeSubmit(submitId: Int)(account: Admin): Future[Boolean] = {

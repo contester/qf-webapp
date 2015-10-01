@@ -1,7 +1,6 @@
 package models
 
-import controllers.FinishedTesting
-import play.api.Logger
+import models.ContesterResults.FinishedTesting
 import play.api.libs.json.{JsValue, Writes, Json}
 import slick.jdbc.JdbcBackend
 

@@ -1,7 +1,7 @@
 package actors
 
 import akka.actor.{Actor, Props}
-import controllers.{CustomTestResult, FinishedTesting}
+import models.ContesterResults.{CustomTestResult, FinishedTesting}
 import models._
 import play.api.Logger
 import play.api.libs.EventSource
