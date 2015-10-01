@@ -18,21 +18,15 @@ import views.html
 
 import scala.concurrent.{ExecutionContext, Future}
 
-
 case class ClarificationReqData(problem: String, text: String)
 
 class QandA @Inject() (dbConfigProvider: DatabaseConfigProvider,
                        val auth: AuthWrapper,
                        statusActorModel: StatusActorModel,
-                       system: ActorSystem,
                        val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport {
-
   private val dbConfig = dbConfigProvider.get[JdbcProfile]
   private val db = dbConfig.db
   import dbConfig.driver.api._
-
-  val rabbitMq = system.actorOf(Props[RabbitControl])
-  import com.spingo.op_rabbit.PlayJsonSupport._
 
   private val clarificationReqForm = Form {
     mapping("problem" -> text, "text" -> text)(ClarificationReqData.apply)(ClarificationReqData.unapply)
@@ -71,5 +65,4 @@ class QandA @Inject() (dbConfigProvider: DatabaseConfigProvider,
       }
     )
   }
-
 }
