@@ -21,11 +21,6 @@ import scala.concurrent.{ExecutionContext, Future}
 
 case class ClarificationReqData(problem: String, text: String)
 
-case class ClarificationRequestId(id: Int)
-object ClarificationRequestId {
-  implicit val format = Json.format[ClarificationRequestId]
-}
-
 class QandA @Inject() (dbConfigProvider: DatabaseConfigProvider,
                        val auth: AuthWrapper,
                        statusActorModel: StatusActorModel,
@@ -70,9 +65,6 @@ class QandA @Inject() (dbConfigProvider: DatabaseConfigProvider,
                 CURRENT_TIMESTAMP())
               """.andThen(sql"select last_insert_id()".as[Int])).withPinnedSession
         ).map { clrIds =>
-          clrIds.foreach { clrId =>
-            rabbitMq ! Message.queue(ClarificationRequestId(clrId), queue = "contester.clarificationrequests")
-          }
           statusActorModel.statusActor ! ClarificationRequested(loggedInTeam.contest.id)
           Redirect(routes.QandA.index)
         }
