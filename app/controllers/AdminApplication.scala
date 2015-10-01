@@ -62,7 +62,6 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   import com.spingo.op_rabbit.PlayJsonSupport._
 
   private val rabbitMq = rabbitMqModel.rabbitMq
-  val (brdOut, brdChannel) = Concurrent.broadcast[JsValue]
 
   def monitor(id: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(id)) { implicit request =>
     implicit val ec = StackActionExecutionContext
@@ -75,7 +74,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   import slick.driver.MySQLDriver.api._
 
   private def getSubmitCid(submitId: Int) =
-    db.run(sql"""select Contest from NewSubmits where ID = $submitId""".as[Int])
+    db.run(sql"""select Contest from NewSubmits where ID = $submitId""".as[Int]).map(_.headOption)
 
   private def canSeeSubmit(submitId: Int)(account: Admin): Future[Boolean] = {
     import play.api.libs.concurrent.Execution.Implicits.defaultContext
