@@ -30,11 +30,11 @@ object StatusActor {
   case class ClarificationAnswered(contest: Int)
 
   case class ClarificationRequestsStoredState(values: Seq[(Int, Int)])
+
+  private val userPing = Event("", None, Some("ping"))
 }
 
-case class Message2(id: Int, contest: Int, team: Int, kind: String, data: JsValue) {
-  //def asKJson = Json.obj("kind" -> kind, "contest" -> contest, "msgid" -> id, "data" -> data)
-}
+case class Message2(id: Int, contest: Int, team: Int, kind: String, data: JsValue)
 
 object Message2 {
   implicit val getResult = GetResult(r =>
@@ -53,26 +53,25 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   import scala.language.postfixOps
 
   import scala.concurrent.duration._
-  val tick =
+  private val tick =
     context.system.scheduler.schedule(0 seconds, 10 seconds, self, Tick)
 
-  val refreshTick =
+  private val refreshTick =
     context.system.scheduler.schedule(30 seconds, 30 seconds, self, RefreshTick)
 
   context.system.scheduler.scheduleOnce(0 seconds, self, Init)
 
   import com.github.nscala_time.time.Imports._
 
-  val (contestOut, contestChannel) = Concurrent.broadcast[Contest]
-  val (userPingOut, userPingChannel) = Concurrent.broadcast[Event]
-  val userPing = Event("", None, Some("ping"))
+  private val (contestOut, contestChannel) = Concurrent.broadcast[Contest]
+  private val (userPingOut, userPingChannel) = Concurrent.broadcast[Event]
 
-  val contestStates = mutable.Map[Int, Contest]()
-  val (msg2Out, msg2Channel) = Concurrent.broadcast[Message2]
-  val unacked = mutable.Map[(Int, Int), mutable.Map[Int, Message2]]()
-  val (submitOut, submitChannel) = Concurrent.broadcast[AnnoSubmit]
-  val pendingClarificationRequests = mutable.Map[Int, Int]().withDefaultValue(0)
-  val (clrOut, clrChannel) = Concurrent.broadcast[ClarificationRequestState]
+  private val contestStates = mutable.Map[Int, Contest]()
+  private val (msg2Out, msg2Channel) = Concurrent.broadcast[Message2]
+  private val unacked = mutable.Map[(Int, Int), mutable.Map[Int, Message2]]()
+  private val (submitOut, submitChannel) = Concurrent.broadcast[AnnoSubmit]
+  private val pendingClarificationRequests = mutable.Map[Int, Int]().withDefaultValue(0)
+  private val (clrOut, clrChannel) = Concurrent.broadcast[ClarificationRequestState]
 
   private def getUnacked(contest: Int, team: Int) =
     unacked.getOrElseUpdate((contest, team), mutable.Map[Int, Message2]())
