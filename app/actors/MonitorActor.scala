@@ -44,9 +44,9 @@ class MonitorActor(db: JdbcBackend#DatabaseDef) extends Actor {
     }
   }
 
-  val firstTime = mutable.HashMap[Int, Promise[Option[StoredContestStatus]]]()
-  val monitors = mutable.HashMap[Int, StoredContestStatus]()
-  var validContests: Option[ValidContests] = None
+  private val firstTime = mutable.HashMap[Int, Promise[Option[StoredContestStatus]]]()
+  private val monitors = mutable.HashMap[Int, StoredContestStatus]()
+  private var validContests: Option[ValidContests] = None
 
   override def receive: Receive = {
     case Refresh => {
