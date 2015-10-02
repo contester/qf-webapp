@@ -33,6 +33,8 @@ GET /admin/rejudge/:contestId controllers.AdminApplication.rejudgePage(contestId
 POST /admin/rejudgeRange/:contestId controllers.AdminApplication.rejudgeRange(contestId: Int)
 POST /admin/rejudgeSubmit/:submitId controllers.AdminApplication.rejudgeSubmit(submitId: Int)
 
+POST /admin/reprintSubmit/:submitId controllers.AdminApplication.reprintSubmit(submitId: Int)
+
 GET /admin/postNewClarification/:contestId controllers.AdminApplication.postNewClarification(contestId: Int)
 GET /admin/updateClarification/:clrId controllers.AdminApplication.postUpdateClarification(clrId: Int)
 POST /admin/postClarification controllers.AdminApplication.postClarification

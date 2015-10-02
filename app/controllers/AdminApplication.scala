@@ -16,7 +16,7 @@ import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
 import play.api.libs.EventSource
 import play.api.libs.iteratee.{Enumeratee, Concurrent}
-import play.api.libs.json.JsValue
+import play.api.libs.json.{Json, JsValue}
 import play.api.mvc.{Action, Controller, RequestHeader}
 import slick.driver.JdbcProfile
 import slick.jdbc.GetResult
@@ -48,6 +48,16 @@ object ClarificationRequest1 {
 }
 
 case class ClarificationResponse(answer: String)
+
+case class SubmitIdLite(id: Int)
+object SubmitIdLite {
+  implicit val format = Json.format[SubmitIdLite]
+}
+
+case class SubmitTicketLite(submit: SubmitIdLite)
+object SubmitTicketLite {
+  implicit val format = Json.format[SubmitTicketLite]
+}
 
 @Singleton
 class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
@@ -105,14 +115,14 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
 
   private def getSelectedContests(contestId: Int, account: Admin)(implicit ec: ExecutionContext): Future[SelectedContest] =
-    db.run(Contests.getContests).map { contests =>
+    db.run(Contests.getContests).map(_.filter(c => account.canSpectate(c.id)).sortBy(_.id)).map { contests =>
       val cmap = contests.map(x => x.id -> x).toMap
-      SelectedContest(cmap(contestId), cmap.mapValues(_.name).toSeq)
+      SelectedContest(cmap.getOrElse(contestId, contests.head), cmap.mapValues(_.name).toSeq)
     }
 
   def index = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
     implicit val ec = StackActionExecutionContext
-    showSubs(1, Some(20), loggedIn)
+    Future.successful(Redirect(routes.AdminApplication.submits(1)))
   }
 
   private val rangeRe = "(\\d*)\\.\\.(\\d*)".r
@@ -206,6 +216,13 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
         Ok(html.admin.showsubmit(submit, contest))
       }
     }
+  }
+
+  def reprintSubmit(submitId: Int) = AsyncStack(AuthorityKey -> canRejudgeSubmit(submitId)) { implicit request =>
+    implicit val ec = StackActionExecutionContext
+
+    rabbitMq ! Message.queue(SubmitTicketLite(SubmitIdLite(submitId)), queue = "contester.tickets")
+    Future.successful(Ok("ok"))
   }
 
   def showQandA(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
