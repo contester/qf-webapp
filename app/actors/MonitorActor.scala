@@ -15,16 +15,24 @@ object MonitorActor {
   def props(db: JdbcBackend#DatabaseDef) = Props(classOf[MonitorActor], db)
 
   case class Get(contest: Int)
+  case object Start
+  case class State(monitors: Seq[StoredContestStatus])
   case object Refresh
-  case class ValidContests(contests: Set[Int])
 }
 
-class MonitorActor(db: JdbcBackend#DatabaseDef) extends Actor {
+class MonitorActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   import MonitorActor._
   import context.dispatcher
 
   import scala.concurrent.duration._
   import scala.language.postfixOps
+
+
+  @throws[Exception](classOf[Exception])
+  override def preStart(): Unit = {
+    super.preStart()
+    self ! Refresh
+  }
 
   private def getContestMonitor(contest: Contest)(implicit ec: ExecutionContext) = {
     val cid = contest.id
@@ -44,64 +52,44 @@ class MonitorActor(db: JdbcBackend#DatabaseDef) extends Actor {
     }
   }
 
-  private val firstTime = mutable.HashMap[Int, Promise[Option[StoredContestStatus]]]()
+  private def loadMonitors()(implicit ec: ExecutionContext) = {
+    val fu = db.run(Contests.getContests).flatMap { contests =>
+      Future.sequence(contests.map(getContestMonitor))
+    }
+    fu.foreach(st => self ! State(st))
+    fu.onComplete { _ =>
+      context.system.scheduler.scheduleOnce(20 seconds, self, Refresh)
+    }
+    fu
+  }
+
+  //private val firstTime = mutable.HashMap[Int, Promise[Option[StoredContestStatus]]]()
   private val monitors = mutable.HashMap[Int, StoredContestStatus]()
-  private var validContests: Option[ValidContests] = None
+  //private var validContests: Option[ValidContests] = None
 
-  override def receive: Receive = {
-    case Refresh => {
-      db.run(Contests.getContests).flatMap { contests =>
-        self ! ValidContests(contests.map(_.id).toSet)
-
-        Future.sequence(contests.map(getContestMonitor(_)).map { f =>
-          f.foreach { v =>
-            self ! v
-          }
-          f
-        })
-      }.onComplete { _ =>
-        context.system.scheduler.scheduleOnce(20 seconds, self, Refresh)
-      }
-    }
-
-    case c: StoredContestStatus => {
-      firstTime.remove(c.contest.id).foreach { f =>
-        f.success(Some(c))
-      }
-      monitors.put(c.contest.id, c)
-
-      FileUtils.writeStringToFile(new File(s"/ssd/s/qq/${c.contest.id}.html"),
-        Compressor(views.html.staticmonitor(c.contest, c.monitor(false).status).body), Charsets.UTF_8)
-    }
-
-    case v: ValidContests => {
-      validContests = Some(v)
-      firstTime.keys.filterNot(v.contests).foreach { id =>
-        firstTime.remove(id).foreach { f =>
-          f.success(None)
-        }
-      }
-    }
-
-    case Get(id) => {
-      import akka.pattern.pipe
-      monitors.get(id) match {
-        case Some(s) => sender() ! Some(s)
-        case None =>
-          validContests match {
-            case Some(contests) if contests.contests(id) =>
-              firstTimeFuture(id).pipeTo(sender())
-            case None =>
-              firstTimeFuture(id).pipeTo(sender())
-            case _ =>
-              sender ! None
-          }
-      }
+  private def updateMonitors(state: Seq[StoredContestStatus]) = {
+    state.map(_.contest.id).foreach(monitors.remove)
+    state.foreach { st =>
+      monitors.put(st.contest.id, st)
+      FileUtils.writeStringToFile(new File(s"/ssd/s/qq/${st.contest.id}.html"),
+        Compressor(views.html.staticmonitor(st.contest, st.monitor(false).status).body), Charsets.UTF_8)
     }
   }
 
-  private def firstTimeFuture(id: Int) =
-    firstTime.getOrElseUpdate(id, Promise[Option[StoredContestStatus]]()).future
+  def initialized: Receive = {
+    case Refresh => loadMonitors()
+    case State(state) => updateMonitors(state)
+    case Get(id) => sender ! monitors.get(id)
+  }
 
-  context.system.scheduler.scheduleOnce(0 seconds, self, Refresh)
+  override def receive: Receive = {
+    case Refresh => loadMonitors()
+    case State(state) => {
+      updateMonitors(state)
+      unstashAll()
+      context.become(initialized)
+    }
+    case Get(id) =>
+      stash()
+  }
 }
