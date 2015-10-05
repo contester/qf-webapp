@@ -358,8 +358,8 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
             BadRequest(html.admin.postanswer(formWithErrors, clr, answerList.toSeq, contest))
           },
           data => {
-            db.run(sqlu"""update ClarificationRequests set Answer = ${data.answer}, Answered = 1 where ID = $clrId""").map { _ =>
-              statusActorModel.statusActor ! ClarificationAnswered(clr.contest, clrId)
+            db.run(sqlu"""update ClarificationRequests set Answer = ${data.answer}, Status = 1 where ID = $clrId""").map { _ =>
+              statusActorModel.statusActor ! ClarificationAnswered(clr.contest, clrId, clr.team, clr.problem, data.answer)
               Redirect(routes.AdminApplication.showQandA(clr.contest))
             }
           }

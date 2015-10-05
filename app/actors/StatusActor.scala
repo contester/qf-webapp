@@ -27,8 +27,7 @@ object StatusActor {
   case class JoinUser(contest: Int, team: Int)
   case class UserJoined(enumerator: Enumerator[Event])
   case class ClarificationRequested(contest: Int, clrId: Int)
-  case class ClarificationAnswered(contest: Int, clrId: Int)
-
+  case class ClarificationAnswered(contest: Int, clrId: Int, teamId: Int, problem: String, text: String)
   case class ClarificationRequestsStoredState(values: Map[Int, Seq[Int]])
 
   private val userPing = Event("", None, Some("ping"))
@@ -146,9 +145,10 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       clrChannel.push(ClarificationRequestState(contest, pendingClarificationRequests(contest).size, true))
     }
 
-    case ClarificationAnswered(contest, clrId) => {
+    case ClarificationAnswered(contest, clrId, teamId, problem, text) => {
       pendingClarificationRequests(contest) -= clrId
       clrChannel.push(ClarificationRequestState(contest, pendingClarificationRequests(contest).size, false))
+      pushPersistent(contest, teamId, "clarificationAnswered", Json.obj("problem" -> problem, "text" -> text))
     }
 
     case finished: FinishedTesting => {

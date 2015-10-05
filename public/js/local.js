@@ -171,6 +171,16 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
         }
     })
 
+    source.addEventListener('clarificationAnswered', function(ev) {
+        var obj = JSON.parse(ev.data);
+        if (ackMessagePath) {
+            notifyMe("На вопрос по задаче " + obj.problem + " получен ответ", iconbase + 'icpc_logo.png', obj.text);
+            if (obj.msgid) {
+                $.post(ackMessagePath, {'msgid': obj.msgid});
+            }
+        }
+    })
+
     source.addEventListener('contest', function(ev) {
         var obj = JSON.parse(ev.data);
         updateContestTimes(obj, iconbase);
