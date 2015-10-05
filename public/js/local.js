@@ -164,7 +164,7 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
                 icon = iconbase + 'baloons/baloon-' + obj.problem.toLowerCase() + '.png';
             }
             console.log(obj.submitId)
-            notifyMe("Problem " + obj.problem, icon, obj.result.message)
+            notifyMe("Задача " + obj.problem, icon, obj.result.message)
             if (obj.msgid) {
                 $.post(ackMessagePath, {'msgid': obj.msgid});
             }
