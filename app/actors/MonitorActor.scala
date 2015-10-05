@@ -12,7 +12,7 @@ import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future, Promise}
 
 object MonitorActor {
-  def props(db: JdbcBackend#DatabaseDef) = Props(classOf[MonitorActor], db)
+  def props(db: JdbcBackend#DatabaseDef, staticLocation: Option[String]) = Props(classOf[MonitorActor], db, staticLocation)
 
   case class Get(contest: Int)
   case object Start
@@ -20,13 +20,12 @@ object MonitorActor {
   case object Refresh
 }
 
-class MonitorActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
+class MonitorActor(db: JdbcBackend#DatabaseDef, staticLocation: Option[String]) extends Actor with Stash {
   import MonitorActor._
   import context.dispatcher
 
   import scala.concurrent.duration._
   import scala.language.postfixOps
-
 
   @throws[Exception](classOf[Exception])
   override def preStart(): Unit = {
@@ -63,16 +62,16 @@ class MonitorActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     fu
   }
 
-  //private val firstTime = mutable.HashMap[Int, Promise[Option[StoredContestStatus]]]()
   private val monitors = mutable.HashMap[Int, StoredContestStatus]()
-  //private var validContests: Option[ValidContests] = None
 
   private def updateMonitors(state: Seq[StoredContestStatus]) = {
     state.map(_.contest.id).foreach(monitors.remove)
     state.foreach { st =>
       monitors.put(st.contest.id, st)
-      FileUtils.writeStringToFile(new File(s"/ssd/s/qq/${st.contest.id}.html"),
-        Compressor(views.html.staticmonitor(st.contest, st.monitor(false).status).body), Charsets.UTF_8)
+      for (location <- staticLocation) {
+        FileUtils.writeStringToFile(new File(s"/ssd/s/qq/${st.contest.id}.html"),
+          Compressor(views.html.staticmonitor(st.contest, st.monitor(false).status).body), Charsets.UTF_8)
+      }
     }
   }
 

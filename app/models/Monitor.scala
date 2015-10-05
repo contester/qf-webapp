@@ -5,6 +5,7 @@ import javax.inject.{Inject, Singleton}
 import actors.MonitorActor
 import akka.actor.ActorSystem
 import models.Foo.RankedRow
+import play.api.Configuration
 import play.api.db.slick.DatabaseConfigProvider
 import slick.driver.JdbcProfile
 import spire.math.Rational
@@ -158,8 +159,8 @@ case class StoredContestStatus(contest: Contest, frozen: AnyStatus, exposed: Any
 }
 
 @Singleton
-class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, system: ActorSystem) {
-  private[this] val monitorActor = system.actorOf(MonitorActor.props(dbConfigProvider.get[JdbcProfile].db), "monitor-actor")
+class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, system: ActorSystem, configuration: Configuration) {
+  private[this] val monitorActor = system.actorOf(MonitorActor.props(dbConfigProvider.get[JdbcProfile].db, configuration.getString("monitor.static_location")), "monitor-actor")
 
   def getMonitor(id: Int, overrideFreeze: Boolean)(implicit ec: ExecutionContext): Future[Option[ContestMonitor]] = {
     import akka.pattern.ask
