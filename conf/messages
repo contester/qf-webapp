@@ -1,0 +1,11 @@
+verdict {
+  compiled = Compilation successful
+  compileFailed = Compilation failed
+  accepted = Accepted
+  timeLimitExceeded = Time limit exceeded
+  runtimeError = Runtime error
+  wrongAnswer = Wrong answer
+  memoryLimitExceeded = Memory limit exceeded
+  testerError = Tester error
+  rejected = Rejected
+}

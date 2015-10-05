@@ -1,6 +1,7 @@
 package models
 
 import models.ContesterResults.FinishedTesting
+import play.api.i18n.Messages
 import play.api.libs.json.{JsValue, Writes, Json}
 import slick.jdbc.JdbcBackend
 
@@ -84,17 +85,31 @@ object SubmitResult {
       }
     }
 
+/*  val message = Map(
+    1 -> "compiled",
+    2 -> "compilationFailed",
+    10 -> "accepted",
+    11 -> "timeLimitExceeded",
+    12 -> "runtimeError",
+    13 -> "wrongAnswer",
+    14 -> "wrongAnswer",
+    15 -> "memoryLimitExceeded",
+    16 -> "testerError",
+    21 -> "rejected"
+  ).mapValues(v => Messages(s"verdict.$v"))
+  */
+
   val message = Map(
-    1 -> "Compilation successful",
-    2 -> "Compilation failed",
-    10 -> "Accepted",
-    11 -> "Time limit exceeded",
-    12 -> "Runtime error",
-    13 -> "Wrong answer",
-    14 -> "Wrong answer",
-    15 -> "Memory limit exceeded",
-    16 -> "Tester error",
-    21 -> "Rejected"
+    1 -> "Скомпилировалось",
+  2 -> "Не скомпилировалось",
+  10 -> "Успешно",
+  11 -> "Превышен лимит времени",
+  12 -> "Ошибка выполнения",
+  13 -> "Неверный ответ",
+  14 -> "Неверный ответ",
+  15 -> "Превышен лимит памяти",
+  16 -> "Ошибка тестера",
+  21 -> "Отвергнуто"
   )
 
   def success(code: Int) =
