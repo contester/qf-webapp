@@ -221,6 +221,31 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
+  private def getClarificationById(clrId: Int) =
+    db.run(sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications
+            where cl_id = $clrId""".as[Clarification])
+
+  def toggleClarification(clrId: Int) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
+    implicit val ec = StackActionExecutionContext
+
+    getClarificationById(clrId).flatMap { clrs =>
+      Future.sequence(clrs.map { clr =>
+        db.run(sqlu"update clarifications set cl_is_hidden = ${!clr.hidden} where cl_id = ${clr.id}")
+      })
+    }.map { _ =>
+      Ok("ok")
+    }
+  }
+
+  def deleteClarification(clrId: Int) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
+    implicit val ec = StackActionExecutionContext
+
+    db.run(sqlu"delete from clarifications where cl_id = ${clrId}").map { _ =>
+      Ok("ok")
+    }
+  }
+
+
   def feed(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
     implicit val ec = StackActionExecutionContext
 
