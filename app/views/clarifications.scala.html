@@ -40,7 +40,7 @@
     </thead>
     <tbody>
     @for(s <- clarifications) {
-    <tr><td>@s.arrived</td><td>@s.problem</td><td>@Html(s.text)</td></tr>
+    <tr><td>@LocalDateFormat(s.arrived)</td><td>@s.problem</td><td>@Html(s.text)</td></tr>
     }
 
     </tbody>
@@ -55,7 +55,7 @@
         </thead>
         <tbody>
         @for(s <- clReq) {
-        <tr><td>@s.arrived</td><td>@s.problem</td><td>@s.request</td><td>@s.answer</td></tr>
+        <tr><td>@LocalDateFormat(s.arrived)</td><td>@s.problem</td><td>@s.request</td><td>@s.answer</td></tr>
         }
         </tbody>
     </table>
