@@ -26,9 +26,12 @@ object StatusActor {
   case class AdminJoined(enumerator: Enumerator[Event])
   case class JoinUser(contest: Int, team: Int)
   case class UserJoined(enumerator: Enumerator[Event])
+
   case class ClarificationRequested(contest: Int, clrId: Int)
   case class ClarificationAnswered(contest: Int, clrId: Int, teamId: Int, problem: String, text: String)
   case class ClarificationRequestsStoredState(values: Map[Int, Seq[Int]])
+
+  case class ClarificationPosted(contest: Int, problem: Option[String])
 
   private val userPing = Event("", None, Some("ping"))
 }

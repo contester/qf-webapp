@@ -3,17 +3,17 @@
 @adminmain(tab = "qanda", contest=contest) {
 <script>
     function toggleClarification(target, btnid) {
-        $('#rejudge-' + btnid).html('...');
-        $('#result-' + btnid).html('...')
+        $('#cl-button-' + btnid).html('...');
         $.post(target, {}, function() {
-            $('#rejudge-' + btnid).html('<span class="caret"></span>')
+            $('#cl-button-' + btnid).html('<span class="caret"></span>')
         });
     }
 
     function deleteClarification(target, btnid) {
-        $('#rejudge-' + btnid).html('...');
+        $('#cl-button-' + btnid).html('...');
         $.post(target, {}, function() {
-            $('#rejudge-' + btnid).html('<span class="caret"></span>')
+            $('#cl-button-' + btnid).html('<span class="caret"></span>')
+            $('#cl-row-' + btnid).remove();
         });
     }
 
@@ -30,9 +30,9 @@
     </thead>
     <tbody>
     @for(s <- clarifications) {
-    <tr><th scope="row"><a href="@routes.AdminApplication.postUpdateClarification(s.id)">@s.id</a></th>
+    <tr id="cl-row-@{s.id}"><th scope="row"><a href="@routes.AdminApplication.postUpdateClarification(s.id)">@s.id</a></th>
         <td><div class="btn-group btn-nomargin">
-            <a href="javascript:void(0)" data-target="#" class="btn btn-primary btn-xs btn-nomargin dropdown-toggle" data-toggle="dropdown">
+            <a href="javascript:void(0)" data-target="#" class="btn btn-primary btn-xs btn-nomargin dropdown-toggle" data-toggle="dropdown" id="cl-button-${s.id}">
                 <span class="caret"></span>
             </a>
             <ul class="dropdown-menu">
@@ -42,7 +42,7 @@
         </div>
         </td>
         <td>@s.contest</td>
-        <td>@s.problem</td><td>@s.text</td><td>@s.arrived</td><td>@s.hidden</td></tr>
+        <td>@s.problem</td><td>@s.text</td><td>@LocalDateFormat(s.arrived)</td><td>@s.hidden</td></tr>
     }
     </tbody>
 </table>
@@ -62,7 +62,7 @@
     @for(s <- clReqs) {
     <tr><th scope="row"><a href="@routes.AdminApplication.postAnswerForm(s.id)">@s.id</a></th>
         <td>@s.contest</td><td>@s.team</td>
-        <td>@s.problem</td><td>@s.request</td><td>@s.arrived</td><td>@s.answer</td><td>@s.answered</td></tr>
+        <td>@s.problem</td><td>@s.request</td><td>@LocalDateFormat(s.arrived)</td><td>@s.answer</td><td>@s.answered</td></tr>
     }
 
     </tbody>

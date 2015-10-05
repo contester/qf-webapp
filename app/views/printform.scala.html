@@ -46,7 +46,7 @@
         </thead>
         <tbody>
         @for(s <- jobs) {
-        <tr><td>@s.arrived</td><td>@s.filename</td>
+        <tr><td>@LocalDateFormat(s.arrived)</td><td>@s.filename</td>
             <td>@s.printed</td></tr>
         }
 

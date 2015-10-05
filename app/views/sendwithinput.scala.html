@@ -53,7 +53,7 @@
         </thead>
         <tbody>
         @for(s <- evals) {
-        <tr><td>@s.arrived</td><td><pre>@s.sourceStr</pre></td><td><pre>@s.inputStr</pre></td><td>@s.status.getOrElse("...")</td>
+        <tr><td>@LocalDateFormat(s.arrived)</td><td><pre>@s.sourceStr</pre></td><td><pre>@s.inputStr</pre></td><td>@s.status.getOrElse("...")</td>
         <td><pre>@s.outputStr.getOrElse("")</pre></td><td>@s.timex</td><td>@s.memory</td><td>@s.info</td></tr>
         }
 
