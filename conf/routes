@@ -37,7 +37,7 @@ POST /admin/reprintSubmit/:submitId controllers.AdminApplication.reprintSubmit(s
 
 GET /admin/postNewClarification/:contestId controllers.AdminApplication.postNewClarification(contestId: Int)
 GET /admin/updateClarification/:clrId controllers.AdminApplication.postUpdateClarification(clrId: Int)
-POST /admin/postClarification controllers.AdminApplication.postClarification
+POST /admin/postClarification/:contestId controllers.AdminApplication.postClarification(contestId: Int)
 GET /admin/qanda/:contestId controllers.AdminApplication.showQandA(contestId: Int)
 POST /admin/postAnswer/:clrId controllers.AdminApplication.postAnswer(clrId: Int)
 GET /admin/postAnswer/:clrId controllers.AdminApplication.postAnswerForm(clrId: Int)

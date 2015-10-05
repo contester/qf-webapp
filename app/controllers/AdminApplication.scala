@@ -258,7 +258,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     implicit val ec = StackActionExecutionContext
     db.run(
       sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications
-           |             where cl_id = $clarificationId""".as[Clarification])
+            where cl_id = $clarificationId""".as[Clarification])
       .map(_.headOption).flatMap { clOpt =>
       clOpt.map { cl =>
         val clObj = PostClarification(
@@ -271,7 +271,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-  def postClarification = AsyncStack(parse.multipartFormData, AuthorityKey -> Permissions.any) { implicit request =>
+  def postClarification(contestId: Int) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
     implicit val ec = StackActionExecutionContext
     postClarificationForm.bindFromRequest.fold(
       formWithErrors => getSelectedContests(1, loggedIn).map { contest =>
@@ -287,10 +287,10 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
             db.run(
               sqlu"""insert into clarifications (cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden) values
                  (${data.contest}, ${data.problem}, ${data.text}, $cdate, ${data.hidden})
-                  """.andThen(sql"select last_insert_id".as[Int]).withPinnedSession).map(_.headOption))
+                  """.andThen(sql"select last_insert_id()".as[Int]).withPinnedSession).map(_.headOption))
 
         cOp.map { optId =>
-          Redirect(routes.AdminApplication.postNewClarification(1))
+          Redirect(routes.AdminApplication.showQandA(contestId))
         }
       }
     )
