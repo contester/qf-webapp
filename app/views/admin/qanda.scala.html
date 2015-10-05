@@ -1,4 +1,4 @@
-@(clarifications: Seq[Clarification1], clReqs: Seq[ClarificationRequest1], contest: SelectedContest)(implicit request: RequestHeader)
+@(clarifications: Seq[Clarification], clReqs: Seq[ClarificationRequest], contest: SelectedContest)(implicit request: RequestHeader)
 
 @adminmain(tab = "qanda", contest=contest) {
 
@@ -15,9 +15,8 @@
     @for(s <- clarifications) {
     <tr><th scope="row"><a href="@routes.AdminApplication.postUpdateClarification(s.id)">@s.id</a></th>
         <td>@s.contest</td>
-        <td>@s.problem</td><td>@s.text</td><td>@s.date</td><td>@s.hidden</td></tr>
+        <td>@s.problem</td><td>@s.text</td><td>@s.arrived</td><td>@s.hidden</td></tr>
     }
-
     </tbody>
 </table>
     </div>
@@ -35,7 +34,7 @@
     @for(s <- clReqs) {
     <tr><th scope="row"><a href="@routes.AdminApplication.postAnswerForm(s.id)">@s.id</a></th>
         <td>@s.contest</td><td>@s.team</td>
-        <td>@s.problem</td><td>@s.text</td><td>@s.arrived</td><td>@s.answer</td><td>@s.status</td></tr>
+        <td>@s.problem</td><td>@s.request</td><td>@s.arrived</td><td>@s.answer</td><td>@s.answered</td></tr>
     }
 
     </tbody>

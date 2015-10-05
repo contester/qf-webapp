@@ -1,4 +1,4 @@
-@(form: Form[ClarificationResponse], clr: ClarificationRequest1, answers: Seq[(String, String)], contest: SelectedContest)(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@(form: Form[ClarificationResponse], clr: ClarificationRequest, answers: Seq[(String, String)], contest: SelectedContest)(implicit flash: Flash, messages: Messages, request: RequestHeader)
 @import helper.Implicits._
 @import b3.vertical.fieldConstructor
 @adminmain(tab = "qanda", contest=contest) {
@@ -23,7 +23,7 @@
         @b3.static("Contest"){ @clr.contest }
         @b3.static("Team"){ @clr.team }
         @b3.static("Problem"){ @clr.problem }
-        @b3.static("Question"){ @clr.text }
+        @b3.static("Question"){ @clr.request }
         @b3.static("Timestamp"){ @clr.arrived }
         @b3.select(form("answer"), options=answers, '_label -> "Answer")
         @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Update}

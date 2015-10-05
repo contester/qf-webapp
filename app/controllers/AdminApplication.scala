@@ -29,24 +29,6 @@ import com.github.nscala_time.time.Imports._
 case class RejudgeSubmitRange(range: String)
 case class PostClarification(id: Option[Int], contest: Int, problem: String, text: String, date: Option[DateTime], hidden: Boolean)
 
-case class Clarification1(id: Int, contest: Int, problem: String, text: String, date: DateTime, hidden: Boolean)
-object Clarification1 {
-  implicit val getResult = GetResult(r =>
-    Clarification1(r.nextInt(), r.nextInt(), r.nextString(), r.nextString(), new DateTime(r.nextTimestamp()),
-      r.nextBoolean())
-  )
-}
-
-case class ClarificationRequest1(id: Int, contest: Int, team: Int, problem: String, text: String, arrived: DateTime,
-                                 answer: String, status: Boolean)
-
-object ClarificationRequest1 {
-  implicit val getResult = GetResult(r =>
-    ClarificationRequest1(r.nextInt(), r.nextInt(), r.nextInt(), r.nextString(), r.nextString(), new DateTime(r.nextTimestamp()),
-    r.nextString(), r.nextBoolean())
-  )
-}
-
 case class ClarificationResponse(answer: String)
 
 case class SubmitIdLite(id: Int)
@@ -228,10 +210,12 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   def showQandA(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
     implicit val ec = StackActionExecutionContext
     db.run(
-      sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications where cl_contest_idf = $contestId"""
-        .as[Clarification1]).zip(db.run(
-      sql"""select ID, Contest, Team, Problem, Request, Arrived, Answer, Status from ClarificationRequests where Contest = $contestId"""
-        .as[ClarificationRequest1])).zip(getSelectedContests(contestId, loggedIn)).map {
+      sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications
+             where cl_contest_idf = $contestId order by cl_date desc"""
+        .as[Clarification]).zip(db.run(
+      sql"""select ID, Contest, Team, Problem, Request, Answer, Arrived, Status from ClarificationRequests
+               where Contest = $contestId order by Arrived desc"""
+        .as[ClarificationRequest])).zip(getSelectedContests(contestId, loggedIn)).map {
       case ((clarifications, clReqs), contest) =>
         Ok(html.admin.qanda(clarifications, clReqs, contest))
     }
@@ -274,11 +258,11 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     implicit val ec = StackActionExecutionContext
     db.run(
       sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications
-            where cl_id = $clarificationId""".as[Clarification1])
+           |             where cl_id = $clarificationId""".as[Clarification])
       .map(_.headOption).flatMap { clOpt =>
       clOpt.map { cl =>
         val clObj = PostClarification(
-          Some(cl.id), cl.contest, cl.problem, cl.text, Some(cl.date), cl.hidden
+          Some(cl.id), cl.contest, cl.problem, cl.text, Some(cl.arrived), cl.hidden
         )
         getSelectedContests(cl.contest, loggedIn).map { contest =>
           Ok(html.admin.postclarification(postClarificationForm.fill(clObj), contest))
@@ -317,8 +301,9 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   }
 
   private def getClrById(clrId: Int)(implicit ec: ExecutionContext) =
-    db.run(sql"""select ID, Contest, Team, Problem, Request, Arrived, Answer, Status from ClarificationRequests where ID = $clrId"""
-      .as[ClarificationRequest1]).map(_.headOption)
+    db.run(sql"""select ID, Contest, Team, Problem, Request, Answer, Arrived, Status from ClarificationRequests
+                where ID = $clrId"""
+      .as[ClarificationRequest]).map(_.headOption)
 
   private val answerList = Map(
     "No comments" -> "No comments",
@@ -348,8 +333,8 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
             BadRequest(html.admin.postanswer(formWithErrors, clr, answerList.toSeq, contest))
           },
           data => {
-            db.run(sqlu"""update ClarificationRequests set Answer = ${data.answer}, Status = 1 where ID = $clrId""").map { _ =>
-              statusActorModel.statusActor ! ClarificationAnswered(clr.contest)
+            db.run(sqlu"""update ClarificationRequests set Answer = ${data.answer}, Answered = 1 where ID = $clrId""").map { _ =>
+              statusActorModel.statusActor ! ClarificationAnswered(clr.contest, clrId)
               Redirect(routes.AdminApplication.showQandA(clr.contest))
             }
           }

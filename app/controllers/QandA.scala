@@ -34,8 +34,13 @@ class QandA @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   private def clrForm(loggedInTeam: LoggedInTeam, form: Form[ClarificationReqData])(implicit request: RequestHeader, ec: ExecutionContext) =
     db.run(loggedInTeam.contest.getProblems).flatMap { probs =>
-      db.run(loggedInTeam.contest.getClarifications).flatMap { clars =>
-        db.run(loggedInTeam.getClarificationRequests).map { clReq =>
+      db.run(
+        sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications
+             where cl_is_hidden = '0' and cl_contest_idf = ${loggedInTeam.contest.id} order by cl_date desc""".as[Clarification]).flatMap { clars =>
+        db.run(
+          sql"""select ID, Contest, Team, Problem, Request, Answer, Arrived, Status from ClarificationRequests
+               where Contest = ${loggedInTeam.contest.id} and Team = ${loggedInTeam.team.localId} order by Arrived desc
+             """.as[ClarificationRequest]).map { clReq =>
           html.clarifications(loggedInTeam, clars, clReq, Problems.toSelect(probs), form)
         }
       }
@@ -59,7 +64,9 @@ class QandA @Inject() (dbConfigProvider: DatabaseConfigProvider,
                 CURRENT_TIMESTAMP())
               """.andThen(sql"select last_insert_id()".as[Int])).withPinnedSession
         ).map { clrIds =>
-          statusActorModel.statusActor ! ClarificationRequested(loggedInTeam.contest.id)
+          for (clrId <- clrIds) {
+            statusActorModel.statusActor ! ClarificationRequested(loggedInTeam.contest.id, clrId)
+          }
           Redirect(routes.QandA.index)
         }
       }

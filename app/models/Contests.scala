@@ -24,7 +24,6 @@ case class Contest(id: Int, name: String, schoolMode: Boolean, startTime: DateTi
 
   def getProblems = Contests.getProblems(id)
   def getCompilers = Contests.getCompilers(id)
-  def getClarifications = Contests.getClarifications(id)
 }
 
 object Contest {
@@ -104,13 +103,6 @@ object Contests {
   def getCompilers(contest: Int) =
     sql"""select ID, Name, Ext from Languages where Contest = $contest order by ID""".as[Compiler]
 
-  implicit private val getClarification = GetResult(
-    r => Clarification(new DateTime(r.nextTimestamp()), r.nextString().toUpperCase, r.nextString()))
-
-  def getClarifications(contestId: Int) =
-    sql"""select cl_date, cl_task, cl_text from clarifications where cl_is_hidden = '0' and
-         cl_contest_idf = $contestId""".as[Clarification]
-
   implicit val getLocalTeam = GetResult(r =>
     LocalTeam(r.nextInt(), r.nextString(), r.nextIntOption(), r.nextString(), r.nextBoolean(),
       r.nextBoolean(), r.nextBoolean()))
@@ -127,7 +119,4 @@ object Problems {
   def toSelect(problems: Seq[Problem]) =
     problems.map(x => x.id -> s"${x.id}. ${x.name}")
 }
-
-case class Clarification(time: DateTime, problem: String, text: String)
-case class ClarificationRequest(time: DateTime, problem: String, text: String, answer: String)
 

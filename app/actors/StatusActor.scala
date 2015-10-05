@@ -26,10 +26,10 @@ object StatusActor {
   case class AdminJoined(enumerator: Enumerator[Event])
   case class JoinUser(contest: Int, team: Int)
   case class UserJoined(enumerator: Enumerator[Event])
-  case class ClarificationRequested(contest: Int)
-  case class ClarificationAnswered(contest: Int)
+  case class ClarificationRequested(contest: Int, clrId: Int)
+  case class ClarificationAnswered(contest: Int, clrId: Int)
 
-  case class ClarificationRequestsStoredState(values: Seq[(Int, Int)])
+  case class ClarificationRequestsStoredState(values: Map[Int, Seq[Int]])
 
   private val userPing = Event("", None, Some("ping"))
 }
@@ -70,7 +70,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   private val (msg2Out, msg2Channel) = Concurrent.broadcast[Message2]
   private val unacked = mutable.Map[(Int, Int), mutable.Map[Int, Message2]]()
   private val (submitOut, submitChannel) = Concurrent.broadcast[AnnoSubmit]
-  private val pendingClarificationRequests = mutable.Map[Int, Int]().withDefaultValue(0)
+  private val pendingClarificationRequests = mutable.Map[Int, mutable.Set[Int]]().withDefaultValue(mutable.Set[Int]())
   private val (clrOut, clrChannel) = Concurrent.broadcast[ClarificationRequestState]
 
   private def getUnacked(contest: Int, team: Int) =
@@ -116,9 +116,10 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
 
   private def loadClarificationRequestState =
     db.run(
-      sql"""select Contest, Count(*) from ClarificationRequests where Answer = 'Pending'""".as[(Int, Int)]
+      sql"""select Contest, ID from ClarificationRequests where not Answered""".as[(Int, Int)]
     ).map { msgs =>
-      self ! ClarificationRequestsStoredState(msgs)
+      val grp = msgs.groupBy(_._1).mapValues(x => x.map(_._2))
+      self ! ClarificationRequestsStoredState(grp)
     }
 
   def receive = {
@@ -130,25 +131,24 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     case ClarificationRequestsStoredState(values) => {
       values.foreach {
         case (contest, pending) => {
-          pendingClarificationRequests.put(contest, pending).foreach { old =>
-            if (old != pending) {
-              clrChannel.push(ClarificationRequestState(contest, pending, false))
+          val pendingSet = mutable.Set[Int](pending:_*)
+          pendingClarificationRequests.put(contest, pendingSet).foreach { old =>
+            if (old != pendingSet) {
+              clrChannel.push(ClarificationRequestState(contest, pending.length, false))
             }
           }
         }
       }
     }
 
-    case ClarificationRequested(contest) => {
-      val next = pendingClarificationRequests(contest) + 1
-      pendingClarificationRequests.put(contest, next)
-      clrChannel.push(ClarificationRequestState(contest, next, true))
+    case ClarificationRequested(contest, clrId) => {
+      pendingClarificationRequests(contest) += clrId
+      clrChannel.push(ClarificationRequestState(contest, pendingClarificationRequests(contest).size, true))
     }
 
-    case ClarificationAnswered(contest) => {
-      val next = pendingClarificationRequests(contest) - 1
-      pendingClarificationRequests.put(contest, next)
-      clrChannel.push(ClarificationRequestState(contest, next, false))
+    case ClarificationAnswered(contest, clrId) => {
+      pendingClarificationRequests(contest) -= clrId
+      clrChannel.push(ClarificationRequestState(contest, pendingClarificationRequests(contest).size, false))
     }
 
     case finished: FinishedTesting => {
@@ -202,7 +202,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
 
     case JoinAdmin(c: Int) => {
       val contestEvents = Enumerator.enumerate(contestStates.get(c)).andThen(contestOut &> filterContest(c)) &> contestToEvent
-      val clrEvents = Enumerator(ClarificationRequestState(c, pendingClarificationRequests(c), false))
+      val clrEvents = Enumerator(ClarificationRequestState(c, pendingClarificationRequests(c).size, false))
         .andThen(clrOut &> filterClarificationRequests(c)) &> EventSource()
 
       sender ! AdminJoined(
