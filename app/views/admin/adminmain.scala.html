@@ -48,7 +48,7 @@
 <script type="text/javascript">
     document.addEventListener('DOMContentLoaded', function() {
         maybeCheckNotifyPermission();
-        listenOnEvents('@routes.AdminApplication.feed(contest.contest.id)', '@routes.Assets.at("images/")');
+        listenOnAdmin('@routes.AdminApplication.feed(contest.contest.id)', '@routes.Assets.at("images/")');
     })
 </script>
 }

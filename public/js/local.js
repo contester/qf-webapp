@@ -148,19 +148,13 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
         resetPingState();
     }
 
-    source.onmessage = function(ev) {
-        console.log(ev.data)
-    }
-
     source.addEventListener('submit', function(ev) {
         var obj = JSON.parse(ev.data);
-        console.log(obj);
 
         var tr = $('#result-' + obj.submitId);
         if (tr.length) {
             tr.html(obj.result.message);
         } else {
-            console.log("huh")
             $('#submits > tbody').prepend('<tr><th scope="row">' + obj.submitId + '</th></tr>')
         }
 
@@ -177,15 +171,72 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
         }
     })
 
+    source.addEventListener('contest', function(ev) {
+        var obj = JSON.parse(ev.data);
+        updateContestTimes(obj, iconbase);
+    })
+
+    source.addEventListener('ping', function(ev) {
+        resetPingState();
+    })
+
+    source.onerror = function(ev) {
+        $("#connected1").addClass("badge-error");
+        $("#connected1").text("!");
+        console.log("Error")
+        console.log(ev)
+        if (pingState && pingState.tm) {
+            clearTimeout(pingState.tm);
+            pingState.tm = null;
+        }
+
+        if (source.readyState == 2) {
+            reconnect();
+        }
+    }
+}
+
+function listenOnAdmin(path, iconbase) {
+    var source = new EventSource(path);
+
+    var reconnect = function() {
+        source.close();
+        window.setTimeout(function() { listenOnEvents(path) }, 1000);
+    }
+
+    var resetPingState = function() {
+        if (pingState && pingState.tm) {
+            clearTimeout(pingState.tm);
+            pingState.tm = null;
+        }
+        pingState.tm = setTimeout(function() { reconnect(); }, 60000);
+    }
+
+    source.onopen = function() {
+        $("#connected1").removeClass("badge-error");
+        $("#connected1").text("+");
+        resetPingState();
+    }
+
+    source.addEventListener('submit', function(ev) {
+        var obj = JSON.parse(ev.data);
+
+        var tr = $('#result-' + obj.submitId);
+        if (tr.length) {
+            tr.html(obj.result.message);
+        } else {
+            $('#submits > tbody').prepend('<tr><th scope="row">' + obj.submitId + '</th></tr>')
+        }
+    })
+
     source.addEventListener('clarificationRequestState', function(ev) {
         var obj = JSON.parse(ev.data);
-        console.log(obj)
         var clrp = $("#clrPending")
         clrp.text(obj.pending);
         if (obj.pending) {
             clrp.show()
             if (obj.newRequest) {
-                notifyMe("New clarification request", iconbase + 'icpc_logo.png', 'New clarification request')
+                notifyMe("Новый вопрос жюри", iconbase + 'icpc_logo.png', 'Новый вопрос жюри')
             }
         } else {
             clrp.hide()

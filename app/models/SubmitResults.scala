@@ -24,12 +24,12 @@ case object SubmitWaiting extends SubmitResult {
 
 case object SubmitAccepted extends SubmitResult {
   override val success = true
-  override val message = "Accepted"
+  override val message = "Успешно"
 }
 
 case object SubmitCompileError extends SubmitResult {
   override val success = false
-  override val message = "Compilation failed"
+  override val message = "Не скомпилировалось"
 }
 
 case class SubmitPartialResult(passed: Int, taken: Int) extends SubmitResult {
@@ -43,7 +43,7 @@ case class SubmitACMPartialResult(text: String, test: Option[Int]) extends Submi
   override val success = false
 
   override def message =
-    s"${text}${test.map(x => s" on test $x").getOrElse("")}"
+    s"${text}${test.map(x => s" на тесте $x").getOrElse("")}"
 }
 
 object SubmitResult {
