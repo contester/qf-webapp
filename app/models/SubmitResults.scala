@@ -29,7 +29,7 @@ case object SubmitAccepted extends SubmitResult {
 
 case object SubmitCompileError extends SubmitResult {
   override val success = false
-  override val message = "Не скомпилировалось"
+  override val message = "Ошибка компиляции"
 }
 
 case class SubmitPartialResult(passed: Int, taken: Int) extends SubmitResult {
