@@ -14,7 +14,7 @@ trait SubmitResult {
   def message: String
 }
 
-case class SubmitStats(timeMs: Int, memory: Long)
+case class SubmitStats(timeMs: Int, memory: Memory)
 
 case object SubmitWaiting extends SubmitResult {
   override val success: Boolean = false
