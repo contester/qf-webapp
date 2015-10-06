@@ -181,6 +181,16 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
         }
     })
 
+    source.addEventListener('clarificationPosted', function(ev) {
+        var obj = JSON.parse(ev.data);
+        console.log(obj);
+        var msg = "Сообщение жюри";
+        if (obj.problem) {
+          msg += " по задаче " + obj.problem;
+        }
+        notifyMe(msg, iconbase + 'icpc_logo.png', obj.text);
+    })
+
     source.addEventListener('contest', function(ev) {
         var obj = JSON.parse(ev.data);
         updateContestTimes(obj, iconbase);

@@ -29,7 +29,7 @@ object ClarificationActor {
     def filterContest(contestId: Int)(implicit ec: ExecutionContext) = Enumeratee.filter[Posted](_.contest == contestId)
   }
 
-  case class Ack(ctid: ContestTeamIds, id: Int) extends Transit
+  case class Ack(ctid: ContestTeamIds) extends Transit
   case class Joined(ctid: ContestTeamIds, enumerator: Enumerator[Event], orig: ActorRef)
   case class Joining(ctid: ContestTeamIds, orig: ActorRef)
 
@@ -49,7 +49,6 @@ class ClarificationActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   import ClarificationActor._
 
   private def loadState() = {
-    Logger.info("foobar3")
     db.run(
       sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications""".as[Clarification]
     ).zip(db.run(sql"select Contest, Team, Clarification from ClarificationsSeen".as[(Int, Int, Int)])).map {
@@ -58,7 +57,6 @@ class ClarificationActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
         self ! InitialState(clarifications.groupBy(_.contest).mapValues(x => x.map(_.id)),
           clseen.map(x => ContestTeamIds(x._1, x._2) -> x._3).groupBy(_._1).mapValues(x => x.map(_._2)))
     }
-    Logger.info("foobar4")
   }
 
   private val issued = mutable.Map[Int, mutable.Set[Int]]()
@@ -68,10 +66,8 @@ class ClarificationActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
   @throws[Exception](classOf[Exception])
   override def preStart(): Unit = {
-    Logger.info("foobar")
     super.preStart()
-    Logger.info("foobar2")
-    loadState
+    loadState()
   }
 
   override def receive: Receive = {
@@ -106,14 +102,19 @@ class ClarificationActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
       channel.push(p)
     }
 
-    case Ack(ctid, id) => {
-      seen.getOrElse(ctid, mutable.Set()).add(id)
-      db.run(sqlu"insert into ClarificationsSeen (Contest, Team, Clarification) values (${ctid.contestId}, ${ctid.teamId}, $id)")
+    case Ack(ctid) => {
+      val pending = issued.getOrElse(ctid.contestId, Set[Int]()) -- seen.getOrElse(ctid, Set[Int]())
+
+      Logger.info(s"Acking $pending for $ctid")
+
+      seen.getOrElse(ctid, mutable.Set()).++=(pending)
+      for (id <- pending) {
+        db.run(sqlu"insert into ClarificationsSeen (Contest, Team, Clarification) values (${ctid.contestId}, ${ctid.teamId}, $id)")
+      }
     }
 
     case Joining(ctid, orig) => {
       val pending = issued.getOrElse(ctid.contestId, Set[Int]()) -- seen.getOrElse(ctid, Set[Int]())
-      Logger.info(s"Joined: $ctid")
       sender ! Joined(ctid, (Enumerator[ClarificationState](ClarificationState(ctid.contestId, pending.toSeq)) &> EventSource()).andThen(
         output &> Posted.filterContest(ctid.contestId) &> EventSource()
       ), orig)

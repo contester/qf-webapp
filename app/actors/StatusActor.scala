@@ -223,7 +223,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     }
 
     case ClarificationActor.Joined(ctid, clrevents, orig) => {
-      Logger.info(s"JOINED: $ctid")
       val stored = getUnacked(ctid.contestId, ctid.teamId).map {
         case (msgid, msg) => msg
       }
