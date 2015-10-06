@@ -48,19 +48,26 @@ class ServerSideEval @Inject() (val dbConfigProvider: DatabaseConfigProvider,
     mapping("compiler" -> number)(ServerSideData.apply)(ServerSideData.unapply)
   }
 
-  implicit private val getEval = GetResult(r =>
-    EvalEntry(r.nextInt(), new DateTime(r.nextTimestamp()), r.nextString(), r.nextBytes(), r.nextBytes(),
-      r.nextBytesOption(), r.nextInt(), r.nextLong(), r.nextLong(), r.nextInt(), r.nextStringOption())
-  )
-
   private def evalQuery(contest: Int, team: Int) =
-    sql"""SELECT e.ID, e.Arrived, e.Ext, substring(e.Source, 1, 110) as Source, substring(e.Input, 1, 110) as Input,
-    substring(e.Output, 1, 110) as Output, e.Timex, e.Memory, e.Info, e.Result, r.Description as Status
-    FROM Eval e LEFT JOIN ResultDesc r ON e.Result=r.ID WHERE e.Team=$team
-    AND e.Contest=$contest ORDER BY Arrived DESC""".as[EvalEntry]
+    sql"""SELECT ID, Touched, Ext, Source, Input, Output, Timex, Memory, Info, Result, Contest, Team, Processed, Arrived
+    FROM Eval WHERE Team=$team
+    AND Contest=$contest ORDER BY Arrived DESC""".as[EvalEntry]
 
   private def getEvals(contest: Int, team: Int) =
     db.run(evalQuery(contest, team))
+
+  private def getEvalById(id: Int)(implicit ec: ExecutionContext) =
+    db.run(sql"""SELECT ID, Touched, Ext, Source, Input, Output, Timex, Memory, Info, Result, Contest, Team, Processed, Arrived
+    FROM Eval WHERE ID = $id ORDER BY Arrived DESC""".as[EvalEntry]).map(_.headOption)
+
+  private def canSeeEval(id: Int)(account: LoggedInTeam): Future[Boolean] = {
+    import play.api.libs.concurrent.Execution.Implicits.defaultContext
+
+    getEvalById(id).map { cids =>
+      cids.exists(cid => account.matching(ContestTeamIds(cid.contest, cid.team)))
+    }
+  }
+
 
   private def getEvalForm(loggedInTeam: LoggedInTeam, compilers:Seq[Compiler],
                           form: Form[ServerSideData])(implicit request: RequestHeader, ec: ExecutionContext) =
@@ -74,6 +81,17 @@ class ServerSideEval @Inject() (val dbConfigProvider: DatabaseConfigProvider,
 
     db.run(loggedInTeam.contest.getCompilers).flatMap { compilers =>
       getEvalForm(loggedIn, compilers, serverSideForm).map(Ok(_))
+    }
+  }
+
+  def details(id: Int) = AsyncStack(AuthorityKey -> canSeeEval(id)) { implicit request =>
+    val loggedInTeam = loggedIn
+    implicit val ec = StackActionExecutionContext
+
+    getEvalById(id).map { opt =>
+      opt.map { ev =>
+        Ok(html.evaldetails(loggedInTeam, ev))
+      }.getOrElse(Redirect(routes.ServerSideEval.index))
     }
   }
 

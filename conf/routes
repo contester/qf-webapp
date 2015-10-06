@@ -5,6 +5,7 @@ POST /clarifications controllers.QandA.post
 
 GET /sendwithinput controllers.ServerSideEval.index
 POST /sendwithinput controllers.ServerSideEval.post
+GET /evaldetails/:id controllers.ServerSideEval.details(id: Int)
 
 GET /print controllers.Printing.index
 POST /print controllers.Printing.post
