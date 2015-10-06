@@ -2,7 +2,7 @@ package controllers
 
 import javax.inject.{Inject, Singleton}
 
-import actors.StatusActor
+import actors.{ClarificationActor, StatusActor}
 import actors.StatusActor.ClarificationAnswered
 import akka.actor.{ActorSystem, Props}
 import com.google.common.collect.ImmutableRangeSet
@@ -303,7 +303,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
         val cOp = clarificationId.map { id =>
           db.run(sqlu"""update clarifications set cl_task = ${data.problem}, cl_text = ${data.text},
-              cl_is_hidden = ${data.hidden} where cl_id = $id""").map(_ => Some(clarificationId))
+              cl_is_hidden = ${data.hidden} where cl_id = $id""").map(_ => clarificationId)
         }.getOrElse(
             db.run(
               sqlu"""insert into clarifications (cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden) values
@@ -313,11 +313,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
         cOp.map { optId =>
           for (realId <- optId) {
             val popt = if (data.problem.isEmpty) None else Some(data.problem.toUpperCase)
-            db.run(Contests.getTeams(contestId)).map { teams =>
-              for (team <- teams) {
-                statusActorModel.statusActor ! StatusActor.ClarificationPosted(contestId, team.localId, popt, data.text)
-              }
-            }
+                statusActorModel.statusActor ! ClarificationActor.Posted(realId, contestId, popt, data.text)
           }
           Redirect(routes.AdminApplication.showQandA(contestId))
         }

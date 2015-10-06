@@ -1,6 +1,7 @@
 package actors
 
 import akka.actor.{Actor, Props}
+import akka.util.Timeout
 import models.ContesterResults.{CustomTestResult, FinishedTesting}
 import models._
 import play.api.Logger
@@ -27,12 +28,11 @@ object StatusActor {
   case class JoinUser(contest: Int, team: Int)
   case class UserJoined(enumerator: Enumerator[Event])
 
+  case class JoinUserWith(ctid: ContestTeamIds, clrenum: Enumerator[Event])
+
   case class ClarificationRequested(contest: Int, clrId: Int)
   case class ClarificationAnswered(contest: Int, clrId: Int, teamId: Int, problem: String, text: String)
   case class ClarificationRequestsStoredState(values: Map[Int, Seq[Int]])
-
-  case class ClarificationStoredState(values: Map[Int, Seq[Int]])
-  case class ClarificationPosted(id: Int, contest: Int, team: Int, problem: Option[String], text: String)
 
   private val userPing = Event("", None, Some("ping"))
 }
@@ -64,8 +64,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
 
   context.system.scheduler.scheduleOnce(0 seconds, self, Init)
 
-  import com.github.nscala_time.time.Imports._
-
   private val (contestOut, contestChannel) = Concurrent.broadcast[Contest]
   private val (userPingOut, userPingChannel) = Concurrent.broadcast[Event]
 
@@ -76,8 +74,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   private val pendingClarificationRequests = mutable.Map[Int, mutable.Set[Int]]().withDefaultValue(mutable.Set[Int]())
   private val (clrOut, clrChannel) = Concurrent.broadcast[ClarificationRequestState]
 
-  private val clarificationsIssued = mutable.Map[Int, mutable.Set[Int]]()
-  private val clarificationSeenBy = mutable.Map[ContestTeamIds, mutable.Set[Int]]()
+  private val clarificationActor = context.actorOf(ClarificationActor.props(db), "clarifications")
 
   private def getUnacked(contest: Int, team: Int) =
     unacked.getOrElseUpdate((contest, team), mutable.Map[Int, Message2]())
@@ -128,31 +125,10 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       self ! ClarificationRequestsStoredState(grp)
     }
 
-  private def loadClarificationsState =
-    db.run(
-      sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications where not hidden""".as[Clarification]
-    ).map { clarifications =>
-      self ! ClarificationStoredState(clarifications.groupBy(_.contest).mapValues(x => x.map(_.id)))
-    }
-
   def receive = {
     case Init => {
       loadPersistentMessages
       loadClarificationRequestState
-    }
-
-    case ClarificationStoredState(values) => {
-      val dropped = clarificationsIssued.keySet -- values.keySet
-      values.foreach {
-        case (contest, issued) => {
-          val issuedSet = mutable.Set[Int](issued:_*)
-          clarificationsIssued.put(contest, issuedSet).foreach { old =>
-            if (old != issuedSet) {
-              val added =
-            }
-          }
-        }
-      }
     }
 
     case ClarificationRequestsStoredState(values) => {
@@ -208,9 +184,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       msg2Channel.push(msg2)
     }
 
-    case ClarificationPosted(contest, team, problem, text) => {
-
-    }
 
     case NewContestState(c) => {
       val old = contestStates.get(c.id)
@@ -246,18 +219,30 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     }
 
     case JoinUser(contest: Int, team: Int) => {
-      val stored = getUnacked(contest, team).map {
+      clarificationActor ! ClarificationActor.Joining(ContestTeamIds(contest, team), sender())
+    }
+
+    case ClarificationActor.Joined(ctid, clrevents, orig) => {
+      Logger.info(s"JOINED: $ctid")
+      val stored = getUnacked(ctid.contestId, ctid.teamId).map {
         case (msgid, msg) => msg
       }
 
       val eStored = Enumerator.enumerate(stored) &> EventSource()
 
-      sender ! UserJoined(
+      val contest = ctid.contestId
+      val team = ctid.teamId
+
+      orig ! UserJoined(
         Enumerator.enumerate[Contest](contestStates.get(contest)).through(contestToEvent).andThen(eStored).andThen(
           Enumerator.interleave(contestOut &> filterContest(contest) &> contestToEvent,
             msg2Out &> filterMessage2(contest, team) &> EventSource(),
-            userPingOut)))
+            userPingOut,
+            clrevents)))
     }
+
+    case x: ClarificationActor.Transit =>
+      clarificationActor forward x
   }
 
   @throws[Exception](classOf[Exception])
