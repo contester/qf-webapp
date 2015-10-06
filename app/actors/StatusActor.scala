@@ -31,7 +31,8 @@ object StatusActor {
   case class ClarificationAnswered(contest: Int, clrId: Int, teamId: Int, problem: String, text: String)
   case class ClarificationRequestsStoredState(values: Map[Int, Seq[Int]])
 
-  case class ClarificationPosted(contest: Int, problem: Option[String])
+  case class ClarificationStoredState(values: Map[Int, Seq[Int]])
+  case class ClarificationPosted(id: Int, contest: Int, team: Int, problem: Option[String], text: String)
 
   private val userPing = Event("", None, Some("ping"))
 }
@@ -74,6 +75,9 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   private val (submitOut, submitChannel) = Concurrent.broadcast[AnnoSubmit]
   private val pendingClarificationRequests = mutable.Map[Int, mutable.Set[Int]]().withDefaultValue(mutable.Set[Int]())
   private val (clrOut, clrChannel) = Concurrent.broadcast[ClarificationRequestState]
+
+  private val clarificationsIssued = mutable.Map[Int, mutable.Set[Int]]()
+  private val clarificationSeenBy = mutable.Map[ContestTeamIds, mutable.Set[Int]]()
 
   private def getUnacked(contest: Int, team: Int) =
     unacked.getOrElseUpdate((contest, team), mutable.Map[Int, Message2]())
@@ -124,10 +128,31 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       self ! ClarificationRequestsStoredState(grp)
     }
 
+  private def loadClarificationsState =
+    db.run(
+      sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications where not hidden""".as[Clarification]
+    ).map { clarifications =>
+      self ! ClarificationStoredState(clarifications.groupBy(_.contest).mapValues(x => x.map(_.id)))
+    }
+
   def receive = {
     case Init => {
       loadPersistentMessages
       loadClarificationRequestState
+    }
+
+    case ClarificationStoredState(values) => {
+      val dropped = clarificationsIssued.keySet -- values.keySet
+      values.foreach {
+        case (contest, issued) => {
+          val issuedSet = mutable.Set[Int](issued:_*)
+          clarificationsIssued.put(contest, issuedSet).foreach { old =>
+            if (old != issuedSet) {
+              val added =
+            }
+          }
+        }
+      }
     }
 
     case ClarificationRequestsStoredState(values) => {
@@ -181,6 +206,10 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       val m = getUnacked(msg2.contest, msg2.team)
       m += (msg2.id -> msg2)
       msg2Channel.push(msg2)
+    }
+
+    case ClarificationPosted(contest, team, problem, text) => {
+
     }
 
     case NewContestState(c) => {
