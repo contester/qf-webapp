@@ -201,4 +201,17 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
+  def getCompilerOutput(testingId: Int) = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>
+    implicit val ec = StackActionExecutionContext
+
+    db.run(
+      sql"""select Test, Result, Timex, Memory, Info, TesterExitCode, TesterOutput, TesterError
+           from Results where UID = $testingId and Test = 0 order by Test""".as[ResultEntry])
+      .map(_.headOption)
+      .map { opt =>
+        opt.map { res =>
+          Ok(Json.obj("output" -> res.testerOutput, "error" -> res.testerError))
+        }.getOrElse(BadRequest(Json.obj()))
+      }
+  }
 }

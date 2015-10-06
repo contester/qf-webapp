@@ -3,6 +3,8 @@ GET / controllers.Application.index
 GET /clarifications controllers.QandA.index
 POST /clarifications controllers.QandA.post
 
+GET /getCompilerOutput/:uid controllers.Application.getCompilerOutput(uid: Int)
+
 GET /sendwithinput controllers.ServerSideEval.index
 POST /sendwithinput controllers.ServerSideEval.post
 GET /evaldetails/:id controllers.ServerSideEval.details(id: Int)
