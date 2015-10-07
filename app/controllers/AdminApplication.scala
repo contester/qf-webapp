@@ -209,7 +209,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
         // db.run(sql"select ID, Submit, Start, Finish, ProblemID from Testings where ID = $tid".as[Testing])
         val outputs = submit.fsub.submit.testingId.map { testingId =>
           Future.sequence(submit.fsub.details.map(r =>
-            GridfsTools.getFileString(gridfs, s"submit/test2015/${submitId}/${testingId}/${r.test}/output.txt").map(_.map(v => r.test -> v))))
+            GridfsTools.getFileString(gridfs, s"submit/test2015/${submitId}/${testingId}/${r.test}/output.txt")(Contexts.gridfsExecutionContext).map(_.map(v => r.test -> v))))
             .map(_.flatten.toMap)
         }.getOrElse(Future.successful(Map[Int, String]()))
         getSelectedContests(contestId, loggedIn).zip(outputs).map {
