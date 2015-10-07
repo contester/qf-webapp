@@ -1,6 +1,6 @@
 @(loggedIn: LoggedInTeam, tab: String = "", styles: Html = Html(""), scripts: Html = Html(""))(content: Html)(implicit request: RequestHeader)
 
-@navlink(myid: String, myhref: String, mytext: String) = {
+@navlink(myid: String, myhref: play.api.mvc.Call, mytext: Html) = {
     @if(myid == tab) {
         <li class="active"><a href="#">@mytext <span class="sr-only">(current)</span></a></li>
     } else {
@@ -9,14 +9,13 @@
 }
 
 @teamNavlinks = {
-@navlink("index", "/", "Подходы")
-@navlink("submit", "/submit", "Отправить")
-@navlink("monitor", "/monitor", "Монитор")
-@navlink("clarifications", "/clarifications", "Сообщения жюри")
-@navlink("print", "/print", "Печать")
-@navlink("sendwithinput", "/sendwithinput", "Запуск на стороне сервера")
+@navlink("index", routes.Application.index, Html("Подходы"))
+@navlink("submit", routes.Application.submit, Html("Отправить"))
+@navlink("monitor", routes.Application.monitorDefault, Html("Монитор"))
+@navlink("clarifications", routes.QandA.index, Html("Сообщения жюри <span id='clrPending' class='badge'>!</span>"))
+@navlink("print", routes.Printing.index, Html("Печать"))
+@navlink("sendwithinput", routes.ServerSideEval.index, Html("Запуск на стороне сервера"))
 <li><a href="#">Строки компиляции</a></li>
-<li><a href="#">Ботва</a></li>
 }
 
 @myStyles = {

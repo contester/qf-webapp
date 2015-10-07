@@ -181,9 +181,22 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
         }
     })
 
+    source.addEventListener('clarificationState', function(ev) {
+        var obj = JSON.parse(ev.data);
+        var clrp = $("#clrPending")
+        if (obj.ids.length) {
+            clrp.show();
+        } else {
+            clrp.hide();
+        }
+    })
+
     source.addEventListener('clarificationPosted', function(ev) {
         var obj = JSON.parse(ev.data);
         console.log(obj);
+        var clrp = $("#clrPending");
+        clrp.text("!");
+        clrp.show();
         var msg = "Сообщение жюри";
         if (obj.problem) {
           msg += " по задаче " + obj.problem;

@@ -1,6 +1,7 @@
 package models
 
 import com.github.nscala_time.time.Imports._
+import controllers.routes
 import org.joda.time.DateTime
 import slick.jdbc.{GetResult, JdbcBackend}
 

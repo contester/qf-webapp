@@ -19,6 +19,7 @@ object ClarificationActor {
 
   case class InitialState(state: Map[Int, Seq[Int]], seen: Map[ContestTeamIds, Seq[Int]])
   case class Posted(id: Int, contest: Int, problem: Option[String], text: String) extends Transit
+
   object Posted {
     implicit val format = Json.format[Posted]
     implicit val eventNameExtractor = EventNameExtractor[Posted](_ => Some("clarificationPosted"))
