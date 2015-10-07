@@ -1,0 +1,24 @@
+@(loggedIn: LoggedInTeam, ev: EvalEntry)(implicit flash: Flash, messages: Messages, request: RequestHeader)
+
+@main(loggedIn, tab = "sendwithinput") {
+@contestteaminfo(loggedIn)
+
+<div class="panel panel-success">
+    <div class="panel-heading"><h3 class="panel-title">Исходный текст</h3></div>
+    <div class="panel-body">
+        <pre>@ev.sourceStr</pre>
+    </div>
+</div>
+<div class="panel panel-success">
+    <div class="panel-heading"><h3 class="panel-title">Входные данные</h3></div>
+    <div class="panel-body">
+        <pre>@ev.inputStr</pre>
+    </div>
+</div>
+<div class="panel panel-success">
+    <div class="panel-heading"><h3 class="panel-title">Выходные данные</h3></div>
+    <div class="panel-body">
+        <pre>@ev.outputStr</pre>
+    </div>
+</div>
+}

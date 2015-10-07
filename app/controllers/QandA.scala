@@ -2,6 +2,7 @@ package controllers
 
 import javax.inject.Inject
 
+import actors.ClarificationActor
 import actors.StatusActor.ClarificationRequested
 import akka.actor.{ActorSystem, Props}
 import com.spingo.op_rabbit.{RabbitControl, Message}
@@ -48,7 +49,10 @@ class QandA @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   def index = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
     implicit val ec = StackActionExecutionContext
-    clrForm(loggedIn, clarificationReqForm).map(Ok(_))
+    clrForm(loggedIn, clarificationReqForm).map { v =>
+      statusActorModel.statusActor ! ClarificationActor.Ack(ContestTeamIds(loggedIn.contest.id, loggedIn.team.localId))
+      Ok(v)
+    }
   }
 
   def post = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>

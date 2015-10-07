@@ -48,13 +48,12 @@
     <div class="panel-heading"><h3 class="panel-title">Ваши подходы</h3></div>
     <table class="table table-bordered table-responsive">
         <thead>
-        <tr><th>Время</th><th>Исходный текст</th><th>Входной файл</th><th>Статус</th><th>Выходной файл</th>
-        <th>Время работы</th><th>Память</th><th>Код возврата</th></tr>
+        <tr><th>ID</th><th>Время</th><th>Статус</th><th>Время работы</th><th>Память</th><th>Код возврата</th></tr>
         </thead>
         <tbody>
         @for(s <- evals) {
-        <tr><td>@LocalDateFormat(s.arrived)</td><td><pre>@s.sourceStr</pre></td><td><pre>@s.inputStr</pre></td><td>@s.status.getOrElse("...")</td>
-        <td><pre>@s.outputStr.getOrElse("")</pre></td><td>@s.timex</td><td>@s.memory</td><td>@s.info</td></tr>
+        <tr><th scope="row"><a href="@controllers.routes.ServerSideEval.details(s.id)">@s.id</a></th><td>@LocalDateFormat(s.arrived)</td><td>@s.resultStr</td>
+        <td>@s.timex</td><td>@s.memory</td><td>@s.info</td></tr>
         }
 
         </tbody>

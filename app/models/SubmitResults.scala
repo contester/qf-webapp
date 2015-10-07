@@ -14,7 +14,15 @@ trait SubmitResult {
   def message: String
 }
 
-case class SubmitStats(timeMs: Int, memory: Long)
+case class TimeMs(val underlying: Int) extends AnyVal {
+  override def toString: String = s"${underlying}ms"
+}
+
+object TimeMs {
+  implicit val ordering: Ordering[TimeMs] = Ordering.by(_.underlying)
+}
+
+case class SubmitStats(timeMs: TimeMs, memory: Memory)
 
 case object SubmitWaiting extends SubmitResult {
   override val success: Boolean = false
@@ -29,7 +37,7 @@ case object SubmitAccepted extends SubmitResult {
 
 case object SubmitCompileError extends SubmitResult {
   override val success = false
-  override val message = "Не скомпилировалось"
+  override val message = "Ошибка компиляции"
 }
 
 case class SubmitPartialResult(passed: Int, taken: Int) extends SubmitResult {

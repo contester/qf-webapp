@@ -115,14 +115,22 @@ case class ACMCell(attempt: Int, arrivedSeconds: Int, fullSolution: Boolean) {
     else s"-$attempt"
 }
 
-case class ResultEntry(test: Int, result: Int, time: Int, memory: Long, info: Int, testerExitCode: Int,
+case class Memory(val underlying: Long) extends AnyVal {
+  override def toString: String = s"${underlying / 1024}K"
+}
+
+object Memory {
+  implicit val ordering: Ordering[Memory] = Ordering.by(_.underlying)
+}
+
+case class ResultEntry(test: Int, result: Int, time: TimeMs, memory: Memory, info: Int, testerExitCode: Int,
                        testerOutput: String, testerError: String) {
   def resultString = SubmitResult.message(result)
 }
 
 object ResultEntry {
   implicit val getResultEntry = GetResult(r =>
-    ResultEntry(r.nextInt(), r.nextInt(), r.nextInt(), r.nextLong(), r.nextInt(), r.nextInt(), r.nextString(), r.nextString())
+    ResultEntry(r.nextInt(), r.nextInt(), TimeMs(r.nextInt()), Memory(r.nextLong()), r.nextInt(), r.nextInt(), r.nextString(), r.nextString())
   )
 }
 
@@ -244,7 +252,7 @@ object Submits {
   def getTestingStats(details: Seq[ResultEntry]) =
     trOption(details.filter(_.test != 0)).map { detlist =>
       SubmitStats(detlist.map(_.time).max, detlist.map(_.memory).max)
-    }.getOrElse(SubmitStats(0, 0))
+    }.getOrElse(SubmitStats(TimeMs(0), Memory(0)))
 
   def getTestingLastResult(details: Seq[ResultEntry]) =
     trOption(details).map(_.maxBy(_.test))

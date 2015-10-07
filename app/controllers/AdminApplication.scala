@@ -2,7 +2,7 @@ package controllers
 
 import javax.inject.{Inject, Singleton}
 
-import actors.StatusActor
+import actors.{ClarificationActor, StatusActor}
 import actors.StatusActor.ClarificationAnswered
 import akka.actor.{ActorSystem, Props}
 import com.google.common.collect.ImmutableRangeSet
@@ -27,8 +27,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import com.github.nscala_time.time.Imports._
 
 case class RejudgeSubmitRange(range: String)
-case class PostClarification(id: Option[Int], contest: Int, problem: String, text: String, date: Option[DateTime], hidden: Boolean)
-
+case class PostClarification(problem: String, text: String, hidden: Boolean)
 case class ClarificationResponse(answer: String)
 
 case class SubmitIdLite(id: Int)
@@ -260,12 +259,9 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-  val postClarificationForm = Form {
-    mapping("id" -> optional(number),
-      "contest" -> number,
-      "problem" -> text,
+  private val postClarificationForm = Form {
+    mapping("problem" -> text,
       "text" -> nonEmptyText,
-      "date" -> optional(jodaDate),
       "isHidden" -> boolean
     )(PostClarification.apply)(PostClarification.unapply)
   }
@@ -273,7 +269,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   def postNewClarification(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canModify(contestId)) { implicit request =>
     implicit val ec = StackActionExecutionContext
     getSelectedContests(contestId, loggedIn).map { contest =>
-      Ok(html.admin.postclarification(postClarificationForm, contest))
+      Ok(html.admin.postclarification(None, postClarificationForm, contest))
     }
   }
 
@@ -287,34 +283,38 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
       .map(_.headOption).flatMap { clOpt =>
       clOpt.map { cl =>
         val clObj = PostClarification(
-          Some(cl.id), cl.contest, cl.problem, cl.text, Some(cl.arrived), cl.hidden
+          cl.problem, cl.text, cl.hidden
         )
         getSelectedContests(cl.contest, loggedIn).map { contest =>
-          Ok(html.admin.postclarification(postClarificationForm.fill(clObj), contest))
+          Ok(html.admin.postclarification(Some(cl.id), postClarificationForm.fill(clObj), contest))
         }
       }.getOrElse(Future.successful(Redirect(routes.AdminApplication.postNewClarification(1))))
     }
   }
 
-  def postClarification(contestId: Int) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
+  def postClarification(contestId: Int, clarificationId: Option[Int]) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
     implicit val ec = StackActionExecutionContext
     postClarificationForm.bindFromRequest.fold(
       formWithErrors => getSelectedContests(1, loggedIn).map { contest =>
-        BadRequest(html.admin.postclarification(formWithErrors, contest))
+        BadRequest(html.admin.postclarification(clarificationId, formWithErrors, contest))
       },
       data => {
-        val cdate = data.date.getOrElse(DateTime.now)
+        val cdate = DateTime.now
 
-        val cOp = data.id.map { id =>
-          db.run(sqlu"""update clarifications set cl_task = ${data.problem}, cl_text = ${data.text}, cl_date = $cdate,
-              cl_is_hidden = ${data.hidden} where cl_id = $id""").map(_ => None)
+        val cOp = clarificationId.map { id =>
+          db.run(sqlu"""update clarifications set cl_task = ${data.problem}, cl_text = ${data.text},
+              cl_is_hidden = ${data.hidden} where cl_id = $id""").map(_ => clarificationId)
         }.getOrElse(
             db.run(
               sqlu"""insert into clarifications (cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden) values
-                 (${data.contest}, ${data.problem}, ${data.text}, $cdate, ${data.hidden})
+                 (${contestId}, ${data.problem}, ${data.text}, $cdate, ${data.hidden})
                   """.andThen(sql"select last_insert_id()".as[Int]).withPinnedSession).map(_.headOption))
 
         cOp.map { optId =>
+          for (realId <- optId) {
+            val popt = if (data.problem.isEmpty) None else Some(data.problem.toUpperCase)
+                statusActorModel.statusActor ! ClarificationActor.Posted(realId, contestId, popt, data.text)
+          }
           Redirect(routes.AdminApplication.showQandA(contestId))
         }
       }

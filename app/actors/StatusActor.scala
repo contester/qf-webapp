@@ -1,6 +1,7 @@
 package actors
 
 import akka.actor.{Actor, Props}
+import akka.util.Timeout
 import models.ContesterResults.{CustomTestResult, FinishedTesting}
 import models._
 import play.api.Logger
@@ -27,11 +28,11 @@ object StatusActor {
   case class JoinUser(contest: Int, team: Int)
   case class UserJoined(enumerator: Enumerator[Event])
 
+  case class JoinUserWith(ctid: ContestTeamIds, clrenum: Enumerator[Event])
+
   case class ClarificationRequested(contest: Int, clrId: Int)
   case class ClarificationAnswered(contest: Int, clrId: Int, teamId: Int, problem: String, text: String)
   case class ClarificationRequestsStoredState(values: Map[Int, Seq[Int]])
-
-  case class ClarificationPosted(contest: Int, problem: Option[String])
 
   private val userPing = Event("", None, Some("ping"))
 }
@@ -63,8 +64,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
 
   context.system.scheduler.scheduleOnce(0 seconds, self, Init)
 
-  import com.github.nscala_time.time.Imports._
-
   private val (contestOut, contestChannel) = Concurrent.broadcast[Contest]
   private val (userPingOut, userPingChannel) = Concurrent.broadcast[Event]
 
@@ -74,6 +73,8 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   private val (submitOut, submitChannel) = Concurrent.broadcast[AnnoSubmit]
   private val pendingClarificationRequests = mutable.Map[Int, mutable.Set[Int]]().withDefaultValue(mutable.Set[Int]())
   private val (clrOut, clrChannel) = Concurrent.broadcast[ClarificationRequestState]
+
+  private val clarificationActor = context.actorOf(ClarificationActor.props(db), "clarifications")
 
   private def getUnacked(contest: Int, team: Int) =
     unacked.getOrElseUpdate((contest, team), mutable.Map[Int, Message2]())
@@ -183,6 +184,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       msg2Channel.push(msg2)
     }
 
+
     case NewContestState(c) => {
       val old = contestStates.get(c.id)
       if (old.isEmpty || old.get != c) {
@@ -217,18 +219,29 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     }
 
     case JoinUser(contest: Int, team: Int) => {
-      val stored = getUnacked(contest, team).map {
+      clarificationActor ! ClarificationActor.Joining(ContestTeamIds(contest, team), sender())
+    }
+
+    case ClarificationActor.Joined(ctid, clrevents, orig) => {
+      val stored = getUnacked(ctid.contestId, ctid.teamId).map {
         case (msgid, msg) => msg
       }
 
       val eStored = Enumerator.enumerate(stored) &> EventSource()
 
-      sender ! UserJoined(
+      val contest = ctid.contestId
+      val team = ctid.teamId
+
+      orig ! UserJoined(
         Enumerator.enumerate[Contest](contestStates.get(contest)).through(contestToEvent).andThen(eStored).andThen(
           Enumerator.interleave(contestOut &> filterContest(contest) &> contestToEvent,
             msg2Out &> filterMessage2(contest, team) &> EventSource(),
-            userPingOut)))
+            userPingOut,
+            clrevents)))
     }
+
+    case x: ClarificationActor.Transit =>
+      clarificationActor forward x
   }
 
   @throws[Exception](classOf[Exception])
