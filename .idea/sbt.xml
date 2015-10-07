@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ScalaSbtSettings">
     <option name="customLauncherEnabled" value="true" />
-    <option name="customLauncherPath" value="$USER_HOME$/homebrew/Cellar/sbt/0.13.7/libexec/sbt-launch.jar" />
+    <option name="customLauncherPath" value="C:\Program Files (x86)\sbt\bin\sbt-launch.jar" />
     <option name="linkedExternalProjectsSettings">
       <SbtProjectSettings>
         <option name="createEmptyContentRootDirectories" value="true" />
@@ -15,7 +15,7 @@
           </set>
         </option>
         <option name="resolveClassifiers" value="true" />
-        <option name="sbtVersion" value="0.13.7" />
+        <option name="sbtVersion" value="0.13.8" />
         <option name="useAutoImport" value="true" />
         <option name="useOurOwnAutoImport" value="true" />
       </SbtProjectSettings>
