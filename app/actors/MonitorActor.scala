@@ -27,6 +27,8 @@ class MonitorActor(db: JdbcBackend#DatabaseDef, staticLocation: Option[String]) 
   import scala.concurrent.duration._
   import scala.language.postfixOps
 
+  private val staticLocationFile = staticLocation.map(x => new File(x))
+
   @throws[Exception](classOf[Exception])
   override def preStart(): Unit = {
     super.preStart()
@@ -68,9 +70,11 @@ class MonitorActor(db: JdbcBackend#DatabaseDef, staticLocation: Option[String]) 
     state.map(_.contest.id).foreach(monitors.remove)
     state.foreach { st =>
       monitors.put(st.contest.id, st)
-      for (location <- staticLocation) {
-        FileUtils.writeStringToFile(new File(s"/ssd/s/qq/${st.contest.id}.html"),
+      for (location <- staticLocationFile) {
+        val tmpFile = new File(location, s"${st.contest.id}.html.new")
+        FileUtils.writeStringToFile(tmpFile,
           Compressor(views.html.staticmonitor(st.contest, st.monitor(false).status).body), Charsets.UTF_8)
+        FileUtils.moveFile(tmpFile, new File(location, s"${st.contest.id}.html"))
       }
     }
   }
