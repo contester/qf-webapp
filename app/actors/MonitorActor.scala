@@ -1,6 +1,7 @@
 package actors
 
 import java.io.File
+import java.nio.file.{StandardCopyOption, Files}
 
 import akka.actor.{Stash, Actor, Props}
 import models._
@@ -74,7 +75,7 @@ class MonitorActor(db: JdbcBackend#DatabaseDef, staticLocation: Option[String]) 
         val tmpFile = new File(location, s"${st.contest.id}.html.new")
         FileUtils.writeStringToFile(tmpFile,
           Compressor(views.html.staticmonitor(st.contest, st.monitor(false).status).body), Charsets.UTF_8)
-        FileUtils.moveFile(tmpFile, new File(location, s"${st.contest.id}.html"))
+        Files.move(tmpFile.toPath, new File(location, s"${st.contest.id}.html").toPath, StandardCopyOption.ATOMIC_MOVE)
       }
     }
   }
