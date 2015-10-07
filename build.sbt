@@ -1,3 +1,7 @@
+import sbtprotobuf.{ProtobufPlugin=>PB}
+
+Seq(PB.protobufSettings: _*)
+
 name := "qf"
 
 scalaVersion  := "2.11.7"
@@ -37,7 +41,8 @@ libraryDependencies ++= Seq(
   "org.scala-lang.modules" %% "scala-async" % "0.9.4",
   "com.googlecode.htmlcompressor" % "htmlcompressor" % "1.5.2",
   "rhino" % "js" % "1.7R2",
-  "org.mongodb" %% "casbah" % "2.8.2",
+  "org.mongodb" %% "casbah-core" % "2.8.2",
+  "org.mongodb" %% "casbah-gridfs" % "2.8.2",
   "org.spire-math" %% "spire" % "0.10.1",
   "com.google.guava" % "guava" % "18.0"
 )

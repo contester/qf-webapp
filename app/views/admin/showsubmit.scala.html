@@ -1,8 +1,7 @@
-@(subopt: Option[SubmitDetails], contest: SelectedContest)(implicit request: RequestHeader)
+@(sub: SubmitDetails, contest: SelectedContest, outputs: Map[Int, String])(implicit request: RequestHeader)
 
 @adminmain(tab = "", contest = contest) {
 
-@for(sub <- subopt) {
 <div class="row">
     <div class="well">
         <p>По часам: @{sub.fsub.submit.submitId.arrived.timestamp}, по контесту: @sub.fsub.submit.submitId.arrived.asString,
@@ -20,6 +19,7 @@
             <tr><td>@if(s.test!=0){@s.test}</td><td>@s.resultString</td><td>@s.time</td><td>@s.memory</td>
                 <td>@s.testerExitCode</td><td><pre>@s.testerOutput</pre></td><td><pre>@s.testerError</pre></td>
             </tr>
+            <tr><td></td><td colspan="6"><pre>@outputs.getOrElse(s.test, "")</pre></td></tr>
             }
             </tbody>
         </table>
@@ -30,5 +30,4 @@
         <pre>@sub.sourceStr</pre>
     </div>
 </div>
-}
 }

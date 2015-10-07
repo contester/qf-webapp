@@ -3,7 +3,7 @@ package models
 import models.ContesterResults.FinishedTesting
 import play.api.i18n.Messages
 import play.api.libs.json.{JsValue, Writes, Json}
-import slick.jdbc.JdbcBackend
+import slick.jdbc.{GetResult, JdbcBackend}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -126,4 +126,13 @@ object SubmitResult {
 
 object AnnoSubmit {
   implicit val formatAnnoSubmit = Json.writes[AnnoSubmit]
+}
+
+import com.github.nscala_time.time.Imports._
+case class Testing(id: Int, submit: Int, start: DateTime, finish: Option[DateTime], problemId: Option[String])
+object Testing {
+  implicit val getResult = GetResult(r =>
+    Testing(r.nextInt(), r.nextInt(), new DateTime(r.nextTimestamp()),
+      r.nextTimestampOption().map(x => new DateTime(x)), r.nextStringOption())
+  )
 }

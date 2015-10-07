@@ -47,7 +47,7 @@ GET /admin/qanda/:contestId controllers.AdminApplication.showQandA(contestId: In
 POST /admin/postAnswer/:clrId controllers.AdminApplication.postAnswer(clrId: Int)
 GET /admin/postAnswer/:clrId controllers.AdminApplication.postAnswerForm(clrId: Int)
 
-GET /admin/showsubmit/:id controllers.AdminApplication.showSubmit(id: Int)
+GET /admin/showsubmit/:contestId/:id controllers.AdminApplication.showSubmit(contestId: Int, id: Int)
 
 GET /admin/login controllers.AdminAuthForms.login
 POST /admin/login controllers.AdminAuthForms.authenticate

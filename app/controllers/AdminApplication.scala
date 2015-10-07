@@ -6,9 +6,13 @@ import actors.{ClarificationActor, StatusActor}
 import actors.StatusActor.ClarificationAnswered
 import akka.actor.{ActorSystem, Props}
 import com.google.common.collect.ImmutableRangeSet
+import com.mongodb.casbah.gridfs.GridFS
+import com.mongodb.casbah.{MongoURI, MongoDB, MongoClientURI, MongoClient}
 import com.spingo.op_rabbit.{Message, RabbitControl}
 import jp.t2v.lab.play2.auth.AuthElement
 import models._
+import org.apache.commons.io.{IOUtils, FileUtils}
+import org.stingray.contester.proto.Blobs.Blob
 import play.api.{Configuration, Logger}
 import play.api.data.Form
 import play.api.data.Forms._
@@ -20,6 +24,7 @@ import play.api.libs.json.{Json, JsValue}
 import play.api.mvc.{Action, Controller, RequestHeader}
 import slick.driver.JdbcProfile
 import slick.jdbc.GetResult
+import utils.{GridfsTools, Blobs, ProtobufTools}
 import views.html
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -54,6 +59,10 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   import com.spingo.op_rabbit.PlayJsonSupport._
 
   private val rabbitMq = rabbitMqModel.rabbitMq
+
+  private val mongoClient = MongoClient(MongoClientURI(configuration.getString("mongodb.uri").get))
+  private val mongoDb = mongoClient(configuration.getString("mongodb.db").get)
+  private val gridfs = GridFS(mongoDb)
 
   def monitor(id: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(id)) { implicit request =>
     implicit val ec = StackActionExecutionContext
@@ -190,13 +199,24 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-  def showSubmit(submitId: Int) = AsyncStack(AuthorityKey -> canSeeSubmit(submitId)) { implicit request =>
+  //implicit def of2fo[A](x: Option[Future[A]]): Future[Option[A]] = x.map(_.map(Some(_))).getOrElse(Future.successful(None))
+
+  def showSubmit(contestId: Int, submitId: Int) = AsyncStack(AuthorityKey -> canSeeSubmit(submitId)) { implicit request =>
     implicit val ec = StackActionExecutionContext
-    Submits.getSubmitById(db, submitId).flatMap { submit =>
-      val cid = submit.map(_.fsub.submit.submitId.contestId).getOrElse(1)
-      getSelectedContests(cid, loggedIn).map { contest =>
-        Ok(html.admin.showsubmit(submit, contest))
-      }
+    Submits.getSubmitById(db, submitId).flatMap { optSubmit =>
+      optSubmit.map { submit =>
+        //val tid = submit.flatMap(_.fsub.submit.testingId).getOrElse(1)
+        // db.run(sql"select ID, Submit, Start, Finish, ProblemID from Testings where ID = $tid".as[Testing])
+        val outputs = submit.fsub.submit.testingId.map { testingId =>
+          Future.sequence(submit.fsub.details.map(r =>
+            GridfsTools.getFileString(gridfs, s"submit/test2015/${submitId}/${testingId}/${r.test}/output.txt").map(_.map(v => r.test -> v))))
+            .map(_.flatten.toMap)
+        }.getOrElse(Future.successful(Map[Int, String]()))
+        getSelectedContests(contestId, loggedIn).zip(outputs).map {
+          case (contest, outputs) =>
+            Ok(html.admin.showsubmit(submit, contest, outputs))
+        }
+      }.getOrElse(Future.successful(Redirect(routes.AdminApplication.submits(contestId))))
     }
   }
 
