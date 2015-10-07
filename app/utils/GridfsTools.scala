@@ -1,37 +1,47 @@
 package utils
 
+import java.io.InputStream
+import java.nio.charset.{Charset}
 import java.util.Arrays
-import java.util.zip.Inflater
+import java.util.zip.{InflaterInputStream, Inflater}
 
 import com.mongodb.casbah.commons.MongoDBObject
 import com.mongodb.casbah.gridfs.GridFS
+import org.apache.commons.codec.Charsets
 import org.apache.commons.io.IOUtils
 import play.api.Logger
 
 import scala.concurrent.{ExecutionContext, Future}
 
+case class GridfsContent(content: Array[Byte], truncated: Boolean) {
+  def asString(charset: Charset) = new String(content, charset)
+
+  override def toString: String = asString(GridfsContent.CP1251) + (if (truncated) "\n..." else "")
+}
+
+object GridfsContent {
+  val CP1251 = Charsets.toCharset("CP1251")
+}
+
 object GridfsTools {
-  private def decompress(x: Array[Byte], origSize: Int): Array[Byte] = {
-    val decompressor = new Inflater()
-    decompressor.setInput(x)
-    val result = new Array[Byte](origSize)
-    val size = decompressor.inflate(result)
-    result
+  private def readTruncated(is: InputStream, sizeLimit: Int): GridfsContent = {
+    val buffer = new Array[Byte](sizeLimit)
+    val read = is.read(buffer)
+    val result = Arrays.copyOf(buffer, read)
+    if (read < sizeLimit)
+      GridfsContent(result, true)
+    else
+      GridfsContent(result, is.available() != 0)
   }
 
-  def getFile(fs: GridFS, name: String)(implicit ec: ExecutionContext): Future[Option[Array[Byte]]] =
+  def getFile(fs: GridFS, name: String, sizeLimit: Int)(implicit ec: ExecutionContext): Future[Option[GridfsContent]] =
     Future {
       fs.findOne(name).map { file =>
         val metadata = new MongoDBObject(file.metaData)
         val ctype = metadata.getAsOrElse[String]("compressionType", "")
-        val orig = IOUtils.toByteArray(file.inputStream)
-        if (ctype == "ZLIB") {
-          val originalSize = metadata.getAsOrElse[Long]("originalSize", 0)
-          decompress(orig, originalSize.toInt)
-        } else orig
-      }
+        val istream = if (ctype == "ZLIB") new InflaterInputStream(file.inputStream) else file.inputStream
+        readTruncated(istream, sizeLimit)
+     }
     }
 
-  def getFileString(fs: GridFS, name: String)(implicit ec: ExecutionContext) =
-    getFile(fs, name).map(_.map(x => new String(x, "CP1251")))
 }

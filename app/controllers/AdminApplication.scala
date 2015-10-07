@@ -12,7 +12,6 @@ import com.spingo.op_rabbit.{Message, RabbitControl}
 import jp.t2v.lab.play2.auth.AuthElement
 import models._
 import org.apache.commons.io.{IOUtils, FileUtils}
-import org.stingray.contester.proto.Blobs.Blob
 import play.api.{Configuration, Logger}
 import play.api.data.Form
 import play.api.data.Forms._
@@ -24,7 +23,7 @@ import play.api.libs.json.{Json, JsValue}
 import play.api.mvc.{Action, Controller, RequestHeader}
 import slick.driver.JdbcProfile
 import slick.jdbc.GetResult
-import utils.{GridfsTools}
+import utils.{GridfsContent, GridfsTools}
 import views.html
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -209,9 +208,10 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
         // db.run(sql"select ID, Submit, Start, Finish, ProblemID from Testings where ID = $tid".as[Testing])
         val outputs = submit.fsub.submit.testingId.map { testingId =>
           Future.sequence(submit.fsub.details.map(r =>
-            GridfsTools.getFileString(gridfs, s"submit/test2015/${submitId}/${testingId}/${r.test}/output.txt")(Contexts.gridfsExecutionContext).map(_.map(v => r.test -> v))))
-            .map(_.flatten.toMap)
-        }.getOrElse(Future.successful(Map[Int, String]()))
+            GridfsTools.getFile(gridfs, s"submit/test2015/${submitId}/${testingId}/${r.test}/output.txt", 1024)(Contexts.gridfsExecutionContext)
+              .map(_.map(v => r.test -> v))))
+              .map(_.flatten.toMap)
+        }.getOrElse(Future.successful(Map[Int, GridfsContent]()))
         getSelectedContests(contestId, loggedIn).zip(outputs).map {
           case (contest, outputs) =>
             Ok(html.admin.showsubmit(submit, contest, outputs))

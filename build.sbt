@@ -1,7 +1,3 @@
-import sbtprotobuf.{ProtobufPlugin=>PB}
-
-Seq(PB.protobufSettings: _*)
-
 name := "qf"
 
 scalaVersion  := "2.11.7"
