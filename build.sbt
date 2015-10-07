@@ -37,6 +37,7 @@ libraryDependencies ++= Seq(
   "org.scala-lang.modules" %% "scala-async" % "0.9.4",
   "com.googlecode.htmlcompressor" % "htmlcompressor" % "1.5.2",
   "rhino" % "js" % "1.7R2",
+  "org.mongodb" %% "casbah" % "2.8.2",
   "org.spire-math" %% "spire" % "0.10.1",
   "com.google.guava" % "guava" % "18.0"
 )
