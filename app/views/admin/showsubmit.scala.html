@@ -2,33 +2,85 @@
 
 @adminmain(tab = "", contest = contest) {
 
-<div class="row">
-    <div class="well">
+<div class="panel panel-default">
+    <div class="panel-heading">Подход</div>
+    <div class="panel-body">
         <p>По часам: @{sub.fsub.submit.submitId.arrived.timestamp}, по контесту: @sub.fsub.submit.submitId.arrived.asString,
             @if(sub.fsub.submit.submitId.arrived.afterFreeze){после}else{до} заморозки</p>
     </div>
 </div>
-<div class="row">
-    <div class="well">
-        <table class="table table-hover table-bordered table-responsive">
-            <thead>
-            <tr><th>Тест</th><th>Результат</th><th>Время</th><th>Память</th><th>Код</th><th>Стдвывод</th><th>Стдерр</th></tr>
-            </thead>
-            <tbody>
-            @for(s <- sub.fsub.details) {
-            <tr><td>@if(s.test!=0){@s.test}</td><td>@s.resultString</td><td>@s.time</td><td>@s.memory</td>
-                <td>@s.testerExitCode</td><td><pre>@s.testerOutput</pre></td><td><pre>@s.testerError</pre></td>
-            </tr>
-            <tr><td></td><td colspan="6"><pre>@outputs.get(s.test).map(_.input)</pre></td></tr>
-            <tr><td></td><td colspan="6"><pre>@outputs.get(s.test).map(_.output)</pre></td></tr>
-            <tr><td></td><td colspan="6"><pre>@outputs.get(s.test).map(_.answer)</pre></td></tr>
-            }
-            </tbody>
-        </table>
+
+@for(s <- sub.fsub.details) {
+@if(s.test == 0) {
+<div class="panel panel-info">
+    <div class="panel-heading">
+        <h3 class="panel-title">Компиляция</h3>
+    </div>
+    <div class="panel-body">
+        <p><b>Вердикт:</b>@s.resultString</p>
+        @s.time @s.memory @s.testerExitCode
+        <div class="panel panel-default">
+            <div class="panel-heading">Стд.вывод</div>
+            <div class="panel-body">
+                <pre>@s.testerOutput</pre>
+            </div>
+        </div>
+        <div class="panel panel-default">
+            <div class="panel-heading">Стдерр</div>
+            <div class="panel-body">
+                <pre>@s.testerError</pre>
+            </div>
+        </div>
     </div>
 </div>
-<div class="row">
-    <div class="well">
+} else {
+<div class="panel panel-primary">
+    <div class="panel-heading">
+        <h3 class="panel-title">Тест @s.test</h3>
+    </div>
+    <div class="panel-body">
+        <p><b>Вердикт:</b>@s.resultString</p>
+        @s.time @s.memory @s.testerExitCode
+        @for(o <- outputs.get(s.test).flatMap(_.input)) {
+            <div class="panel panel-default">
+                <div class="panel-heading">Входные данные</div>
+                <div class="panel-body">
+                    <pre>@o</pre>
+                </div>
+            </div>
+        }
+        @for(o <- outputs.get(s.test).flatMap(_.output)) {
+        <div class="panel panel-default">
+            <div class="panel-heading">Вывод участника</div>
+            <div class="panel-body">
+                <pre>@o</pre>
+            </div>
+        </div>
+        }
+        @for(o <- outputs.get(s.test).flatMap(_.answer)) {
+        <div class="panel panel-default">
+            <div class="panel-heading">Ответ жюри</div>
+            <div class="panel-body">
+                <pre>@o</pre>
+            </div>
+        </div>
+        }
+        <div class="panel panel-default">
+            <div class="panel-heading">Комментарий чекера</div>
+            <div class="panel-body">
+                <pre>@s.testerError</pre>
+            </div>
+        </div>
+    </div>
+</div>
+}
+}
+
+<div class="panel panel-info">
+    <div class="panel-heading">
+        <h3 class="panel-title">Исходный текст</h3>
+    </div>
+    <div class="panel-body">
         <pre>@sub.sourceStr</pre>
     </div>
 </div>
