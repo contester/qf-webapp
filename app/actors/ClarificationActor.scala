@@ -2,7 +2,6 @@ package actors
 
 import akka.actor.{ActorRef, Stash, Props, Actor}
 import models.{ContestTeamIds, Clarification}
-import play.api.Logger
 import play.api.libs.EventSource
 import play.api.libs.EventSource.{Event, EventDataExtractor, EventNameExtractor}
 import play.api.libs.iteratee.{Enumerator, Concurrent, Enumeratee}
@@ -54,7 +53,6 @@ class ClarificationActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
       sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications""".as[Clarification]
     ).zip(db.run(sql"select Contest, Team, Clarification from ClarificationsSeen".as[(Int, Int, Int)])).map {
       case (clarifications, clseen) =>
-        Logger.info(s"Loading: $clarifications, $clseen")
         self ! InitialState(clarifications.groupBy(_.contest).mapValues(x => x.map(_.id)),
           clseen.map(x => ContestTeamIds(x._1, x._2) -> x._3).groupBy(_._1).mapValues(x => x.map(_._2)))
     }
@@ -84,7 +82,6 @@ class ClarificationActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
           seen.put(ctid, mutable.Set(s:_*))
         }
       }
-      Logger.info(s"Unstashing and becoming")
       unstashAll()
       context.become(initialized)
     }
@@ -105,8 +102,6 @@ class ClarificationActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
     case Ack(ctid) => {
       val pending = issued.getOrElse(ctid.contestId, Set[Int]()) -- seen.getOrElse(ctid, Set[Int]())
-
-      Logger.info(s"Acking $pending for $ctid")
 
       seen.getOrElse(ctid, mutable.Set()).++=(pending)
       for (id <- pending) {
