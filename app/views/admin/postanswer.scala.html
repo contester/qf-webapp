@@ -25,7 +25,7 @@
         @b3.static("Problem"){ @clr.problem }
         @b3.static("Question"){ @clr.request }
         @b3.static("Timestamp"){ @clr.arrived }
-        @b3.select(form("answer"), options=answers, '_label -> "Answer")
+        @b3.text(form("answer"), '_label -> "Ответ")
         @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Update}
         }
     </div>
