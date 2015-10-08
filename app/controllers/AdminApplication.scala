@@ -23,7 +23,7 @@ import play.api.libs.json.{Json, JsValue}
 import play.api.mvc.{Action, Controller, RequestHeader}
 import slick.driver.JdbcProfile
 import slick.jdbc.GetResult
-import utils.{GridfsContent, GridfsTools}
+import utils.{PolygonURL, GridfsContent, GridfsTools}
 import views.html
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -203,15 +203,21 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     Submits.getSubmitById(db, submitId).flatMap { optSubmit =>
       optSubmit.map { submit =>
         //val tid = submit.flatMap(_.fsub.submit.testingId).getOrElse(1)
-        // db.run(sql"select ID, Submit, Start, Finish, ProblemID from Testings where ID = $tid".as[Testing])
-        val outputs = submit.fsub.submit.testingId.map { testingId =>
-          Future.sequence(submit.fsub.details.map(r =>
-            GridfsTools.getFile(gridfs, s"submit/test2015/${submitId}/${testingId}/${r.test}/output.txt", 1024)(Contexts.gridfsExecutionContext)
-              .map(_.map(v => r.test -> v))))
-              .map(_.flatten.toMap)
-        }.getOrElse(Future.successful(Map[Int, GridfsContent]()))
-        getSelectedContests(contestId, loggedIn).zip(outputs).map {
-          case (contest, outputs) =>
+
+        //db.run(sql"select ID, Submit, Start, Finish, ProblemID from Testings where ID = $tid".as[Testing])
+        submit.fsub.submit.testingId.map { testingId =>
+          db.run(sql"select ID, Submit, Start, Finish, ProblemID from Testings where ID = $testingId".as[Testing])
+            .map(_.headOption)
+        }.getOrElse(Future.successful(None)).flatMap { testingOpt =>
+          testingOpt.flatMap { testing =>
+            testing.problemId.map { problemId =>
+              val phandle = PolygonURL(problemId)
+              Outputs.getAllAssets(gridfs, "test2015", submit.fsub.submit.submitId.id, testing.id, submit.fsub.details.map(_.test), phandle)
+            }
+          }.getOrElse(Future.successful(Map[Int, ResultAssets]()))
+        }.zip(
+        getSelectedContests(contestId, loggedIn)).map {
+          case (outputs, contest) =>
             Ok(html.admin.showsubmit(submit, contest, outputs))
         }
       }.getOrElse(Future.successful(Redirect(routes.AdminApplication.submits(contestId))))

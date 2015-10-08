@@ -1,4 +1,4 @@
-@(sub: SubmitDetails, contest: SelectedContest, outputs: Map[Int, utils.GridfsContent])(implicit request: RequestHeader)
+@(sub: SubmitDetails, contest: SelectedContest, outputs: Map[Int, ResultAssets])(implicit request: RequestHeader)
 
 @adminmain(tab = "", contest = contest) {
 
@@ -19,7 +19,9 @@
             <tr><td>@if(s.test!=0){@s.test}</td><td>@s.resultString</td><td>@s.time</td><td>@s.memory</td>
                 <td>@s.testerExitCode</td><td><pre>@s.testerOutput</pre></td><td><pre>@s.testerError</pre></td>
             </tr>
-            <tr><td></td><td colspan="6"><pre>@outputs.getOrElse(s.test, "")</pre></td></tr>
+            <tr><td></td><td colspan="6"><pre>@outputs.get(s.test).map(_.input)</pre></td></tr>
+            <tr><td></td><td colspan="6"><pre>@outputs.get(s.test).map(_.output)</pre></td></tr>
+            <tr><td></td><td colspan="6"><pre>@outputs.get(s.test).map(_.answer)</pre></td></tr>
             }
             </tbody>
         </table>
