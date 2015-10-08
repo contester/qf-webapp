@@ -24,14 +24,14 @@ object GridfsContent {
 }
 
 object GridfsTools {
-  private def readTruncated(is: InputStream, sizeLimit: Int): GridfsContent = {
+  private def readTruncated(is: InputStream, sizeLimit: Int, origSizeOpt: Option[Long]): GridfsContent = {
     val buffer = new Array[Byte](sizeLimit)
     val read = is.read(buffer)
     val result = Arrays.copyOf(buffer, read)
     if (read < sizeLimit)
-      GridfsContent(result, true)
+      GridfsContent(result, false)
     else
-      GridfsContent(result, is.available() != 0)
+      GridfsContent(result, is.available() > 0)
   }
 
   def getFile(fs: GridFS, name: String, sizeLimit: Int)(implicit ec: ExecutionContext): Future[Option[GridfsContent]] =
@@ -39,8 +39,9 @@ object GridfsTools {
       fs.findOne(name).map { file =>
         val metadata = new MongoDBObject(file.metaData)
         val ctype = metadata.getAsOrElse[String]("compressionType", "")
+        val origSize = metadata.getAs[Long]("originalSize")
         val istream = if (ctype == "ZLIB") new InflaterInputStream(file.inputStream) else file.inputStream
-        readTruncated(istream, sizeLimit)
+        readTruncated(istream, sizeLimit, origSize)
      }
     }
 
