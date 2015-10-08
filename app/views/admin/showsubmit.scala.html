@@ -14,6 +14,11 @@
     }
 }
 
+@details(s: ResultEntry) = {
+<p><b>Результат:</b> @s.resultString, <b>Время:</b> @s.time, <b>Память:</b> @s.memory,
+<b>Код возврата компилятора</b>: @s.testerExitCode</p>
+}
+
 @adminmain(tab = "", contest = contest) {
 
 @panel("Подход") {
@@ -24,19 +29,13 @@
 @for(s <- sub.fsub.details) {
     @if(s.test == 0) {
         @panel("Компиляция", "info") {
-            <p><b>Результат:</b>@s.resultString</p>
-            <p><b>Время:</b> @s.time</p>
-            <p><b>Память</b> @s.memory</p>
-            <p><b>Код возврата чекера</b>: @s.testerExitCode</p>
+            @details(s)
             @stdpanel("Вывод", s.testerOutput)
             @stdpanel("Ошибки", s.testerError)
         }
     } else {
         @panel(s"Тест ${s.test}", "primary") {
-            <p><b>Результат:</b>@s.resultString</p>
-            <p><b>Время:</b> @s.time</p>
-            <p><b>Память</b> @s.memory</p>
-            <p><b>Код возврата чекера</b>: @s.testerExitCode</p>
+            @details(s)
             @stdpanel("Ввод", outputs.get(s.test).flatMap(_.input).map(_.toString).getOrElse(""))
             @stdpanel("Вывод", outputs.get(s.test).flatMap(_.output).map(_.toString).getOrElse(""))
             @stdpanel("Ответ жюри", outputs.get(s.test).flatMap(_.answer).map(_.toString).getOrElse(""))
