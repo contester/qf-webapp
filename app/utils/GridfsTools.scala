@@ -27,11 +27,15 @@ object GridfsTools {
   private def readTruncated(is: InputStream, sizeLimit: Int, origSizeOpt: Option[Long]): GridfsContent = {
     val buffer = new Array[Byte](sizeLimit)
     val read = is.read(buffer)
-    val result = Arrays.copyOf(buffer, read)
-    if (read < sizeLimit)
-      GridfsContent(result, false)
-    else
-      GridfsContent(result, is.available() > 0)
+    if (read <= 0)
+      GridfsContent(new Array[Byte](0), false)
+    else {
+      val result = Arrays.copyOf(buffer, read)
+      if (read < sizeLimit)
+        GridfsContent(result, false)
+      else
+        GridfsContent(result, is.available() > 0)
+    }
   }
 
   def getFile(fs: GridFS, name: String, sizeLimit: Int)(implicit ec: ExecutionContext): Future[Option[GridfsContent]] =
