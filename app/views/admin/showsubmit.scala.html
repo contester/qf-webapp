@@ -31,7 +31,6 @@
         @panel("Компиляция", "info") {
             @details(s)
             @stdpanel("Вывод", s.testerOutput)
-            @stdpanel("Ошибки", s.testerError)
         }
     } else {
         @panel(s"Тест ${s.test}", "primary") {
@@ -39,7 +38,7 @@
             @stdpanel("Ввод", outputs.get(s.test).flatMap(_.input).map(_.toString).getOrElse(""))
             @stdpanel("Вывод", outputs.get(s.test).flatMap(_.output).map(_.toString).getOrElse(""))
             @stdpanel("Ответ жюри", outputs.get(s.test).flatMap(_.answer).map(_.toString).getOrElse(""))
-            @stdpanel("Комментарий чекера", s.testerError)
+            @stdpanel("Комментарий чекера", s.testerOutput)
         }
     }
 }
