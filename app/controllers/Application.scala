@@ -1,5 +1,6 @@
 package controllers
 
+import java.io.File
 import javax.inject.{Inject, Singleton}
 
 import actors.StatusActor
@@ -8,8 +9,8 @@ import com.spingo.op_rabbit._
 import jp.t2v.lab.play2.auth.AuthElement
 import models.ContesterResults.{CustomTestResult, FinishedTesting}
 import models._
-import org.apache.commons.io.FileUtils
-import play.api.Logger
+import org.apache.commons.io.{Charsets, FileUtils}
+import play.api.{Configuration, Logger}
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
@@ -18,6 +19,7 @@ import play.api.libs.EventSource
 import play.api.libs.iteratee.Iteratee
 import play.api.libs.json._
 import play.api.mvc.{Action, Controller}
+import play.twirl.api.Html
 import slick.driver.JdbcProfile
 import views.html
 
@@ -37,6 +39,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
                              monitorModel: Monitor,
                             rabbitMqModel: RabbitMqModel,
                             statusActorModel: StatusActorModel,
+                            configuration: Configuration,
                              val auth: AuthWrapper,
                              val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport{
 
@@ -50,6 +53,8 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   import com.spingo.op_rabbit.PlayJsonSupport._
 
   val userPermissions = new UserPermissions(db)
+
+  val addonInfoFile = configuration.getString("qf.addinfofile").map(x => new File(x))
 
   def monitorDefault = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>
     val loggedInTeam = loggedIn
@@ -67,6 +72,16 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
     getSubmits(loggedInTeam).flatMap(Submits.groupAndAnnotate(db, loggedInTeam.contest.schoolMode, _)).map { subs =>
       Ok(html.index(loggedInTeam, subs))
+    }
+  }
+
+  def additionalInfo = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>
+    implicit val ec = StackActionExecutionContext
+
+    Future {
+      addonInfoFile.map(FileUtils.readFileToString(_, Charsets.UTF_8))
+    }.map { content =>
+      Ok(html.addoninfo(loggedIn, content.map(Html.apply)))
     }
   }
 

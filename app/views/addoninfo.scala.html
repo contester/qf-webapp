@@ -1,0 +1,8 @@
+@(loggedIn: LoggedInTeam, content: Option[Html])(implicit request: RequestHeader)
+
+@main(loggedIn, tab = "addoninfo") {
+@contestteaminfo(loggedIn)
+@for(c <- content) {
+@content
+}
+}
