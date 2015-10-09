@@ -2,7 +2,7 @@ package controllers
 
 import javax.inject.{Inject, Singleton}
 
-import actors.{ClarificationActor, StatusActor}
+import actors.{StatusActor}
 import actors.StatusActor.ClarificationAnswered
 import akka.actor.{ActorSystem, Props}
 import com.google.common.collect.ImmutableRangeSet
@@ -334,7 +334,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
         cOp.map { optId =>
           for (realId <- optId) {
             val popt = if (data.problem.isEmpty) None else Some(data.problem.toUpperCase)
-                statusActorModel.statusActor ! ClarificationActor.Posted(realId, contestId, popt, data.text)
+                statusActorModel.statusActor ! StatusActor.ClarificationUpdated(realId, contestId, cdate, popt, data.text)
           }
           Redirect(routes.AdminApplication.showQandA(contestId))
         }

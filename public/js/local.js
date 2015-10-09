@@ -184,7 +184,7 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
     source.addEventListener('clarificationState', function(ev) {
         var obj = JSON.parse(ev.data);
         var clrp = $("#clrPending")
-        if (obj.ids.length) {
+        if (obj.unseen) {
             clrp.show();
         } else {
             clrp.hide();

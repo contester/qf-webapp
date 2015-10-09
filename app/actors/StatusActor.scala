@@ -1,5 +1,7 @@
 package actors
 
+import java.sql.Timestamp
+
 import akka.actor.{Actor, Props}
 import akka.util.Timeout
 import models.ContesterResults.{CustomTestResult, FinishedTesting}
@@ -10,7 +12,7 @@ import play.api.libs.EventSource.{EventNameExtractor, EventDataExtractor, EventI
 import play.api.libs.iteratee.Concurrent.Channel
 import play.api.libs.iteratee.{Enumeratee, Concurrent, Enumerator}
 import play.api.libs.json._
-import slick.jdbc.{GetResult, JdbcBackend}
+import slick.jdbc.{PositionedParameters, SetParameter, GetResult, JdbcBackend}
 
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
@@ -28,11 +30,36 @@ object StatusActor {
   case class JoinUser(contest: Int, team: Int)
   case class UserJoined(enumerator: Enumerator[Event])
 
-  case class JoinUserWith(ctid: ContestTeamIds, clrenum: Enumerator[Event])
-
   case class ClarificationRequested(contest: Int, clrId: Int)
   case class ClarificationAnswered(contest: Int, clrId: Int, teamId: Int, problem: String, text: String)
   case class ClarificationRequestsStoredState(values: Map[Int, Seq[Int]])
+
+  case class ClarificationsInitialState(clr: Seq[Clarification], seen: Seq[MaxSeen])
+
+  case class ClarificationState(contest: Int, team: Int, unseen: Boolean)
+  object ClarificationState {
+    implicit val format = Json.format[ClarificationState]
+    implicit val eventNameExtractor = EventNameExtractor[ClarificationState](_ => Some("clarificationState"))
+    implicit val eventDataExtractor = EventDataExtractor[ClarificationState] { state =>
+      Json.stringify(Json.toJson(state))
+    }
+  }
+
+  case class ClarificationPosted(id: Int, contest: Int, updated: Boolean, problem: Option[String], text: String)
+  object ClarificationPosted {
+    implicit val format = Json.format[ClarificationPosted]
+    implicit val eventNameExtractor = EventNameExtractor[ClarificationPosted](_ => Some("clarificationPosted"))
+    implicit val eventDataExtractor = EventDataExtractor[ClarificationPosted] { state =>
+      Json.stringify(Json.toJson(state))
+    }
+
+    def filterContest(contestId: Int)(implicit ec: ExecutionContext) = Enumeratee.filter[ClarificationPosted](_.contest == contestId)
+  }
+
+  import com.github.nscala_time.time.Imports._
+
+  case class ClarificationUpdated(id: Int, contest: Int, timestamp: DateTime, problem: Option[String], text: String)
+  case class AckAllClarifications(contest: Int, team: Int)
 
   private val userPing = Event("", None, Some("ping"))
 }
@@ -55,14 +82,20 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   import context.dispatcher
   import scala.language.postfixOps
 
-  import scala.concurrent.duration._
-  private val tick =
+  private val tick = {
+    import scala.concurrent.duration._
     context.system.scheduler.schedule(0 seconds, 10 seconds, self, Tick)
+  }
 
-  private val refreshTick =
+  private val refreshTick = {
+    import scala.concurrent.duration._
     context.system.scheduler.schedule(30 seconds, 30 seconds, self, RefreshTick)
+  }
 
-  context.system.scheduler.scheduleOnce(0 seconds, self, Init)
+  {
+    import scala.concurrent.duration._
+    context.system.scheduler.scheduleOnce(0 seconds, self, Init)
+  }
 
   private val (contestOut, contestChannel) = Concurrent.broadcast[Contest]
   private val (userPingOut, userPingChannel) = Concurrent.broadcast[Event]
@@ -74,7 +107,20 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   private val pendingClarificationRequests = mutable.Map[Int, mutable.Set[Int]]().withDefaultValue(mutable.Set[Int]())
   private val (clrOut, clrChannel) = Concurrent.broadcast[ClarificationRequestState]
 
-  private val clarificationActor = context.actorOf(ClarificationActor.props(db), "clarifications")
+  private val (clrPostOut, clrPostChannel) = Concurrent.broadcast[ClarificationPosted]
+
+  private val clarifications = {
+    import com.github.nscala_time.time.Imports._
+
+    mutable.Map[Int, mutable.Map[Int, DateTime]]()
+  }
+  private val clarificationsSeen = {
+    import com.github.nscala_time.time.Imports._
+
+    mutable.Map[(Int, Int), DateTime]()
+  }
+
+
 
   private def getUnacked(contest: Int, team: Int) =
     unacked.getOrElseUpdate((contest, team), mutable.Map[Int, Message2]())
@@ -125,6 +171,16 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       self ! ClarificationRequestsStoredState(grp)
     }
 
+  private def loadClarState() = {
+    db.run(
+      sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications""".as[Clarification]
+    ).zip(db.run(sql"select Contest, Team, MaxSeen from ClrsSeen2".as[MaxSeen])).map {
+      case (clarifications, clseen) =>
+        self ! ClarificationsInitialState(clarifications, clseen)
+    }
+  }
+
+
   def receive = {
     case Init => {
       loadPersistentMessages
@@ -153,6 +209,31 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       pendingClarificationRequests(contest) -= clrId
       clrChannel.push(ClarificationRequestState(contest, pendingClarificationRequests(contest).size, false))
       pushPersistent(contest, teamId, "clarificationAnswered", Json.obj("problem" -> problem, "text" -> text))
+    }
+
+    case ClarificationsInitialState(clr, seen) => {
+      for (cl <- clr) {
+        import com.github.nscala_time.time.Imports._
+        clarifications.getOrElseUpdate(cl.contest, mutable.Map[Int, DateTime]()).put(cl.id, cl.arrived)
+      }
+      for (s <- seen) {
+        clarificationsSeen.put((s.contest, s.team), s.timestamp)
+      }
+    }
+
+    case ClarificationUpdated(id, contest, timestamp, problem, text) => {
+      import com.github.nscala_time.time.Imports._
+      clarifications.getOrElseUpdate(contest, mutable.Map[Int, DateTime]()).put(id, timestamp)
+
+      clrPostChannel.push(ClarificationPosted(id, contest, false, problem, text))
+    }
+
+    case AckAllClarifications(contest, team) => {
+      import com.github.nscala_time.time.Imports._
+      val now = DateTime.now
+      clarificationsSeen.put((contest, team), now)
+      import utils.Db._
+      db.run(sqlu"""replace ClrSeen2 (Contest, Team, MaxSeen) values ($contest, $team, ${now})""")
     }
 
     case finished: FinishedTesting => {
@@ -219,29 +300,30 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     }
 
     case JoinUser(contest: Int, team: Int) => {
-      clarificationActor ! ClarificationActor.Joining(ContestTeamIds(contest, team), sender())
-    }
-
-    case ClarificationActor.Joined(ctid, clrevents, orig) => {
-      val stored = getUnacked(ctid.contestId, ctid.teamId).map {
+      val stored = getUnacked(contest, team).map {
         case (msgid, msg) => msg
       }
 
       val eStored = Enumerator.enumerate(stored) &> EventSource()
+      import com.github.nscala_time.time.Imports._
 
-      val contest = ctid.contestId
-      val team = ctid.teamId
+      val unseen = clarificationsSeen.get((contest, team)).map { lastSeen =>
+        !(clarifications.values.flatMap { v =>
+          v.filter(x => (x._2 > lastSeen))
+        }.isEmpty)
+      }.getOrElse(true)
 
-      orig ! UserJoined(
+      val clrevents = (Enumerator.apply(ClarificationState(contest, team, unseen)) &> EventSource()).andThen(
+        clrPostOut &> ClarificationPosted.filterContest(contest) &> EventSource()
+      )
+
+      sender ! UserJoined(
         Enumerator.enumerate[Contest](contestStates.get(contest)).through(contestToEvent).andThen(eStored).andThen(
           Enumerator.interleave(contestOut &> filterContest(contest) &> contestToEvent,
             msg2Out &> filterMessage2(contest, team) &> EventSource(),
             userPingOut,
             clrevents)))
     }
-
-    case x: ClarificationActor.Transit =>
-      clarificationActor forward x
   }
 
   @throws[Exception](classOf[Exception])
