@@ -174,7 +174,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   private def loadClarState() = {
     db.run(
       sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications""".as[Clarification]
-    ).zip(db.run(sql"select Contest, Team, MaxSeen from ClrsSeen2".as[MaxSeen])).map {
+    ).zip(db.run(sql"select Contest, Team, MaxSeen from ClrSeen2".as[MaxSeen])).map {
       case (clarifications, clseen) =>
         self ! ClarificationsInitialState(clarifications, clseen)
     }
@@ -185,6 +185,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     case Init => {
       loadPersistentMessages
       loadClarificationRequestState
+      loadClarState()
     }
 
     case ClarificationRequestsStoredState(values) => {
@@ -230,10 +231,13 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
 
     case AckAllClarifications(contest, team) => {
       import com.github.nscala_time.time.Imports._
-      val now = DateTime.now
-      clarificationsSeen.put((contest, team), now)
-      import utils.Db._
-      db.run(sqlu"""replace ClrSeen2 (Contest, Team, MaxSeen) values ($contest, $team, ${now})""")
+      clarifications.get(contest).map { cmap =>
+        cmap.values.max
+      }.foreach { now =>
+        clarificationsSeen.put((contest, team), now)
+        import utils.Db._
+        db.run(sqlu"""replace ClrSeen2 (Contest, Team, MaxSeen) values ($contest, $team, ${now})""")
+      }
     }
 
     case finished: FinishedTesting => {
@@ -307,11 +311,20 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       val eStored = Enumerator.enumerate(stored) &> EventSource()
       import com.github.nscala_time.time.Imports._
 
-      val unseen = clarificationsSeen.get((contest, team)).map { lastSeen =>
-        !(clarifications.values.flatMap { v =>
-          v.filter(x => (x._2 > lastSeen))
-        }.isEmpty)
-      }.getOrElse(true)
+      val issued = clarifications.get(contest).flatMap { v =>
+        if (v.isEmpty) None
+        else Some(v.values.max)
+      }
+
+      val lastSeen = clarificationsSeen.get((contest, team))
+
+      val unseen = issued match {
+        case Some(ts) => lastSeen match {
+          case Some(ls) => ls < ts
+          case None => true
+        }
+        case None => false
+      }
 
       val clrevents = (Enumerator.apply(ClarificationState(contest, team, unseen)) &> EventSource()).andThen(
         clrPostOut &> ClarificationPosted.filterContest(contest) &> EventSource()
