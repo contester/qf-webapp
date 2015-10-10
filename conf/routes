@@ -3,7 +3,7 @@ GET / controllers.Application.index
 GET /clarifications controllers.QandA.index
 POST /clarifications controllers.QandA.post
 
-GET /additionalInfo controllers.Application.additionalInfo
+GET /extrainfo/:num controllers.Application.showExtraInfo(num: Int)
 
 GET /getCompilerOutput/:uid controllers.Application.getCompilerOutput(uid: Int)
 

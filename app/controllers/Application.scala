@@ -73,14 +73,10 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-  def additionalInfo = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>
-    implicit val ec = StackActionExecutionContext
-
+  def showExtraInfo(num: Int) = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>
     val loggedInTeam = loggedIn
 
-    db.run(sql"select Data from Extrainfo where Contest = ${loggedInTeam.contest.id}".as[String]).map { content =>
-      Ok(html.addoninfo(loggedIn, content.headOption.map(Html.apply)))
-    }
+    Future.successful(Ok(html.addoninfo(loggedIn, loggedIn.einfo.find(_.num == num))))
   }
 
   private def getProblems(contest: Int)(implicit ec: ExecutionContext) =

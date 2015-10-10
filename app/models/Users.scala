@@ -3,6 +3,7 @@ package models
 import com.github.nscala_time.time.Imports._
 import controllers.routes
 import org.joda.time.DateTime
+import play.api.Logger
 import slick.jdbc.{GetResult, JdbcBackend}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -23,9 +24,19 @@ trait Team {
 case class LocalTeam(localId: Int, schoolName: String, teamNum: Option[Int], teamName: String,
                      notRated: Boolean, noPrint: Boolean, disabled: Boolean) extends Team
 
-case class LoggedInTeam(username: String, contest: Contest, team: LocalTeam) {
+case class LoggedInTeam(username: String, contest: Contest, team: LocalTeam, einfo: Seq[Extrainfo]) {
   def matching(ctid: ContestTeamIds) =
     ctid.contestId == contest.id && ctid.teamId == team.localId
+}
+
+case class Extrainfo(contest: Int, num: Int, heading: String, data: String)
+
+object Extrainfo {
+  import slick.jdbc.GetResult
+
+  implicit val getResult = GetResult(r =>
+    Extrainfo(r.nextInt(), r.nextInt(), r.nextString(), r.nextString())
+  )
 }
 
 object Users {
@@ -38,7 +49,7 @@ object Users {
       new DateTime(r.nextTimestamp()), new DateTime(r.nextTimestamp()), new DateTime(r.nextTimestamp()),
       new DateTime(r.nextTimestamp())),
     LocalTeam(r.nextInt(), r.nextString(), r.nextIntOption(), r.nextString(), r.nextBoolean(),
-    r.nextBoolean(), r.nextBoolean())))
+    r.nextBoolean(), r.nextBoolean()), Seq()))
 
 
   def authQuery(username: String, password: String) =
@@ -84,10 +95,18 @@ object Users {
          Teams.School = Schools.ID
        """.as[LoggedInTeam]
 
-  def resolve(db: JdbcBackend#DatabaseDef, username: String)(implicit ec: ExecutionContext): Future[Option[LoggedInTeam]] =
-    db.run(resolveQuery(username)).map(_.headOption)
-}
+  def extraInfoQuery(contest: Int) =
+    sql"""select Contest, Num, Heading, Data from Extrainfo where Contest = $contest order by Num""".as[Extrainfo]
 
+  def resolve(db: JdbcBackend#DatabaseDef, username: String)(implicit ec: ExecutionContext): Future[Option[LoggedInTeam]] =
+    db.run(resolveQuery(username)).map(_.headOption).flatMap { opt =>
+      opt.map { lt =>
+        db.run(extraInfoQuery(lt.contest.id)).map { einfo =>
+          Some(LoggedInTeam(lt.username, lt.contest, lt.team, einfo))
+        }
+      }.getOrElse(Future.successful(None))
+    }
+}
 
 case class ContestTeamIds(contestId: Int, teamId: Int)
 

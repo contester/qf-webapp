@@ -27,7 +27,7 @@ class AuthWrapper @Inject() (dbConfigProvider: DatabaseConfigProvider, configura
   val db = dbConfigProvider.get[JdbcProfile].db
 
   def resolve(username: String)(implicit ctx: ExecutionContext) =
-    db.run(Users.resolveQuery(username)).map(_.headOption)
+    Users.resolve(db, username)
 
   def authenticateUser(username: String, password: String)(implicit ctx: ExecutionContext) =
     if (configuration.getBoolean("qfauth.users").getOrElse(true))

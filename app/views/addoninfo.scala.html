@@ -1,8 +1,7 @@
-@(loggedIn: LoggedInTeam, content: Option[Html])(implicit request: RequestHeader)
+@(loggedIn: LoggedInTeam, content: Option[Extrainfo])(implicit request: RequestHeader)
 
-@main(loggedIn, tab = "addoninfo") {
-@contestteaminfo(loggedIn)
+@main(loggedIn, tab = content.map(x => s"extrainfo${x.num}").getOrElse("")) {
 @for(c <- content) {
-@content
+@Html(c.data)
 }
 }

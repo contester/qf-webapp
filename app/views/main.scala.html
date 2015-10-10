@@ -15,7 +15,9 @@
 @navlink("clarifications", routes.QandA.index, Html("Сообщения жюри <span id='clrPending' class='badge'>!</span>"))
 @navlink("print", routes.Printing.index, Html("Печать"))
 @navlink("sendwithinput", routes.ServerSideEval.index, Html("Запуск на стороне сервера"))
-@navlink("addoninfo", routes.Application.additionalInfo, Html("Допинформация"))
+@for(c <- loggedIn.einfo) {
+    @navlink(s"extrainfo${c.num}", routes.Application.showExtraInfo(c.num), Html(c.heading))
+}
 }
 
 @myStyles = {
