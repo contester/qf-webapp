@@ -13,7 +13,7 @@ case class EvalEntry(id: Int, touched: DateTime, ext: String, source: Array[Byte
   def resultStr = if (processed)
     SubmitResult.message.getOrElse(result, "???")
   else
-    "..."
+    "Выполняется"
 }
 
 object EvalEntry {

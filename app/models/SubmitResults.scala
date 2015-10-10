@@ -27,7 +27,7 @@ case class SubmitStats(timeMs: TimeMs, memory: Memory)
 case object SubmitWaiting extends SubmitResult {
   override val success: Boolean = false
 
-  override val message: String = "..."
+  override val message: String = "Выполняется"
 }
 
 case object SubmitAccepted extends SubmitResult {
