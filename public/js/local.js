@@ -167,13 +167,16 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
 
         if (ackMessagePath) {
             if (obj.msgid) {
-
+                var exists = localStorage.getItem(obj.msgid);
+                if (!exists) {
+                    var icon = iconbase + 'error-icon.gif';
+                    if (obj.result.success) {
+                        icon = iconbase + 'baloons/baloon-' + obj.problem.toLowerCase() + '.png';
+                    }
+                    notifyMe("Задача " + obj.problem, icon, obj.result.message)
+                    localStorage.setItem(obj.msgid, "true");
+                }
             }
-            var icon = iconbase + 'error-icon.gif';
-            if (obj.result.success) {
-                icon = iconbase + 'baloons/baloon-' + obj.problem.toLowerCase() + '.png';
-            }
-            notifyMe("Задача " + obj.problem, icon, obj.result.message)
             if (obj.msgid) {
                 $.post(ackMessagePath, {'msgid': obj.msgid});
             }
@@ -183,8 +186,12 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
     source.addEventListener('clarificationAnswered', function(ev) {
         var obj = JSON.parse(ev.data);
         if (ackMessagePath) {
-            notifyMe("На вопрос по задаче " + obj.problem + " получен ответ", iconbase + 'icpc_logo.png', obj.text);
             if (obj.msgid) {
+                var exists = localStorage.getItem(obj.msgid);
+                if (!exists) {
+                  notifyMe("На вопрос по задаче " + obj.problem + " получен ответ", iconbase + 'icpc_logo.png', obj.text);
+                  localStorage.setItem(obj.msgid, "true");
+                }
                 $.post(ackMessagePath, {'msgid': obj.msgid});
             }
         }
@@ -202,14 +209,19 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
 
     source.addEventListener('clarificationPosted', function(ev) {
         var obj = JSON.parse(ev.data);
-        var clrp = $("#clrPending");
-        clrp.text("!");
-        clrp.show();
-        var msg = "Сообщение жюри";
-        if (obj.problem) {
-          msg += " по задаче " + obj.problem;
+        var exists = localStorage.getItem(obj.text);
+        console.log(exists);
+        if (!exists) {
+            var clrp = $("#clrPending");
+            clrp.text("!");
+            clrp.show();
+            var msg = "Сообщение жюри";
+            if (obj.problem) {
+              msg += " по задаче " + obj.problem;
+            }
+            notifyMe(msg, iconbase + 'icpc_logo.png', obj.text);
+            localStorage.setItem(obj.text, "true");
         }
-        notifyMe(msg, iconbase + 'icpc_logo.png', obj.text);
     })
 
     source.addEventListener('contest', function(ev) {
