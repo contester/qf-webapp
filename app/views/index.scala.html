@@ -16,7 +16,7 @@
         <table class="table table-hover table-bordered table-responsive">
             <thead>
             <tr><th>ID</th><th>Время</th><th>Задача</th><th>Попытка</th><th>Язык</th><th>Результат</th>
-                <th>Баллы</th>
+                <th>@if(loggedIn.contest.schoolMode) { Баллы } else { Штраф }</th>
                 <th>Время работы</th>
             <th>Память</th></tr>
             </thead>
