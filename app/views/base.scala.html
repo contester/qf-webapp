@@ -22,6 +22,9 @@
     <script src="@routes.Assets.at("js/local.js")"></script>
     <script type="text/javascript">
     $.material.init()
+    $.validator.addMethod('filesize', function(value, element, param) {
+        return this.optional(element) || (element.files[0].size <= param)
+    }, $.validator.format("Файлы длиной более {0} недопустимы."));
     </script>
     @scripts
 </head><body>@body</body></html>

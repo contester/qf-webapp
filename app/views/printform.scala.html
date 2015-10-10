@@ -17,7 +17,7 @@
             Невозможно определить ваше местонахождение. Ничего напечатать не получится.
         </div>
         }
-        @b3.form(controllers.routes.Printing.post, 'enctype -> "multipart/form-data") {
+        @b3.form(controllers.routes.Printing.post, 'enctype -> "multipart/form-data", 'id -> "submitform") {
         @form.globalError.map { error =>
         <div class="alert alert-danger" role="alert">
             <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
@@ -35,6 +35,11 @@
         @b3.file(form("file"), '_label -> "Файл с текстом для печати")
         @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Отправить}
         }
+        <script>
+            $('#submitform').validate({
+                rules: { file: { required: true, filesize: 10000  }}
+            });
+        </script>
     </div>
 </div>
 

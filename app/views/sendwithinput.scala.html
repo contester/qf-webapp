@@ -32,13 +32,8 @@
         @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Отправить}
         }
         <script>
-            $.validator.addMethod('filesize', function(value, element, param) {
-                return this.optional(element) || (element.files[0].size <= param)
-            });
-
             $('#submitform').validate({
-                rules: { file: { required: true, filesize: 128000  }},
-                messages: { file: "File must be less than 128000 bytes" }
+                rules: { file: { required: true, filesize: 128000  }, inputfile: { filesize: 128000 }}
             });
         </script>
     </div>
