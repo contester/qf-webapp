@@ -3,8 +3,8 @@
 @import helper.Implicits._
 @import b3.vertical.fieldConstructor
 
-@plus = {
-@if(loggedIn.contest.schoolMode) { "+" } else {}
+@plus = @{
+if(!loggedIn.contest.schoolMode) { "+" } else {""}
 }
 
 

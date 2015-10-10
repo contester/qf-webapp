@@ -160,6 +160,9 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
         }
 
         if (ackMessagePath) {
+            if (obj.msgid) {
+
+            }
             var icon = iconbase + 'error-icon.gif';
             if (obj.result.success) {
                 icon = iconbase + 'baloons/baloon-' + obj.problem.toLowerCase() + '.png';
