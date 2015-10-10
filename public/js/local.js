@@ -15,9 +15,15 @@ function notifyMe(n_title, n_icon, n_body) {
     if (Notification.permission !== "granted")
         Notification.requestPermission();
     else {
+
+        var div = document.createElement("div");
+
+        div.innerHTML = n_body;
+        var text = div.innerText || div.textContent || div.text;
+
         var notification = new Notification(n_title, {
           icon: n_icon,
-          body: n_body,
+          body: text,
         });
 
         notification.addEventListener('click', function () {
@@ -27,7 +33,7 @@ function notifyMe(n_title, n_icon, n_body) {
 
         window.setTimeout(function() {
             notification.close()
-            }, 120000);
+            }, 600000);
 
     }
 
