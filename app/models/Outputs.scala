@@ -1,6 +1,7 @@
 package models
 
 import com.mongodb.casbah.gridfs.GridFS
+import play.api.Logger
 import utils.{PolygonProblemHandle, GridfsTools, GridfsContent}
 
 import scala.concurrent.Future
@@ -9,7 +10,7 @@ case class ResultAssets(test: Int, input: Option[GridfsContent], output: Option[
 
 object Outputs {
   def getOutput(fs: GridFS, shortName: String, submitId: Int, testingId: Int, test: Int): Future[Option[GridfsContent]] =
-    GridfsTools.getFile(fs, s"submit/test2015/${submitId}/${testingId}/$test/output.txt", 1024)(Contexts.gridfsExecutionContext)
+    GridfsTools.getFile(fs, s"submit/${shortName}/${submitId}/${testingId}/$test/output.txt", 1024)(Contexts.gridfsExecutionContext)
 
   def getInput(fs: GridFS, handle: PolygonProblemHandle, test: Int): Future[Option[GridfsContent]] =
     GridfsTools.getFile(fs, handle.inputName(test), 1024)(Contexts.gridfsExecutionContext)

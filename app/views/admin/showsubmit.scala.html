@@ -14,9 +14,9 @@
     }
 }
 
-@details(s: ResultEntry) = {
+@details(s: ResultEntry, wat: String) = {
 <p><b>Результат:</b> @s.resultString, <b>Время:</b> @s.time, <b>Память:</b> @s.memory,
-<b>Код возврата компилятора</b>: @s.testerExitCode</p>
+<b>Код возврата @wat</b>: @s.testerExitCode</p>
 }
 
 @adminmain(tab = "", contest = contest) {
@@ -26,25 +26,27 @@
             @if(sub.fsub.submit.submitId.arrived.afterFreeze){после}else{до} заморозки</p>
 }
 
+@panel("Исходный текст", "info") {
+<pre>@sub.sourceStr</pre>
+}
+
 @for(s <- sub.fsub.details) {
     @if(s.test == 0) {
-        @panel("Компиляция", "info") {
-            @details(s)
-            @stdpanel("Вывод", s.testerOutput)
+        @if(s.result != 1) {
+            @panel("Компиляция", "info") {
+                @details(s, "компилятора")
+                @stdpanel("Вывод", s.testerOutput)
+            }
         }
     } else {
         @panel(s"Тест ${s.test}", "primary") {
-            @details(s)
+            @details(s, "чекера")
             @stdpanel("Ввод", outputs.get(s.test).flatMap(_.input).map(_.toString).getOrElse(""))
             @stdpanel("Вывод", outputs.get(s.test).flatMap(_.output).map(_.toString).getOrElse(""))
             @stdpanel("Ответ жюри", outputs.get(s.test).flatMap(_.answer).map(_.toString).getOrElse(""))
             @stdpanel("Комментарий чекера", s.testerOutput)
         }
     }
-}
-
-@panel("Исходный текст", "info") {
-        <pre>@sub.sourceStr</pre>
 }
 
 }

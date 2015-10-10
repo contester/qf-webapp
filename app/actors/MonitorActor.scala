@@ -50,7 +50,9 @@ class MonitorActor(db: JdbcBackend#DatabaseDef, staticLocation: Option[String]) 
           else
             ACM.calculateStatus(problems, teams, _)
 
-        StoredContestStatus(contest, calcStatus(submits.filter(!_.afterFreeze)), calcStatus(submits))
+        val subs0 = submits.filter(_.finished)
+
+        StoredContestStatus(contest, calcStatus(subs0.filter(!_.afterFreeze)), calcStatus(subs0))
     }
   }
 
