@@ -32,7 +32,7 @@ case object SubmitWaiting extends SubmitResult {
 
 case object SubmitAccepted extends SubmitResult {
   override val success = true
-  override val message = "Успешно"
+  override val message = "Полное решение"
 }
 
 case object SubmitCompileError extends SubmitResult {
@@ -110,7 +110,7 @@ object SubmitResult {
   val message = Map(
     1 -> "Скомпилировалось",
     2 -> "Ошибка компиляции",
-    10 -> "Успешно",
+    10 -> "Ok",
     11 -> "Превышен лимит времени",
     12 -> "Ошибка выполнения",
     13 -> "Неверный ответ",
