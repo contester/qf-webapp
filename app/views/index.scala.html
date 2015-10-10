@@ -3,9 +3,15 @@
 @import helper.Implicits._
 @import b3.vertical.fieldConstructor
 
+@plus = {
+@if(loggedIn.contest.schoolMode) { "+" } else {}
+}
+
+
 @main(loggedIn, tab = "index") {
 
 @contestteaminfo(loggedIn)
+
 
 <div class="panel panel-success">
     <div class="panel-body">
@@ -29,7 +35,7 @@
                     } else {
                 <td id="result-@{s.submit.submitId.id}">
                     }
-                    @s.result.message</td><td  id="score-@{s.submit.submitId.id}">@s.score.getOrElse("")</td>
+                    @s.result.message</td><td id="score-@{s.submit.submitId.id}">@s.score.map(x => s"$plus$x").getOrElse("")</td>
                 </td>
                 <td id="time-@{s.submit.submitId.id}">@s.stats.timeMs</td><td  id="memory-@{s.submit.submitId.id}">@s.stats.memory</td></tr>
             }
