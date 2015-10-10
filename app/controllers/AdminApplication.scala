@@ -62,6 +62,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   private val mongoClient = MongoClient(MongoClientURI(configuration.getString("mongodb.uri").get))
   private val mongoDb = mongoClient(configuration.getString("mongodb.db").get)
   private val gridfs = GridFS(mongoDb)
+  private val shortn = configuration.getString("mongodb.shortn").get
 
   def monitor(id: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(id)) { implicit request =>
     import Contexts.adminExecutionContext
@@ -202,9 +203,6 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
     Submits.getSubmitById(db, submitId).flatMap { optSubmit =>
       optSubmit.map { submit =>
-        //val tid = submit.flatMap(_.fsub.submit.testingId).getOrElse(1)
-
-        //db.run(sql"select ID, Submit, Start, Finish, ProblemID from Testings where ID = $tid".as[Testing])
         submit.fsub.submit.testingId.map { testingId =>
           db.run(sql"select ID, Submit, Start, Finish, ProblemID from Testings where ID = $testingId".as[Testing])
             .map(_.headOption)
@@ -212,7 +210,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
           testingOpt.flatMap { testing =>
             testing.problemId.map { problemId =>
               val phandle = PolygonURL(problemId)
-              Outputs.getAllAssets(gridfs, "test2015", submit.fsub.submit.submitId.id, testing.id, submit.fsub.details.map(_.test), phandle)
+              Outputs.getAllAssets(gridfs, shortn, submit.fsub.submit.submitId.id, testing.id, submit.fsub.details.map(_.test), phandle)
             }
           }.getOrElse(Future.successful(Map[Int, ResultAssets]()))
         }.zip(
@@ -259,9 +257,9 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-  def deleteClarification(clrId: Int) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
+  def deleteClarification(contestId: Int, clrId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canModify(contestId)) { implicit request =>
     import Contexts.adminExecutionContext
-    db.run(sqlu"delete from clarifications where cl_id = ${clrId}").map { _ =>
+    db.run(sqlu"delete from clarifications where cl_id = ${clrId} and cl_contest_idf = ${contestId}").map { _ =>
       Ok("ok")
     }
   }

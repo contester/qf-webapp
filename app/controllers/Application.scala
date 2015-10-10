@@ -78,7 +78,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
     val loggedInTeam = loggedIn
 
-    db.run(sql"select Content from Extrainfo where Contest = ${loggedInTeam.contest.id}".as[String]).map { content =>
+    db.run(sql"select Data from Extrainfo where Contest = ${loggedInTeam.contest.id}".as[String]).map { content =>
       Ok(html.addoninfo(loggedIn, content.headOption.map(Html.apply)))
     }
   }
