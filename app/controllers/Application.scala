@@ -54,8 +54,6 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   val userPermissions = new UserPermissions(db)
 
-  val addonInfoFile = configuration.getString("qf.addinfofile").map(x => new File(x))
-
   def monitorDefault = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>
     val loggedInTeam = loggedIn
     implicit val ec = StackActionExecutionContext
@@ -78,10 +76,10 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   def additionalInfo = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>
     implicit val ec = StackActionExecutionContext
 
-    Future {
-      addonInfoFile.map(FileUtils.readFileToString(_, Charsets.UTF_8))
-    }.map { content =>
-      Ok(html.addoninfo(loggedIn, content.map(Html.apply)))
+    val loggedInTeam = loggedIn
+
+    db.run(sql"select Content from Extrainfo where Contest = ${loggedInTeam.contest.id}".as[String]).map { content =>
+      Ok(html.addoninfo(loggedIn, content.headOption.map(Html.apply)))
     }
   }
 
