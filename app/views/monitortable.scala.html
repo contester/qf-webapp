@@ -6,17 +6,17 @@
 
 <table class="table table-hover table-bordered table-responsive">
     <thead>
-    <tr><th>Rank</th><th>ID</th><th>Name</th>
+    <tr><th>Место</th><th>ID</th><th>Команда</th>
     @status match {
     case st: ACM.Status => {
-    <th>Solved</th><th>Penalty</th>
+    <th>=</th><th>Штраф</th>
         }
         case st: School.Status => {
-    <th>Score</th>
+    <th>=</th>
         }
         }
         @for(p <- status.problems) {
-        <th>@p</th>
+        <th style="text-align: center;">@p</th>
         }
     </tr>
     </thead>
