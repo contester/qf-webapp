@@ -21,7 +21,7 @@
 
 @adminmain(tab = "", contest = contest) {
 
-@panel("Подход") {
+@panel("Попытка") {
         <p>По часам: @{sub.fsub.submit.submitId.arrived.timestamp}, по контесту: @sub.fsub.submit.submitId.arrived.asString,
             @if(sub.fsub.submit.submitId.arrived.afterFreeze){после}else{до} заморозки</p>
 }
