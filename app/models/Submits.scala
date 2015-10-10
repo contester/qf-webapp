@@ -1,6 +1,7 @@
 package models
 
 import org.joda.time.DateTime
+import play.api.Logger
 import slick.jdbc.{GetResult, JdbcBackend}
 import spire.math.{FixedPoint, FixedScale, Rational}
 
@@ -62,9 +63,12 @@ object RationalToScoreStr {
 
 object SchoolScorer extends SubmitScorer[SchoolCell] {
   def apply(cell: SchoolCell, submit: Submit) =
-    if (!submit.compiled)
+    if (!submit.compiled || !submit.finished || submit.taken == 0) {
+      if (submit.compiled) {
+        Logger.info(s"Compiled but taken = 0: $submit")
+      }
       (cell, None)
-    else {
+    } else {
       val newScore = SchoolCell.calculate(submit.submitId.problem.rating,
         Rational(submit.passed, submit.taken), cell.attempt + 1)
 
