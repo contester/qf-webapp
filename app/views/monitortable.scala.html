@@ -1,8 +1,8 @@
-@(contest: Contest, status: models.AnyStatus, current: Int)
+@(contest: Contest, status: models.AnyStatus, current: Int, admin: Boolean=false)
 
 @import spire.math.Rational
 
-@if(contest.started) {
+@if(contest.started || admin) {
 
 <table class="table table-hover table-bordered table-responsive">
     <thead>
