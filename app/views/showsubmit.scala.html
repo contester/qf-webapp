@@ -5,21 +5,28 @@
 @contestteaminfo(loggedIn)
 
 @for(sub <- subopt) {
-<div class="row">
-    <div class="col-md-6 well">
-        <pre>@sub.sourceStr</pre>
+
+<div class="panel panel-info">
+    <div class="panel-heading"><h3 class="panel-title">Результат тестирования</h3>
     </div>
-    <div class="col-md-6 well">
-        <table class="table table-hover table-bordered table-responsive">
-            <thead>
-            <tr><th>Тест</th><th>Результат</th><th>Время, ms</th><th>Память, KB</th></tr>
-            </thead>
-            <tbody>
-            @for(s <- sub.fsub.details.reverse) {
-            <tr><td>@s.test</td><td>@s.resultString</td><td>@s.time</td><td>@s.memory</td></tr>
-            }
-            </tbody>
-        </table>
+    <div class="panel-body"><table class="table table-hover table-bordered table-responsive">
+        <thead>
+        <tr><th>Тест</th><th>Результат</th><th>Время, ms</th><th>Память, KB</th></tr>
+        </thead>
+        <tbody>
+        @for(s <- sub.fsub.details.reverse) {
+        <tr><td>@s.test</td><td>@s.resultString</td><td>@s.time</td><td>@s.memory</td></tr>
+        @if(s.test == 0 && !s.success) {
+        <tr><td colspan="4"><pre>@s.testerOutput</pre></td></tr>
+        }
+        }
+        </tbody>
+    </table></div>
+</div>
+<div class="panel panel-info">
+    <div class="panel-heading"><h3 class="panel-title">Исходный текст</h3>
+    </div>
+    <div class="panel-body"><pre>@sub.sourceStr</pre>
     </div>
 </div>
 }

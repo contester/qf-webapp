@@ -135,6 +135,10 @@ object Memory {
 case class ResultEntry(test: Int, result: Int, time: TimeMs, memory: Memory, info: Int, testerExitCode: Int,
                        testerOutput: String, testerError: String) {
   def resultString = SubmitResult.message(result)
+
+  def success =
+    if (test == 0) result == 1
+    else result == 10
 }
 
 object ResultEntry {
