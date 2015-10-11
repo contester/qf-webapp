@@ -82,7 +82,11 @@ case class SchoolScore(value: Rational) extends Score {
   override def toString: String = RationalToScoreStr(value)
 }
 
-case class SchoolCell(attempt: Int, score: Rational, fullSolution: Boolean) {
+trait ProblemCell {
+  def fullSolution: Boolean
+}
+
+case class SchoolCell(attempt: Int, score: Rational, fullSolution: Boolean) extends ProblemCell {
   override def toString =
     if (attempt == 0) ""
     else RationalToScoreStr(score)
@@ -110,7 +114,7 @@ object ACMScorer extends SubmitScorer[ACMCell] {
     }
 }
 
-case class ACMCell(attempt: Int, arrivedSeconds: Int, fullSolution: Boolean) {
+case class ACMCell(attempt: Int, arrivedSeconds: Int, fullSolution: Boolean) extends ProblemCell {
   def score = if (fullSolution) (arrivedSeconds / 60 + (attempt - 1) * 20) else 0
 
   override def toString =

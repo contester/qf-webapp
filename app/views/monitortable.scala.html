@@ -2,7 +2,10 @@
 
 @import spire.math.Rational
 
+@sm = @{status.solvedProblems}
+
 @if(contest.started || admin) {
+
 
 <table class="table table-hover table-bordered table-responsive">
     <thead>
@@ -16,7 +19,7 @@
         }
         }
         @for(p <- status.problems) {
-        <th style="text-align: center;">@p</th>
+        <th style="text-align: center;">@p<div style="font-size: 65%;">(@sm.getOrElse(p, 0))</div></th>
         }
     </tr>
     </thead>

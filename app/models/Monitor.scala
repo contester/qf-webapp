@@ -17,6 +17,11 @@ case class ContestMonitor(contest: Contest, status: AnyStatus)
 trait AnyStatus {
   def problems: Seq[String]
   def anyRows: Seq[AnyRankedRow]
+
+  def solvedProblems: Map[String, Int] =
+    anyRows.flatMap { row =>
+      row.anyCells.filter(_._2.fullSolution).keys
+    }.groupBy(x => x).mapValues(_.size)
 }
 
 trait AnyRankedRow {
@@ -24,7 +29,7 @@ trait AnyRankedRow {
   def team: LocalTeam
 
   def anyScore: Any
-  def anyCells: Map[String, Any]
+  def anyCells: Map[String, ProblemCell]
 
   def rankStr =
     if (rank == 0) "*" else rank.toString
@@ -37,15 +42,15 @@ object Foo {
     def cells: Map[String, CellType]
   }
 
-  case class RankedRow[ScoreType, CellType](rank: Int, team: LocalTeam, score: ScoreType, cells: Map[String, CellType]) extends AnyRankedRow {
+  case class RankedRow[ScoreType, CellType <: ProblemCell](rank: Int, team: LocalTeam, score: ScoreType, cells: Map[String, CellType]) extends AnyRankedRow {
     override def anyScore: Any = score
 
-    override def anyCells: Map[String, Any] = cells
+    override def anyCells: Map[String, ProblemCell] = cells
   }
 
-  type RankState[ScoreType, CellType] = (Seq[RankedRow[ScoreType, CellType]], Int)
+  type RankState[ScoreType, CellType <: ProblemCell] = (Seq[RankedRow[ScoreType, CellType]], Int)
 
-  def pullRank[ScoreType, CellType](state: RankState[ScoreType, CellType], next: MonitorRow[ScoreType, CellType]): RankState[ScoreType, CellType] = {
+  def pullRank[ScoreType, CellType <: ProblemCell](state: RankState[ScoreType, CellType], next: MonitorRow[ScoreType, CellType]): RankState[ScoreType, CellType] = {
     val position = state._2
 
     val nextR =
@@ -62,13 +67,13 @@ object Foo {
   }
 
 
-  def rank[ScoreType, CellType](rows: Seq[MonitorRow[ScoreType, CellType]]): Seq[RankedRow[ScoreType, CellType]] =
+  def rank[ScoreType, CellType <: ProblemCell](rows: Seq[MonitorRow[ScoreType, CellType]]): Seq[RankedRow[ScoreType, CellType]] =
     rows.foldLeft((Seq[RankedRow[ScoreType, CellType]](), 0))(pullRank)._1
 
   case class SomeRow[ScoreType, CellType](team: LocalTeam, score: ScoreType,
                                                                 cells: Map[String, CellType]) extends MonitorRow[ScoreType, CellType]
 
-  def groupAndRank[ScoreType, CellType](teams: Seq[LocalTeam], submits: Seq[Submit],
+  def groupAndRank[ScoreType, CellType <: ProblemCell](teams: Seq[LocalTeam], submits: Seq[Submit],
                                                                getCell: (Seq[Submit]) => CellType,
                                                                getScore: (Seq[CellType]) => ScoreType)(implicit ord: Ordering[ScoreType]): Seq[RankedRow[ScoreType, CellType]] = {
     val rows = submits.groupBy(_.submitId.teamId).map {
