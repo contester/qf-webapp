@@ -167,6 +167,7 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
 
         if (ackMessagePath) {
             if (obj.msgid) {
+                setTimeout(function() {
                 var exists = localStorage.getItem(obj.msgid);
                 if (!exists) {
                     var icon = iconbase + 'error-icon.gif';
@@ -176,9 +177,8 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
                     notifyMe("Задача " + obj.problem, icon, obj.result.message)
                     localStorage.setItem(obj.msgid, "true");
                 }
-            }
-            if (obj.msgid) {
                 $.post(ackMessagePath, {'msgid': obj.msgid});
+                }, Math.random() * 3000)
             }
         }
     })
@@ -187,12 +187,14 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
         var obj = JSON.parse(ev.data);
         if (ackMessagePath) {
             if (obj.msgid) {
-                var exists = localStorage.getItem(obj.msgid);
-                if (!exists) {
-                  notifyMe("На вопрос по задаче " + obj.problem + " получен ответ", iconbase + 'icpc_logo.png', obj.text);
-                  localStorage.setItem(obj.msgid, "true");
-                }
-                $.post(ackMessagePath, {'msgid': obj.msgid});
+                setTimeout(function() {
+                    var exists = localStorage.getItem(obj.msgid);
+                    if (!exists) {
+                      notifyMe("На вопрос по задаче " + obj.problem + " получен ответ", iconbase + 'icpc_logo.png', obj.text);
+                      localStorage.setItem(obj.msgid, "true");
+                    }
+                    $.post(ackMessagePath, {'msgid': obj.msgid});
+                }, Math.random() * 3000)
             }
         }
     })
@@ -209,6 +211,7 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
 
     source.addEventListener('clarificationPosted', function(ev) {
         var obj = JSON.parse(ev.data);
+        setTimeout(function() {
         var exists = localStorage.getItem(obj.text);
         console.log(exists);
         if (!exists) {
@@ -222,6 +225,8 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
             notifyMe(msg, iconbase + 'icpc_logo.png', obj.text);
             localStorage.setItem(obj.text, "true");
         }
+                }, Math.random() * 3000)
+
     })
 
     source.addEventListener('contest', function(ev) {

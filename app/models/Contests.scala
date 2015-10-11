@@ -64,7 +64,7 @@ case class Compiler(id: Int, name: String, ext: String)
 
 object Compilers {
   def toSelect(compilers: Seq[Compiler]) =
-    compilers.map(x => x.id.toString -> x.name)
+    Seq(("", "Выберите компилятор")) ++ compilers.sortBy(_.name).map(x => x.id.toString -> x.name)
 }
 
 object Contests {

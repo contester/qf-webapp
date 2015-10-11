@@ -33,8 +33,18 @@
         }
         <script>
             $('#submitform').validate({
-                rules: { file: { required: true, filesize: 128000  }, inputfile: { filesize: 8000000 }}
+                rules: { file: { required: true, filesize: 128000  }, inputfile: { filesize: 8000000 }, compiler: { required: true }}
             });
+
+            var compilerId = localStorage.getItem("compilerId");
+            if (compilerId) {
+              $("#compiler").val(compilerId);
+            }
+
+            $("#submitform").submit(function() {
+                localStorage.setItem("compilerId", $('#compiler').val());
+                return true;
+            })
         </script>
     </div>
 </div>

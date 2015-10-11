@@ -87,7 +87,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   }
 
   private def compilersForForm(compilers: Seq[Compiler]) =
-    compilers.map(x => x.id.toString -> x.name)
+    Seq(("", "Выберите компилятор")) ++ compilers.sortBy(_.name).map(x => x.id.toString -> x.name)
 
   private def getProblemsAndCompilers(contestId: Int)(implicit ec: ExecutionContext) =
     getProblems(contestId).zip(db.run(Contests.getCompilers(contestId)))
