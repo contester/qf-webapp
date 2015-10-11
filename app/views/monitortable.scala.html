@@ -19,7 +19,7 @@
         }
         }
         @for(p <- status.problems) {
-        <th style="text-align: center;">@p<div style="font-size: 65%;">(@sm.getOrElse(p, 0))</div></th>
+        <th style="text-align: center;">@p<div style="font-size: 65%;@if(sm.getOrElse(p, 0)==0){color:#ccc;}">(@sm.getOrElse(p, 0))</div></th>
         }
     </tr>
     </thead>
