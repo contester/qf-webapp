@@ -124,7 +124,7 @@ case class ACMCell(attempt: Int, arrivedSeconds: Int, fullSolution: Boolean) ext
 }
 
 case class Memory(val underlying: Long) extends AnyVal {
-  //override def toString: String = s"${underlying / 1024}K"
+  override def toString: String = s"${underlying / 1024}"
 }
 
 object Memory {

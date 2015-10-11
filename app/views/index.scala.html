@@ -22,8 +22,8 @@ if(!loggedIn.contest.schoolMode) { "+" } else {""}
             <thead>
             <tr><th>ID</th><th>Время</th><th>Задача</th><th>Попытка</th><th>Язык</th><th>Результат</th>
                 <th>@if(loggedIn.contest.schoolMode) { Баллы } else { Штраф }</th>
-                <th>Время работы</th>
-            <th>Память</th></tr>
+                <th>Время работы, ms</th>
+            <th>Память, KB</th></tr>
             </thead>
             <tbody>
             @for(s <- subs) {

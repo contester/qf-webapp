@@ -42,7 +42,7 @@ class QandA @Inject() (dbConfigProvider: DatabaseConfigProvider,
           sql"""select ID, Contest, Team, Problem, Request, Answer, Arrived, Status from ClarificationRequests
                where Contest = ${loggedInTeam.contest.id} and Team = ${loggedInTeam.team.localId} order by Arrived desc
              """.as[ClarificationRequest]).map { clReq =>
-          html.clarifications(loggedInTeam, clars, clReq, Problems.toSelect(probs), form)
+          html.clarifications(loggedInTeam, clars, clReq, Seq[(String, String)](("", "Выберите задачу")) ++ Problems.toSelect(probs), form)
         }
       }
     }

@@ -98,7 +98,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
     getProblemsAndCompilers(loggedInTeam.contest.id).map {
       case (problems, compilers) => {
-        Ok(html.sendsolution(loggedInTeam, submitForm, problems, compilersForForm(compilers)))
+        Ok(html.sendsolution(loggedInTeam, submitForm, Seq[(String, String)](("", "Выберите задачу")) ++ problems, compilersForForm(compilers)))
       }
     }
   }
