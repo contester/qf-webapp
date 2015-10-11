@@ -18,6 +18,7 @@ case class SubmitId(id: Int, arrived: Arrived, teamId: Int, contestId: Int, prob
 case class Submit(submitId: SubmitId, finished: Boolean, compiled: Boolean, passed: Int, taken: Int, testingId: Option[Int]) {
   val success = finished && compiled && taken > 0 && passed == taken
   def afterFreeze = submitId.arrived.afterFreeze
+  val failedOnFirst = taken == 1 && passed == 0
 }
 
 trait SubmitScorer[Cell] {
@@ -63,7 +64,7 @@ object RationalToScoreStr {
 
 object SchoolScorer extends SubmitScorer[SchoolCell] {
   def apply(cell: SchoolCell, submit: Submit) =
-    if (!submit.compiled || !submit.finished || submit.taken == 0) {
+    if (!submit.compiled || !submit.finished || submit.taken == 0 || submit.failedOnFirst) {
       if (submit.compiled) {
         Logger.info(s"Compiled but taken = 0: $submit")
       }
@@ -106,7 +107,7 @@ case class ACMScore(value: Int) extends Score {
 
 object ACMScorer extends SubmitScorer[ACMCell] {
   def apply(cell: ACMCell, submit: Submit) =
-    if (!submit.compiled || cell.fullSolution)
+    if (!submit.compiled || submit.failedOnFirst || cell.fullSolution)
       (cell, None)
     else {
       val result = ACMCell(cell.attempt + 1, submit.submitId.arrived.seconds, submit.success)
