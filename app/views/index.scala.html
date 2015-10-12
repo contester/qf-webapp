@@ -34,7 +34,7 @@ if(!loggedIn.contest.schoolMode) { "+" } else {""}
                     } else {
                 <td id="result-@{s.submit.submitId.id}">
                     }
-                    @s.result.message</td><td id="score-@{s.submit.submitId.id}">@s.score.map(x => s"$plus$x").getOrElse("")</td>
+                    <a href="@routes.Application.showSubmit(s.submit.submitId.id)">@s.result.message</a></td><td id="score-@{s.submit.submitId.id}">@s.score.map(x => s"$plus$x").getOrElse("")</td>
                 </td>
                 <td id="time-@{s.submit.submitId.id}">@s.stats.timeMs</td><td  id="memory-@{s.submit.submitId.id}">@s.stats.memory</td></tr>
             }

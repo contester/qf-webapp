@@ -14,7 +14,7 @@
 @navlink("monitor", routes.Application.monitorDefault, Html("Монитор"))
 @navlink("clarifications", routes.QandA.index, Html("Сообщения жюри <span id='clrPending' class='badge'>!</span>"))
 @navlink("print", routes.Printing.index, Html("Печать"))
-@navlink("sendwithinput", routes.ServerSideEval.index, Html("Запуск на стороне сервера"))
+@navlink("sendwithinput", routes.ServerSideEval.index, Html("Запуск"))
 @for(c <- loggedIn.einfo) {
     @navlink(s"extrainfo${c.num}", routes.Application.showExtraInfo(c.num), Html(c.heading))
 }

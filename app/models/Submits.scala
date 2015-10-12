@@ -65,7 +65,7 @@ object RationalToScoreStr {
 object SchoolScorer extends SubmitScorer[SchoolCell] {
   def apply(cell: SchoolCell, submit: Submit) =
     if (!submit.compiled || !submit.finished || submit.taken == 0 || submit.failedOnFirst) {
-      if (submit.compiled) {
+      if (submit.compiled && submit.taken == 0) {
         Logger.info(s"Compiled but taken = 0: $submit")
       }
       (cell, None)
