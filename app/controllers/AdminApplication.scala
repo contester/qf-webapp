@@ -97,7 +97,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
       db.run(Contests.getTeams(contestId)).map(_.map(x => x.localId -> x).toMap)
     ).zip(db.run(Submits.getContestSubmits(contestId))).flatMap {
       case ((contest, teamMap), submits) =>
-        Submits.groupAndAnnotate(db, contest.contest.schoolMode, limit.map(submits.take).getOrElse(submits)).map { fullyDescribedSubmits =>
+        Submits.groupAndAnnotate(db, contest.contest.schoolMode, limit.map(submits.reverse.take(_).reverse).getOrElse(submits)).map { fullyDescribedSubmits =>
           Ok(html.admin.submits(fullyDescribedSubmits, teamMap, contest, account))
         }
       case _ =>
