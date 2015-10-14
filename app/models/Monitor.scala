@@ -127,11 +127,14 @@ object ACM {
     override def anyRows: Seq[AnyRankedRow] = rows
   }
 
-  case class Score(val solved: Int, val penalty: Int) extends Ordered[Score] {
+  case class Score(solved: Int, penalty: Int, lastSubmitPenalty: Int) extends Ordered[Score] {
     override def compare(that: Score): Int = {
       val r = that.solved.compare(solved)
       if (r == 0) {
-        penalty.compare(that.penalty)
+        val r2 = penalty.compare(that.penalty)
+        if (r2 == 0) {
+          lastSubmitPenalty.compare(that.lastSubmitPenalty)
+        } else r2
       } else r
     }
   }
@@ -141,12 +144,12 @@ object ACM {
 
   def cellFold(state: Score, cell: ACMCell) =
     if (cell.fullSolution)
-        Score(state.solved + 1, state.penalty + cell.score)
+        Score(state.solved + 1, state.penalty + cell.score, state.lastSubmitPenalty.max(cell.score))
     else
         state
 
   def getScore(cells: Seq[ACMCell]) =
-    cells.foldLeft(Score(0, 0))(cellFold)
+    cells.foldLeft(Score(0, 0, 0))(cellFold)
 
   def calculateStatus(problems: Seq[Problem], teams: Seq[LocalTeam], submits: Seq[Submit]) =
     Status(problems.map(_.id), Foo.groupAndRank(teams, submits, getCell(_), getScore(_)))
