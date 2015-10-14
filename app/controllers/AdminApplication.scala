@@ -159,7 +159,12 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   def submits(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
     import Contexts.adminExecutionContext
-    showSubs(contestId, None, loggedIn)
+
+    val lim = if (loggedIn.canModify(contestId))
+      None
+    else
+      Some(100)
+    showSubs(contestId, lim, loggedIn)
   }
 
   val rejudgeSubmitRangeForm = Form {
