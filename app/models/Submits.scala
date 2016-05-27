@@ -295,8 +295,6 @@ object Submits {
   implicit def o2f[A](o: Option[Future[A]])(implicit ec: ExecutionContext): Future[Option[A]] =
     o.map(_.map(Some(_))).getOrElse(Future.successful(None))
 
-  import utils.Db._
-
   case class SubmitSourceShort(contest: Int, team: Int, problem: String, source: Array[Byte])
   object SubmitSourceShort {
     implicit val getResult = GetResult(r =>
