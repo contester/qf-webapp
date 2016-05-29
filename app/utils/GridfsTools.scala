@@ -1,15 +1,13 @@
 package utils
 
 import java.io.InputStream
-import java.nio.charset.{Charset}
+import java.nio.charset.Charset
 import java.util.Arrays
-import java.util.zip.{InflaterInputStream, Inflater}
 
-import com.mongodb.casbah.commons.MongoDBObject
-import com.mongodb.casbah.gridfs.GridFS
+import akka.stream._
+import akka.util.ByteString
 import org.apache.commons.codec.Charsets
-import org.apache.commons.io.IOUtils
-import play.api.Logger
+import play.api.libs.ws.WSClient
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -21,6 +19,32 @@ case class GridfsContent(content: Array[Byte], truncated: Boolean) {
 
 object GridfsContent {
   val CP1251 = Charsets.toCharset("CP1251")
+}
+
+import akka.stream.stage._
+
+class ByteLimiter(val maximumBytes: Long) extends GraphStage[FlowShape[ByteString, ByteString]] {
+  val in = Inlet[ByteString]("ByteLimiter.in")
+  val out = Outlet[ByteString]("ByteLimiter.out")
+  override val shape = FlowShape.of(in, out)
+
+  override def createLogic(inheritedAttributes: Attributes): GraphStageLogic = new GraphStageLogic(shape) {
+    private var count = 0
+
+    setHandlers(in, out, new InHandler with OutHandler {
+
+      override def onPull(): Unit = {
+        pull(in)
+      }
+
+      override def onPush(): Unit = {
+        val chunk = grab(in)
+        count += chunk.size
+        if (count > maximumBytes) failStage(new IllegalStateException("Too much bytes"))
+        else push(out, chunk)
+      }
+    })
+  }
 }
 
 object GridfsTools {
@@ -38,15 +62,15 @@ object GridfsTools {
     }
   }
 
-  def getFile(fs: GridFS, name: String, sizeLimit: Int)(implicit ec: ExecutionContext): Future[Option[GridfsContent]] =
-    Future {
-      fs.findOne(name).map { file =>
-        val metadata = new MongoDBObject(file.metaData)
-        val ctype = metadata.getAsOrElse[String]("compressionType", "")
-        val origSize = metadata.getAs[Long]("originalSize")
-        val istream = if (ctype == "ZLIB") new InflaterInputStream(file.inputStream) else file.inputStream
-        readTruncated(istream, sizeLimit, origSize)
-     }
+  def getFile(ws: WSClient, name: String, sizeLimit: Long)(implicit ec: ExecutionContext, mat: Materializer): Future[Option[GridfsContent]] =
+    ws.url(name).withMethod("GET").stream().flatMap { resp =>
+      resp.headers.status match {
+        case 404 => Future.successful(None)
+        case 200 =>
+          val origSize = resp.headers.headers.get("X-Fs-Content-Length").map(_.head).map(_.toLong).getOrElse(0L)
+          resp.body.via(new ByteLimiter(sizeLimit)).runReduce((x, y) => x ++ y).map { x =>
+            Some(GridfsContent(x.toByteBuffer.array(), origSize > sizeLimit))
+          }
+      }
     }
-
 }

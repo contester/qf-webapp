@@ -2,33 +2,27 @@ package controllers
 
 import javax.inject.{Inject, Singleton}
 
-import actors.{StatusActor}
+import actors.StatusActor
 import actors.StatusActor.ClarificationAnswered
-import akka.actor.{ActorSystem, Props}
+import akka.stream.Materializer
+import com.github.nscala_time.time.Imports._
 import com.google.common.collect.ImmutableRangeSet
-import com.mongodb.casbah.gridfs.GridFS
-import com.mongodb.casbah.{MongoURI, MongoDB, MongoClientURI, MongoClient}
-import com.spingo.op_rabbit.{Message, RabbitControl}
+import com.spingo.op_rabbit.Message
 import jp.t2v.lab.play2.auth.AuthElement
 import models._
-import org.apache.commons.io.{IOUtils, FileUtils}
-import play.api.{Configuration, Logger}
+import play.api.Configuration
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
-import play.api.libs.EventSource
-import play.api.libs.iteratee.{Enumeratee, Concurrent}
-import play.api.libs.json.{Json, JsValue}
-import play.api.mvc.{Action, Controller, RequestHeader}
+import play.api.libs.json.Json
+import play.api.libs.ws.WSClient
+import play.api.mvc.{Controller, RequestHeader}
 import slick.driver.JdbcProfile
-import slick.jdbc.GetResult
-import utils.{PolygonURL, GridfsContent, GridfsTools}
+import utils.PolygonURL
 import views.html
 
 import scala.concurrent.{ExecutionContext, Future}
-
-import com.github.nscala_time.time.Imports._
 
 case class RejudgeSubmitRange(range: String)
 case class PostClarification(problem: String, text: String, hidden: Boolean)
@@ -50,6 +44,8 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
                                  rabbitMqModel: RabbitMqModel,
                              statusActorModel: StatusActorModel,
                                   configuration: Configuration,
+                                  ws: WSClient,
+                                  implicit val mat: Materializer,
                              val auth: AuthWrapper,
                              val messagesApi: MessagesApi) extends Controller with AuthElement with AdminAuthConfigImpl with I18nSupport{
 
@@ -59,10 +55,8 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   private val rabbitMq = rabbitMqModel.rabbitMq
 
-  private val mongoClient = MongoClient(MongoClientURI(configuration.getString("mongodb.uri").get))
-  private val mongoDb = mongoClient(configuration.getString("mongodb.db").get)
-  private val gridfs = GridFS(mongoDb)
-  private val shortn = configuration.getString("mongodb.shortn").get
+  private val fileserverUrl = configuration.getString("fileserver.url")
+  private val shortn = configuration.getString("fileserver.shortn")
 
   def monitor(id: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(id)) { implicit request =>
     import Contexts.adminExecutionContext
@@ -111,7 +105,6 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
 
   def index = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
-    import Contexts.adminExecutionContext
     Future.successful(Redirect(routes.AdminApplication.submits(1)))
   }
 
@@ -215,7 +208,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
           testingOpt.flatMap { testing =>
             testing.problemId.map { problemId =>
               val phandle = PolygonURL(problemId)
-              Outputs.getAllAssets(gridfs, shortn, submit.fsub.submit.submitId.id, testing.id, submit.fsub.details.map(_.test), phandle)
+              Outputs.getAllAssets(ws, fileserverUrl.get, shortn.get, submit.fsub.submit.submitId.id, testing.id, submit.fsub.details.map(_.test), phandle)
             }
           }.getOrElse(Future.successful(Map[Int, ResultAssets]()))
         }.zip(
@@ -271,9 +264,10 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
 
   def feed(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
-    import scala.concurrent.duration._
-    import akka.pattern.ask
     import Contexts.adminExecutionContext
+    import akka.pattern.ask
+
+    import scala.concurrent.duration._
 
     statusActorModel.statusActor.ask(StatusActor.JoinAdmin(contestId))(Duration(5, SECONDS)).map {
       case StatusActor.AdminJoined(e) => {
@@ -297,8 +291,6 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-  import utils.Db._
-
   def postUpdateClarification(clarificationId: Int) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
     import Contexts.adminExecutionContext
     db.run(
@@ -318,6 +310,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   def postClarification(contestId: Int, clarificationId: Option[Int]) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
     import Contexts.adminExecutionContext
+    import utils.Db._
     postClarificationForm.bindFromRequest.fold(
       formWithErrors => getSelectedContests(1, loggedIn).map { contest =>
         BadRequest(html.admin.postclarification(clarificationId, formWithErrors, contest))

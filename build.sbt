@@ -17,6 +17,7 @@ val spireVersion = "0.11.0"
 
 libraryDependencies ++= Seq(
   cache,
+  ws,
   "com.adrianhurt" %% "play-bootstrap3" % "0.4.5-P24",
   "org.webjars" % "font-awesome" % "4.6.2",
   "org.webjars" % "bootstrap-datepicker" % "1.6.1",
@@ -30,8 +31,6 @@ libraryDependencies ++= Seq(
   "com.github.nscala-time" %% "nscala-time" % "2.12.0",
   "com.googlecode.htmlcompressor" % "htmlcompressor" % "1.5.2",
   "rhino" % "js" % "1.7R2",
-  "org.mongodb" %% "casbah-core" % "2.8.2",
-  "org.mongodb" %% "casbah-gridfs" % "2.8.2",
   "org.spire-math" %% "spire" % spireVersion,
   "org.spire-math" %% "spire-extras" % spireVersion,
   "com.google.guava" % "guava" % "19.0"
