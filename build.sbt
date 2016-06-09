@@ -4,7 +4,7 @@ scalaVersion  := "2.11.8"
 
 organization := "org.stingray.contester"
 
-version := "0.0.1-SNAPSHOT"
+version := "0.2"
 
 lazy val root = (project in file(".")).enablePlugins(PlayScala)
 
@@ -22,6 +22,7 @@ libraryDependencies ++= Seq(
   "org.webjars" % "font-awesome" % "4.6.2",
   "org.webjars" % "bootstrap-datepicker" % "1.6.1",
   "org.apache.httpcomponents" % "httpclient" % "4.5.2",
+  "org.apache.httpcomponents" % "httpcore" % "4.4.4",
   "jp.t2v" %% "play2-auth"      % "0.14.0",
   "jp.t2v" %% "play2-auth-test" % "0.14.0" % "test",
   "com.typesafe.play" %% "play-slick" % "2.0.2",

@@ -7,6 +7,7 @@ import java.util.Arrays
 import akka.stream._
 import akka.util.ByteString
 import org.apache.commons.codec.Charsets
+import play.api.Logger
 import play.api.libs.ws.WSClient
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -39,9 +40,15 @@ class ByteLimiter(val maximumBytes: Long) extends GraphStage[FlowShape[ByteStrin
 
       override def onPush(): Unit = {
         val chunk = grab(in)
-        count += chunk.size
-        if (count > maximumBytes) failStage(new IllegalStateException("Too much bytes"))
-        else push(out, chunk)
+        val newCount = count + chunk.size
+        if (newCount > maximumBytes) {
+          val newChunk = chunk.take((maximumBytes - count).toInt)
+          push(out, newChunk)
+          completeStage()
+        } else {
+          count = newCount
+          push(out, chunk)
+        }
       }
     })
   }
@@ -62,7 +69,8 @@ object GridfsTools {
     }
   }
 
-  def getFile(ws: WSClient, name: String, sizeLimit: Long)(implicit ec: ExecutionContext, mat: Materializer): Future[Option[GridfsContent]] =
+  def getFile(ws: WSClient, name: String, sizeLimit: Long)(implicit ec: ExecutionContext, mat: Materializer): Future[Option[GridfsContent]] = {
+    Logger.info(s"name=$name")
     ws.url(name).withMethod("GET").stream().flatMap { resp =>
       resp.headers.status match {
         case 404 => Future.successful(None)
@@ -73,4 +81,5 @@ object GridfsTools {
           }
       }
     }
+  }
 }

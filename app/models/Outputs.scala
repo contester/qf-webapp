@@ -11,7 +11,7 @@ case class ResultAssets(test: Int, input: Option[GridfsContent], output: Option[
 object Outputs {
   import Contexts.gridfsExecutionContext
   def getOutput(ws: WSClient, prefix: String, shortName: String, submitId: Int, testingId: Int, test: Int)(implicit mat: Materializer): Future[Option[GridfsContent]] =
-    GridfsTools.getFile(ws, s"${prefix}submit/${shortName}/${submitId}/${testingId}/$test/output.txt", 1024)
+    GridfsTools.getFile(ws, s"${prefix}submit/${shortName}/${submitId}/${testingId}/$test/output", 1024)
 
   def getInput(ws: WSClient, prefix: String, handle: PolygonProblemHandle, test: Int)(implicit mat: Materializer): Future[Option[GridfsContent]] =
     GridfsTools.getFile(ws, prefix + handle.inputName(test), 1024)
