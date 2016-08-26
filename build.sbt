@@ -13,6 +13,8 @@ scalacOptions ++= Seq("-unchecked", "-deprecation", "-optimise", "-explaintypes"
 
 resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"
 
+updateOptions := updateOptions.value.withCachedResolution(true)
+
 val spireVersion = "0.11.0"
 
 libraryDependencies ++= Seq(
@@ -23,8 +25,8 @@ libraryDependencies ++= Seq(
   "org.webjars" % "bootstrap-datepicker" % "1.6.1",
   "org.apache.httpcomponents" % "httpclient" % "4.5.2",
   "org.apache.httpcomponents" % "httpcore" % "4.4.4",
-  "jp.t2v" %% "play2-auth"      % "0.14.0",
-  "jp.t2v" %% "play2-auth-test" % "0.14.0" % "test",
+  "jp.t2v" %% "play2-auth"      % "0.14.2",
+  "jp.t2v" %% "play2-auth-test" % "0.14.2" % "test",
   "com.typesafe.play" %% "play-slick" % "2.0.2",
   "com.typesafe.play" %% "play-slick-evolutions" % "2.0.2",
   "mysql" % "mysql-connector-java" % "5.1.39",
