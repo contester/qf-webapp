@@ -1,9 +1,6 @@
 package models
 
-import com.github.nscala_time.time.Imports._
-import controllers.routes
 import org.joda.time.DateTime
-import play.api.Logger
 import slick.jdbc.{GetResult, JdbcBackend}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -40,8 +37,8 @@ object Extrainfo {
 }
 
 object Users {
-  import slick.jdbc.GetResult
   import slick.driver.MySQLDriver.api._
+  import slick.jdbc.GetResult
 
   implicit val getLoggedInTeam = GetResult(r => LoggedInTeam(
     r.nextString(),
@@ -117,9 +114,8 @@ object ContestTeamIds {
 }
 
 class UserPermissions(db: JdbcBackend#DatabaseDef) {
-  import slick.driver.MySQLDriver.api._
-  import play.api.libs.concurrent.Execution.Implicits.defaultContext
   import UserPermissions._
+  import slick.driver.MySQLDriver.api._
 
   def submit(submitId: Int)(account: LoggedInTeam): Future[Boolean] =
     matching {

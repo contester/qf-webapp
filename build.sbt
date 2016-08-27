@@ -29,7 +29,7 @@ libraryDependencies ++= Seq(
   "jp.t2v" %% "play2-auth-test" % "0.14.2" % "test",
   "com.typesafe.play" %% "play-slick" % "2.0.2",
   "com.typesafe.play" %% "play-slick-evolutions" % "2.0.2",
-  "mysql" % "mysql-connector-java" % "6.0.3",
+  "org.mariadb.jdbc" % "mariadb-java-client" % "1.4.6",
   "commons-io" % "commons-io" % "2.5",
   "com.github.nscala-time" %% "nscala-time" % "2.12.0",
   "com.googlecode.htmlcompressor" % "htmlcompressor" % "1.5.2",
