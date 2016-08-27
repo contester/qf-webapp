@@ -21,7 +21,7 @@
     <ul class="dropdown-menu" role="menu">
         @for(c <- contest.contests) {
             <li role="presentation" @if(c._1 == contest.contest.id){class="active"}>
-                <a href="@if(c._1 == contest.contest.id){#}else{@AdminNavlinkMatch(tab)(c._1)}">@c._2</a></li>
+                <a href="@if(c._1 == contest.contest.id){#}else{@AdminNavlinkMatch(tab)(c._1)}">@c._1 - @c._2</a></li>
         }
     </ul>
 </li>
