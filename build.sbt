@@ -20,7 +20,7 @@ val spireVersion = "0.12.0"
 libraryDependencies ++= Seq(
   cache,
   ws,
-  "com.adrianhurt" %% "play-bootstrap3" % "0.4.5-P24",
+  "com.adrianhurt" %% "play-bootstrap" % "1.0-P25-B3",
   "org.webjars" % "font-awesome" % "4.6.3",
   "org.webjars" % "bootstrap-datepicker" % "1.6.1",
   "org.apache.httpcomponents" % "httpclient" % "4.5.2",

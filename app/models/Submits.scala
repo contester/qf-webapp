@@ -3,7 +3,8 @@ package models
 import org.joda.time.DateTime
 import play.api.Logger
 import slick.jdbc.{GetResult, JdbcBackend}
-import spire.math.{FixedPoint, FixedScale, Rational}
+import spire.math.Rational
+import spire.math.extras.{FixedPoint, FixedScale}
 
 import scala.concurrent.{ExecutionContext, Future}
 
