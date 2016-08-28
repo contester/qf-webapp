@@ -34,10 +34,13 @@ libraryDependencies ++= Seq(
   "com.github.nscala-time" %% "nscala-time" % "2.12.0",
   "com.googlecode.htmlcompressor" % "htmlcompressor" % "1.5.2",
   "rhino" % "js" % "1.7R2",
+  "com.typesafe.slick" %% "slick" % "3.1.1",
+  "com.typesafe.slick" %% "slick-hikaricp" % "3.1.1",
+  "com.zaxxer" % "HikariCP" % "2.4.5",
   "org.spire-math" %% "spire" % spireVersion,
   "org.spire-math" %% "spire-extras" % spireVersion,
   "com.google.guava" % "guava" % "19.0"
-)
+).map(_.exclude("com.zaxxer", "HikariCP-java6"))
 
 resolvers ++= Seq(
   "SpinGo OSS" at "http://spingo-oss.s3.amazonaws.com/repositories/releases"
