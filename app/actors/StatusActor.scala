@@ -146,11 +146,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
 
   private def filterClarificationRequests(contest: Int) = Enumeratee.filter[ClarificationRequestState](_.contest == contest)
 
-  private val submitToEvent: Enumeratee[AnnoSubmit, Event] =
-    Enumeratee.map { e =>
-      Event(Json.stringify(Json.toJson(e)), None, Some("submit"))
-    }
-
   private def loadPersistentMessages =
     db.run(
       sql"""select ID, Contest, Team, Kind, Value from Messages2 where Seen != 1""".as[Message2]
@@ -294,7 +289,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
 
       sender ! AdminJoined(
         Enumerator.interleave(contestEvents,
-        submitOut &> filterSubmits(c) &> submitToEvent,
+        submitOut &> filterSubmits(c) &> EventSource(),
         clrEvents,
         userPingOut
         ))

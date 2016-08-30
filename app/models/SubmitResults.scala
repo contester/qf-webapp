@@ -2,7 +2,8 @@ package models
 
 import models.ContesterResults.FinishedTesting
 import play.api.i18n.Messages
-import play.api.libs.json.{JsValue, Writes, Json}
+import play.api.libs.EventSource.{EventDataExtractor, EventNameExtractor}
+import play.api.libs.json.{JsValue, Json, Writes}
 import slick.jdbc.{GetResult, JdbcBackend}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -126,6 +127,11 @@ object SubmitResult {
 
 object AnnoSubmit {
   implicit val formatAnnoSubmit = Json.writes[AnnoSubmit]
+
+  implicit val eventNameExtractor = EventNameExtractor[AnnoSubmit](_ => Some("submit"))
+  implicit val eventDataExtractor = EventDataExtractor[AnnoSubmit] { c =>
+    Json.stringify(Json.toJson(c))
+  }
 }
 
 import com.github.nscala_time.time.Imports._
