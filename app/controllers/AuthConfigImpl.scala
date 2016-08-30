@@ -2,6 +2,7 @@ package models
 
 import controllers.{AuthWrapper, routes}
 import jp.t2v.lab.play2.auth._
+import play.api.Logger
 import play.api.mvc.Results.{Forbidden, Redirect}
 import play.api.mvc.{RequestHeader, Result}
 
@@ -75,13 +76,6 @@ trait AuthConfigImpl extends AuthConfig {
   override def authorizationFailed(request: RequestHeader, user: User, authority: Option[Authority])(implicit context: ExecutionContext): Future[Result] = {
     Future.successful(Forbidden("no permission"))
   }
-
-  /**
-   * This method is kept for compatibility.
-   * It will be removed in a future version
-   * Override `authorizationFailed(RequestHeader, User, Option[Authority])` instead of this
-   */
-  def authorizationFailed(request: RequestHeader)(implicit ctx: ExecutionContext): Future[Result] = throw new AssertionError
 
   /**
    * A function that determines what `Authority` a user has.
