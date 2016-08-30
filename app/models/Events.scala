@@ -1,9 +1,7 @@
 package models
 
-import actors.Message2
 import play.api.libs.EventSource.{EventDataExtractor, EventNameExtractor}
-import play.api.libs.json.{JsNumber, JsObject, Json}
-import slick.jdbc.GetResult
+import play.api.libs.json.Json
 
 case class ClarificationRequestState(contest: Int, pending: Int, newRequest: Boolean)
 
