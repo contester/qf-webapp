@@ -136,9 +136,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       }
     }
 
-  private val contestToEvent: Enumeratee[Contest, Event] =
-    Enumeratee.map { e => Event(Json.stringify(Json.toJson(e)), None, Some("contest"))}
-
   private def filterContest(contestId: Int) = Enumeratee.filter[Contest](_.id == contestId)
 
   private def filterMessage2(contest: Int, team: Int) = Enumeratee.filter[Message2] { msg =>
@@ -291,7 +288,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     }
 
     case JoinAdmin(c: Int) => {
-      val contestEvents = Enumerator.enumerate(contestStates.get(c)).andThen(contestOut &> filterContest(c)) &> contestToEvent
+      val contestEvents = Enumerator.enumerate(contestStates.get(c)).andThen(contestOut &> filterContest(c)) &> EventSource()
       val clrEvents = Enumerator(ClarificationRequestState(c, pendingClarificationRequests(c).size, false))
         .andThen(clrOut &> filterClarificationRequests(c)) &> EventSource()
 
@@ -331,8 +328,8 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       )
 
       sender ! UserJoined(
-        Enumerator.enumerate[Contest](contestStates.get(contest)).through(contestToEvent).andThen(eStored).andThen(
-          Enumerator.interleave(contestOut &> filterContest(contest) &> contestToEvent,
+        Enumerator.enumerate[Contest](contestStates.get(contest)).through(EventSource()).andThen(eStored).andThen(
+          Enumerator.interleave(contestOut &> filterContest(contest) &> EventSource(),
             msg2Out &> filterMessage2(contest, team) &> EventSource(),
             userPingOut,
             clrevents)))

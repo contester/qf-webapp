@@ -54,6 +54,11 @@ object Contest {
       )
     }
   }
+
+  implicit val eventNameExtractor = EventNameExtractor[Contest](_ => Some("contest"))
+  implicit val eventDataExtractor = EventDataExtractor[Contest] { c =>
+    Json.stringify(Json.toJson(c))
+  }
 }
 
 case class SelectedContest(contest: Contest, contests: Seq[(Int, String)])
