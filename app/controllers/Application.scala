@@ -1,25 +1,20 @@
 package controllers
 
-import java.io.File
 import javax.inject.{Inject, Singleton}
 
 import actors.StatusActor
-import akka.actor.{Props, ActorSystem}
 import com.spingo.op_rabbit._
 import jp.t2v.lab.play2.auth.AuthElement
 import models.ContesterResults.{CustomTestResult, FinishedTesting}
 import models._
-import org.apache.commons.io.{Charsets, FileUtils}
-import play.api.{Configuration, Logger}
+import org.apache.commons.io.FileUtils
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
-import play.api.libs.EventSource
-import play.api.libs.iteratee.Iteratee
 import play.api.libs.json._
-import play.api.mvc.{Action, Controller}
-import play.twirl.api.Html
+import play.api.mvc.Controller
+import play.api.{Configuration, Logger}
 import slick.driver.JdbcProfile
 import views.html
 
@@ -40,6 +35,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
                             rabbitMqModel: RabbitMqModel,
                             statusActorModel: StatusActorModel,
                             configuration: Configuration,
+                             webJarAssets: WebJarAssets,
                              val auth: AuthWrapper,
                              val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport{
 
@@ -47,6 +43,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   private val db = dbConfig.db
   import dbConfig.driver.api._
   import utils.Db._
+
   import scala.language.postfixOps
 
   private val rabbitMq = rabbitMqModel.rabbitMq
@@ -103,7 +100,6 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-
   def submitInsertQuery(contestId: Int, teamId: Int, problemId: String, srcLang: Int, source: Array[Byte], remoteAddr: String) =
     sqlu"""insert into NewSubmits (Contest, Team, Problem, SrcLang, Source, Computer, Arrived)
           values ($contestId, $teamId, $problemId, $srcLang, $source, inet_aton($remoteAddr), CURRENT_TIMESTAMP())
@@ -148,10 +144,9 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   }
 
   //import play.api.Play.current
-  import play.api.mvc._
+  import akka.pattern.ask
 
   import scala.concurrent.duration._
-  import akka.pattern.ask
 
   val finishedRef = Subscription.run(rabbitMq) {
     import Directives._
@@ -199,8 +194,9 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   def feed(contestId: Int, teamId: Int) = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>
     implicit val ec = StackActionExecutionContext
 
-    import scala.concurrent.duration._
     import akka.pattern.ask
+
+    import scala.concurrent.duration._
 
     statusActorModel.statusActor.ask(StatusActor.JoinUser(contestId, teamId))(Duration(5, SECONDS)).map {
       case StatusActor.UserJoined(e) => {
