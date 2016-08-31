@@ -1,18 +1,14 @@
 package actors
 
-import java.sql.Timestamp
-
 import akka.actor.{Actor, Props}
-import akka.util.Timeout
 import models.ContesterResults.{CustomTestResult, FinishedTesting}
 import models._
 import play.api.Logger
 import play.api.libs.EventSource
-import play.api.libs.EventSource.{EventNameExtractor, EventDataExtractor, EventIdExtractor, Event}
-import play.api.libs.iteratee.Concurrent.Channel
-import play.api.libs.iteratee.{Enumeratee, Concurrent, Enumerator}
+import play.api.libs.EventSource.{Event, EventDataExtractor, EventNameExtractor}
+import play.api.libs.iteratee.{Concurrent, Enumeratee, Enumerator}
 import play.api.libs.json._
-import slick.jdbc.{PositionedParameters, SetParameter, GetResult, JdbcBackend}
+import slick.jdbc.{GetResult, JdbcBackend}
 
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
@@ -80,6 +76,8 @@ object Message2 {
 class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   import StatusActor._
   import context.dispatcher
+  import utils.Db._
+
   import scala.language.postfixOps
 
   private val tick = {
@@ -227,7 +225,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
         cmap.values.max
       }.foreach { now =>
         clarificationsSeen.put((contest, team), now)
-        import utils.Db._
         db.run(sqlu"""replace ClrSeen2 (Contest, Team, MaxSeen) values ($contest, $team, ${now})""")
       }
     }
