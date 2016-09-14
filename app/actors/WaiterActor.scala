@@ -47,6 +47,10 @@ object WaiterActor {
 
   case class Join(rooms: List[String])
   case class Joined(enum: Enumerator[Event])
+
+  case class WaiterTaskEventPayload(when: DateTime, message: String, roomsActive: List[String], roomsAcked: List[String])
+
+  case class WaiterTaskEventMessage()
 }
 
 
