@@ -27,11 +27,11 @@ object WaiterActor {
   case class Loaded(tasks: List[StoredWaiterTask])
 
   case class NewTask(message: String, rooms: List[String])
-  case class AckTask(id: Int, rooms: Set[String])
-  case class UnackTask(id: Int, rooms: Set[String])
+  case class AckTask(id: Int, room: String)
+  case class UnackTask(id: Int, room: String)
   case class DeleteTask(id: Int)
 
-  case class TaskAcked(id: Int, when: DateTime, rooms: Set[String])
+  case class TaskAcked(id: Int, when: DateTime, room: String)
   case class TaskDeleted(id: Int) extends WaiterTaskMessage
 
   object TaskDeleted {
@@ -45,14 +45,13 @@ object WaiterActor {
 
 
 class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
-  val tasks = mutable.Map[Int, StoredWaiterTask]()
+  val tasks = mutable.Map[Long, StoredWaiterTask]()
 
   import scala.concurrent.ExecutionContext.Implicits.global
 
   import WaiterActor._
 
   private val (waiterOut, waiterChannel) = Concurrent.broadcast[WaiterTaskMessage]
-
 
   override def receive: Receive = {
     case Load => WaiterModel.load(db).onSuccess {
@@ -79,19 +78,20 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
       waiterChannel.push(task)
     }
 
-    case AckTask(id, rooms) =>
-      WaiterModel.markDone(db, id, rooms.head).onSuccess {
-        case (when) => self ! TaskAcked(id, when, rooms)
+    case AckTask(id, room) =>
+      WaiterModel.markDone(db, id, room).onSuccess {
+        case (when) => self ! TaskAcked(id, when, room)
       }
 
-    case TaskAcked(id, when, rooms) => {
+    case TaskAcked(id, when, room) => {
       tasks.get(id).foreach { stored =>
-        val newMsg = StoredWaiterTask(stored.id, stored.when, stored.message, stored.roomsActive, stored.roomsAcked.union(rooms))
+        val newMsg = StoredWaiterTask(stored.id, stored.when, stored.message, stored.roomsActive, stored.roomsAcked.updated(room, when))
         tasks.put(id, newMsg)
         waiterChannel.push(newMsg)
       }
     }
 
+    case UnackTask(id, rooms) =>
 
   }
 }

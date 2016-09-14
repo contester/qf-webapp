@@ -10,11 +10,11 @@ import play.api.libs.EventSource.{EventDataExtractor, EventNameExtractor}
 import play.api.libs.json.Json
 
 abstract trait WaiterTaskMessage {
-  def id: Int
+  def id: Long
 }
 
-case class StoredWaiterTask(id: Int, when: DateTime,
-                            message: String, roomsActive: Set[String], roomsAcked: Set[String]) extends WaiterTaskMessage
+case class StoredWaiterTask(id: Long, when: DateTime, message: String, roomsActive: Set[String],
+                            roomsAcked: Map[String, DateTime]) extends WaiterTaskMessage
 
 object StoredWaiterTask {
   implicit val format = Json.format[StoredWaiterTask]
@@ -28,6 +28,23 @@ object WaiterModel {
   import slick.driver.MySQLDriver.api._
 
   import utils.Db._
+
+  implicit val datetimeColumnType = MappedColumnType.base[DateTime, Timestamp](
+    x => new Timestamp(x.getMillis),
+    x => new DateTime(x)
+  )
+
+  case class WaiterTaskRecord(id: Long, room: String, ts: DateTime)
+
+  class WaiterTaskRecords(tag: Tag) extends Table[WaiterTaskRecord](tag, "WaiterTaskRecord") {
+    def id = column[Long]("ID")
+    def room = column[String]("Room")
+    def ts = column[DateTime]("TS")
+
+    override def * = (id, room, ts) <> (WaiterTaskRecord.tupled, WaiterTaskRecord.unapply)
+  }
+
+  val waiterTaskRecords = TableQuery[WaiterTaskRecords]
 
   def maybeMakeRooms(db: JdbcBackend#DatabaseDef, roomsActive: List[String])(implicit ec: ExecutionContext): Future[List[String]] = {
     if (roomsActive.isEmpty) {
@@ -45,7 +62,7 @@ object WaiterModel {
     val now = DateTime.now
     db.run(sqlu"""insert into WaiterTasks (TS, Message, Rooms) values ($now, $message, $ra)
                   """.andThen(sql"select last_insert_id()".as[Int]).withPinnedSession).map(_.headOption.get).map { lastInsertId =>
-      StoredWaiterTask(lastInsertId, now, message, newRa.toSet, Set.empty)
+      StoredWaiterTask(lastInsertId, now, message, newRa.toSet, Map.empty)
     }
   }
 
@@ -54,9 +71,9 @@ object WaiterModel {
     db.run(sqlu"""insert into WaiterTasksRecord (ID, Room, TS) values ($id, $room, $now)""").map(_ => now)
   }
 
-  def getAllRecords(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[Map[Int, Set[String]]] =
-    db.run(sql"""select ID, Room from WaiterTaskRecord""".as[(Int, String)]).map { records =>
-      records.toList.groupBy(_._1).mapValues(x => x.map(_._2).toSet)
+  def getAllRecords(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[Map[Long, Map[String, DateTime]]] =
+    db.run(waiterTaskRecords.result).map { records =>
+      records.toList.groupBy(_.id).mapValues(x => x.map(y => y.room -> y.ts).toMap)
     }
 
   def getAllTasks(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[List[StoredWaiterTask]] =
@@ -64,7 +81,7 @@ object WaiterModel {
       records.map {
         case (id, ts, message, roomStr) =>
           val rooms = roomStr.split(",").toSet
-          StoredWaiterTask(id, ts, message, rooms, Set.empty)
+          StoredWaiterTask(id, ts, message, rooms, Map.empty)
       }.toList
     }
 
