@@ -2,7 +2,7 @@ package models
 
 import java.sql.Timestamp
 
-import slick.jdbc.JdbcBackend
+import slick.jdbc.{GetResult, JdbcBackend}
 
 import scala.concurrent.{ExecutionContext, Future}
 import com.github.nscala_time.time.Imports.DateTime
@@ -66,9 +66,9 @@ object WaiterModel {
     }
   }
 
-  def markDone(db: JdbcBackend#DatabaseDef, id: Int, room: String)(implicit ec: ExecutionContext): Future[DateTime] = {
+  def markDone(db: JdbcBackend#DatabaseDef, id: Long, room: String)(implicit ec: ExecutionContext): Future[DateTime] = {
     val now = DateTime.now
-    db.run(sqlu"""insert into WaiterTasksRecord (ID, Room, TS) values ($id, $room, $now)""").map(_ => now)
+    db.run(DBIO.seq(waiterTaskRecords += WaiterTaskRecord(id, room, now))).map(_ => now)
   }
 
   def getAllRecords(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[Map[Long, Map[String, DateTime]]] =
@@ -76,21 +76,20 @@ object WaiterModel {
       records.toList.groupBy(_.id).mapValues(x => x.map(y => y.room -> y.ts).toMap)
     }
 
-  def getAllTasks(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[List[StoredWaiterTask]] =
-    db.run(sql"""select ID, TS, Message, Rooms from WaiterTasks""".as[(Int, DateTime, String, String)]).map { records =>
-      records.map {
-        case (id, ts, message, roomStr) =>
-          val rooms = roomStr.split(",").toSet
-          StoredWaiterTask(id, ts, message, rooms, Map.empty)
-      }.toList
-    }
+  implicit private val getStoredTask = GetResult(r =>
+    StoredWaiterTask(r.nextLong(), new DateTime(r.nextTimestamp()), r.nextString(), r.nextString().split(",").toSet, Map.empty)
+  )
+
+  def getAllTasks(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[List[StoredWaiterTask]] = {
+    db.run(sql"""select ID, TS, Message, Rooms from WaiterTasks""".as[StoredWaiterTask]).map(_.toList)
+  }
 
   def load(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[List[StoredWaiterTask]] = {
     getAllRecords(db).zip(getAllTasks(db)).map {
       case (records, tasks) =>
         tasks.map {
           case StoredWaiterTask(id, ts, message, roomsActive, _) =>
-            StoredWaiterTask(id, ts, message, roomsActive, records.get(id).getOrElse(Set.empty))
+            StoredWaiterTask(id, ts, message, roomsActive, records.get(id).getOrElse(Map.empty))
         }
     }
   }

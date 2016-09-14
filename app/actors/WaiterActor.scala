@@ -27,12 +27,12 @@ object WaiterActor {
   case class Loaded(tasks: List[StoredWaiterTask])
 
   case class NewTask(message: String, rooms: List[String])
-  case class AckTask(id: Int, room: String)
-  case class UnackTask(id: Int, room: String)
-  case class DeleteTask(id: Int)
+  case class AckTask(id: Long, room: String)
+  case class UnackTask(id: Long, room: String)
+  case class DeleteTask(id: Long)
 
-  case class TaskAcked(id: Int, when: DateTime, room: String)
-  case class TaskDeleted(id: Int) extends WaiterTaskMessage
+  case class TaskAcked(id: Long, when: DateTime, room: String)
+  case class TaskDeleted(id: Long) extends WaiterTaskMessage
 
   object TaskDeleted {
     implicit val format = Json.format[TaskDeleted]
