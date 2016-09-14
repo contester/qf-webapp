@@ -2,7 +2,7 @@ package controllers
 
 import javax.inject.{Inject, Singleton}
 
-import actors.StatusActor
+import actors.{StatusActor, WaiterActor}
 import actors.StatusActor.ClarificationAnswered
 import akka.stream.Materializer
 import com.github.nscala_time.time.Imports._
@@ -15,6 +15,7 @@ import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
+import play.api.libs.iteratee.Enumerator
 import play.api.libs.json.Json
 import play.api.libs.ws.WSClient
 import play.api.mvc.{Controller, RequestHeader}
@@ -22,6 +23,7 @@ import slick.driver.JdbcProfile
 import utils.PolygonURL
 import views.html
 
+import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{ExecutionContext, Future}
 
 case class RejudgeSubmitRange(range: String)
@@ -43,6 +45,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
                              monitorModel: Monitor,
                                  rabbitMqModel: RabbitMqModel,
                              statusActorModel: StatusActorModel,
+                                  waiterActorModel: WaiterActorModel,
                                   configuration: Configuration,
                                   ws: WSClient,
                                   implicit val mat: Materializer,
@@ -262,6 +265,22 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
+  private val standardTimeout = {
+    import scala.concurrent.duration._
+    Duration(5, SECONDS)
+  }
+
+  def joinAdminFeed(contestId: Int, rooms: List[String]) = {
+    import Contexts.adminExecutionContext
+    import akka.pattern.ask
+
+    statusActorModel.statusActor.ask(StatusActor.JoinAdmin(contestId))(standardTimeout).mapTo[StatusActor.AdminJoined].zip(
+      waiterActorModel.waiterActor.ask(WaiterActor.Join(rooms))(standardTimeout).mapTo[WaiterActor.Joined]
+    ).map {
+      case (one, two) =>
+        Enumerator.interleave(one.enumerator, two.enum)
+    }
+  }
 
   def feed(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
     import Contexts.adminExecutionContext
@@ -269,11 +288,8 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
     import scala.concurrent.duration._
 
-    statusActorModel.statusActor.ask(StatusActor.JoinAdmin(contestId))(Duration(5, SECONDS)).map {
-      case StatusActor.AdminJoined(e) => {
-        Ok.feed(e).as("text/event-stream")
-      }
-      case _ => BadRequest("foo")
+    joinAdminFeed(contestId, loggedIn.locations.toList).map { e =>
+      Ok.feed(e).as("text/event-stream")
     }
   }
 

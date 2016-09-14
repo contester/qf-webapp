@@ -1,8 +1,8 @@
 package actors
 
 import akka.actor.Actor.Receive
-import akka.actor.{Actor, Stash}
-import models.{Contest, StoredWaiterTask, WaiterModel, WaiterTaskMessage}
+import akka.actor.{Actor, Props, Stash}
+import models._
 import play.api.libs.EventSource
 import play.api.libs.EventSource.{Event, EventDataExtractor, EventNameExtractor}
 import play.api.libs.iteratee.{Concurrent, Enumeratee, Enumerator}
@@ -23,7 +23,10 @@ import scala.collection.mutable
 
 import com.github.nscala_time.time.Imports.DateTime
 
+
 object WaiterActor {
+  def props(db: JdbcBackend#DatabaseDef) = Props(classOf[WaiterActor], db)
+
   case object Load
   case class Loaded(tasks: List[StoredWaiterTask])
 
@@ -33,24 +36,15 @@ object WaiterActor {
   case class DeleteTask(id: Long)
 
   case class TaskAcked(id: Long, when: DateTime, room: String)
-  case class TaskDeleted(id: Long) extends WaiterTaskMessage {
-    override val roomsActive: Set[String] = Set.empty
-  }
-
-  object TaskDeleted {
+  case class TaskDeleted(id: Long) extends WaiterTaskEvent {
+    override def matches(rooms: Set[String]): Boolean = true
     implicit val format = Json.format[TaskDeleted]
-    implicit val eventNameExtractor = EventNameExtractor[TaskDeleted](_ => Some("waiterTaskDeleted"))
-    implicit val eventDataExtractor = EventDataExtractor[TaskDeleted] { state =>
-      Json.stringify(Json.toJson(state))
-    }
+
+    override def toEvent: Event = Event(Json.stringify(Json.toJson(this)), None, Some("waiterTaskDeleted"))
   }
 
   case class Join(rooms: List[String])
   case class Joined(enum: Enumerator[Event])
-
-  case class WaiterTaskEventPayload(when: DateTime, message: String, roomsActive: List[String], roomsAcked: List[String])
-
-  case class WaiterTaskEventMessage()
 }
 
 
@@ -61,11 +55,19 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
   import WaiterActor._
 
-  private val (waiterOut, waiterChannel) = Concurrent.broadcast[WaiterTaskMessage]
+  private val (waiterOut, waiterChannel) = Concurrent.broadcast[WaiterTaskEvent]
 
-  private def filterByRooms(rooms: Set[String]) = Enumeratee.filter[WaiterTaskMessage](_.matches(rooms))
+  private def filterByRooms(rooms: Set[String]) = Enumeratee.filter[WaiterTaskEvent](_.matches(rooms))
 
-  private def storedSnapshot: Iterable[WaiterTaskMessage] = tasks.values
+  private def storedSnapshot: Iterable[WaiterTaskEvent] = tasks.values
+
+  import scala.language.implicitConversions
+
+  implicit def wt2event(x: WaiterTaskEvent): Event =
+    x.toEvent
+
+  private val wt2event2: Enumeratee[WaiterTaskEvent, Event] =
+    Enumeratee.map { e => e.toEvent}
 
   override def receive: Receive = {
     case Load => WaiterModel.load(db).onSuccess {
@@ -99,18 +101,16 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
     case TaskAcked(id, when, room) => {
       tasks.get(id).foreach { stored =>
-        val newMsg = StoredWaiterTask(stored.id, stored.when, stored.message, stored.roomsActive, stored.roomsAcked.updated(room, when))
+        val newMsg = StoredWaiterTask(stored.id, stored.when, stored.message, stored.rooms, stored.acked.updated(room, when))
         tasks.put(id, newMsg)
         waiterChannel.push(newMsg)
       }
     }
 
     case Join(rooms) => {
-      val r = Enumerator.enumerate(storedSnapshot).andThen(waiterOut) &> filterByRooms(rooms.toSet) &> EventSource()
+      val r: Enumerator[Event] = Enumerator.enumerate(storedSnapshot).andThen(waiterOut) &> filterByRooms(rooms.toSet) &>
+        wt2event2
       sender ! Joined(r)
     }
-
-    case UnackTask(id, rooms) =>
-
   }
 }

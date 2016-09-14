@@ -284,6 +284,8 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       val clrEvents = Enumerator(ClarificationRequestState(c, pendingClarificationRequests(c).size, false))
         .andThen(clrOut &> filterClarificationRequests(c)) &> EventSource()
 
+
+
       sender ! AdminJoined(
         Enumerator.interleave(contestEvents,
         submitOut &> filterSubmits(c) &> EventSource(),
