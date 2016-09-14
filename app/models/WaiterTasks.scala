@@ -11,6 +11,10 @@ import play.api.libs.json.Json
 
 abstract trait WaiterTaskMessage {
   def id: Long
+  def roomsActive: Set[String]
+
+  def matches(rooms: Set[String]) =
+    rooms.contains("*") || !roomsActive.intersect(rooms).isEmpty
 }
 
 case class StoredWaiterTask(id: Long, when: DateTime, message: String, roomsActive: Set[String],

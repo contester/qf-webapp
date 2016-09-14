@@ -2,9 +2,10 @@ package actors
 
 import akka.actor.Actor.Receive
 import akka.actor.{Actor, Stash}
-import models.{StoredWaiterTask, WaiterModel, WaiterTaskMessage}
-import play.api.libs.EventSource.{EventDataExtractor, EventNameExtractor}
-import play.api.libs.iteratee.Concurrent
+import models.{Contest, StoredWaiterTask, WaiterModel, WaiterTaskMessage}
+import play.api.libs.EventSource
+import play.api.libs.EventSource.{Event, EventDataExtractor, EventNameExtractor}
+import play.api.libs.iteratee.{Concurrent, Enumeratee, Enumerator}
 import play.api.libs.json.Json
 import slick.jdbc.JdbcBackend
 
@@ -32,7 +33,9 @@ object WaiterActor {
   case class DeleteTask(id: Long)
 
   case class TaskAcked(id: Long, when: DateTime, room: String)
-  case class TaskDeleted(id: Long) extends WaiterTaskMessage
+  case class TaskDeleted(id: Long) extends WaiterTaskMessage {
+    override val roomsActive: Set[String] = Set.empty
+  }
 
   object TaskDeleted {
     implicit val format = Json.format[TaskDeleted]
@@ -41,6 +44,9 @@ object WaiterActor {
       Json.stringify(Json.toJson(state))
     }
   }
+
+  case class Join(rooms: List[String])
+  case class Joined(enum: Enumerator[Event])
 }
 
 
@@ -52,6 +58,10 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   import WaiterActor._
 
   private val (waiterOut, waiterChannel) = Concurrent.broadcast[WaiterTaskMessage]
+
+  private def filterByRooms(rooms: Set[String]) = Enumeratee.filter[WaiterTaskMessage](_.matches(rooms))
+
+  private def storedSnapshot: Iterable[WaiterTaskMessage] = tasks.values
 
   override def receive: Receive = {
     case Load => WaiterModel.load(db).onSuccess {
@@ -89,6 +99,11 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
         tasks.put(id, newMsg)
         waiterChannel.push(newMsg)
       }
+    }
+
+    case Join(rooms) => {
+      val r = Enumerator.enumerate(storedSnapshot).andThen(waiterOut) &> filterByRooms(rooms.toSet) &> EventSource()
+      sender ! Joined(r)
     }
 
     case UnackTask(id, rooms) =>
