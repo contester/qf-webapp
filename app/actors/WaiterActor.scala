@@ -26,7 +26,7 @@ object WaiterActor {
   case object Load
   case class Loaded(tasks: List[StoredWaiterTask])
 
-  case class NewTask(message: String, rooms: Set[String])
+  case class NewTask(message: String, rooms: List[String])
   case class AckTask(id: Int, rooms: Set[String])
   case class UnackTask(id: Int, rooms: Set[String])
   case class DeleteTask(id: Int)
@@ -46,6 +46,8 @@ object WaiterActor {
 
 class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   val tasks = mutable.Map[Int, StoredWaiterTask]()
+
+  import scala.concurrent.ExecutionContext.Implicits.global
 
   import WaiterActor._
 

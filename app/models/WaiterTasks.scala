@@ -1,5 +1,7 @@
 package models
 
+import java.sql.Timestamp
+
 import slick.jdbc.JdbcBackend
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -11,7 +13,7 @@ abstract trait WaiterTaskMessage {
   def id: Int
 }
 
-case class StoredWaiterTask(id: Int, when: com.github.nscala_time.time.Imports.DateTime,
+case class StoredWaiterTask(id: Int, when: DateTime,
                             message: String, roomsActive: Set[String], roomsAcked: Set[String]) extends WaiterTaskMessage
 
 object StoredWaiterTask {
@@ -25,7 +27,9 @@ object StoredWaiterTask {
 object WaiterModel {
   import slick.driver.MySQLDriver.api._
 
-  def maybeMakeRooms(db: JdbcBackend#DatabaseDef, roomsActive: Set[String])(implicit ec: ExecutionContext): Future[Set[String]] = {
+  import utils.Db._
+
+  def maybeMakeRooms(db: JdbcBackend#DatabaseDef, roomsActive: List[String])(implicit ec: ExecutionContext): Future[List[String]] = {
     if (roomsActive.isEmpty) {
       makeRooms(db)
     } else Future.successful(roomsActive)
@@ -35,7 +39,7 @@ object WaiterModel {
     db.run(sql"""select Name from Areas""".as[String]).map(_.toList)
   }
 
-  def addNewTask(db: JdbcBackend#DatabaseDef, message: String, roomsActive: Set[String])(implicit ec: ExecutionContext): Future[StoredWaiterTask] =
+  def addNewTask(db: JdbcBackend#DatabaseDef, message: String, roomsActive: List[String])(implicit ec: ExecutionContext): Future[StoredWaiterTask] =
   maybeMakeRooms(db, roomsActive).flatMap { newRa =>
     val ra = newRa.mkString(",")
     val now = DateTime.now
@@ -45,7 +49,7 @@ object WaiterModel {
     }
   }
 
-  def markDone(db: JdbcBackend#DatabaseDef, id: Int, room: String)(implicit ec: ExecutionContext): Future[com.github.nscala_time.time.Imports.DateTime] = {
+  def markDone(db: JdbcBackend#DatabaseDef, id: Int, room: String)(implicit ec: ExecutionContext): Future[DateTime] = {
     val now = DateTime.now
     db.run(sqlu"""insert into WaiterTasksRecord (ID, Room, TS) values ($id, $room, $now)""").map(_ => now)
   }

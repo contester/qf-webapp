@@ -10,7 +10,8 @@ case class AdminId(username: String, passwordHash: String) {
   override def toString = s"$username:$passwordHash"
 }
 
-case class Admin(username: String, passwordHash: String, spectator: Set[Int], administrator: Set[Int]) {
+case class Admin(username: String, passwordHash: String, spectator: Set[Int], administrator: Set[Int],
+                 locations: Set[String]) {
   override def toString = s"$username:$passwordHash"
 
   def toId = AdminId(username, passwordHash)
@@ -20,6 +21,9 @@ case class Admin(username: String, passwordHash: String, spectator: Set[Int], ad
 
   def canModify(contestId: Int) =
     administrator.contains(contestId) || administrator.contains(-1)
+
+  def canCreateTasks =
+    locations.contains("*")
 }
 
 object AdminId {
@@ -36,7 +40,7 @@ object Admin {
   import slick.driver.MySQLDriver.api._
 
   implicit private val getAdmin = GetResult(r =>
-    Admin(r.nextString(), r.nextString(), parseAcl(r.nextString()), parseAcl(r.nextString()))
+    Admin(r.nextString(), r.nextString(), parseAcl(r.nextString()), parseAcl(r.nextString()), parseStringAcl(r.nextString()))
   )
 
   private def parseSingleAcl(s: String): Option[Int] =
@@ -47,8 +51,11 @@ object Admin {
   private def parseAcl(s: String): Set[Int] =
     s.split(',').map(parseSingleAcl).flatten.toSet
 
+  private def parseStringAcl(s: String): Set[String] =
+    s.split(',').toSet
+
   def query(username: String, passwordHash: String) =
-    sql"""select Username, Password, Spectator, Administrator from admins where Username = $username and Password = $passwordHash""".as[Admin]
+    sql"""select Username, Password, Spectator, Administrator, Locations from admins where Username = $username and Password = $passwordHash""".as[Admin]
 }
 
 object AdminPermissions {
