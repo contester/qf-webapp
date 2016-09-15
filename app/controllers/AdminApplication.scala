@@ -30,6 +30,8 @@ case class RejudgeSubmitRange(range: String)
 case class PostClarification(problem: String, text: String, hidden: Boolean)
 case class ClarificationResponse(answer: String)
 
+case class PostWaiterTask(id: Option[Long], when: Option[DateTime], message: String, rooms: String)
+
 case class SubmitIdLite(id: Int)
 object SubmitIdLite {
   implicit val format = Json.format[SubmitIdLite]

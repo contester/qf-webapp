@@ -7,6 +7,7 @@ import play.api.libs.EventSource
 import play.api.libs.EventSource.{Event, EventDataExtractor, EventNameExtractor}
 import play.api.libs.iteratee.{Concurrent, Enumeratee, Enumerator}
 import play.api.libs.json.Json
+import play.api.mvc.RequestHeader
 import slick.jdbc.JdbcBackend
 
 import scala.collection.mutable
@@ -24,6 +25,13 @@ import scala.collection.mutable
 import com.github.nscala_time.time.Imports.DateTime
 
 
+// Task is visible:
+// - to admins
+// - if any room in it matches our rooms
+// Task can be acked for a room:
+// - by admins
+// - if that room matches our list
+
 object WaiterActor {
   def props(db: JdbcBackend#DatabaseDef) = Props(classOf[WaiterActor], db)
 
@@ -39,8 +47,16 @@ object WaiterActor {
   case class TaskDeleted(id: Long) extends WaiterTaskEvent {
     override def matches(rooms: Set[String]): Boolean = true
     implicit val format = Json.format[TaskDeleted]
-
     override def toEvent: Event = Event(Json.stringify(Json.toJson(this)), None, Some("waiterTaskDeleted"))
+  }
+
+  case class RoomWithAttrs(name: String, can: Boolean, confirmed: Option[DateTime])
+
+  case class TaskWithPerms(id: Long, when: DateTime, message: String, rooms: Seq[RoomWithAttrs])
+
+  case class TaskUpdateEvent(id: Long, content: String)
+  object TaskUpdateEvent {
+    implicit val format = Json.format[TaskUpdateEvent]
   }
 
   case class Join(rooms: List[String])
@@ -68,6 +84,19 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
   private val wt2event2: Enumeratee[WaiterTaskEvent, Event] =
     Enumeratee.map { e => e.toEvent}
+
+  def convertEvents(rooms: Set[String], request: RequestHeader): Enumeratee[WaiterTaskEvent, Event] = Enumeratee.map { e0 =>
+    e0 match {
+      case x: TaskDeleted => x.toEvent
+      case x: StoredWaiterTask => {
+        val vrooms = x.rooms.map(v => RoomWithAttrs(v, rooms.contains(v), x.acked.get(v)))
+        val t = TaskWithPerms(x.id, x.when, x.message, vrooms.toSeq)
+        val y = views.html.admin.singlewaitertask(t)(request)
+        val u = TaskUpdateEvent(x.id, y.body)
+        Event(Json.stringify(Json.toJson(u)), None, Some("waiterTask"))
+      }
+    }
+  }
 
   override def receive: Receive = {
     case Load => WaiterModel.load(db).onSuccess {
