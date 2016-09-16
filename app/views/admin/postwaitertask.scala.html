@@ -27,8 +27,8 @@
         @b3.static("ID"){ @id }
         }
         @b3.static("Contest"){ @contest.contest.name }
-        @b3.text(form("problem"), '_label -> "Задача")
-        @b3.textarea(form("text"), '_label -> "Clarification text", 'rows -> 6)
+        @b3.text(form("rooms"), '_label -> "Комнаты")
+        @b3.textarea(form("message"), '_label -> "Задание", 'rows -> 6)
         @b3.checkbox(form("isHidden"), '_text -> "Не показывать")
         @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Update}
         }
