@@ -23,7 +23,7 @@ object WaiterModel {
 
   case class WaiterTaskRecord(id: Long, room: String, ts: DateTime)
 
-  class WaiterTaskRecords(tag: Tag) extends Table[WaiterTaskRecord](tag, "WaiterTaskRecord") {
+  class WaiterTaskRecords(tag: Tag) extends Table[WaiterTaskRecord](tag, "WaiterTasksRecord") {
     def id = column[Long]("ID")
     def room = column[String]("Room")
     def ts = column[DateTime]("TS")
