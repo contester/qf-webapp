@@ -15,6 +15,7 @@ import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
+import play.api.libs.EventSource.Event
 import play.api.libs.iteratee.Enumerator
 import play.api.libs.json.Json
 import play.api.libs.ws.WSClient
@@ -30,7 +31,7 @@ case class RejudgeSubmitRange(range: String)
 case class PostClarification(problem: String, text: String, hidden: Boolean)
 case class ClarificationResponse(answer: String)
 
-case class PostWaiterTask(id: Option[Long], when: Option[DateTime], message: String, rooms: String)
+case class PostWaiterTask(message: String, rooms: String)
 
 case class SubmitIdLite(id: Int)
 object SubmitIdLite {
@@ -272,24 +273,23 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     Duration(5, SECONDS)
   }
 
-  def joinAdminFeed(contestId: Int, rooms: List[String]) = {
+  private def joinAdminFeed(contestId: Int, rooms: List[String]): Future[Enumerator[Event]] = {
     import Contexts.adminExecutionContext
     import akka.pattern.ask
-
+/*
     statusActorModel.statusActor.ask(StatusActor.JoinAdmin(contestId))(standardTimeout).mapTo[StatusActor.AdminJoined].zip(
       waiterActorModel.waiterActor.ask(WaiterActor.Join(rooms))(standardTimeout).mapTo[WaiterActor.Joined]
     ).map {
       case (one, two) =>
         Enumerator.interleave(one.enumerator, two.enum)
-    }
+    }*/
+
+    statusActorModel.statusActor.ask(StatusActor.JoinAdmin(contestId))(standardTimeout)
+      .mapTo[StatusActor.AdminJoined].map(_.enumerator)
   }
 
   def feed(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
     import Contexts.adminExecutionContext
-    import akka.pattern.ask
-
-    import scala.concurrent.duration._
-
     joinAdminFeed(contestId, loggedIn.locations.toList).map { e =>
       Ok.feed(e).as("text/event-stream")
     }
@@ -401,5 +401,33 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
         )
       }.getOrElse(Future.successful(Redirect(routes.AdminApplication.showQandA(1))))
     }
+  }
+
+  private val waiterTaskForm = Form {
+    mapping("message" -> nonEmptyText, "rooms" -> text)(PostWaiterTask.apply)(PostWaiterTask.unapply)
+  }
+
+  def postNewWaiterTaskForm(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canCreateTasks) { implicit request =>
+    import Contexts.adminExecutionContext
+    getSelectedContests(contestId, loggedIn).map { contest =>
+      Ok(html.admin.postwaitertask(None, waiterTaskForm, contest))
+    }
+  }
+
+  def postWaiterTask(contestId: Int, id: Option[Int]) = AsyncStack(AuthorityKey -> AdminPermissions.canCreateTasks) { implicit request =>
+    import Contexts.adminExecutionContext
+    waiterTaskForm.bindFromRequest.fold(
+      formWithErrors => getSelectedContests(contestId, loggedIn).map { contest =>
+        BadRequest(html.admin.postwaitertask(id, formWithErrors, contest))
+      },
+      data => {
+        import akka.pattern.ask
+
+        waiterActorModel.waiterActor.ask(WaiterActor.NewTask(data.message, Nil))(standardTimeout)
+          .mapTo[StoredWaiterTask].map { posted =>
+          Redirect(routes.AdminApplication.showQandA(contestId))
+        }
+      }
+    )
   }
 }

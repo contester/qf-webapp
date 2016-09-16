@@ -1,10 +1,10 @@
-@(task: TaskWithPerms)(implicit request: RequestHeader)
+@(task: AdaptedWaiterTask)(implicit request: RequestHeader)
 <tr id="wt-id-@task.id">
     <th scope="row">
     <td>@task.id</td>
     </th>
     <td>@task.message</td>
-    <td>@for(s <- task.rooms){
+    <td>@for(s <- task.unacked){
         <a href="" class="btn btn-raised btn-success">@{s.name}</a>
     }
     </td>

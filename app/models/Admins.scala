@@ -64,6 +64,9 @@ object AdminPermissions {
 
   def canSpectate(contestId: Int)(account: Admin): Future[Boolean] =
     Future.successful(account.canSpectate(contestId))
+
+  def canCreateTasks(account: Admin): Future[Boolean] =
+    Future.successful(account.canCreateTasks)
 }
 
 object AdminNavlinkMatch {

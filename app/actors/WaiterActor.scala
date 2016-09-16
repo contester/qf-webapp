@@ -44,11 +44,7 @@ object WaiterActor {
   case class DeleteTask(id: Long)
 
   case class TaskAcked(id: Long, when: DateTime, room: String)
-  case class TaskDeleted(id: Long) extends WaiterTaskEvent {
-    override def matches(rooms: Set[String]): Boolean = true
-    implicit val format = Json.format[TaskDeleted]
-    override def toEvent: Event = Event(Json.stringify(Json.toJson(this)), None, Some("waiterTaskDeleted"))
-  }
+  case class TaskDeleted(id: Long)
 
   case class RoomWithAttrs(name: String, can: Boolean, confirmed: Option[DateTime])
 
@@ -61,6 +57,9 @@ object WaiterActor {
 
   case class Join(rooms: List[String])
   case class Joined(enum: Enumerator[Event])
+
+  case class GetSnapshot(rooms: List[String])
+  case class Snapshot()
 }
 
 
@@ -70,7 +69,7 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   import scala.concurrent.ExecutionContext.Implicits.global
 
   import WaiterActor._
-
+/*
   private val (waiterOut, waiterChannel) = Concurrent.broadcast[WaiterTaskEvent]
 
   private def filterByRooms(rooms: Set[String]) = Enumeratee.filter[WaiterTaskEvent](_.matches(rooms))
@@ -97,7 +96,7 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
       }
     }
   }
-
+*/
   override def receive: Receive = {
     case Load => WaiterModel.load(db).onSuccess {
       case loaded => self ! Loaded(loaded)
@@ -120,7 +119,7 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
     case task: StoredWaiterTask => {
       tasks.put(task.id, task)
-      waiterChannel.push(task)
+      //waiterChannel.push(task)
     }
 
     case AckTask(id, room) =>
@@ -132,14 +131,14 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
       tasks.get(id).foreach { stored =>
         val newMsg = StoredWaiterTask(stored.id, stored.when, stored.message, stored.rooms, stored.acked.updated(room, when))
         tasks.put(id, newMsg)
-        waiterChannel.push(newMsg)
+        //waiterChannel.push(newMsg)
       }
     }
-
+/*
     case Join(rooms) => {
       val r: Enumerator[Event] = Enumerator.enumerate(storedSnapshot).andThen(waiterOut) &> filterByRooms(rooms.toSet) &>
         wt2event2
       sender ! Joined(r)
-    }
+    }*/
   }
 }

@@ -2,26 +2,20 @@ package models
 
 
 import com.github.nscala_time.time.Imports.DateTime
-import play.api.libs.EventSource.Event
-import play.api.libs.json.Json
 import slick.jdbc.{GetResult, JdbcBackend}
 
 import scala.concurrent.{ExecutionContext, Future}
 
 // Model: stored things.
 
-trait WaiterTaskEvent {
-  def matches(rooms: Set[String]): Boolean
-  def toEvent: Event
-}
-
 case class StoredWaiterTask(id: Long, when: DateTime, message: String, rooms: Set[String],
-                            acked: Map[String, DateTime]) extends WaiterTaskEvent {
-  override def matches(vrooms: Set[String]): Boolean = vrooms.contains("*") || !rooms.intersect(vrooms).isEmpty
-  implicit val format = Json.format[StoredWaiterTask]
-
-  override def toEvent: Event = Event(Json.stringify(Json.toJson(this)), None, Some("waiterTask"))
+                            acked: Map[String, DateTime]) {
+  def adapt(vrooms: List[String]): AdaptedWaiterTask = ???
 }
+
+case class RoomWithPermission(name: String, can: Boolean)
+
+case class AdaptedWaiterTask(id: Long, when: DateTime, message: String, unacked: List[RoomWithPermission], acked: List[RoomWithPermission])
 
 object WaiterModel {
   import slick.driver.MySQLDriver.api._

@@ -1,4 +1,4 @@
-@(currentId: Option[Int], form: Form[PostClarification], contest: SelectedContest)(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@(current: Option[Int], form: Form[PostWaiterTask], contest: SelectedContest)(implicit flash: Flash, messages: Messages, request: RequestHeader)
 
 @import helper.Implicits._
 @import b3.vertical.fieldConstructor
@@ -12,9 +12,9 @@
 }
 
 <div class="panel panel-success">
-    <div class="panel-heading"><h3 class="panel-title">Post clarification</h3></div>
+    <div class="panel-heading"><h3 class="panel-title">Post/update waiter task</h3></div>
     <div class="panel-body">
-        @b3.form(controllers.routes.AdminApplication.postClarification(contest.contest.id, currentId)) {
+        @b3.form(controllers.routes.AdminApplication.postWaiterTask(contest.contest.id, current)) {
         @form.globalError.map { error =>
         <div class="alert alert-danger" role="alert">
             <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
@@ -23,7 +23,7 @@
         </div>
         }
 
-        @for(id <- currentId) {
+        @for(id <- current) {
         @b3.static("ID"){ @id }
         }
         @b3.static("Contest"){ @contest.contest.name }

@@ -58,5 +58,8 @@ POST /admin/login controllers.AdminAuthForms.authenticate
 GET /admin/logout controllers.AdminAuthForms.logout
 GET /admin/feed/:contestId controllers.AdminApplication.feed(contestId: Int)
 
+GET /admin/:contestId/postNewWaiterForm controllers.AdminApplication.postNewWaiterTaskForm(contestId: Int)
+POST /admin/:contestId/postWaiterTask controllers.AdminApplication.postWaiterTask(contestId: Int, id: Option[Int])
+
 
 GET     /assets/*file				controllers.Assets.at(path="/public", file)
