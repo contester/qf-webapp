@@ -3,6 +3,7 @@ package actors
 import akka.actor.Actor.Receive
 import akka.actor.{Actor, Props, Stash}
 import models._
+import play.api.Logger
 import play.api.libs.EventSource
 import play.api.libs.EventSource.{Event, EventDataExtractor, EventNameExtractor}
 import play.api.libs.iteratee.{Concurrent, Enumeratee, Enumerator}
@@ -101,11 +102,19 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   }
 */
   override def receive: Receive = {
-    case Load => WaiterModel.load(db).onSuccess {
-      case loaded => self ! Loaded(loaded)
+    case Load => {
+      val f = WaiterModel.load(db)
+
+      f.onSuccess {
+        case loaded => self ! Loaded(loaded)
+      }
+      f.onFailure {
+        case x => Logger.error("failed to load", x)
+      }
     }
 
     case Loaded(newtasks) => {
+      Logger.info(s"Loaded: $newtasks")
       newtasks.foreach { task =>
         tasks.put(task.id, task)
       }
