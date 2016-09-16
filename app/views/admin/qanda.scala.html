@@ -17,6 +17,13 @@
         });
     }
 
+    function ackWaiterTask(target, btnid) {
+        $('#wa-' + btnid).html('...');
+        $.post(target, {}, function() {
+            $('#wa-' + btnid).html('<span class="caret"></span>')
+        });
+    }
+
 </script>
 
 @waitertasks(tasks, contest)
