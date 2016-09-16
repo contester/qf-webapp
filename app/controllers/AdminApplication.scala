@@ -231,17 +231,27 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     Future.successful(Ok("ok"))
   }
 
-  def showQandA(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
-    import Contexts.adminExecutionContext
+  private def getClarifications(contestId: Int)(implicit ec: ExecutionContext) =
     db.run(
       sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications
              where cl_contest_idf = $contestId order by cl_date desc"""
-        .as[Clarification]).zip(db.run(
+        .as[Clarification])
+
+  private def getClarificationReqs(contestId: Int)(implicit ec: ExecutionContext) =
+    db.run(
       sql"""select ID, Contest, Team, Problem, Request, Answer, Arrived, Status from ClarificationRequests
                where Contest = $contestId order by Arrived desc"""
-        .as[ClarificationRequest])).zip(getSelectedContests(contestId, loggedIn)).map {
-      case ((clarifications, clReqs), contest) =>
-        Ok(html.admin.qanda(clarifications, clReqs, contest))
+        .as[ClarificationRequest])
+
+  def showQandA(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
+    import Contexts.adminExecutionContext
+    getClarifications(contestId)
+      .zip(getClarificationReqs(contestId))
+      .zip(getSelectedContests(contestId, loggedIn))
+        .zip(waiterActorModel.getSnapshot(loggedIn.locations.toList))
+      .map {
+      case (((clarifications, clReqs), contest), tasks) =>
+        Ok(html.admin.qanda(tasks, clarifications, clReqs, contest))
     }
   }
 

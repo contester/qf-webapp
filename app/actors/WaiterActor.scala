@@ -46,10 +46,6 @@ object WaiterActor {
   case class TaskAcked(id: Long, when: DateTime, room: String)
   case class TaskDeleted(id: Long)
 
-  case class RoomWithAttrs(name: String, can: Boolean, confirmed: Option[DateTime])
-
-  case class TaskWithPerms(id: Long, when: DateTime, message: String, rooms: Seq[RoomWithAttrs])
-
   case class TaskUpdateEvent(id: Long, content: String)
   object TaskUpdateEvent {
     implicit val format = Json.format[TaskUpdateEvent]
@@ -59,7 +55,7 @@ object WaiterActor {
   case class Joined(enum: Enumerator[Event])
 
   case class GetSnapshot(rooms: List[String])
-  case class Snapshot()
+  case class Snapshot(tasks: List[AdaptedWaiterTask])
 }
 
 
@@ -69,6 +65,13 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   import scala.concurrent.ExecutionContext.Implicits.global
 
   import WaiterActor._
+
+  @throws[Exception](classOf[Exception])
+  override def preStart(): Unit = {
+    super.preStart()
+    self ! Load
+  }
+
 /*
   private val (waiterOut, waiterChannel) = Concurrent.broadcast[WaiterTaskEvent]
 
@@ -111,6 +114,11 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   }
 
   def initialized: Receive = {
+    case GetSnapshot(vrooms: List[String]) => {
+      val r = tasks.values.map(_.adapt(vrooms)).toList
+      sender ! Snapshot(r)
+    }
+
     case NewTask(message, rooms) =>
       WaiterModel.addNewTask(db, message, rooms).map { s =>
         self ! s

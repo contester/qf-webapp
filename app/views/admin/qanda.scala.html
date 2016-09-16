@@ -1,4 +1,4 @@
-@(clarifications: Seq[Clarification], clReqs: Seq[ClarificationRequest], contest: SelectedContest)(implicit request: RequestHeader)
+@(tasks: Seq[AdaptedWaiterTask], clarifications: Seq[Clarification], clReqs: Seq[ClarificationRequest], contest: SelectedContest)(implicit request: RequestHeader)
 
 @adminmain(tab = "qanda", contest=contest) {
 <script>
