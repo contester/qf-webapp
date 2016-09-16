@@ -3,9 +3,14 @@
     <th scope="row">
     <td>@task.id</td>
     </th>
+    <td>@LocalDateFormat(task.when)</td>
     <td>@task.message</td>
     <td>@for(s <- task.unacked){
         <a href="" class="btn btn-raised btn-success">@{s.name}</a>
     }
+    </td>
+    <td>@for(s <- task.acked){
+        <a href="" class="btn btn-raised btn-success">@{s.name}</a>
+        }
     </td>
 </tr>

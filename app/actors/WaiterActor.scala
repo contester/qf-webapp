@@ -128,11 +128,13 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
       sender ! Snapshot(r)
     }
 
-    case NewTask(message, rooms) =>
+    case NewTask(message, rooms) => {
+      val saved = sender()
       WaiterModel.addNewTask(db, message, rooms).map { s =>
         self ! s
-        sender ! s
+        saved ! s
       }
+    }
 
     case task: StoredWaiterTask => {
       tasks.put(task.id, task)
