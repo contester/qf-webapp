@@ -283,24 +283,20 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     Duration(5, SECONDS)
   }
 
-  private def joinAdminFeed(contestId: Int, rooms: List[String]): Future[Enumerator[Event]] = {
+  private def joinAdminFeed(contestId: Int, rooms: List[String], requestHeader: RequestHeader): Future[Enumerator[Event]] = {
     import Contexts.adminExecutionContext
     import akka.pattern.ask
-/*
-    statusActorModel.statusActor.ask(StatusActor.JoinAdmin(contestId))(standardTimeout).mapTo[StatusActor.AdminJoined].zip(
-      waiterActorModel.waiterActor.ask(WaiterActor.Join(rooms))(standardTimeout).mapTo[WaiterActor.Joined]
-    ).map {
-      case (one, two) =>
-        Enumerator.interleave(one.enumerator, two.enum)
-    }*/
 
-    statusActorModel.statusActor.ask(StatusActor.JoinAdmin(contestId))(standardTimeout)
-      .mapTo[StatusActor.AdminJoined].map(_.enumerator)
+    statusActorModel.statusActor.ask(StatusActor.JoinAdmin(contestId))(standardTimeout).mapTo[StatusActor.AdminJoined].zip(
+      waiterActorModel.join(rooms, requestHeader)).map {
+      case (one, two) =>
+        Enumerator.interleave(one.enumerator, two)
+    }
   }
 
   def feed(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
     import Contexts.adminExecutionContext
-    joinAdminFeed(contestId, loggedIn.locations.toList).map { e =>
+    joinAdminFeed(contestId, loggedIn.locations.toList, request).map { e =>
       Ok.feed(e).as("text/event-stream")
     }
   }

@@ -10,6 +10,9 @@ import scala.concurrent.{ExecutionContext, Future}
 
 case class StoredWaiterTask(id: Long, when: DateTime, message: String, rooms: Set[String],
                             acked: Map[String, DateTime]) {
+  def matches(vrooms: Set[String]): Boolean =
+    vrooms.contains("*") || !vrooms.intersect(rooms).isEmpty
+
   def adapt(vrooms: List[String]): AdaptedWaiterTask = {
     val s = vrooms.toSet
     val ac = acked.keys.map(x => RoomWithPermission(x, s.contains(x)))

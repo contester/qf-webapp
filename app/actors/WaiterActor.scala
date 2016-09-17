@@ -47,18 +47,44 @@ object WaiterActor {
   case class TaskAcked(id: Long, when: DateTime, room: String)
   case class TaskDeleted(id: Long)
 
-  case class TaskUpdateEvent(id: Long, content: String)
-  object TaskUpdateEvent {
-    implicit val format = Json.format[TaskUpdateEvent]
-  }
-
-  case class Join(rooms: List[String])
+  case class Join(rooms: List[String], requestHeader: RequestHeader)
   case class Joined(enum: Enumerator[Event])
 
   case class GetSnapshot(rooms: List[String])
   case class Snapshot(tasks: List[AdaptedWaiterTask])
 }
 
+// UI events:
+// - update (id) -> will insert or update row.
+// - delete (id) -> will delete row.
+
+trait WaiterTaskEvent {
+  def filter(vrooms: Set[String]): Boolean
+  def toEvent(vrooms: Set[String], requestHeader: RequestHeader): Event
+}
+
+case class WaiterTaskDeleted(id: Long) extends WaiterTaskEvent {
+  override def filter(vrooms: Set[String]): Boolean = true
+
+  implicit val format = Json.format[WaiterTaskDeleted]
+
+  override def toEvent(vrooms: Set[String], requestHeader: RequestHeader): Event = Event(Json.stringify(Json.toJson(this)), None, Some("waiterTaskDeleted"))
+}
+
+case class WaiterTaskUpdate(id: Long, content: String)
+object WaiterTaskUpdate {
+  implicit val format = Json.format[WaiterTaskUpdate]
+}
+
+case class WaiterTaskUpdated(inner: StoredWaiterTask) extends WaiterTaskEvent {
+  override def filter(vrooms: Set[String]): Boolean = inner.matches(vrooms)
+
+  override def toEvent(vrooms: Set[String], requestHeader: RequestHeader): Event = {
+    val c = views.html.admin.singlewaitertask(inner.adapt(vrooms.toList))(requestHeader)
+    val e = WaiterTaskUpdate(inner.id, c.body)
+    Event(Json.stringify(Json.toJson(e)), None, Some("waiterTaskUpdated"))
+  }
+}
 
 class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   val tasks = mutable.Map[Long, StoredWaiterTask]()
@@ -73,34 +99,18 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     self ! Load
   }
 
-/*
+
   private val (waiterOut, waiterChannel) = Concurrent.broadcast[WaiterTaskEvent]
 
-  private def filterByRooms(rooms: Set[String]) = Enumeratee.filter[WaiterTaskEvent](_.matches(rooms))
-
-  private def storedSnapshot: Iterable[WaiterTaskEvent] = tasks.values
+  private def filterByRooms(rooms: Set[String]) = Enumeratee.filter[WaiterTaskEvent](_.filter(rooms))
 
   import scala.language.implicitConversions
 
-  implicit def wt2event(x: WaiterTaskEvent): Event =
-    x.toEvent
+  private def wt2event2(vrooms: Set[String], requestHeader: RequestHeader): Enumeratee[WaiterTaskEvent, Event] =
+    Enumeratee.map { e => e.toEvent(vrooms, requestHeader)}
 
-  private val wt2event2: Enumeratee[WaiterTaskEvent, Event] =
-    Enumeratee.map { e => e.toEvent}
+  private def storedSnapshot: Iterable[WaiterTaskEvent] = tasks.values.map(WaiterTaskUpdated)
 
-  def convertEvents(rooms: Set[String], request: RequestHeader): Enumeratee[WaiterTaskEvent, Event] = Enumeratee.map { e0 =>
-    e0 match {
-      case x: TaskDeleted => x.toEvent
-      case x: StoredWaiterTask => {
-        val vrooms = x.rooms.map(v => RoomWithAttrs(v, rooms.contains(v), x.acked.get(v)))
-        val t = TaskWithPerms(x.id, x.when, x.message, vrooms.toSeq)
-        val y = views.html.admin.singlewaitertask(t)(request)
-        val u = TaskUpdateEvent(x.id, y.body)
-        Event(Json.stringify(Json.toJson(u)), None, Some("waiterTask"))
-      }
-    }
-  }
-*/
   override def receive: Receive = {
     case Load => {
       val f = WaiterModel.load(db)
@@ -138,7 +148,7 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
     case task: StoredWaiterTask => {
       tasks.put(task.id, task)
-      //waiterChannel.push(task)
+      waiterChannel.push(WaiterTaskUpdated(task))
     }
 
     case AckTask(id, room) =>
@@ -150,14 +160,14 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
       tasks.get(id).foreach { stored =>
         val newMsg = StoredWaiterTask(stored.id, stored.when, stored.message, stored.rooms, stored.acked.updated(room, when))
         tasks.put(id, newMsg)
-        //waiterChannel.push(newMsg)
+        waiterChannel.push(WaiterTaskUpdated(newMsg))
       }
     }
-/*
-    case Join(rooms) => {
+
+    case Join(rooms, requestHeader) => {
       val r: Enumerator[Event] = Enumerator.enumerate(storedSnapshot).andThen(waiterOut) &> filterByRooms(rooms.toSet) &>
-        wt2event2
+        wt2event2(rooms.toSet, requestHeader)
       sender ! Joined(r)
-    }*/
+    }
   }
 }

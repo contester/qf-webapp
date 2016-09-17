@@ -5,6 +5,7 @@ import javax.inject.{Inject, Singleton}
 import actors.{StatusActor, WaiterActor}
 import akka.actor.ActorSystem
 import play.api.db.slick.DatabaseConfigProvider
+import play.api.mvc.RequestHeader
 import slick.driver.JdbcProfile
 
 import scala.concurrent.ExecutionContext
@@ -29,4 +30,7 @@ class WaiterActorModel @Inject() (dbConfigProvider: DatabaseConfigProvider, syst
 
   def getSnapshot(rooms: List[String])(implicit ec: ExecutionContext) =
     waiterActor.ask(WaiterActor.GetSnapshot(rooms))(AllActors.standardTimeout).mapTo[WaiterActor.Snapshot].map(_.tasks)
+
+  def join(rooms: List[String], requestHeader: RequestHeader)(implicit ec: ExecutionContext) =
+    waiterActor.ask(WaiterActor.Join(rooms, requestHeader))(AllActors.standardTimeout).mapTo[WaiterActor.Joined].map(_.enum)
 }
