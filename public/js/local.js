@@ -309,6 +309,15 @@ function listenOnAdmin(path, iconbase) {
         resetPingState();
     })
 
+    source.addEventListener('waiterTaskUpdated', function(ev) {
+        var obj = JSON.parse(ev.data);
+
+        var tr = $('#wt-id-' + obj.id);
+        if (tr.length) {
+            tr.replaceWith(obj.content);
+        }
+    })
+
     source.onerror = function(ev) {
         $("#connected1").addClass("badge-error");
         $("#connected1").text("!");
