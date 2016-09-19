@@ -155,6 +155,21 @@ function ackWaiterTask(target, btnid) {
     });
 }
 
+function rejudgePost(target, btnid) {
+    $('#rejudge-' + btnid).html('...');
+    $('#result-' + btnid).html('...')
+    $.post(target, {}, function() {
+        $('#rejudge-' + btnid).html('<span class="caret"></span>')
+    });
+}
+
+function reprintPost(target, btnid) {
+    $('#rejudge-' + btnid).html('...');
+    $.post(target, {}, function() {
+        $('#rejudge-' + btnid).html('<span class="caret"></span>')
+    });
+}
+
 function listenOnEvents(path, iconbase, ackMessagePath) {
     var source = new EventSource(path);
 

@@ -1,22 +1,5 @@
 @(submits: Seq[FullyDescribedSubmit], teams: Map[Int, LocalTeam], contest: SelectedContest, admin: Admin)(implicit request: RequestHeader)
 @adminmain(tab = "status", contest = contest) {
-<script>
-    function rejudgePost(target, btnid) {
-        $('#rejudge-' + btnid).html('...');
-        $('#result-' + btnid).html('...')
-        $.post(target, {}, function() {
-            $('#rejudge-' + btnid).html('<span class="caret"></span>')
-        });
-    }
-
-    function reprintPost(target, btnid) {
-        $('#rejudge-' + btnid).html('...');
-        $.post(target, {}, function() {
-            $('#rejudge-' + btnid).html('<span class="caret"></span>')
-        });
-    }
-
-</script>
 @defining(admin.canModify(contest.contest.id)) { showRejudge =>
 <table id="submits" class="table table-hover table-bordered table-responsive">
     <thead>
