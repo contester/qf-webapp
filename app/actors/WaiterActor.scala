@@ -80,7 +80,7 @@ case class WaiterTaskUpdated(inner: StoredWaiterTask) extends WaiterTaskEvent {
   override def filter(vrooms: Set[String]): Boolean = inner.matches(vrooms)
 
   override def toEvent(vrooms: Set[String], requestHeader: RequestHeader): Event = {
-    val c = views.html.admin.singlewaitertask(inner.adapt(vrooms.toList))(requestHeader)
+    val c = views.html.admin.singlewaitertask(inner.adapt(vrooms.toList))
     val e = WaiterTaskUpdate(inner.id, c.body)
     Event(Json.stringify(Json.toJson(e)), None, Some("waiterTaskUpdated"))
   }
