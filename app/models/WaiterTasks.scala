@@ -17,8 +17,8 @@ case class StoredWaiterTask(id: Long, when: DateTime, message: String, rooms: Se
   def adapt(vrooms: List[String]): AdaptedWaiterTask = {
     val s = vrooms.toSet
     val odmin = s.contains("*")
-    val ac = acked.keys.map(x => RoomWithPermission(x, odmin || s.contains(x)))
-    val un = rooms.filterNot(acked.contains).map(x => RoomWithPermission(x, odmin || s.contains(x)))
+    val ac = acked.keys.map(x => RoomWithPermission(x, odmin || s.contains(x))).toSeq.sortBy(x => (!x.can, x.name))
+    val un = rooms.filterNot(acked.contains).map(x => RoomWithPermission(x, odmin || s.contains(x))).toSeq.sortBy(x => (!x.can, x.name))
     AdaptedWaiterTask(id, when, message, un.toList, ac.toList)
   }
 }
@@ -69,9 +69,7 @@ object WaiterModel {
   }
 
   def unmarkDone(db: JdbcBackend#DatabaseDef, id: Long, room: String)(implicit ec: ExecutionContext): Future[Unit] = {
-    val f = db.run(waiterTaskRecords.filter(x => x.id === id && x.room === room).delete)
-    f.onComplete(x => Logger.info(s"$x"))
-    f.map(_ => ())
+    db.run(waiterTaskRecords.filter(x => x.id === id && x.room === room).delete).map(_ => ())
   }
 
   private def getAllRecords(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[Map[Long, Map[String, DateTime]]] =
