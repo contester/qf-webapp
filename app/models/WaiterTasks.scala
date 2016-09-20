@@ -15,8 +15,9 @@ case class StoredWaiterTask(id: Long, when: DateTime, message: String, rooms: Se
 
   def adapt(vrooms: List[String]): AdaptedWaiterTask = {
     val s = vrooms.toSet
-    val ac = acked.keys.map(x => RoomWithPermission(x, s.contains(x)))
-    val un = rooms.filterNot(acked.contains).map(x => RoomWithPermission(x, s.contains(x)))
+    val odmin = s.contains("*")
+    val ac = acked.keys.map(x => RoomWithPermission(x, odmin || s.contains(x)))
+    val un = rooms.filterNot(acked.contains).map(x => RoomWithPermission(x, odmin || s.contains(x)))
     AdaptedWaiterTask(id, when, message, un.toList, ac.toList)
   }
 }
