@@ -4,11 +4,15 @@
     <td>@LocalDateFormat(task.when)</td>
     <td>@task.message</td>
     <td>@for(s <- task.unacked){
-        <a id="wa-@{task.id}-@{s.name}" href="javascript:void(0)" onclick="ackWaiterTask('@controllers.routes.AdminApplication.ackWaiterTask(task.id, s.name)', '@{task.id}-@{s.name}')" class="btn btn-raised btn-danger btn-sm">@{s.name}</a>
+        <a id="wa-@{task.id}-@{s.name}" href="javascript:void(0)"
+           onclick="ackWaiterTask('@controllers.routes.AdminApplication.ackWaiterTask(task.id, s.name)', '@{task.id}-@{s.name}')"
+           class="btn btn-raised btn-danger btn-sm" @if(!s.can){disabled}>@{s.name}</a>
     }
     </td>
     <td>@for(s <- task.acked){
-        <a href="javascript:void(0)" onclick="" class="btn btn-raised btn-success btn-sm" @if(!s.can){disabled}>@{s.name}</a>
+        <a id="wa-@{task.id}-@{s.name}" href="javascript:void(0)"
+           onclick="ackWaiterTask('@controllers.routes.AdminApplication.ackWaiterTask(task.id, s.name)', '@{task.id}-@{s.name}')"
+           class="btn btn-raised btn-success btn-sm" @if(!s.can){disabled}>@{s.name}</a>
         }
     </td>
 </tr>

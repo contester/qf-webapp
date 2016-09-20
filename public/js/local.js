@@ -150,9 +150,12 @@ function deleteClarification(target, btnid) {
 
 function ackWaiterTask(target, btnid) {
     $('#wa-' + btnid).html('...');
-    $.post(target, {}, function() {
-        $('#wa-' + btnid).html('<span class="caret"></span>')
-    });
+    $.post(target, {});
+}
+
+function unackWaiterTask(target, btnid) {
+    $('#wa-' + btnid).html('...');
+    $.post(target, {});
 }
 
 function rejudgePost(target, btnid) {

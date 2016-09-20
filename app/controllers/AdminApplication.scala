@@ -443,4 +443,11 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     waiterActorModel.waiterActor ! WaiterActor.AckTask(id, room)
     Future.successful(Ok("ok"))
   }
+
+  def unackWaiterTask(id: Long, room: String) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
+    import Contexts.adminExecutionContext
+
+    waiterActorModel.waiterActor ! WaiterActor.UnackTask(id, room)
+    Future.successful(Ok("ok"))
+  }
 }

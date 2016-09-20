@@ -45,6 +45,7 @@ object WaiterActor {
   case class DeleteTask(id: Long)
 
   case class TaskAcked(id: Long, when: DateTime, room: String)
+  case class TaskUnacked(id: Long, room: String)
   case class TaskDeleted(id: Long)
 
   case class Join(rooms: List[String], requestHeader: RequestHeader)
@@ -159,6 +160,21 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     case TaskAcked(id, when, room) => {
       tasks.get(id).foreach { stored =>
         val newMsg = StoredWaiterTask(stored.id, stored.when, stored.message, stored.rooms, stored.acked.updated(room, when))
+        tasks.put(id, newMsg)
+        waiterChannel.push(WaiterTaskUpdated(newMsg))
+      }
+    }
+
+    case UnackTask(id, room) => {
+      WaiterModel.unmarkDone(db, id, room).onSuccess {
+        case _ =>
+          self ! TaskUnacked(id, room)
+      }
+    }
+
+    case TaskUnacked(id, room) => {
+      tasks.get(id).foreach { stored =>
+        val newMsg = StoredWaiterTask(stored.id, stored.when, stored.message, stored.rooms, stored.acked - room)
         tasks.put(id, newMsg)
         waiterChannel.push(WaiterTaskUpdated(newMsg))
       }
