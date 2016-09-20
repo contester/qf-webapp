@@ -1,9 +1,10 @@
 package models
 
 import controllers.routes
-import slick.jdbc.GetResult
+import slick.jdbc.{GetResult, JdbcBackend}
+import slick.lifted.ProvenShape
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
 case class AdminId(username: String, passwordHash: String) {
@@ -11,7 +12,7 @@ case class AdminId(username: String, passwordHash: String) {
 }
 
 case class Admin(username: String, passwordHash: String, spectator: Set[Int], administrator: Set[Int],
-                 locations: Set[String]) {
+                 locations: Set[String], canGiveTasks: Boolean) {
   override def toString = s"$username:$passwordHash"
 
   def toId = AdminId(username, passwordHash)
@@ -39,10 +40,6 @@ object AdminId {
 object Admin {
   import slick.driver.MySQLDriver.api._
 
-  implicit private val getAdmin = GetResult(r =>
-    Admin(r.nextString(), r.nextString(), parseAcl(r.nextString()), parseAcl(r.nextString()), parseStringAcl(r.nextString()))
-  )
-
   private def parseSingleAcl(s: String): Option[Int] =
     if (s == "*")
       Some(-1)
@@ -54,8 +51,34 @@ object Admin {
   private def parseStringAcl(s: String): Set[String] =
     s.split(',').toSet
 
-  def query(username: String, passwordHash: String) =
-    sql"""select Username, Password, Spectator, Administrator, Locations from admins where Username = $username and Password = $passwordHash""".as[Admin]
+  private def buildAdmin(x: AdminModel.AdminEntry): Admin =
+    Admin(x.username, x.password, parseAcl(x.spectator), parseAcl(x.administrator), parseStringAcl(x.locations),
+      x.canGiveTasks)
+
+  def query(db: JdbcBackend#DatabaseDef, username: String, passwordHash: String)(implicit ec: ExecutionContext) =
+    db.run(AdminModel.admins.filter(x => x.username === username && x.password === passwordHash).take(1).result)
+      .map(_.headOption.map(buildAdmin))
+}
+
+object AdminModel {
+  import slick.driver.MySQLDriver.api._
+  import utils.Db._
+
+  case class AdminEntry(username: String, password: String, spectator: String, administrator: String, locations: String,
+                        canGiveTasks: Boolean)
+
+  case class Admins(tag: Tag) extends Table[AdminEntry](tag, "admins") {
+    def username = column[String]("Username", O.PrimaryKey)
+    def password = column[String]("Password")
+    def spectator = column[String]("Spectator")
+    def administrator = column[String]("Administrator")
+    def locations = column[String]("Locations")
+    def canGiveTasks = column[Boolean]("CanGiveTasks")
+
+    override def * = (username, password, spectator, administrator, locations, canGiveTasks) <> (AdminEntry.tupled, AdminEntry.unapply)
+  }
+
+  val admins = TableQuery[Admins]
 }
 
 object AdminPermissions {

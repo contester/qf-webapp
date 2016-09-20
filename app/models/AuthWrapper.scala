@@ -36,7 +36,7 @@ class AuthWrapper @Inject() (dbConfigProvider: DatabaseConfigProvider, configura
       resolve(username)
 
   def resolveAdmin(admin: AdminId)(implicit ctx: ExecutionContext) =
-    db.run(Admin.query(admin.username, admin.passwordHash)).map(_.headOption)
+    Admin.query(db, admin.username, admin.passwordHash)
 
   def authAdmin(username: String, password: String)(implicit ctx: ExecutionContext) =
     resolveAdmin(AdminId(username, Hasher.getSha1(password)))

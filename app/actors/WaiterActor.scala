@@ -25,7 +25,6 @@ import scala.collection.mutable
 
 import com.github.nscala_time.time.Imports.DateTime
 
-
 // Task is visible:
 // - to admins
 // - if any room in it matches our rooms
