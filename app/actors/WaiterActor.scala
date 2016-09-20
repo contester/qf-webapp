@@ -166,6 +166,7 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     }
 
     case UnackTask(id, room) => {
+      Logger.info(s"unack($id, $room)")
       val f = WaiterModel.unmarkDone(db, id, room)
       f.onSuccess {
         case _ =>

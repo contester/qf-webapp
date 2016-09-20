@@ -11,7 +11,7 @@
     </td>
     <td>@for(s <- task.acked){
         <a id="wa-@{task.id}-@{s.name}" href="javascript:void(0)"
-           onclick="ackWaiterTask('@controllers.routes.AdminApplication.ackWaiterTask(task.id, s.name)', '@{task.id}-@{s.name}')"
+           onclick="ackWaiterTask('@controllers.routes.AdminApplication.unackWaiterTask(task.id, s.name)', '@{task.id}-@{s.name}')"
            class="btn btn-raised btn-success btn-sm" @if(!s.can){disabled}>@{s.name}</a>
         }
     </td>
