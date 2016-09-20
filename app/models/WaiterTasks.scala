@@ -2,6 +2,7 @@ package models
 
 
 import com.github.nscala_time.time.Imports.DateTime
+import play.api.Logger
 import slick.jdbc.{GetResult, JdbcBackend}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -64,11 +65,13 @@ object WaiterModel {
 
   def markDone(db: JdbcBackend#DatabaseDef, id: Long, room: String)(implicit ec: ExecutionContext): Future[DateTime] = {
     val now = DateTime.now
-    db.run(DBIO.seq(waiterTaskRecords += WaiterTaskRecord(id, room, now))).map(_ => now)
+    db.run(waiterTaskRecords += WaiterTaskRecord(id, room, now)).map(_ => now)
   }
 
   def unmarkDone(db: JdbcBackend#DatabaseDef, id: Long, room: String)(implicit ec: ExecutionContext): Future[Unit] = {
-    db.run(DBIO.seq(waiterTaskRecords.filter(x => x.id === id && x.room === room).delete))
+    val f = db.run(waiterTaskRecords.filter(x => x.id === id && x.room === room).delete)
+    f.onComplete(x => Logger.info(s"$x"))
+    f.map(_ => ())
   }
 
   private def getAllRecords(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[Map[Long, Map[String, DateTime]]] =
