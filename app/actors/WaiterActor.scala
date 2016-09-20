@@ -166,10 +166,12 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     }
 
     case UnackTask(id, room) => {
-      WaiterModel.unmarkDone(db, id, room).onSuccess {
+      val f = WaiterModel.unmarkDone(db, id, room)
+      f.onSuccess {
         case _ =>
           self ! TaskUnacked(id, room)
       }
+      f.onFailure { case x => Logger.error("foo", x) }
     }
 
     case TaskUnacked(id, room) => {
