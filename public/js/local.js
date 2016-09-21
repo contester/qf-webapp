@@ -366,6 +366,9 @@ function listenOnAdmin(path, iconbase) {
         var tr = $('#wt-id-' + obj.id);
         if (tr.length) {
             tr.replaceWith(obj.content);
+        } else {
+            $('#waitertasks > tbody').prepend(obj.content);
+            notifyMe('Новое задание для дежурных', iconbase + 'icpc_logo.png', 'Новое задание')
         }
     })
 
@@ -377,7 +380,6 @@ function listenOnAdmin(path, iconbase) {
             tr.remove();
         }
     })
-
 
     source.onerror = function(ev) {
         $("#connected1").addClass("badge-error");
