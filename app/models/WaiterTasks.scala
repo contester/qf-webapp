@@ -19,13 +19,14 @@ case class StoredWaiterTask(id: Long, when: DateTime, message: String, rooms: Se
     val odmin = s.contains("*")
     val ac = acked.keys.map(x => RoomWithPermission(x, odmin || s.contains(x))).toSeq.sortBy(x => (!x.can, x.name))
     val un = rooms.filterNot(acked.contains).map(x => RoomWithPermission(x, odmin || s.contains(x))).toSeq.sortBy(x => (!x.can, x.name))
-    AdaptedWaiterTask(id, when, message, un.toList, ac.toList)
+    AdaptedWaiterTask(id, when, message, un.toList, ac.toList, odmin)
   }
 }
 
 case class RoomWithPermission(name: String, can: Boolean)
 
-case class AdaptedWaiterTask(id: Long, when: DateTime, message: String, unacked: List[RoomWithPermission], acked: List[RoomWithPermission])
+case class AdaptedWaiterTask(id: Long, when: DateTime, message: String, unacked: List[RoomWithPermission],
+                             acked: List[RoomWithPermission], canDelete: Boolean)
 
 object WaiterModel {
   import slick.driver.MySQLDriver.api._
@@ -71,6 +72,13 @@ object WaiterModel {
   def unmarkDone(db: JdbcBackend#DatabaseDef, id: Long, room: String)(implicit ec: ExecutionContext): Future[Unit] = {
     db.run(waiterTaskRecords.filter(x => x.id === id && x.room === room).delete).map(_ => ())
   }
+
+  def delete(db: JdbcBackend#DatabaseDef, id: Long)(implicit ec: ExecutionContext): Future[Unit] = {
+    db.run(DBIO.seq(waiterTaskRecords.filter(_.id === id).delete, sqlu"""delete from WaiterTasks where ID == $id"""))
+  }
+
+/*  def update(db: JdbcBackend#DatabaseDef, id: Long, message: String, rooms: Set[String], reset: Boolean)(implicit ec: ExecutionContext) =
+    maybeMakeRooms(db, rooms)*/
 
   private def getAllRecords(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[Map[Long, Map[String, DateTime]]] =
     db.run(waiterTaskRecords.result).map { records =>

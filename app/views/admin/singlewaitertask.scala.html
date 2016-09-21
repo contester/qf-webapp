@@ -1,6 +1,7 @@
 @(task: AdaptedWaiterTask)
 <tr id="wt-id-@task.id">
     <th scope="row">@task.id</th>
+    <td>@if(task.canDelete){ X }</td>
     <td>@LocalDateFormat(task.when)</td>
     <td>@task.message</td>
     <td>@for(s <- task.unacked){

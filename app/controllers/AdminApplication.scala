@@ -258,7 +258,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-  private val standardTimeout = {
+  private implicit val standardTimeout: akka.util.Timeout = {
     import scala.concurrent.duration._
     Duration(5, SECONDS)
   }
@@ -267,7 +267,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     import Contexts.adminExecutionContext
     import akka.pattern.ask
 
-    statusActorModel.statusActor.ask(StatusActor.JoinAdmin(contestId))(standardTimeout).mapTo[StatusActor.AdminJoined].zip(
+    statusActorModel.statusActor.ask(StatusActor.JoinAdmin(contestId)).mapTo[StatusActor.AdminJoined].zip(
       waiterActorModel.join(rooms, requestHeader)).map {
       case (one, two) =>
         Enumerator.interleave(one.enumerator, two)
