@@ -118,8 +118,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     mutable.Map[(Int, Int), DateTime]()
   }
 
-
-
   private def getUnacked(contest: Int, team: Int) =
     unacked.getOrElseUpdate((contest, team), mutable.Map[Int, Message2]())
 
@@ -281,8 +279,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       val contestEvents = Enumerator.enumerate(contestStates.get(c)).andThen(contestOut &> filterContest(c)) &> EventSource()
       val clrEvents = Enumerator(ClarificationRequestState(c, pendingClarificationRequests(c).size, false))
         .andThen(clrOut &> filterClarificationRequests(c)) &> EventSource()
-
-
 
       sender ! AdminJoined(
         Enumerator.interleave(contestEvents,

@@ -99,7 +99,6 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     self ! Load
   }
 
-
   private val (waiterOut, waiterChannel) = Concurrent.broadcast[WaiterTaskEvent]
 
   private def filterByRooms(rooms: Set[String]) = Enumeratee.filter[WaiterTaskEvent](_.filter(rooms))
@@ -119,12 +118,16 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
         case loaded => self ! Loaded(loaded)
       }
       f.onFailure {
-        case x => Logger.error("failed to load", x)
+        case x =>
+          Logger.error("failed to load", x)
+          // reload in 5 seconds
+          import scala.concurrent.duration._
+          import scala.language.postfixOps
+          context.system.scheduler.scheduleOnce(5 seconds, self, Load)
       }
     }
 
     case Loaded(newtasks) => {
-      Logger.info(s"Loaded: $newtasks")
       newtasks.foreach { task =>
         tasks.put(task.id, task)
       }
