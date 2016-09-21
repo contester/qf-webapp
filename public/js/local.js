@@ -369,6 +369,16 @@ function listenOnAdmin(path, iconbase) {
         }
     })
 
+    source.addEventListener('waiterTaskDeleted', function(ev) {
+        var obj = JSON.parse(ev.data);
+
+        var tr = $('#wt-id-' + obj.id);
+        if (tr.length) {
+            tr.remove();
+        }
+    })
+
+
     source.onerror = function(ev) {
         $("#connected1").addClass("badge-error");
         $("#connected1").text("!");
