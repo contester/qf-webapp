@@ -51,7 +51,7 @@ object WaiterActor {
   case class Joined(enum: Enumerator[Event])
 
   case class GetSnapshot(rooms: List[String])
-  case class Snapshot(tasks: List[AdaptedWaiterTask])
+  case class Snapshot(tasks: Seq[AdaptedWaiterTask])
 }
 
 // UI events:
@@ -137,7 +137,7 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
   def initialized: Receive = {
     case GetSnapshot(vrooms: List[String]) => {
-      val r = tasks.values.map(_.adapt(vrooms)).toList
+      val r = tasks.values.map(_.adapt(vrooms)).toSeq.sortBy(_.id)
       sender ! Snapshot(r)
     }
 
