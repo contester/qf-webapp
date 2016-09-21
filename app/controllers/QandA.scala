@@ -35,13 +35,8 @@ class QandA @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   private def clrForm(loggedInTeam: LoggedInTeam, form: Form[ClarificationReqData])(implicit request: RequestHeader, ec: ExecutionContext) =
     db.run(loggedInTeam.contest.getProblems).flatMap { probs =>
-      db.run(
-        sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications
-             where cl_is_hidden = '0' and cl_contest_idf = ${loggedInTeam.contest.id} order by cl_date desc""".as[Clarification]).flatMap { clars =>
-        db.run(
-          sql"""select ID, Contest, Team, Problem, Request, Answer, Arrived, Status from ClarificationRequests
-               where Contest = ${loggedInTeam.contest.id} and Team = ${loggedInTeam.team.localId} order by Arrived desc
-             """.as[ClarificationRequest]).map { clReq =>
+      ClarificationModel.getVisibleClarifications(db, loggedInTeam.contest.id).flatMap { clars =>
+        ClarificationModel.getTeamClarificationReqs(db, loggedInTeam.contest.id, loggedInTeam.team.localId).map { clReq =>
           html.clarifications(loggedInTeam, clars, clReq, Seq[(String, String)](("", "Выберите задачу")) ++ Problems.toSelect(probs), form)
         }
       }

@@ -162,9 +162,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     }
 
   private def loadClarState() = {
-    db.run(
-      sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications""".as[Clarification]
-    ).zip(db.run(sql"select Contest, Team, MaxSeen from ClrSeen2".as[MaxSeen])).map {
+    ClarificationModel.loadAll(db).map {
       case (clarifications, clseen) =>
         self ! ClarificationsInitialState(clarifications, clseen)
     }

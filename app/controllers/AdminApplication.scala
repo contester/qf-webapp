@@ -231,22 +231,11 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     Future.successful(Ok("ok"))
   }
 
-  private def getClarifications(contestId: Int)(implicit ec: ExecutionContext) =
-    db.run(
-      sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications
-             where cl_contest_idf = $contestId order by cl_date desc"""
-        .as[Clarification])
-
-  private def getClarificationReqs(contestId: Int)(implicit ec: ExecutionContext) =
-    db.run(
-      sql"""select ID, Contest, Team, Problem, Request, Answer, Arrived, Status from ClarificationRequests
-               where Contest = $contestId order by Arrived desc"""
-        .as[ClarificationRequest])
 
   def showQandA(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
     import Contexts.adminExecutionContext
-    getClarifications(contestId)
-      .zip(getClarificationReqs(contestId))
+    ClarificationModel.getClarifications(db, contestId)
+      .zip(ClarificationModel.getClarificationReqs(db, contestId))
       .zip(getSelectedContests(contestId, loggedIn))
         .zip(waiterActorModel.getSnapshot(loggedIn.locations.toList))
       .map {
@@ -255,25 +244,16 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-  private def getClarificationById(clrId: Int) =
-    db.run(sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications
-            where cl_id = $clrId""".as[Clarification])
-
   def toggleClarification(clrId: Int) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
     import Contexts.adminExecutionContext
-
-    getClarificationById(clrId).flatMap { clrs =>
-      Future.sequence(clrs.map { clr =>
-        db.run(sqlu"update clarifications set cl_is_hidden = ${!clr.hidden} where cl_id = ${clr.id}")
-      })
-    }.map { _ =>
+    ClarificationModel.toggleClarification(db, clrId).map { _ =>
       Ok("ok")
     }
   }
 
   def deleteClarification(contestId: Int, clrId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canModify(contestId)) { implicit request =>
     import Contexts.adminExecutionContext
-    db.run(sqlu"delete from clarifications where cl_id = ${clrId} and cl_contest_idf = ${contestId}").map { _ =>
+    ClarificationModel.deleteClarification(db, clrId).map { _ =>
       Ok("ok")
     }
   }
@@ -317,10 +297,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   def postUpdateClarification(clarificationId: Int) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
     import Contexts.adminExecutionContext
-    db.run(
-      sql"""select cl_id, cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden from clarifications
-            where cl_id = $clarificationId""".as[Clarification])
-      .map(_.headOption).flatMap { clOpt =>
+    ClarificationModel.getClarification(db, clarificationId).flatMap { clOpt =>
       clOpt.map { cl =>
         val clObj = PostClarification(
           cl.problem, cl.text, cl.hidden
@@ -341,7 +318,6 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
       },
       data => {
         val cdate = DateTime.now
-
         val cOp = clarificationId.map { id =>
           db.run(sqlu"""update clarifications set cl_task = ${data.problem}, cl_text = ${data.text},
               cl_is_hidden = ${data.hidden} where cl_id = $id""").map(_ => clarificationId)
@@ -366,11 +342,6 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     mapping("answer" -> text)(ClarificationResponse.apply)(ClarificationResponse.unapply)
   }
 
-  private def getClrById(clrId: Int)(implicit ec: ExecutionContext) =
-    db.run(sql"""select ID, Contest, Team, Problem, Request, Answer, Arrived, Status from ClarificationRequests
-                where ID = $clrId"""
-      .as[ClarificationRequest]).map(_.headOption)
-
   private val answerList = Map(
     "No comments" -> "No comments",
     "Yes" -> "Yes",
@@ -380,7 +351,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   def postAnswerForm(clrId: Int) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
     import Contexts.adminExecutionContext
-    getClrById(clrId).flatMap { optClr =>
+    ClarificationModel.getClarificationReq(db, clrId).flatMap { optClr =>
       optClr.map { clr =>
         getSelectedContests(clr.contest, loggedIn).map { contest =>
           Ok(html.admin.postanswer(
@@ -392,7 +363,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   def postAnswer(clrId: Int) = AsyncStack(parse.multipartFormData, AuthorityKey -> Permissions.any) { implicit request =>
     import Contexts.adminExecutionContext
-    getClrById(clrId).flatMap { optClr =>
+    ClarificationModel.getClarificationReq(db, clrId).flatMap { optClr =>
       optClr.map { clr =>
         clarificationResponseForm.bindFromRequest.fold(
           formWithErrors => getSelectedContests(clr.contest, loggedIn).map { contest =>
