@@ -11,8 +11,12 @@ case class AdminId(username: String, passwordHash: String) {
   override def toString = s"$username:$passwordHash"
 }
 
+trait WaiterPermissions {
+  def canCreate: Boolean
+}
+
 case class Admin(username: String, passwordHash: String, spectator: Set[Int], administrator: Set[Int],
-                 locations: Set[String], canGiveTasks: Boolean) {
+                 locations: Set[String]) {
   override def toString = s"$username:$passwordHash"
 
   def toId = AdminId(username, passwordHash)
@@ -52,8 +56,7 @@ object Admin {
     s.split(',').toSet
 
   private def buildAdmin(x: AdminModel.AdminEntry): Admin =
-    Admin(x.username, x.password, parseAcl(x.spectator), parseAcl(x.administrator), parseStringAcl(x.locations),
-      x.canGiveTasks)
+    Admin(x.username, x.password, parseAcl(x.spectator), parseAcl(x.administrator), parseStringAcl(x.locations))
 
   def query(db: JdbcBackend#DatabaseDef, username: String, passwordHash: String)(implicit ec: ExecutionContext) =
     db.run(AdminModel.admins.filter(x => x.username === username && x.password === passwordHash).take(1).result)
@@ -64,8 +67,7 @@ object AdminModel {
   import slick.driver.MySQLDriver.api._
   import utils.Db._
 
-  case class AdminEntry(username: String, password: String, spectator: String, administrator: String, locations: String,
-                        canGiveTasks: Boolean)
+  case class AdminEntry(username: String, password: String, spectator: String, administrator: String, locations: String)
 
   case class Admins(tag: Tag) extends Table[AdminEntry](tag, "admins") {
     def username = column[String]("Username", O.PrimaryKey)
@@ -73,9 +75,8 @@ object AdminModel {
     def spectator = column[String]("Spectator")
     def administrator = column[String]("Administrator")
     def locations = column[String]("Locations")
-    def canGiveTasks = column[Boolean]("CanGiveTasks")
 
-    override def * = (username, password, spectator, administrator, locations, canGiveTasks) <> (AdminEntry.tupled, AdminEntry.unapply)
+    override def * = (username, password, spectator, administrator, locations) <> (AdminEntry.tupled, AdminEntry.unapply)
   }
 
   val admins = TableQuery[Admins]
