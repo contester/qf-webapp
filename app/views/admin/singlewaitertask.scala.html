@@ -1,7 +1,11 @@
 @(task: AdaptedWaiterTask)
 <tr id="wt-id-@task.id">
     <th scope="row">@task.id</th>
-    <td>@if(task.canDelete){ X }</td>
+    <td>@if(task.canDelete){
+        <a id="wa-del-@{task.id}" href="javascript:void(0)"
+           onclick="deleteWaiterTask('@controllers.routes.AdminApplication.deleteWaiterTask(task.id)', '@{task.id}')"
+           class="btn btn-raised btn-danger btn-sm">X</a>
+        }</td>
     <td>@LocalDateFormat(task.when)</td>
     <td>@task.message</td>
     <td>@for(s <- task.unacked){

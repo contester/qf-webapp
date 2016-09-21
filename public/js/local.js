@@ -162,6 +162,13 @@ function unackWaiterTask(target, btnid) {
     });
 }
 
+function deleteWaiterTask(target, btnid) {
+    $('#wa-del-' + btnid).html('...');
+    $.post(target, {}, function() {
+        $('#wa-del-' + btnid).html('<span class="caret"></span>')
+    });
+}
+
 function rejudgePost(target, btnid) {
     $('#rejudge-' + btnid).html('...');
     $('#result-' + btnid).html('...')

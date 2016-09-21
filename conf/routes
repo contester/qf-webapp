@@ -62,5 +62,6 @@ GET /admin/:contestId/postNewWaiterForm controllers.AdminApplication.postNewWait
 POST /admin/:contestId/postWaiterTask controllers.AdminApplication.postWaiterTask(contestId: Int, id: Option[Int])
 POST /admin/ackWaiterTask/:id/:room controllers.AdminApplication.ackWaiterTask(id: Long, room: String)
 POST /admin/unackWaiterTask/:id/:room controllers.AdminApplication.unackWaiterTask(id: Long, room: String)
+POST /admin/deleteWaiterTask/:id controllers.AdminApplication.deleteWaiterTask(id: Long)
 
 GET     /assets/*file				controllers.Assets.at(path="/public", file)

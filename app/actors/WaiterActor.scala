@@ -68,7 +68,8 @@ case class WaiterTaskDeleted(id: Long) extends WaiterTaskEvent {
 
   implicit val format = Json.format[WaiterTaskDeleted]
 
-  override def toEvent(vrooms: Set[String], requestHeader: RequestHeader): Event = Event(Json.stringify(Json.toJson(this)), None, Some("waiterTaskDeleted"))
+  override def toEvent(vrooms: Set[String], requestHeader: RequestHeader): Event =
+    Event(Json.stringify(Json.toJson(this)), None, Some("waiterTaskDeleted"))
 }
 
 case class WaiterTaskUpdate(id: Long, content: String)
@@ -137,7 +138,8 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
   def initialized: Receive = {
     case GetSnapshot(vrooms: List[String]) => {
-      val r = tasks.values.map(_.adapt(vrooms)).toSeq.sortBy(_.id)
+      import com.github.nscala_time.time.Imports._
+      val r = tasks.values.map(_.adapt(vrooms)).toSeq.sortBy(_.when).reverse
       sender ! Snapshot(r)
     }
 
