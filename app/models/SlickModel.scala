@@ -1,6 +1,7 @@
 package models
 
 import com.github.nscala_time.time.Imports._
+import play.api.Logger
 import slick.jdbc.JdbcBackend
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -75,10 +76,13 @@ object ClarificationModel {
       })
     }.map(_ => ())
 
-  def updateClarification(db: JdbcBackend#DatabaseDef, cl: Clarification)(implicit ec: ExecutionContext) =
-    db.run(SlickModel.clarifications.returning(SlickModel.clarifications.map(_.id)).insertOrUpdate(cl)).map { opt =>
+  def updateClarification(db: JdbcBackend#DatabaseDef, cl: Clarification)(implicit ec: ExecutionContext) = {
+    val f = db.run(SlickModel.clarifications.returning(SlickModel.clarifications.map(_.id)).insertOrUpdate(cl)).map { opt =>
       opt.map(x => cl.copy(id = Some(x)))
     }
+    f.onComplete(x => Logger.info(s"updated $x"))
+    f
+  }
 /*
         val cOp = clarificationId.map { id =>
           db.run(sqlu"""update clarifications set cl_task = ${data.problem}, cl_text = ${data.text},
