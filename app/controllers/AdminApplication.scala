@@ -303,7 +303,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
           cl.problem, cl.text, cl.hidden
         )
         getSelectedContests(cl.contest, loggedIn).map { contest =>
-          Ok(html.admin.postclarification(Some(cl.id), postClarificationForm.fill(clObj), contest))
+          Ok(html.admin.postclarification(cl.id, postClarificationForm.fill(clObj), contest))
         }
       }.getOrElse(Future.successful(Redirect(routes.AdminApplication.postNewClarification(1))))
     }
@@ -317,21 +317,11 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
         BadRequest(html.admin.postclarification(clarificationId, formWithErrors, contest))
       },
       data => {
-        val cdate = DateTime.now
-        val cOp = clarificationId.map { id =>
-          db.run(sqlu"""update clarifications set cl_task = ${data.problem}, cl_text = ${data.text},
-              cl_is_hidden = ${data.hidden} where cl_id = $id""").map(_ => clarificationId)
-        }.getOrElse(
-            db.run(
-              sqlu"""insert into clarifications (cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden) values
-                 (${contestId}, ${data.problem}, ${data.text}, $cdate, ${data.hidden})
-                  """.andThen(sql"select last_insert_id()".as[Int]).withPinnedSession).map(_.headOption))
+        import akka.pattern.ask
 
-        cOp.map { optId =>
-          for (realId <- optId) {
-            val popt = if (data.problem.isEmpty) None else Some(data.problem.toUpperCase)
-                statusActorModel.statusActor ! StatusActor.ClarificationUpdated(realId, contestId, cdate, popt, data.text)
-          }
+        statusActorModel.statusActor.ask(
+          Clarification(clarificationId, contestId, data.problem.toUpperCase, data.text, DateTime.now, data.hidden))
+          .mapTo[Clarification].map { next =>
           Redirect(routes.AdminApplication.showQandA(contestId))
         }
       }

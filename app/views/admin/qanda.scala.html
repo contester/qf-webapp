@@ -15,18 +15,20 @@
     </thead>
     <tbody>
     @for(s <- clarifications) {
-    <tr id="cl-row-@{s.id}"><th scope="row"><a href="@routes.AdminApplication.postUpdateClarification(s.id)">@s.id</a></th>
-        <td><div class="btn-group btn-nomargin">
-            <a href="javascript:void(0)" data-target="#" class="btn btn-primary btn-xs btn-nomargin dropdown-toggle" data-toggle="dropdown" id="cl-button-${s.id}">
-                <span class="caret"></span>
-            </a>
-            <ul class="dropdown-menu">
-                <li><a href="javascript:void(0)" onclick="toggleClarification('@controllers.routes.AdminApplication.toggleClarification(s.id)', '@{s.id}')">Скрыть/показать</a></li>
-                <li><a href="javascript:void(0)" onclick="deleteClarification('@controllers.routes.AdminApplication.deleteClarification(contest.contest.id, s.id)', '@{s.id}')">Удалить</a></li>
-            </ul>
-        </div>
-        </td>
-        <td>@s.problem</td><td>@s.text</td><td>@LocalDateFormat(s.arrived)</td><td>@s.hidden</td></tr>
+        @defining(s.id.get) { id =>
+        <tr id="cl-row-@{id}"><th scope="row"><a href="@routes.AdminApplication.postUpdateClarification(id)">@id</a></th>
+            <td><div class="btn-group btn-nomargin">
+                <a href="javascript:void(0)" data-target="#" class="btn btn-primary btn-xs btn-nomargin dropdown-toggle" data-toggle="dropdown" id="cl-button-@id">
+                    <span class="caret"></span>
+                </a>
+                <ul class="dropdown-menu">
+                    <li><a href="javascript:void(0)" onclick="toggleClarification('@controllers.routes.AdminApplication.toggleClarification(id)', '@id')">Скрыть/показать</a></li>
+                    <li><a href="javascript:void(0)" onclick="deleteClarification('@controllers.routes.AdminApplication.deleteClarification(contest.contest.id, id)', 'id')">Удалить</a></li>
+                </ul>
+            </div>
+            </td>
+            <td>@s.problem</td><td>@s.text</td><td>@LocalDateFormat(s.arrived)</td><td>@s.hidden</td></tr>
+        }
     }
     </tbody>
 </table>

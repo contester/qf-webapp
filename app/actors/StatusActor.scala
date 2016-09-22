@@ -54,7 +54,7 @@ object StatusActor {
 
   import com.github.nscala_time.time.Imports._
 
-  case class ClarificationUpdated(id: Int, contest: Int, timestamp: DateTime, problem: Option[String], text: String)
+  //case class ClarificationUpdated(id: Int, contest: Int, timestamp: DateTime, problem: Option[String], text: String)
   case class AckAllClarifications(contest: Int, team: Int)
 
   private val userPing = Event("", None, Some("ping"))
@@ -110,7 +110,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   private val clarifications = {
     import com.github.nscala_time.time.Imports._
 
-    mutable.Map[Int, mutable.Map[Int, DateTime]]()
+    mutable.Map[Int, mutable.Map[Int, Clarification]]()
   }
   private val clarificationsSeen = {
     import com.github.nscala_time.time.Imports._
@@ -199,26 +199,37 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     }
 
     case ClarificationsInitialState(clr, seen) => {
-      for (cl <- clr) {
-        import com.github.nscala_time.time.Imports._
-        clarifications.getOrElseUpdate(cl.contest, mutable.Map[Int, DateTime]()).put(cl.id, cl.arrived)
+      for (cl <- clr.filter(_.id.isDefined)) {
+        clarifications.getOrElseUpdate(cl.contest, mutable.Map[Int, Clarification]()).put(cl.id.get, cl)
       }
       for (s <- seen) {
         clarificationsSeen.put((s.contest, s.team), s.timestamp)
       }
     }
 
+    case cl: Clarification => {
+      val orig = cl.id.flatMap(id => clarifications.get(cl.contest).flatMap(_.get(id)))
+      val saved = sender()
+      ClarificationModel.updateClarification(db, cl).map { opt =>
+        val next = opt.getOrElse(cl)
+        val ifp = if(cl.problem.isEmpty) None else Some(cl.problem)
+        clrPostChannel.push(ClarificationPosted(cl.id.get, cl.contest, orig.isDefined, ifp, cl.text))
+        saved ! next
+      }
+    }
+
+      /*
     case ClarificationUpdated(id, contest, timestamp, problem, text) => {
       import com.github.nscala_time.time.Imports._
       clarifications.getOrElseUpdate(contest, mutable.Map[Int, DateTime]()).put(id, timestamp)
 
       clrPostChannel.push(ClarificationPosted(id, contest, false, problem, text))
-    }
+    }*/
 
     case AckAllClarifications(contest, team) => {
       import com.github.nscala_time.time.Imports._
       clarifications.get(contest).map { cmap =>
-        cmap.values.max
+        cmap.values.map(_.arrived).max
       }.foreach { now =>
         clarificationsSeen.put((contest, team), now)
         db.run(sqlu"""replace ClrSeen2 (Contest, Team, MaxSeen) values ($contest, $team, ${now})""")
@@ -298,7 +309,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
 
       val issued = clarifications.get(contest).flatMap { v =>
         if (v.isEmpty) None
-        else Some(v.values.max)
+        else Some(v.values.map(_.arrived).max)
       }
 
       val lastSeen = clarificationsSeen.get((contest, team))
