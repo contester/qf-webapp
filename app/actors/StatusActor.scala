@@ -171,7 +171,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
   private def loadClarificationRequestState: Future[Map[Int, Seq[Int]]] =
     db.run(
-      sql"""select Contest, ID from ClarificationRequests where not Answered""".as[(Int, Int)]
+      sql"""select Contest, ID from ClarificationRequests where Status != 1""".as[(Int, Int)]
     ).map { msgs =>
       msgs.groupBy(_._1).mapValues(x => x.map(_._2))
     }
