@@ -89,6 +89,15 @@ case class WaiterTaskUpdated(inner: StoredWaiterTask) extends WaiterTaskEvent {
   }
 }
 
+case class WaiterTaskHeader(outstanding: Int, text: String) extends WaiterTaskEvent {
+  override def filter(vrooms: Set[String]): Boolean = true
+
+  implicit val format = Json.format[WaiterTaskHeader]
+  override def toEvent(vrooms: Set[String], requestHeader: RequestHeader): Event =
+    Event(Json.stringify(Json.toJson(this)), None, Some("waiterTaskHeader"))
+}
+
+
 class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   val tasks = mutable.Map[Long, StoredWaiterTask]()
 
@@ -112,6 +121,13 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     Enumeratee.map { e => e.toEvent(vrooms, requestHeader)}
 
   private def storedSnapshot: Iterable[WaiterTaskEvent] = tasks.values.map(WaiterTaskUpdated)
+
+  private def getActual(s: Iterable[StoredWaiterTask], vrooms: List[String]): WaiterTaskEvent = {
+    val x = s.filter(_.matches(vrooms.toSet)).map(_.adapt(vrooms)).count { v =>
+      v.unacked.find(_.can).isDefined
+    }
+    WaiterTaskHeader(x, "")
+  }
 
   override def receive: Receive = {
     case Load => {
@@ -187,7 +203,9 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     }
 
     case Join(rooms, requestHeader) => {
-      val r: Enumerator[Event] = Enumerator.enumerate(storedSnapshot).andThen(waiterOut) &> filterByRooms(rooms.toSet) &>
+      val r: Enumerator[Event] = Enumerator.enumerate(storedSnapshot)
+          .andThen(Enumerator(getActual(tasks.values, rooms)))
+        .andThen(waiterOut) &> filterByRooms(rooms.toSet) &>
         wt2event2(rooms.toSet, requestHeader)
       sender ! Success(r)
     }
