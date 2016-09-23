@@ -142,7 +142,7 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     case GetSnapshot(vrooms: List[String]) => {
       import com.github.nscala_time.time.Imports._
       val r = tasks.values.map(_.adapt(vrooms)).toSeq.sortBy(_.when).reverse
-      sender ! Snapshot(r)
+      sender ! Success(Snapshot(r))
     }
 
     case NewTask(message, rooms) => {
