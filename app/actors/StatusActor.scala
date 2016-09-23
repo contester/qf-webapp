@@ -211,6 +211,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       val orig = cl.id.flatMap(id => clarifications.get(cl.contest).flatMap(_.get(id)))
       val saved = sender()
       ClarificationModel.updateClarification(db, cl).map { opt =>
+        Logger.info(s"updated2: $opt")
         val next = opt.getOrElse(cl)
         val ifp = if(cl.problem.isEmpty) None else Some(cl.problem)
         clrPostChannel.push(ClarificationPosted(cl.id.get, cl.contest, orig.isDefined, ifp, cl.text))
