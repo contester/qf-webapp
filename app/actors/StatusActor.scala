@@ -214,6 +214,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
         val next = opt.getOrElse(cl)
         val ifp = if(cl.problem.isEmpty) None else Some(cl.problem)
         clrPostChannel.push(ClarificationPosted(cl.id.get, cl.contest, orig.isDefined, ifp, cl.text))
+        Logger.info(s"updated1: $next")
         saved ! next
       }
     }
