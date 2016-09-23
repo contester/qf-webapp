@@ -27,10 +27,4 @@ class StatusActorModel @Inject() (dbConfigProvider: DatabaseConfigProvider, syst
 @Singleton
 class WaiterActorModel @Inject() (dbConfigProvider: DatabaseConfigProvider, system: ActorSystem) {
   val waiterActor = system.actorOf(WaiterActor.props(dbConfigProvider.get[JdbcProfile].db), "waiter-actor")
-
-  def getSnapshot(rooms: List[String])(implicit ec: ExecutionContext) =
-    waiterActor.ask(WaiterActor.GetSnapshot(rooms))(AllActors.standardTimeout).mapTo[WaiterActor.Snapshot].map(_.tasks)
-
-  def join(rooms: List[String], requestHeader: RequestHeader)(implicit ec: ExecutionContext) =
-    waiterActor.ask(WaiterActor.Join(rooms, requestHeader))(AllActors.standardTimeout).mapTo[WaiterActor.Joined].map(_.enum)
 }

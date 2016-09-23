@@ -10,8 +10,10 @@ import play.api.libs.iteratee.{Concurrent, Enumeratee, Enumerator}
 import play.api.libs.json.Json
 import play.api.mvc.RequestHeader
 import slick.jdbc.JdbcBackend
+import utils.Ask
 
 import scala.collection.mutable
+import scala.util.Success
 
 // Spectator has a list of rooms it cares for.
 // Task goes to the room/list of rooms.
@@ -48,7 +50,7 @@ object WaiterActor {
   case class TaskDeleted(id: Long)
 
   case class Join(rooms: List[String], requestHeader: RequestHeader)
-  case class Joined(enum: Enumerator[Event])
+  //case class Joined(enum: Enumerator[Event])
 
   case class GetSnapshot(rooms: List[String])
   case class Snapshot(tasks: Seq[AdaptedWaiterTask])
@@ -147,8 +149,8 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
       val saved = sender()
       WaiterModel.addNewTask(db, message, rooms).map { s =>
         self ! s
-        saved ! s
-      }
+        s
+      }.onComplete(Ask.respond(saved, _))
     }
 
     case task: StoredWaiterTask => {
@@ -187,7 +189,7 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     case Join(rooms, requestHeader) => {
       val r: Enumerator[Event] = Enumerator.enumerate(storedSnapshot).andThen(waiterOut) &> filterByRooms(rooms.toSet) &>
         wt2event2(rooms.toSet, requestHeader)
-      sender ! Joined(r)
+      sender ! Success(r)
     }
 
     case DeleteTask(id) => {

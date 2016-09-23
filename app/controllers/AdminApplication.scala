@@ -231,13 +231,15 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     Future.successful(Ok("ok"))
   }
 
+  private def getAllWaiterTasks(rooms: Seq[String])(implicit ec: ExecutionContext) =
+    Ask[WaiterActor.Snapshot](waiterActorModel.waiterActor, WaiterActor.GetSnapshot(rooms.toList)).map(_.tasks)
 
   def showQandA(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
     import Contexts.adminExecutionContext
     ClarificationModel.getClarifications(db, contestId)
       .zip(ClarificationModel.getClarificationReqs(db, contestId))
       .zip(getSelectedContests(contestId, loggedIn))
-        .zip(waiterActorModel.getSnapshot(loggedIn.locations.toList))
+        .zip(getAllWaiterTasks(loggedIn.locations.toList))
       .map {
       case (((clarifications, clReqs), contest), tasks) =>
         Ok(html.admin.qanda(tasks, clarifications, clReqs, contest))
@@ -247,7 +249,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   def tasks(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
     import Contexts.adminExecutionContext
     getSelectedContests(contestId, loggedIn)
-      .zip(waiterActorModel.getSnapshot(loggedIn.locations.toList))
+      .zip(getAllWaiterTasks(loggedIn.locations.toList))
       .map {
         case (contest, tasks) =>
           Ok(html.admin.waitertasksmain(tasks, contest))
@@ -278,7 +280,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     import akka.pattern.ask
 
     statusActorModel.statusActor.ask(StatusActor.JoinAdmin(contestId)).mapTo[StatusActor.AdminJoined].zip(
-      waiterActorModel.join(rooms, requestHeader)).map {
+      Ask[Enumerator[Event]](waiterActorModel.waiterActor, WaiterActor.Join(rooms, requestHeader))).map {
       case (one, two) =>
         Enumerator.interleave(one.enumerator, two)
     }
@@ -330,7 +332,6 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
         Ask.apply[Clarification](statusActorModel.statusActor,
           Clarification(clarificationId, contestId, data.problem.toUpperCase, data.text, DateTime.now, data.hidden))
           .map { next =>
-            Logger.info(s"$next")
           Redirect(routes.AdminApplication.showQandA(contestId))
         }
       }
@@ -397,11 +398,8 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
         BadRequest(html.admin.postwaitertask(id, formWithErrors, contest))
       },
       data => {
-        import akka.pattern.ask
-
-        waiterActorModel.waiterActor.ask(WaiterActor.NewTask(data.message, Nil))(standardTimeout)
-          .mapTo[StoredWaiterTask].map { posted =>
-          Redirect(routes.AdminApplication.showQandA(contestId))
+        Ask.apply[StoredWaiterTask](waiterActorModel.waiterActor, WaiterActor.NewTask(data.message, Nil)).map { posted =>
+          Redirect(routes.AdminApplication.tasks(contestId))
         }
       }
     )
