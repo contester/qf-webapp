@@ -304,11 +304,11 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
     }
 }
 
-function addJsonEventListener(source, name, func) {
-    source.addEventListener(source, name, function(ev) {
+function asJson(func) {
+    return function(ev) {
         var obj = JSON.parse(ev.data);
         return func(obj);
-    })
+    }
 }
 
 function listenOnAdmin(path, iconbase) {
@@ -378,8 +378,7 @@ function listenOnAdmin(path, iconbase) {
         }
     })
 
-    source.addEventListener('waiterTaskHeader', function(ev) {
-        var obj = JSON.parse(ev.data);
+    source.addEventListener('waiterTaskHeader', asJson(function(obj) {
         var p = $('#tasksPending');
         if (obj.outstanding) {
             p.text(obj.outstanding);
@@ -388,7 +387,7 @@ function listenOnAdmin(path, iconbase) {
             p.text('-');
             p.hide();
         }
-    })
+    }))
 
     source.addEventListener('waiterTaskDeleted', function(ev) {
         var obj = JSON.parse(ev.data);
@@ -401,7 +400,7 @@ function listenOnAdmin(path, iconbase) {
 
     source.onerror = function(ev) {
         $("#connected1").addClass("badge-error");
-        $("#connected1").text("!");
+        $("#connected1").text("Нет связи");
         console.log("Error: " + ev)
         if (pingState && pingState.tm) {
             clearTimeout(pingState.tm);
