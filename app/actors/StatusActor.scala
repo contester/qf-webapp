@@ -1,6 +1,7 @@
 package actors
 
-import akka.actor.{Actor, Props}
+import akka.actor.Actor.Receive
+import akka.actor.{Actor, Props, Stash}
 import models.ContesterResults.{CustomTestResult, FinishedTesting}
 import models._
 import play.api.Logger
@@ -12,7 +13,7 @@ import slick.jdbc.{GetResult, JdbcBackend}
 import utils.Ask
 
 import scala.collection.mutable
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 
 object StatusActor {
   def props(db: JdbcBackend#DatabaseDef) = Props(classOf[StatusActor], db)
@@ -55,10 +56,13 @@ object StatusActor {
 
   import com.github.nscala_time.time.Imports._
 
-  //case class ClarificationUpdated(id: Int, contest: Int, timestamp: DateTime, problem: Option[String], text: String)
   case class AckAllClarifications(contest: Int, team: Int)
 
   private val userPing = Event("", None, Some("ping"))
+
+  case class StatusActorInitialState(msgs: Iterable[Message2],
+                                     storedClarificationRequests: Map[Int, Seq[Int]],
+                                     clarifications: ClarificationsInitialState)
 }
 
 case class Message2(id: Int, contest: Int, team: Int, kind: String, data: JsValue)
@@ -74,12 +78,19 @@ object Message2 {
   }
 }
 
-class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
+class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   import StatusActor._
   import context.dispatcher
   import utils.Db._
 
   import scala.language.postfixOps
+
+  @throws[Exception](classOf[Exception])
+  override def preStart(): Unit = {
+    super.preStart()
+    self ! Init
+  }
+
 
   private val tick = {
     import scala.concurrent.duration._
@@ -89,11 +100,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
   private val refreshTick = {
     import scala.concurrent.duration._
     context.system.scheduler.schedule(30 seconds, 30 seconds, self, RefreshTick)
-  }
-
-  {
-    import scala.concurrent.duration._
-    context.system.scheduler.scheduleOnce(0 seconds, self, Init)
   }
 
   private val (contestOut, contestChannel) = Concurrent.broadcast[Contest]
@@ -143,40 +149,46 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
 
   private def filterClarificationRequests(contest: Int) = Enumeratee.filter[ClarificationRequestState](_.contest == contest)
 
-  private def loadPersistentMessages =
-    db.run(
-      sql"""select ID, Contest, Team, Kind, Value from Messages2 where Seen != 1""".as[Message2]
-    ).map { msgs =>
-      for(msg <- msgs) {
-        self ! msg
+  private def loadAll = {
+    val f = loadPersistentMessages.zip(loadClarificationRequestState).zip(
+      ClarificationModel.loadAll(db).map {
+        case (clarifications, clseen) => ClarificationsInitialState(clarifications, clseen)
       }
+    )
+    f.onSuccess {
+      case ((msgs, clrs), cls) =>
+        self ! StatusActorInitialState(msgs, clrs, cls)
     }
-
-  private def loadClarificationRequestState =
-    db.run(
-      sql"""select Contest, ID from ClarificationRequests where not Answered""".as[(Int, Int)]
-    ).map { msgs =>
-      val grp = msgs.groupBy(_._1).mapValues(x => x.map(_._2))
-      self ! ClarificationRequestsStoredState(grp)
-    }
-
-  private def loadClarState() = {
-    ClarificationModel.loadAll(db).map {
-      case (clarifications, clseen) =>
-        self ! ClarificationsInitialState(clarifications, clseen)
+    f.onFailure {
+      case e => Logger.error("loading status actor:", e)
     }
   }
 
+  private def loadPersistentMessages: Future[Iterable[Message2]] =
+    db.run(
+      sql"""select ID, Contest, Team, Kind, Value from Messages2 where Seen != 1""".as[Message2]
+    )
 
-  def receive = {
-    case Init => {
-      loadPersistentMessages
-      loadClarificationRequestState
-      loadClarState()
+  private def loadClarificationRequestState: Future[Map[Int, Seq[Int]]] =
+    db.run(
+      sql"""select Contest, ID from ClarificationRequests where not Answered""".as[(Int, Int)]
+    ).map { msgs =>
+      msgs.groupBy(_._1).mapValues(x => x.map(_._2))
     }
 
-    case ClarificationRequestsStoredState(values) => {
-      values.foreach {
+  private def catchMsg(msg2: Message2): Unit = {
+    val m = getUnacked(msg2.contest, msg2.team)
+    m += (msg2.id -> msg2)
+    msg2Channel.push(msg2)
+  }
+
+  override def receive = {
+    case Init => {
+      loadAll
+    }
+
+    case StatusActorInitialState(msgs, clrs, cls) => {
+      clrs.foreach {
         case (contest, pending) => {
           val pendingSet = mutable.Set[Int](pending:_*)
           pendingClarificationRequests.put(contest, pendingSet).foreach { old =>
@@ -186,8 +198,22 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
           }
         }
       }
-    }
 
+      for (cl <- cls.clr.filter(_.id.isDefined)) {
+        clarifications.getOrElseUpdate(cl.contest, mutable.Map[Int, Clarification]()).put(cl.id.get, cl)
+      }
+      for (s <- cls.seen) {
+        clarificationsSeen.put((s.contest, s.team), s.timestamp)
+      }
+
+      for (msg <- msgs)
+        catchMsg(msg)
+
+      context.become(initialized)
+    }
+  }
+
+  def initialized: Receive = {
     case ClarificationRequested(contest, clrId) => {
       pendingClarificationRequests(contest) += clrId
       clrChannel.push(ClarificationRequestState(contest, pendingClarificationRequests(contest).size, true))
@@ -197,15 +223,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       pendingClarificationRequests(contest) -= clrId
       clrChannel.push(ClarificationRequestState(contest, pendingClarificationRequests(contest).size, false))
       pushPersistent(contest, teamId, "clarificationAnswered", Json.obj("problem" -> problem, "text" -> text))
-    }
-
-    case ClarificationsInitialState(clr, seen) => {
-      for (cl <- clr.filter(_.id.isDefined)) {
-        clarifications.getOrElseUpdate(cl.contest, mutable.Map[Int, Clarification]()).put(cl.id.get, cl)
-      }
-      for (s <- seen) {
-        clarificationsSeen.put((s.contest, s.team), s.timestamp)
-      }
     }
 
     case cl: Clarification => {
@@ -254,12 +271,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
       sender ! {}
     }
 
-    case msg2: Message2 => {
-      val m = getUnacked(msg2.contest, msg2.team)
-      m += (msg2.id -> msg2)
-      msg2Channel.push(msg2)
-    }
-
+    case msg2: Message2 => catchMsg(msg2)
 
     case NewContestState(c) => {
       val old = contestStates.get(c.id)
