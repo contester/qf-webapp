@@ -212,8 +212,7 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
     }
 
     source.onopen = function() {
-        $("#connected1").removeClass("badge-error");
-        $("#connected1").text("+");
+        setConnectedBadge(true);
         resetPingState();
     }
 
@@ -301,8 +300,7 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
     })
 
     source.onerror = function(ev) {
-        $("#connected1").addClass("badge-error");
-        $("#connected1").text("!");
+        setConnectedBadge(false);
         console.log("Error: " + ev)
         if (pingState && pingState.tm) {
             clearTimeout(pingState.tm);
