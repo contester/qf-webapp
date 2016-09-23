@@ -2,8 +2,13 @@ package utils
 
 import java.sql.Timestamp
 
+import actors.WaiterActor
+import akka.actor.ActorRef
 import com.github.nscala_time.time.Imports
 import slick.jdbc.{PositionedParameters, SetParameter}
+
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success, Try}
 
 object Db {
   implicit object SetByteArray extends SetParameter[Array[Byte]] {
@@ -25,4 +30,17 @@ object Db {
 
   // TODO: implement fsequence (future sequence)
   // TODO: new fork-join-executor for database access?
+}
+
+object Ask {
+  def apply[T](ref: ActorRef, msg: AnyRef)(implicit timeout: akka.util.Timeout, ec: ExecutionContext) = {
+    import akka.pattern.ask
+    ref.ask(msg).mapTo[Try[T]].flatMap {
+      case Success(x) => Future.successful(x)
+      case Failure(x) => Future.failed(x)
+    }
+  }
+
+  def respond[T](ref: ActorRef, v: Try[T]) =
+    ref ! v
 }

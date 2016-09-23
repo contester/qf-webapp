@@ -100,6 +100,7 @@ object AdminNavlinkMatch {
       case "monitor" => routes.AdminApplication.monitor(_)
       case "qanda" => routes.AdminApplication.showQandA(_)
       case "rejudge" => routes.AdminApplication.rejudgePage(_)
+      case "tasks" => routes.AdminApplication.tasks(_)
       case _ => routes.AdminApplication.submits(_)
     }
 }

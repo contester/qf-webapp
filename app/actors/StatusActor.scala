@@ -9,6 +9,7 @@ import play.api.libs.EventSource.{Event, EventDataExtractor, EventNameExtractor}
 import play.api.libs.iteratee.{Concurrent, Enumeratee, Enumerator}
 import play.api.libs.json._
 import slick.jdbc.{GetResult, JdbcBackend}
+import utils.Ask
 
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
@@ -210,24 +211,13 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     case cl: Clarification => {
       val orig = cl.id.flatMap(id => clarifications.get(cl.contest).flatMap(_.get(id)))
       val saved = sender()
-      val f = ClarificationModel.updateClarification(db, cl).map { opt =>
-        Logger.info(s"updated2: $opt")
+      ClarificationModel.updateClarification(db, cl).map { opt =>
         val next = opt.getOrElse(cl)
         val ifp = if(cl.problem.isEmpty) None else Some(cl.problem)
         clrPostChannel.push(ClarificationPosted(next.id.get, next.contest, orig.isDefined, ifp, next.text))
-        Logger.info(s"updated1: $next")
-        saved ! next
-      }
-      f.onComplete(x => Logger.info(s"c: $x"))
+        next
+      }.onComplete(Ask.respond(saved, _))
     }
-
-      /*
-    case ClarificationUpdated(id, contest, timestamp, problem, text) => {
-      import com.github.nscala_time.time.Imports._
-      clarifications.getOrElseUpdate(contest, mutable.Map[Int, DateTime]()).put(id, timestamp)
-
-      clrPostChannel.push(ClarificationPosted(id, contest, false, problem, text))
-    }*/
 
     case AckAllClarifications(contest, team) => {
       import com.github.nscala_time.time.Imports._

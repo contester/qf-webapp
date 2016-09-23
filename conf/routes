@@ -48,6 +48,7 @@ POST /admin/postClarification/:contestId controllers.AdminApplication.postClarif
 POST /admin/toggleClarification/:clrId controllers.AdminApplication.toggleClarification(clrId: Int)
 POST /admin/deleteClarification/:contestId/:clrId controllers.AdminApplication.deleteClarification(contestId: Int, clrId: Int)
 GET /admin/qanda/:contestId controllers.AdminApplication.showQandA(contestId: Int)
+GET /admin/tasks/:contestId controllers.AdminApplication.tasks(contestId: Int)
 POST /admin/postAnswer/:clrId controllers.AdminApplication.postAnswer(clrId: Int)
 GET /admin/postAnswer/:clrId controllers.AdminApplication.postAnswerForm(clrId: Int)
 

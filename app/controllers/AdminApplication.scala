@@ -10,7 +10,7 @@ import com.google.common.collect.ImmutableRangeSet
 import com.spingo.op_rabbit.Message
 import jp.t2v.lab.play2.auth.AuthElement
 import models._
-import play.api.Configuration
+import play.api.{Configuration, Logger}
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
@@ -21,7 +21,7 @@ import play.api.libs.json.Json
 import play.api.libs.ws.WSClient
 import play.api.mvc.{Controller, RequestHeader}
 import slick.driver.JdbcProfile
-import utils.PolygonURL
+import utils.{Ask, PolygonURL}
 import views.html
 
 import scala.concurrent.duration.{Duration, _}
@@ -244,6 +244,16 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
+  def tasks(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
+    import Contexts.adminExecutionContext
+    getSelectedContests(contestId, loggedIn)
+      .zip(waiterActorModel.getSnapshot(loggedIn.locations.toList))
+      .map {
+        case (contest, tasks) =>
+          Ok(html.admin.waitertasksmain(tasks, contest))
+      }
+  }
+
   def toggleClarification(clrId: Int) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
     import Contexts.adminExecutionContext
     ClarificationModel.toggleClarification(db, clrId).map { _ =>
@@ -317,11 +327,10 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
         BadRequest(html.admin.postclarification(clarificationId, formWithErrors, contest))
       },
       data => {
-        import akka.pattern.ask
-
-        statusActorModel.statusActor.ask(
+        Ask.apply[Clarification](statusActorModel.statusActor,
           Clarification(clarificationId, contestId, data.problem.toUpperCase, data.text, DateTime.now, data.hidden))
-          .mapTo[Clarification].map { next =>
+          .map { next =>
+            Logger.info(s"$next")
           Redirect(routes.AdminApplication.showQandA(contestId))
         }
       }

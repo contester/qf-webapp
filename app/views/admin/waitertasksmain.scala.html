@@ -1,0 +1,5 @@
+@(tasks: Seq[AdaptedWaiterTask], contest: SelectedContest)(implicit request: RequestHeader)
+
+@adminmain(tab = "tasks", contest=contest) {
+@waitertasks(tasks, contest)
+}
