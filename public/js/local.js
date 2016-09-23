@@ -378,8 +378,8 @@ function listenOnAdmin(path, iconbase) {
         }
     })
 
-    addJsonEventListener(source, 'waiterTaskHeader', function(obj) {
-        alert(obj.outstanding);
+    source.addEventListener('waiterTaskHeader', function(ev) {
+        var obj = JSON.parse(ev.data);
         var p = $('#tasksPending');
         if (obj.outstanding) {
             p.text(obj.outstanding);
