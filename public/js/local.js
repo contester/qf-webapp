@@ -324,7 +324,7 @@ function listenOnAdmin(path, iconbase) {
 
     var reconnect = function() {
         source.close();
-        window.setTimeout(function() { listenOnEvents(path) }, 1000);
+        window.setTimeout(function() { listenOnAdmin(path) }, 1000);
     }
 
     var resetPingState = function() {
