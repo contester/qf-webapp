@@ -210,7 +210,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
     case cl: Clarification => {
       val orig = cl.id.flatMap(id => clarifications.get(cl.contest).flatMap(_.get(id)))
       val saved = sender()
-      ClarificationModel.updateClarification(db, cl).map { opt =>
+      val f = ClarificationModel.updateClarification(db, cl).map { opt =>
         Logger.info(s"updated2: $opt")
         val next = opt.getOrElse(cl)
         val ifp = if(cl.problem.isEmpty) None else Some(cl.problem)
@@ -218,6 +218,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor {
         Logger.info(s"updated1: $next")
         saved ! next
       }
+      f.onComplete(x => Logger.info(s"c: $x"))
     }
 
       /*
