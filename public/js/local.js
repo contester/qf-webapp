@@ -290,10 +290,9 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
 
     })
 
-    source.addEventListener('contest', function(ev) {
-        var obj = JSON.parse(ev.data);
+    source.addEventListener('contest', asJson(function(obj) {
         updateContestTimes(obj, iconbase);
-    })
+    }))
 
     source.addEventListener('ping', function(ev) {
         resetPingState();
@@ -397,14 +396,9 @@ function listenOnAdmin(path, iconbase) {
         }
     }))
 
-    source.addEventListener('waiterTaskDeleted', function(ev) {
-        var obj = JSON.parse(ev.data);
-
-        var tr = $('#wt-id-' + obj.id);
-        if (tr.length) {
-            tr.remove();
-        }
-    })
+    source.addEventListener('waiterTaskDeleted', asJson(function(obj) {
+        $('#wt-id-' + obj.id).remove();
+    }))
 
     source.onerror = function(ev) {
         setConnectedBadge(false);
