@@ -184,6 +184,17 @@ function reprintPost(target, btnid) {
     });
 }
 
+function setConnectedBadge(state) {
+    var conn = $('#connected1');
+    if (state) {
+        conn.removeClass("badge-error");
+        conn.text("+");
+    } else {
+        conn.addClass("badge-error");
+        conn.text("Нет связи");
+    }
+}
+
 function listenOnEvents(path, iconbase, ackMessagePath) {
     var source = new EventSource(path);
 
@@ -328,8 +339,7 @@ function listenOnAdmin(path, iconbase) {
     }
 
     source.onopen = function() {
-        $("#connected1").removeClass("badge-error");
-        $("#connected1").text("+");
+        setConnectedBadge(true);
         resetPingState();
     }
 
@@ -399,8 +409,7 @@ function listenOnAdmin(path, iconbase) {
     })
 
     source.onerror = function(ev) {
-        $("#connected1").addClass("badge-error");
-        $("#connected1").text("Нет связи");
+        setConnectedBadge(false);
         console.log("Error: " + ev)
         if (pingState && pingState.tm) {
             clearTimeout(pingState.tm);
