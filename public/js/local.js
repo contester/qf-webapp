@@ -304,6 +304,13 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
     }
 }
 
+function addJsonEventListener(source, name, func) {
+    source.addEventListener(source, name, function(ev) {
+        var obj = JSON.parse(ev.data);
+        return func(obj);
+    })
+}
+
 function listenOnAdmin(path, iconbase) {
     var source = new EventSource(path);
 
@@ -371,8 +378,7 @@ function listenOnAdmin(path, iconbase) {
         }
     })
 
-    source.addEventListener('waiterTaskHeader', function(ev) {
-        var obj = JSON.parse(ev.data);
+    addJsonEventListener(source, 'waiterTaskHeader', function(obj) {
         var p = $('#tasksPending');
         if (obj.outstanding) {
             p.text(obj.outstanding);
