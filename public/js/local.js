@@ -368,7 +368,6 @@ function listenOnAdmin(path, iconbase) {
             tr.replaceWith(obj.content);
         } else {
             $('#waitertasks > tbody').prepend(obj.content);
-            notifyMe('Новое задание для дежурных', iconbase + 'icpc_logo.png', 'Новое задание')
         }
     })
 
