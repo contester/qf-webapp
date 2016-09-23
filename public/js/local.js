@@ -371,6 +371,18 @@ function listenOnAdmin(path, iconbase) {
         }
     })
 
+    source.addEventListener('waiterTaskHeader', function(ev) {
+        var obj = JSON.parse(ev.data);
+        var p = $('#tasksPending');
+        if (obj.outstanding) {
+            p.text(obj.outstanding);
+            p.show();
+        } else {
+            p.text('-');
+            p.hide();
+        }
+    })
+
     source.addEventListener('waiterTaskDeleted', function(ev) {
         var obj = JSON.parse(ev.data);
 
