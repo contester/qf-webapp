@@ -1,9 +1,9 @@
 package actors
 
 import java.io.File
-import java.nio.file.{StandardCopyOption, Files}
+import java.nio.file.{Files, StandardCopyOption}
 
-import akka.actor.{Stash, Actor, Props}
+import akka.actor.{Actor, Props, Stash}
 import models._
 import org.apache.commons.io.{Charsets, FileUtils}
 import play.twirl.api.HtmlFormat
@@ -11,6 +11,7 @@ import slick.jdbc.JdbcBackend
 
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.util.Try
 
 object MonitorActor {
   def props(db: JdbcBackend#DatabaseDef, staticLocation: Option[String]) = Props(classOf[MonitorActor], db, staticLocation)
@@ -85,7 +86,7 @@ class MonitorActor(db: JdbcBackend#DatabaseDef, staticLocation: Option[String]) 
   def initialized: Receive = {
     case Refresh => loadMonitors()
     case State(state) => updateMonitors(state)
-    case Get(id) => sender ! monitors.get(id)
+    case Get(id) => sender ! Try(monitors.get(id))
   }
 
   override def receive: Receive = {

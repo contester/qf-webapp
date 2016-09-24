@@ -9,6 +9,7 @@ import play.api.Configuration
 import play.api.db.slick.DatabaseConfigProvider
 import slick.driver.JdbcProfile
 import spire.math.Rational
+import utils.Ask
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -170,13 +171,13 @@ case class StoredContestStatus(contest: Contest, frozen: AnyStatus, exposed: Any
 class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, system: ActorSystem, configuration: Configuration) {
   private[this] val monitorActor = system.actorOf(MonitorActor.props(dbConfigProvider.get[JdbcProfile].db, configuration.getString("monitor.static_location")), "monitor-actor")
 
-  def getMonitor(id: Int, overrideFreeze: Boolean)(implicit ec: ExecutionContext): Future[Option[ContestMonitor]] = {
-    import akka.pattern.ask
-
+  private implicit val monitorTimeout: akka.util.Timeout = {
     import scala.concurrent.duration._
-    import scala.language.postfixOps
+    Duration(30, SECONDS)
+  }
 
-    monitorActor.ask(MonitorActor.Get(id))(30 seconds).mapTo[Option[StoredContestStatus]]
+  def getMonitor(id: Int, overrideFreeze: Boolean)(implicit ec: ExecutionContext): Future[Option[ContestMonitor]] = {
+    Ask[Option[StoredContestStatus]](monitorActor, MonitorActor.Get(id))
       .map(_.map(_.monitor(overrideFreeze)))
   }
 }

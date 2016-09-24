@@ -277,7 +277,6 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   private def joinAdminFeed(contestId: Int, perm: WaiterPermissions, requestHeader: RequestHeader): Future[Enumerator[Event]] = {
     import Contexts.adminExecutionContext
-    import akka.pattern.ask
 
     Ask[Enumerator[Event]](statusActorModel.statusActor, StatusActor.JoinAdmin(contestId)).zip(
       Ask[Enumerator[Event]](waiterActorModel.waiterActor, WaiterActor.Join(perm, requestHeader))).map {
