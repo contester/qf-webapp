@@ -8,12 +8,13 @@ import jp.t2v.lab.play2.auth.AuthElement
 import models.ContesterResults.{CustomTestResult, FinishedTesting}
 import models._
 import org.apache.commons.io.FileUtils
+import org.webjars.play.RequireJS
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
 import play.api.libs.json._
-import play.api.mvc.Controller
+import play.api.mvc.{Action, Controller}
 import play.api.{Configuration, Logger}
 import slick.driver.JdbcProfile
 import views.html

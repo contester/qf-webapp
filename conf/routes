@@ -66,3 +66,4 @@ POST /admin/unackWaiterTask/:id/:room controllers.AdminApplication.unackWaiterTa
 POST /admin/deleteWaiterTask/:id controllers.AdminApplication.deleteWaiterTask(id: Long)
 
 GET     /assets/*file				controllers.Assets.at(path="/public", file)
+GET        /files/config.js        controllers.RjsHack.index
