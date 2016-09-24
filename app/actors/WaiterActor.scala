@@ -38,9 +38,9 @@ object WaiterActor {
   def props(db: JdbcBackend#DatabaseDef) = Props(classOf[WaiterActor], db)
 
   case object Load
-  case class Loaded(tasks: List[StoredWaiterTask])
+  case class Loaded(tasks: Iterable[StoredWaiterTask])
 
-  case class NewTask(message: String, rooms: List[String])
+  case class NewTask(message: String, rooms: Iterable[String])
   case class AckTask(id: Long, room: String)
   case class UnackTask(id: Long, room: String)
   case class DeleteTask(id: Long)
@@ -49,10 +49,9 @@ object WaiterActor {
   case class TaskUnacked(id: Long, room: String)
   case class TaskDeleted(id: Long)
 
-  case class Join(rooms: List[String], requestHeader: RequestHeader)
-  //case class Joined(enum: Enumerator[Event])
+  case class Join(perm: WaiterPermissions, requestHeader: RequestHeader)
 
-  case class GetSnapshot(rooms: List[String])
+  case class GetSnapshot(perm: WaiterPermissions)
   case class Snapshot(tasks: Seq[AdaptedWaiterTask])
 }
 
@@ -61,16 +60,16 @@ object WaiterActor {
 // - delete (id) -> will delete row.
 
 trait WaiterTaskEvent {
-  def filter(vrooms: Set[String]): Boolean
-  def toEvent(vrooms: Set[String], requestHeader: RequestHeader): Event
+  def filter(perm: WaiterPermissions): Boolean
+  def toEvent(perm: WaiterPermissions, requestHeader: RequestHeader): Event
 }
 
 case class WaiterTaskDeleted(id: Long) extends WaiterTaskEvent {
-  override def filter(vrooms: Set[String]): Boolean = true
+  override def filter(perm: WaiterPermissions): Boolean = true
 
   implicit val format = Json.format[WaiterTaskDeleted]
 
-  override def toEvent(vrooms: Set[String], requestHeader: RequestHeader): Event =
+  override def toEvent(perm: WaiterPermissions, requestHeader: RequestHeader): Event =
     Event(Json.stringify(Json.toJson(this)), None, Some("waiterTaskDeleted"))
 }
 
@@ -80,23 +79,22 @@ object WaiterTaskUpdate {
 }
 
 case class WaiterTaskUpdated(inner: StoredWaiterTask) extends WaiterTaskEvent {
-  override def filter(vrooms: Set[String]): Boolean = inner.matches(vrooms)
+  override def filter(perm: WaiterPermissions): Boolean = inner.matches(perm)
 
-  override def toEvent(vrooms: Set[String], requestHeader: RequestHeader): Event = {
-    val c = views.html.admin.singlewaitertask(inner.adapt(vrooms.toList))
+  override def toEvent(perm: WaiterPermissions, requestHeader: RequestHeader): Event = {
+    val c = views.html.admin.singlewaitertask(inner.adapt(perm))
     val e = WaiterTaskUpdate(inner.id, c.body)
     Event(Json.stringify(Json.toJson(e)), None, Some("waiterTaskUpdated"))
   }
 }
 
 case class WaiterTaskHeader(outstanding: Int, text: String) extends WaiterTaskEvent {
-  override def filter(vrooms: Set[String]): Boolean = true
+  override def filter(perm: WaiterPermissions): Boolean = true
 
   implicit val format = Json.format[WaiterTaskHeader]
-  override def toEvent(vrooms: Set[String], requestHeader: RequestHeader): Event =
+  override def toEvent(perm: WaiterPermissions, requestHeader: RequestHeader): Event =
     Event(Json.stringify(Json.toJson(this)), None, Some("waiterTaskHeader"))
 }
-
 
 class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   val tasks = mutable.Map[Long, StoredWaiterTask]()
@@ -113,17 +111,17 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
   private val (waiterOut, waiterChannel) = Concurrent.broadcast[WaiterTaskEvent]
 
-  private def filterByRooms(rooms: Set[String]) = Enumeratee.filter[WaiterTaskEvent](_.filter(rooms))
+  private def filterByRooms(perm: WaiterPermissions) = Enumeratee.filter[WaiterTaskEvent](_.filter(perm))
 
   import scala.language.implicitConversions
 
-  private def wt2event2(vrooms: Set[String], requestHeader: RequestHeader): Enumeratee[WaiterTaskEvent, Event] =
-    Enumeratee.map { e => e.toEvent(vrooms, requestHeader)}
+  private def wt2event2(perm: WaiterPermissions, requestHeader: RequestHeader): Enumeratee[WaiterTaskEvent, Event] =
+    Enumeratee.map { e => e.toEvent(perm, requestHeader)}
 
   private def storedSnapshot: Iterable[WaiterTaskEvent] = tasks.values.map(WaiterTaskUpdated)
 
-  private def getActual(s: Iterable[StoredWaiterTask], vrooms: List[String]): WaiterTaskEvent = {
-    val x = s.filter(_.matches(vrooms.toSet)).map(_.adapt(vrooms)).count { v =>
+  private def getActual(s: Iterable[StoredWaiterTask], perm: WaiterPermissions): WaiterTaskEvent = {
+    val x = s.filter(_.matches(perm)).map(_.adapt(perm)).count { v =>
       v.unacked.find(_.can).isDefined
     }
     WaiterTaskHeader(x, "")
@@ -155,9 +153,9 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   }
 
   def initialized: Receive = {
-    case GetSnapshot(vrooms: List[String]) => {
+    case GetSnapshot(perm) => {
       import com.github.nscala_time.time.Imports._
-      val r = tasks.values.map(_.adapt(vrooms)).toSeq.sortBy(_.when).reverse
+      val r = tasks.values.map(_.adapt(perm)).toSeq.sortBy(_.when).reverse
       sender ! Success(Snapshot(r))
     }
 
@@ -202,11 +200,11 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
       }
     }
 
-    case Join(rooms, requestHeader) => {
+    case Join(perm, requestHeader) => {
       val r: Enumerator[Event] = Enumerator.enumerate(storedSnapshot)
-          .andThen(Enumerator(getActual(tasks.values, rooms)))
-        .andThen(waiterOut) &> filterByRooms(rooms.toSet) &>
-        wt2event2(rooms.toSet, requestHeader)
+          .andThen(Enumerator(getActual(tasks.values, perm)))
+        .andThen(waiterOut) &> filterByRooms(perm) &>
+        wt2event2(perm, requestHeader)
       sender ! Success(r)
     }
 

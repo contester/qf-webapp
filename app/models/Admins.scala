@@ -12,11 +12,12 @@ case class AdminId(username: String, passwordHash: String) {
 }
 
 trait WaiterPermissions {
-  def canCreate: Boolean
+  def canCreateTasks: Boolean
+  def filter(room: String): Boolean
 }
 
 case class Admin(username: String, passwordHash: String, spectator: Set[Int], administrator: Set[Int],
-                 locations: Set[String]) {
+                 locations: Set[String]) extends WaiterPermissions {
   override def toString = s"$username:$passwordHash"
 
   def toId = AdminId(username, passwordHash)
@@ -27,8 +28,11 @@ case class Admin(username: String, passwordHash: String, spectator: Set[Int], ad
   def canModify(contestId: Int) =
     administrator.contains(contestId) || administrator.contains(-1)
 
-  def canCreateTasks =
+  val canCreateTasks =
     locations.contains("*")
+
+  override def filter(room: String): Boolean =
+    canCreateTasks || locations.contains(room)
 }
 
 object AdminId {

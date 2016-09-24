@@ -11,22 +11,21 @@ import scala.concurrent.{ExecutionContext, Future}
 
 case class StoredWaiterTask(id: Long, when: DateTime, message: String, rooms: Set[String],
                             acked: Map[String, DateTime]) {
-  def matches(vrooms: Set[String]): Boolean =
-    vrooms.contains("*") || !vrooms.intersect(rooms).isEmpty
+  def matches(perm: WaiterPermissions): Boolean =
+    perm.canCreateTasks || rooms.find(perm.filter).isDefined
 
-  def adapt(vrooms: List[String]): AdaptedWaiterTask = {
-    val s = vrooms.toSet
-    val odmin = s.contains("*")
-    val ac = acked.keys.map(x => RoomWithPermission(x, odmin || s.contains(x))).toSeq.sortBy(x => (!x.can, x.name))
-    val un = rooms.filterNot(acked.contains).map(x => RoomWithPermission(x, odmin || s.contains(x))).toSeq.sortBy(x => (!x.can, x.name))
-    AdaptedWaiterTask(id, when, message, un.toList, ac.toList, odmin)
+  def adapt(perm: WaiterPermissions): AdaptedWaiterTask = {
+    val odmin = perm.canCreateTasks
+    val ac = acked.keys.map(x => RoomWithPermission(x, odmin || perm.filter(x))).toSeq.sortBy(x => (!x.can, x.name))
+    val un = rooms.filterNot(acked.contains).map(x => RoomWithPermission(x, odmin || perm.filter(x))).toSeq.sortBy(x => (!x.can, x.name))
+    AdaptedWaiterTask(id, when, message, un, ac, odmin)
   }
 }
 
 case class RoomWithPermission(name: String, can: Boolean)
 
-case class AdaptedWaiterTask(id: Long, when: DateTime, message: String, unacked: List[RoomWithPermission],
-                             acked: List[RoomWithPermission], canDelete: Boolean)
+case class AdaptedWaiterTask(id: Long, when: DateTime, message: String, unacked: Seq[RoomWithPermission],
+                             acked: Seq[RoomWithPermission], canDelete: Boolean)
 
 object WaiterModel {
   import slick.driver.MySQLDriver.api._
@@ -44,17 +43,17 @@ object WaiterModel {
 
   val waiterTaskRecords = TableQuery[WaiterTaskRecords]
 
-  private def maybeMakeRooms(db: JdbcBackend#DatabaseDef, roomsActive: List[String])(implicit ec: ExecutionContext): Future[List[String]] = {
+  private def maybeMakeRooms(db: JdbcBackend#DatabaseDef, roomsActive: Iterable[String])(implicit ec: ExecutionContext): Future[Iterable[String]] = {
     if (roomsActive.isEmpty) {
       makeRooms(db)
     } else Future.successful(roomsActive)
   }
 
-  private def makeRooms(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[List[String]] = {
+  private def makeRooms(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[Iterable[String]] = {
     db.run(sql"""select Name from Areas""".as[String]).map(_.toList)
   }
 
-  def addNewTask(db: JdbcBackend#DatabaseDef, message: String, roomsActive: List[String])(implicit ec: ExecutionContext): Future[StoredWaiterTask] =
+  def addNewTask(db: JdbcBackend#DatabaseDef, message: String, roomsActive: Iterable[String])(implicit ec: ExecutionContext): Future[StoredWaiterTask] =
   maybeMakeRooms(db, roomsActive).flatMap { newRa =>
     val ra = newRa.mkString(",")
     val now = DateTime.now

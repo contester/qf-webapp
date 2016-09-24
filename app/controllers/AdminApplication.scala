@@ -231,15 +231,15 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     Future.successful(Ok("ok"))
   }
 
-  private def getAllWaiterTasks(rooms: Seq[String])(implicit ec: ExecutionContext) =
-    Ask[WaiterActor.Snapshot](waiterActorModel.waiterActor, WaiterActor.GetSnapshot(rooms.toList)).map(_.tasks)
+  private def getAllWaiterTasks(perm: WaiterPermissions)(implicit ec: ExecutionContext) =
+    Ask[WaiterActor.Snapshot](waiterActorModel.waiterActor, WaiterActor.GetSnapshot(perm)).map(_.tasks)
 
   def showQandA(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
     import Contexts.adminExecutionContext
     ClarificationModel.getClarifications(db, contestId)
       .zip(ClarificationModel.getClarificationReqs(db, contestId))
       .zip(getSelectedContests(contestId, loggedIn))
-        .zip(getAllWaiterTasks(loggedIn.locations.toList))
+        .zip(getAllWaiterTasks(loggedIn))
       .map {
       case (((clarifications, clReqs), contest), tasks) =>
         Ok(html.admin.qanda(tasks, clarifications, clReqs, contest))
@@ -249,7 +249,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   def tasks(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
     import Contexts.adminExecutionContext
     getSelectedContests(contestId, loggedIn)
-      .zip(getAllWaiterTasks(loggedIn.locations.toList))
+      .zip(getAllWaiterTasks(loggedIn))
       .map {
         case (contest, tasks) =>
           Ok(html.admin.waitertasksmain(tasks, contest))
@@ -275,12 +275,12 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     Duration(5, SECONDS)
   }
 
-  private def joinAdminFeed(contestId: Int, rooms: List[String], requestHeader: RequestHeader): Future[Enumerator[Event]] = {
+  private def joinAdminFeed(contestId: Int, perm: WaiterPermissions, requestHeader: RequestHeader): Future[Enumerator[Event]] = {
     import Contexts.adminExecutionContext
     import akka.pattern.ask
 
     statusActorModel.statusActor.ask(StatusActor.JoinAdmin(contestId)).mapTo[StatusActor.AdminJoined].zip(
-      Ask[Enumerator[Event]](waiterActorModel.waiterActor, WaiterActor.Join(rooms, requestHeader))).map {
+      Ask[Enumerator[Event]](waiterActorModel.waiterActor, WaiterActor.Join(perm, requestHeader))).map {
       case (one, two) =>
         Enumerator.interleave(one.enumerator, two)
     }
@@ -288,7 +288,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   def feed(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
     import Contexts.adminExecutionContext
-    joinAdminFeed(contestId, loggedIn.locations.toList, request).map { e =>
+    joinAdminFeed(contestId, loggedIn, request).map { e =>
       Ok.feed(e).as("text/event-stream")
     }
   }
