@@ -17,7 +17,7 @@ updateOptions := updateOptions.value.withCachedResolution(true)
 
 val spireVersion = "0.12.0"
 
-// pipelineStages := Seq(rjs)
+pipelineStages := Seq(rjs)
 
 libraryDependencies ++= Seq(
   cache,
