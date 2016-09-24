@@ -1,15 +1,14 @@
 package controllers
 
-import javax.inject.{Inject, Singleton}
+import javax.inject.Singleton
 
-import org.webjars.play.RequireJS
 import play.api.mvc.{Action, Controller}
 
 @Singleton
-class RjsHack @Inject() (requireJS: RequireJS) extends Controller  {
+class RjsHack extends Controller  {
   def index =
     Action {
-      Ok(requireJS.setup(routes.WebJarAssets.at("")))
+      Ok(org.webjars.RequireJS.getSetupJavaScript(routes.WebJarAssets.at("").url))
     }
 
 }
