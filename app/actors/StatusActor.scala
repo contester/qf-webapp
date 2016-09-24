@@ -14,6 +14,7 @@ import utils.Ask
 
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 
 object StatusActor {
   def props(db: JdbcBackend#DatabaseDef) = Props(classOf[StatusActor], db)
@@ -24,7 +25,6 @@ object StatusActor {
   case class NewContestState(c: Contest)
   case class Ack(loggedInTeam: LoggedInTeam, msgid: Int)
   case class JoinAdmin(c: Int)
-  case class AdminJoined(enumerator: Enumerator[Event])
   case class JoinUser(contest: Int, team: Int)
   case class UserJoined(enumerator: Enumerator[Event])
 
@@ -294,16 +294,19 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     }
 
     case JoinAdmin(c: Int) => {
-      val contestEvents = Enumerator.enumerate(contestStates.get(c)).andThen(contestOut &> filterContest(c)) &> EventSource()
-      val clrEvents = Enumerator(ClarificationRequestState(c, pendingClarificationRequests(c).size, false))
-        .andThen(clrOut &> filterClarificationRequests(c)) &> EventSource()
+      val enum = Try {
+        val contestEvents = Enumerator.enumerate(contestStates.get(c)).andThen(contestOut &> filterContest(c)) &> EventSource()
+        val clrEvents = Enumerator(ClarificationRequestState(c, pendingClarificationRequests(c).size, false))
+          .andThen(clrOut &> filterClarificationRequests(c)) &> EventSource()
 
-      sender ! AdminJoined(
-        Enumerator.interleave(contestEvents,
-        submitOut &> filterSubmits(c) &> EventSource(),
-        clrEvents,
-        userPingOut
-        ))
+
+          Enumerator.interleave(contestEvents,
+            submitOut &> filterSubmits(c) &> EventSource(),
+            clrEvents,
+            userPingOut
+          )
+      }
+      sender ! enum
     }
 
     case JoinUser(contest: Int, team: Int) => {

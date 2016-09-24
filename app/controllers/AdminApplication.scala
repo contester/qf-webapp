@@ -279,10 +279,10 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     import Contexts.adminExecutionContext
     import akka.pattern.ask
 
-    statusActorModel.statusActor.ask(StatusActor.JoinAdmin(contestId)).mapTo[StatusActor.AdminJoined].zip(
+    Ask[Enumerator[Event]](statusActorModel.statusActor, StatusActor.JoinAdmin(contestId)).zip(
       Ask[Enumerator[Event]](waiterActorModel.waiterActor, WaiterActor.Join(perm, requestHeader))).map {
       case (one, two) =>
-        Enumerator.interleave(one.enumerator, two)
+        Enumerator.interleave(one, two)
     }
   }
 
