@@ -1,3 +1,10 @@
+requirejs([
+    'jquery',
+    'bootstrap',
+    'bootstrap-datepicker',
+    'arrive',
+    'momentjs']);
+
 function maybeCheckNotifyPermission() {
     if (Notification.permission !== "granted") {
         Notification.requestPermission();
