@@ -15,7 +15,6 @@ function notifyMe(n_title, n_icon, n_body) {
     if (Notification.permission !== "granted")
         Notification.requestPermission();
     else {
-
         var div = document.createElement("div");
 
         div.innerHTML = n_body;
@@ -34,9 +33,7 @@ function notifyMe(n_title, n_icon, n_body) {
         window.setTimeout(function() {
             notification.close();
             }, 600000);
-
     }
-
 }
 
 function pad(num, size) {
