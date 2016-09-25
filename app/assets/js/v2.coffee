@@ -1,6 +1,6 @@
 cleanupText(body) ->
     div = document.createElement("div")
-    div.innerHTML = n_body
+    div.innerHTML = body
     div.innerText || div.textContent || div.text
 
 showNotification(title, icon, body) ->
@@ -17,3 +17,4 @@ showNotification(title, icon, body) ->
     window.setTimeout(->
         notification.close();
     , 600000);
+

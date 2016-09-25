@@ -1,3 +1,5 @@
+'use strict';
+
 function maybeCheckNotifyPermission() {
     if (Notification.permission !== "granted") {
         Notification.requestPermission();
