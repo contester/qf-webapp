@@ -18,3 +18,8 @@ showNotification(title, icon, body) ->
         notification.close();
     , 600000);
 
+notifyMe(title, icon, body) ->
+    if Notification.permission == "granted"
+      showNotification(title, icon, body)
+    else
+      Notification.requestPermission().then(-> showNotification(title, icon, body))
