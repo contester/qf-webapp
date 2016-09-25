@@ -11,20 +11,20 @@
 <tr id="wt-id-@task.id">
     <th scope="row">@task.id</th>
     <td>@if(task.canDelete){
-        <a id="wa-del-@{task.id}" href="javascript:void(0)"
-           onclick="deleteWaiterTask('@controllers.routes.AdminApplication.deleteWaiterTask(task.id)', '@{task.id}')"
-           class="btn btn-raised btn-danger btn-sm">X</a>
+        @defining(s"wa-del-${task.id}") { btnid =>
+        <a id="@{btnid}" href="javascript:void(0)"
+           onclick="v4.V4().btn('@controllers.routes.AdminApplication.deleteWaiterTask(task.id)', '@btnid')"
+           class="btn btn-raised btn-danger btn-xs">X</a>
+        }
         }</td>
     <td>@LocalDateFormat(task.when)</td>
     <td>@task.message</td>
     <td>@for(s <- task.unacked){
         @taskbutton(s, controllers.routes.AdminApplication.ackWaiterTask, "danger")
-    }
+        }
     </td>
     <td>@for(s <- task.acked){
-        <a id="wa-@{task.id}-@{s.name}" href="javascript:void(0)"
-           @if(s.can){onclick="ackWaiterTask('@controllers.routes.AdminApplication.unackWaiterTask(task.id, s.name)', '@{task.id}-@{s.name}')"}
-           class="btn btn-raised btn-success btn-sm" @if(!s.can){disabled}>@{s.name}</a>
+        @taskbutton(s, controllers.routes.AdminApplication.unackWaiterTask, "success")
         }
     </td>
 </tr>
