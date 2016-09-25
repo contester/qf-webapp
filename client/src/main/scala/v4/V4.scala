@@ -3,7 +3,7 @@ package v4
 import scala.scalajs.js
 import org.scalajs.dom
 import org.scalajs.dom.ext.Ajax
-import org.scalajs.jquery.{jQuery => $}
+import org.querki.jquery._
 
 import scala.scalajs.js.annotation.JSExport
 

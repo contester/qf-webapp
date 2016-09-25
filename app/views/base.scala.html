@@ -20,6 +20,10 @@
     <script src="@routes.Assets.at("lib/bootstrap-material-design/js/material.min.js")"></script>
     <script src="@routes.Assets.at("lib/jquery-validation/jquery.validate.min.js")"></script>
     <script src="@routes.Assets.at("js/main.js")"></script>
+    @scalajs.html.scripts(
+      "client",
+      name => routes.Assets.at(name).toString,
+      name => getClass.getResource(s"/public/$name") != null)
     <script type="text/javascript">
     $.material.init()
     $.validator.addMethod('filesize', function(value, element, param) {

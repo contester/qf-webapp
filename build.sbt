@@ -25,7 +25,7 @@ lazy val client = (project in file("client")).settings(
   persistLauncher in Test := false,
   libraryDependencies ++= Seq(
     "org.scala-js" %%% "scalajs-dom" % "0.9.1",
-    "be.doeraene" %%% "scalajs-jquery" % "0.9.0"
+    "org.querki" %%% "jquery-facade" % "1.0-RC6"
   )
 ).enablePlugins(ScalaJSPlugin, ScalaJSWeb)
 
@@ -59,6 +59,7 @@ libraryDependencies ++= Seq(
   "rhino" % "js" % "1.7R2",
   "com.typesafe.slick" %% "slick" % "3.1.1",
   "com.typesafe.slick" %% "slick-hikaricp" % "3.1.1",
+  "com.vmunier" %% "scalajs-scripts" % "1.0.0",
   "com.zaxxer" % "HikariCP" % "2.4.5",
   "org.spire-math" %% "spire" % spireVersion,
   "org.spire-math" %% "spire-extras" % spireVersion,
