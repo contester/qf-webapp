@@ -1,11 +1,3 @@
-function maybeCheckNotifyPermission() {
-    if (Notification.permission !== "granted") {
-        Notification.requestPermission();
-        return false;
-    }
-    return true;
-}
-
 function notifyMe(n_title, n_icon, n_body) {
     if (!Notification) {
         alert('Desktop notifications not available in your browser. Try Chromium.');
@@ -142,27 +134,6 @@ function deleteClarification(target, btnid) {
     $.post(target, {}, function() {
         $('#cl-button-' + btnid).html('<span class="caret"></span>');
         $('#cl-row-' + btnid).remove();
-    });
-}
-
-function ackWaiterTask(target, btnid) {
-    $('#wa-' + btnid).html('...');
-    $.post(target, {}, function() {
-        $('#wa-' + btnid).html('<span class="caret"></span>');
-    });
-}
-
-function unackWaiterTask(target, btnid) {
-    $('#wa-' + btnid).html('...');
-    $.post(target, {}, function() {
-        $('#wa-' + btnid).html('<span class="caret"></span>');
-    });
-}
-
-function deleteWaiterTask(target, btnid) {
-    $('#wa-del-' + btnid).html('...');
-    $.post(target, {}, function() {
-        $('#wa-del-' + btnid).html('<span class="caret"></span>');
     });
 }
 
