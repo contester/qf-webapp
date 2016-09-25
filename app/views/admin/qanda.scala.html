@@ -14,19 +14,27 @@
     <tbody>
     @for(s <- clarifications) {
         @defining(s.id.get) { id =>
-        <tr id="cl-row-@{id}"><th scope="row"><a href="@routes.AdminApplication.postUpdateClarification(id)">@id</a></th>
-            <td><div class="btn-group btn-nomargin">
-                <a href="javascript:void(0)" data-target="#" class="btn btn-primary btn-xs btn-nomargin dropdown-toggle" data-toggle="dropdown" id="cl-button-@id">
+        @defining(s"cl-row-$id") { rowid =>
+        <tr id="@rowid"><th scope="row"><a href="@routes.AdminApplication.postUpdateClarification(id)">@id</a></th>
+            <td>
+                @defining(s"cl-button-$id") { btnid =>
+                <div class="btn-group btn-nomargin">
+                <a href="javascript:void(0)" data-target="#" class="btn btn-primary btn-xs btn-nomargin dropdown-toggle"
+                   data-toggle="dropdown" id="@btnid">
                     <span class="caret"></span>
                 </a>
                 <ul class="dropdown-menu">
-                    <li><a href="javascript:void(0)" onclick="toggleClarification('@controllers.routes.AdminApplication.toggleClarification(id)', '@id')">Скрыть/показать</a></li>
-                    <li><a href="javascript:void(0)" onclick="deleteClarification('@controllers.routes.AdminApplication.deleteClarification(contest.contest.id, id)', 'id')">Удалить</a></li>
+                    <li><a href="javascript:void(0)"
+                           onclick="v4.V4().btn('@controllers.routes.AdminApplication.toggleClarification(id)', '@btnid')">Скрыть/показать</a></li>
+                    <li><a href="javascript:void(0)"
+                           onclick="v4.V4().btnDelete('@controllers.routes.AdminApplication.deleteClarification(contest.contest.id, id)', '@btnid', '@rowid')">Удалить</a></li>
                 </ul>
             </div>
+                }
             </td>
             <td>@s.problem</td><td>@s.text</td><td>@LocalDateFormat(s.arrived)</td><td>@s.hidden</td></tr>
         }
+    }
     }
     </tbody>
 </table>

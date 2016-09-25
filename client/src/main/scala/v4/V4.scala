@@ -6,6 +6,7 @@ import org.scalajs.dom.ext.Ajax
 import org.querki.jquery._
 import org.scalajs.dom.experimental.Notification
 
+import scala.concurrent.Future
 import scala.scalajs.js.annotation.JSExport
 import scala.util.{Failure, Success}
 
@@ -31,16 +32,29 @@ object V4 extends js.JSApp {
     }
   }
 
-  @JSExport
-  def btn(target: String, btnid: String): Unit = {
+  def btn0(target: String, btnid: String): Future[JQuery] = {
     val b = $("#" + btnid)
     b.html("...")
-    Ajax.post(target).onComplete {
-      case Success(xhr) =>
-        b.html("<span class=\"caret\"></span>")
-      case Failure(e) =>
-        dom.console.error(e.toString)
+    val f =  Ajax.post(target)
+    f.onFailure {
+      case e => dom.console.error(e.toString)
         b.html("!")
+    }
+    f.map { x =>
+      b.html("<span class=\"caret\"></span>")
+      b
+    }
+  }
+
+  @JSExport
+  def btn(target: String, btnid: String): Unit = {
+    btn0(target, btnid)
+  }
+
+  @JSExport
+  def btnDelete(target: String, btnid: String, rowid: String) {
+    btn0(target, btnid).onSuccess {
+      case x => $(s"#$rowid").remove()
     }
   }
 }

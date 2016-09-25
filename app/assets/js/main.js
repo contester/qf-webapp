@@ -122,21 +122,6 @@ function pad(num, size) {
         countdownState.contest.prevState = countdownState.contest.state;
     }
 
-function toggleClarification(target, btnid) {
-    $('#cl-button-' + btnid).html('...');
-    $.post(target, {}, function() {
-        $('#cl-button-' + btnid).html('<span class="caret"></span>');
-    });
-}
-
-function deleteClarification(target, btnid) {
-    $('#cl-button-' + btnid).html('...');
-    $.post(target, {}, function() {
-        $('#cl-button-' + btnid).html('<span class="caret"></span>');
-        $('#cl-row-' + btnid).remove();
-    });
-}
-
 function rejudgePost(target, btnid) {
     $('#rejudge-' + btnid).html('...');
     $('#result-' + btnid).html('...');
