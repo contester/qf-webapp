@@ -1,4 +1,13 @@
 @(task: AdaptedWaiterTask)
+
+@taskbutton(s: RoomWithPermission, action: (Long, String) => Call, st: String) = {
+@defining(s"wa-${task.id}-${s.name}") { btnid =>
+<a id="@btnid" href="javascript:void(0)"
+   @if(s.can){onclick="v4.V4().btn('@action(task.id, s.name)', '@btnid')"}
+   class="btn btn-raised btn-@st btn-sm" @if(!s.can){disabled}>@{s.name}</a>
+}
+}
+
 <tr id="wt-id-@task.id">
     <th scope="row">@task.id</th>
     <td>@if(task.canDelete){
@@ -9,9 +18,7 @@
     <td>@LocalDateFormat(task.when)</td>
     <td>@task.message</td>
     <td>@for(s <- task.unacked){
-        <a id="wa-@{task.id}-@{s.name}" href="javascript:void(0)"
-           @if(s.can){onclick="v4.V4().ackWaiterTask('@controllers.routes.AdminApplication.ackWaiterTask(task.id, s.name)', '@{task.id}-@{s.name}')"}
-           class="btn btn-raised btn-danger btn-sm" @if(!s.can){disabled}>@{s.name}</a>
+        @taskbutton(s, controllers.routes.AdminApplication.ackWaiterTask, "danger")
     }
     </td>
     <td>@for(s <- task.acked){

@@ -6,6 +6,7 @@ import org.scalajs.dom.ext.Ajax
 import org.querki.jquery._
 
 import scala.scalajs.js.annotation.JSExport
+import scala.util.{Failure, Success}
 
 object V4 extends js.JSApp {
   import scala.concurrent.ExecutionContext.Implicits.global
@@ -18,6 +19,19 @@ object V4 extends js.JSApp {
     Ajax.post(target).onSuccess {
       case xhr =>
         $("#wa-" + btnid).html("<span class=\"caret\"></span>")
+    }
+  }
+
+  @JSExport
+  def btn(target: String, btnid: String): Unit = {
+    val b = $("#" + btnid)
+    b.html("...")
+    Ajax.post(target).onComplete {
+      case Success(xhr) =>
+        b.html("<span class=\"caret\"></span>")
+      case Failure(e) =>
+        dom.console.error(e.toString)
+        b.html("!")
     }
   }
 }

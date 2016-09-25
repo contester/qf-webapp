@@ -19,7 +19,7 @@ import play.api.libs.EventSource.Event
 import play.api.libs.iteratee.Enumerator
 import play.api.libs.json.Json
 import play.api.libs.ws.WSClient
-import play.api.mvc.{Controller, RequestHeader}
+import play.api.mvc.{Action, AnyContent, Controller, RequestHeader}
 import slick.driver.JdbcProfile
 import utils.{Ask, PolygonURL}
 import views.html
