@@ -53,7 +53,7 @@
 @myScripts = {
 <script type="text/javascript">
     document.addEventListener('DOMContentLoaded', function() {
-        maybeCheckNotifyPermission();
+        v4.V4().askForPermission();
         listenOnAdmin('@routes.AdminApplication.feed(contest.contest.id)', '@routes.Assets.at("images/")');
     })
 </script>
