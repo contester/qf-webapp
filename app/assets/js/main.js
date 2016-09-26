@@ -126,19 +126,10 @@ function btn(target, btnid) {
 }
 
 function rejudgePost(target, btnid) {
-    $('#rejudge-' + btnid).html('...');
     $('#result-' + btnid).html('...');
-    $.post(target, {}, function() {
-        $('#rejudge-' + btnid).html('<span class="caret"></span>');
-    });
+    return btn(target, 'rejudge-' + btnid);
 }
 
-function reprintPost(target, btnid) {
-    $('#rejudge-' + btnid).html('...');
-    $.post(target, {}, function() {
-        $('#rejudge-' + btnid).html('<span class="caret"></span>');
-    });
-}
 
 function setConnectedBadge(state) {
     var conn = $('#connected1');
