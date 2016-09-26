@@ -11,7 +11,7 @@ function cleanupBody(body) {
 }
 
 function notifyMe(n_title, n_icon, n_body) {
-    askForPermission()
+    askForPermission();
     var notification = new Notification(n_title, {
       icon: n_icon,
       body: cleanupBody(n_body),
@@ -118,6 +118,12 @@ function formatSeconds(s) {
         }
         countdownState.contest.prevState = countdownState.contest.state;
     }
+
+function btn(target, btnid) {
+    var b = $('#' + btnid);
+    b.html('...');
+    return $.post(target).done(function() { b.html('<span class="caret"></span>'); }).fail(function() { b.html('!'); });
+}
 
 function rejudgePost(target, btnid) {
     $('#rejudge-' + btnid).html('...');

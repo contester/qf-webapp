@@ -43,6 +43,7 @@ libraryDependencies ++= Seq(
   "org.webjars" % "bootstrap-datepicker" % "1.6.1",
   "org.webjars.npm" % "arrive" % "2.3.1",
   "org.webjars" % "momentjs" % "2.14.1",
+  "org.webjars" % "jquery" % "3.1.1",
   "org.webjars" % "bootstrap-material-design" % "0.5.9",
   "org.webjars" % "jquery-validation" % "1.15.1",
   "org.webjars.bower" % "roboto-fontface" % "0.4.5",
