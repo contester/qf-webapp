@@ -52,10 +52,10 @@
 
 @myScripts = {
 <script type="text/javascript">
-    document.addEventListener('DOMContentLoaded', function() {
-        askForPermission();
-        listenOnAdmin('@routes.AdminApplication.feed(contest.contest.id)', '@routes.Assets.at("images/")');
-    })
+$(function() {
+    askForPermission();
+    listenOnAdmin('@routes.AdminApplication.feed(contest.contest.id)', '@routes.Assets.at("images/")');
+});
 </script>
 }
 
