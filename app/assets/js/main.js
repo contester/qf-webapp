@@ -45,7 +45,6 @@ function pad(num, size) {
 
     var countdownState = {};
     var clrState = {};
-    var pingState = {};
 
     function startIntervalUpdate(iconbase, admin) {
         if (!countdownState.interval)
