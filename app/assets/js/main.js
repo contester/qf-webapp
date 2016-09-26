@@ -326,96 +326,57 @@ function asJson(func) {
 }
 
 function listenOnAdmin(path, iconbase) {
-    var source = new EventSource(path);
-
-    var reconnect = function() {
-        source.close();
-        window.setTimeout(function() { listenOnAdmin(path); }, 1000);
-    };
-
-    var resetPingState = function() {
-        if (pingState && pingState.tm) {
-            clearTimeout(pingState.tm);
-            pingState.tm = null;
-        }
-        pingState.tm = setTimeout(function() { reconnect(); }, 60000);
-    };
-
-    source.onopen = function() {
-        setConnectedBadge(true);
-        resetPingState();
-    };
-
-    source.addEventListener('submit', function(ev) {
-        var obj = JSON.parse(ev.data);
-
-        var tr = $('#result-' + obj.submitId);
-        if (tr.length) {
-            tr.html(obj.result.message);
-        } else {
-            $('#submits > tbody').prepend('<tr><th scope="row">' + obj.submitId + '</th></tr>');
-        }
-    });
-
-    source.addEventListener('clarificationRequestState', function(ev) {
-        var obj = JSON.parse(ev.data);
-        var clrp = $("#clrPending");
-        clrp.text(obj.pending);
-        if (obj.pending) {
-            clrp.show();
-            if (obj.newRequest) {
-                notifyMe("Новый вопрос жюри", iconbase + 'icpc_logo.png', 'Новый вопрос жюри');
+    var setup = function(add) {
+        add('submit', function(obj) {
+            var tr = $('#result-' + obj.submitId);
+            if (tr.length) {
+                tr.html(obj.result.message);
+            } else {
+                $('#submits > tbody').prepend('<tr><th scope="row">' + obj.submitId + '</th></tr>');
             }
-        } else {
-            clrp.hide();
-        }
-    });
+        });
 
-    source.addEventListener('contest', function(ev) {
-        var obj = JSON.parse(ev.data);
-        updateContestTimes(obj, iconbase, true);
-    });
+        add('clarificationRequestState', function(obj) {
+            var clrp = $("#clrPending");
+            clrp.text(obj.pending);
+            if (obj.pending) {
+                clrp.show();
+                if (obj.newRequest) {
+                    notifyMe("Новый вопрос жюри", iconbase + 'icpc_logo.png', 'Новый вопрос жюри');
+                }
+            } else {
+                clrp.hide();
+            }
+        });
 
-    source.addEventListener('ping', function(ev) {
-        resetPingState();
-    });
+        add('contest', function(obj) {
+            updateContestTimes(obj, iconbase, true);
+        });
 
-    source.addEventListener('waiterTaskUpdated', function(ev) {
-        var obj = JSON.parse(ev.data);
+        add('waiterTaskUpdated', function(obj) {
+            var tr = $('#wt-id-' + obj.id);
+            if (tr.length) {
+                tr.replaceWith(obj.content);
+            } else {
+                $('#waitertasks > tbody').prepend(obj.content);
+            }
+        });
 
-        var tr = $('#wt-id-' + obj.id);
-        if (tr.length) {
-            tr.replaceWith(obj.content);
-        } else {
-            $('#waitertasks > tbody').prepend(obj.content);
-        }
-    });
+        add('waiterTaskHeader', function(obj) {
+            var p = $('#tasksPending');
+            if (obj.outstanding) {
+                p.text(obj.outstanding);
+                p.show();
+            } else {
+                p.text('-');
+                p.hide();
+            }
+        });
 
-    source.addEventListener('waiterTaskHeader', asJson(function(obj) {
-        var p = $('#tasksPending');
-        if (obj.outstanding) {
-            p.text(obj.outstanding);
-            p.show();
-        } else {
-            p.text('-');
-            p.hide();
-        }
-    }));
-
-    source.addEventListener('waiterTaskDeleted', asJson(function(obj) {
-        $('#wt-id-' + obj.id).remove();
-    }));
-
-    source.onerror = function(ev) {
-        setConnectedBadge(false);
-        console.log("Error: " + ev);
-        if (pingState && pingState.tm) {
-            clearTimeout(pingState.tm);
-            pingState.tm = null;
-        }
-
-        if (source.readyState == 2) {
-            reconnect();
-        }
+        add('waiterTaskDeleted', function(obj) {
+            $('#wt-id-' + obj.id).remove();
+        });
     };
+
+    return listenV2(path, setup, setConnectedBadge);
 }
