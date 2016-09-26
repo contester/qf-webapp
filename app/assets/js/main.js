@@ -202,127 +202,82 @@ function listenV2(path, setup, state) {
 }
 
 function listenOnEvents(path, iconbase, ackMessagePath) {
-    var source = new EventSource(path);
-
-    var reconnect = function() {
-        source.close();
-        window.setTimeout(function() { listenOnEvents(path); }, 1000);
-    };
-
-    var resetPingState = function() {
-        if (pingState && pingState.tm) {
-            clearTimeout(pingState.tm);
-            pingState.tm = null;
-        }
-        pingState.tm = setTimeout(function() { reconnect(); }, 60000);
-    };
-
-    source.onopen = function() {
-        setConnectedBadge(true);
-        resetPingState();
-    };
-
-    source.addEventListener('submit', function(ev) {
-        var obj = JSON.parse(ev.data);
-
-        var tr = $('#result-' + obj.submitId);
-        if (tr.length) {
-            tr.html(obj.result.message);
-        } else {
-            $('#submits > tbody').prepend('<tr><th scope="row">' + obj.submitId + '</th></tr>');
-        }
-
-        if (ackMessagePath) {
-            if (obj.msgid) {
-                setTimeout(function() {
-                var exists = localStorage.getItem(obj.msgid);
-                if (!exists) {
-                    var icon = iconbase + 'error-icon.gif';
-                    if (obj.result.success) {
-                        icon = iconbase + 'baloons/baloon-' + obj.problem.toLowerCase() + '.png';
-                    }
-                    notifyMe("Задача " + obj.problem, icon, obj.result.message);
-                    localStorage.setItem(obj.msgid, "true");
-                }
-                $.post(ackMessagePath, {'msgid': obj.msgid});
-                }, Math.random() * 3000);
+    var setup = function(add) {
+        add('submit', function(obj) {
+            var tr = $('#result-' + obj.submitId);
+            if (tr.length) {
+                tr.html(obj.result.message);
+            } else {
+                $('#submits > tbody').prepend('<tr><th scope="row">' + obj.submitId + '</th></tr>');
             }
-        }
-    });
 
-    source.addEventListener('clarificationAnswered', function(ev) {
-        var obj = JSON.parse(ev.data);
-        if (ackMessagePath) {
-            if (obj.msgid) {
-                setTimeout(function() {
+            if (ackMessagePath) {
+                if (obj.msgid) {
+                    setTimeout(function() {
                     var exists = localStorage.getItem(obj.msgid);
                     if (!exists) {
-                      notifyMe("На вопрос по задаче " + obj.problem + " получен ответ", iconbase + 'icpc_logo.png', obj.text);
-                      localStorage.setItem(obj.msgid, "true");
+                        var icon = iconbase + 'error-icon.gif';
+                        if (obj.result.success) {
+                            icon = iconbase + 'baloons/baloon-' + obj.problem.toLowerCase() + '.png';
+                        }
+                        notifyMe("Задача " + obj.problem, icon, obj.result.message);
+                        localStorage.setItem(obj.msgid, "true");
                     }
                     $.post(ackMessagePath, {'msgid': obj.msgid});
-                }, Math.random() * 3000);
+                    }, Math.random() * 3000);
+                }
             }
-        }
-    });
+        });
 
-    source.addEventListener('clarificationState', function(ev) {
-        var obj = JSON.parse(ev.data);
-        var clrp = $("#clrPending");
-        if (obj.unseen) {
-            clrp.show();
-        } else {
-            clrp.hide();
-        }
-    });
+        add('clarificationAnswered', function(obj) {
+            if (ackMessagePath) {
+                if (obj.msgid) {
+                    setTimeout(function() {
+                        var exists = localStorage.getItem(obj.msgid);
+                        if (!exists) {
+                          notifyMe("На вопрос по задаче " + obj.problem + " получен ответ", iconbase + 'icpc_logo.png', obj.text);
+                          localStorage.setItem(obj.msgid, "true");
+                        }
+                        $.post(ackMessagePath, {'msgid': obj.msgid});
+                    }, Math.random() * 3000);
+                }
+            }
+        });
 
-    source.addEventListener('clarificationPosted', function(ev) {
-        var obj = JSON.parse(ev.data);
-        setTimeout(function() {
-        var exists = localStorage.getItem(obj.text);
-        console.log(exists);
-        if (!exists) {
+        add('clarificationState', function(obj) {
             var clrp = $("#clrPending");
-            clrp.text("!");
-            clrp.show();
-            var msg = "Сообщение жюри";
-            if (obj.problem) {
-              msg += " по задаче " + obj.problem;
+            if (obj.unseen) {
+                clrp.show();
+            } else {
+                clrp.hide();
             }
-            notifyMe(msg, iconbase + 'icpc_logo.png', obj.text);
-            localStorage.setItem(obj.text, "true");
-        }
-                }, Math.random() * 3000);
+        });
 
-    });
+        add('clarificationPosted', function(obj) {
+            setTimeout(function() {
+                var exists = localStorage.getItem(obj.text);
+                if (!exists) {
+                var clrp = $("#clrPending");
+                clrp.text("!");
+                clrp.show();
+                var msg = "Сообщение жюри";
+                if (obj.problem) {
+                  msg += " по задаче " + obj.problem;
+                }
+                notifyMe(msg, iconbase + 'icpc_logo.png', obj.text);
+                localStorage.setItem(obj.text, "true");
+                    }
+            }, Math.random() * 3000);
 
-    source.addEventListener('contest', asJson(function(obj) {
-        updateContestTimes(obj, iconbase);
-    }));
+        });
 
-    source.addEventListener('ping', function(ev) {
-        resetPingState();
-    });
 
-    source.onerror = function(ev) {
-        setConnectedBadge(false);
-        console.log("Error: " + ev);
-        if (pingState && pingState.tm) {
-            clearTimeout(pingState.tm);
-            pingState.tm = null;
-        }
-
-        if (source.readyState == 2) {
-            reconnect();
-        }
+        add('contest', function(obj) {
+            updateContestTimes(obj, iconbase);
+        });
     };
-}
 
-function asJson(func) {
-    return function(ev) {
-        var obj = JSON.parse(ev.data);
-        return func(obj);
-    };
+    return listenV2(path, setup, setConnectedBadge);
 }
 
 function listenOnAdmin(path, iconbase) {
