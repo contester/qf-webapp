@@ -148,6 +148,59 @@ function setConnectedBadge(state) {
     }
 }
 
+function listenV2(path, setup, state) {
+    var source = new EventSource(path);
+    var reconnect = function() {
+        source.close();
+        window.setTimeout(function() { listenV2(path, setup, state); }, 1000);
+    };
+
+    var pingState = {};
+    var clearPingState = function() {
+        if (pingState && pingState.tm) {
+            clearTimeout(pingState.tm);
+            pingState.tm = null;
+        }
+    };
+
+    var resetPingState = function() {
+        clearPingState();
+        pingState.tm = setTimeout(function() { reconnect(); }, 60000);
+    };
+
+    source.onopen = function() {
+        if (state) {
+            state(true);
+        }
+        resetPingState();
+    };
+
+    source.addEventListener('ping', function(ev) {
+        resetPingState();
+    });
+
+    source.onerror = function(ev) {
+        state(false);
+        console.log("Error: " + ev);
+        clearPingState();
+        if (source.readyState == 2) {
+            reconnect();
+        }
+    };
+
+    var addJsonListener = function(name, handler) {
+        source.addEventListener(name, function(ev) {
+            var p = JSON.parse(ev.data);
+            resetPingState();
+            handler(p);
+        });
+    };
+
+    setup(addJsonListener);
+
+    return source;
+}
+
 function listenOnEvents(path, iconbase, ackMessagePath) {
     var source = new EventSource(path);
 
