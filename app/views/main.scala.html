@@ -39,7 +39,7 @@
 @myScripts = {
 <script type="text/javascript">
     document.addEventListener('DOMContentLoaded', function() {
-        v4.V4().askForPermission();
+        askForPermission();
         listenOnEvents('@routes.Application.feed(loggedIn.contest.id, loggedIn.team.localId)',
             '@routes.Assets.at("images/")',
             '@routes.Application.ackMessage');

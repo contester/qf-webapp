@@ -16,14 +16,6 @@ object V4 extends js.JSApp {
 
   override def main(): Unit = {}
 
-  @JSExport
-  def askForPermission(): Unit = {
-    if (Notification.permission != "granted")
-      Notification.requestPermission { x: String =>
-        ()
-      }
-  }
-
   def btn0(target: String, btnid: String): Future[JQuery] = {
     val b = $("#" + btnid)
     b.html("...")

@@ -1,47 +1,45 @@
-function notifyMe(n_title, n_icon, n_body) {
-    if (!Notification) {
-        alert('Desktop notifications not available in your browser. Try Chromium.');
-        return;
-    }
-
-    if (Notification.permission !== "granted")
+function askForPermission() {
+    if (Notification.permission !== "granted") {
         Notification.requestPermission();
-    else {
-        var div = document.createElement("div");
-
-        div.innerHTML = n_body;
-        var text = div.innerText || div.textContent || div.text;
-
-        var notification = new Notification(n_title, {
-          icon: n_icon,
-          body: text,
-        });
-
-        notification.addEventListener('click', function () {
-            window.focus();
-            this.close();
-        });
-
-        window.setTimeout(function() {
-            notification.close();
-            }, 600000);
     }
 }
 
+function cleanupBody(body) {
+        var div = document.createElement("div");
+        div.innerHTML = body;
+        return div.innerText || div.textContent || div.text;
+}
+
+function notifyMe(n_title, n_icon, n_body) {
+    askForPermission()
+    var notification = new Notification(n_title, {
+      icon: n_icon,
+      body: cleanupBody(n_body),
+    });
+
+    notification.addEventListener('click', function () {
+        window.focus();
+        this.close();
+    });
+
+    window.setTimeout(function() {notification.close();}, 600000);
+}
+
 function pad(num, size) {
+    'use strict';
     var s = num+"";
     while (s.length < size) s = "0" + s;
     return s;
 }
 
-    function formatSeconds(s) {
-        var seconds = s % 60;
-        var minutes = (s / 60) >> 0;
-        var hours = (minutes / 60) >> 0;
-        minutes %= 60;
+function formatSeconds(s) {
+    var seconds = s % 60;
+    var minutes = (s / 60) >> 0;
+    var hours = (minutes / 60) >> 0;
+    minutes %= 60;
 
-        return pad(hours, 2) + ':' + pad(minutes, 2) + ':' + pad(seconds, 2);
-    }
+    return pad(hours, 2) + ':' + pad(minutes, 2) + ':' + pad(seconds, 2);
+}
 
     var countdownState = {};
     var clrState = {};
