@@ -27,8 +27,8 @@
         }
 
         @b3.select(form("compiler"), options = languages, '_label -> "Компилятор")
-        @b3.file(form("file"), '_label -> "Файл с решением")
-        @b3.file(form("inputfile"), '_label -> "Входные данные")
+        @filex(form("file"), '_label -> "Файл с решением")
+        @filex(form("inputfile"), '_label -> "Входные данные")
         @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Отправить}
         }
         <script>
