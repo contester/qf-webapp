@@ -13,7 +13,7 @@
     <td>@if(task.canDelete){
         @defining(s"wa-del-${task.id}") { btnid =>
         <a id="@{btnid}" href="javascript:void(0)"
-           onclick="v4.V4().btn('@controllers.routes.AdminApplication.deleteWaiterTask(task.id)', '@btnid')"
+           onclick="btn('@controllers.routes.AdminApplication.deleteWaiterTask(task.id)', '@btnid')"
            class="btn btn-raised btn-danger btn-xs">X</a>
         }
         }</td>
