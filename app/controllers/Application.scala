@@ -12,6 +12,7 @@ import org.webjars.play.RequireJS
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
+import play.api.http.ContentTypes
 import play.api.i18n.{I18nSupport, MessagesApi}
 import play.api.libs.json._
 import play.api.mvc.{Action, Controller}
@@ -201,7 +202,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
     statusActorModel.statusActor.ask(StatusActor.JoinUser(contestId, teamId))(Duration(5, SECONDS)).map {
       case StatusActor.UserJoined(e) => {
-        Ok.feed(e).as("text/event-stream")
+        Ok.feed(e).as(ContentTypes.EVENT_STREAM)
       }
       case _ => BadRequest("foo")
     }

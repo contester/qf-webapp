@@ -14,6 +14,7 @@ import play.api.{Configuration, Logger}
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
+import play.api.http.ContentTypes
 import play.api.i18n.{I18nSupport, MessagesApi}
 import play.api.libs.EventSource.Event
 import play.api.libs.iteratee.Enumerator
@@ -288,7 +289,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   def feed(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
     import Contexts.adminExecutionContext
     joinAdminFeed(contestId, loggedIn, request).map { e =>
-      Ok.feed(e).as("text/event-stream")
+      Ok.feed(e).as(ContentTypes.EVENT_STREAM)
     }
   }
 
