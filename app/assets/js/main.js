@@ -325,6 +325,9 @@ function listenOnAdmin(path, iconbase) {
                 p.text('-');
                 p.hide();
             }
+            if (obj.text) {
+                notifyMe("Новое задание дежурным", iconbase + 'icpc_logo.png', obj.text);
+            }
         });
 
         add('waiterTaskDeleted', function(obj) {
