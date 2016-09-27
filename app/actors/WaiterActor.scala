@@ -1,6 +1,5 @@
 package actors
 
-import akka.actor.Actor.Receive
 import akka.actor.{Actor, Props, Stash}
 import models._
 import play.api.Logger
@@ -16,15 +15,6 @@ import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.util.Success
 
-// Spectator has a list of rooms it cares for.
-// Task goes to the room/list of rooms.
-// Spectators for these rooms get events.
-// Spectators can ack their rooms.
-
-// Events:
-// - Task added (id, rooms unacked, rooms acked, message)
-// - Task updated (same)
-// - Task deleted (id)
 
 import com.github.nscala_time.time.Imports.DateTime
 
@@ -60,16 +50,13 @@ object WaiterActor {
 
   case class HeaderSource(rows: HeaderRows, added: Option[StoredWaiterTask])
 
-  def convertHeaderSource(perm: WaiterPermissions)(implicit ec: ExecutionContext): Enumeratee[HeaderSource, Event] = Enumeratee.map { v =>
+  def convertHeaderSource(perm: WaiterPermissions)(implicit ec: ExecutionContext): Enumeratee[HeaderSource, WaiterTaskHeader] =
+    Enumeratee.map { v =>
     val count = v.rows.count(_.exists(perm.filter))
     val msg = v.added.filter(_.matches(perm)).map(_.message).getOrElse("")
-    WaiterTaskHeader(count, msg).toEvent(perm, null)
+    WaiterTaskHeader(count, msg)
   }
 }
-
-// UI events:
-// - update (id) -> will insert or update row.
-// - delete (id) -> will delete row.
 
 trait WaiterTaskEvent {
   def filter(perm: WaiterPermissions): Boolean
@@ -100,20 +87,22 @@ case class WaiterTaskUpdated(inner: StoredWaiterTask) extends WaiterTaskEvent {
   }
 }
 
-case class WaiterTaskHeader(outstanding: Int, text: String) extends WaiterTaskEvent {
-  override def filter(perm: WaiterPermissions): Boolean = true
+case class WaiterTaskHeader(outstanding: Int, text: String)
 
+object WaiterTaskHeader {
   implicit val format = Json.format[WaiterTaskHeader]
-  override def toEvent(perm: WaiterPermissions, requestHeader: RequestHeader): Event =
-    Event(Json.stringify(Json.toJson(this)), None, Some("waiterTaskHeader"))
+  implicit val eventNameExtractor = EventNameExtractor[WaiterTaskHeader](_ => Some("waiterTaskHeader"))
+  implicit val eventDataExtractor = EventDataExtractor[WaiterTaskHeader] { state =>
+    Json.stringify(Json.toJson(state))
+  }
 }
 
 class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   val tasks = mutable.Map[Long, StoredWaiterTask]()
 
-  import scala.concurrent.ExecutionContext.Implicits.global
-
   import WaiterActor._
+
+  import scala.concurrent.ExecutionContext.Implicits.global
 
   @throws[Exception](classOf[Exception])
   override def preStart(): Unit = {
@@ -220,7 +209,7 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
       val r: Enumerator[Event] = Enumerator.enumerate(storedSnapshot)
         .andThen(waiterOut) &> filterByRooms(perm) &>
         wt2event2(perm, requestHeader)
-      val r2 = Enumerator(getActual).andThen(headerOut) &> convertHeaderSource(perm)
+      val r2 = Enumerator(getActual).andThen(headerOut) &> convertHeaderSource(perm) &> EventSource()
       sender ! Success(Enumerator.interleave(r, r2))
     }
 
