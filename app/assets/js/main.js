@@ -33,6 +33,7 @@ function pad(num, size) {
 }
 
 function formatSeconds(s) {
+    'use strict';
     var seconds = s % 60;
     var minutes = (s / 60) >> 0;
     var hours = (minutes / 60) >> 0;
