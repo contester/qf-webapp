@@ -233,6 +233,7 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     case TaskDeleted(id) => {
       tasks.remove(id)
       waiterChannel.push(WaiterTaskDeleted(id))
+      headerChannel.push(getActual)
     }
   }
 }
