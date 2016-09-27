@@ -256,16 +256,16 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
             setTimeout(function() {
                 var exists = localStorage.getItem(obj.text);
                 if (!exists) {
-                var clrp = $("#clrPending");
-                clrp.text("!");
-                clrp.show();
-                var msg = "Сообщение жюри";
-                if (obj.problem) {
-                  msg += " по задаче " + obj.problem;
-                }
-                notifyMe(msg, iconbase + 'icpc_logo.png', obj.text);
-                localStorage.setItem(obj.text, "true");
+                    var clrp = $("#clrPending");
+                    clrp.text("!");
+                    clrp.show();
+                    var msg = "Сообщение жюри";
+                    if (obj.problem) {
+                      msg += " по задаче " + obj.problem;
                     }
+                    notifyMe(msg, iconbase + 'icpc_logo.png', obj.text);
+                    localStorage.setItem(obj.text, "true");
+                }
             }, Math.random() * 3000);
 
         });
