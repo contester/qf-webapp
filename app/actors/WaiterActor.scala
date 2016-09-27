@@ -13,6 +13,7 @@ import slick.jdbc.JdbcBackend
 import utils.Ask
 
 import scala.collection.mutable
+import scala.concurrent.ExecutionContext
 import scala.util.Success
 
 // Spectator has a list of rooms it cares for.
@@ -53,6 +54,17 @@ object WaiterActor {
 
   case class GetSnapshot(perm: WaiterPermissions)
   case class Snapshot(tasks: Seq[AdaptedWaiterTask])
+
+  // can be filtered against rooms
+  type HeaderRows = Iterable[Iterable[String]]
+
+  case class HeaderSource(rows: HeaderRows, added: Option[StoredWaiterTask])
+
+  def convertHeaderSource(perm: WaiterPermissions)(implicit ec: ExecutionContext): Enumeratee[HeaderSource, Event] = Enumeratee.map { v =>
+    val count = v.rows.count(_.exists(perm.filter))
+    val msg = v.added.filter(_.matches(perm)).map(_.message).getOrElse("")
+    WaiterTaskHeader(count, msg).toEvent(perm, null)
+  }
 }
 
 // UI events:
@@ -111,6 +123,8 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
   private val (waiterOut, waiterChannel) = Concurrent.broadcast[WaiterTaskEvent]
 
+  private val (headerOut, headerChannel) = Concurrent.broadcast[HeaderSource]
+
   private def filterByRooms(perm: WaiterPermissions) = Enumeratee.filter[WaiterTaskEvent](_.filter(perm))
 
   import scala.language.implicitConversions
@@ -120,11 +134,10 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
   private def storedSnapshot: Iterable[WaiterTaskEvent] = tasks.values.map(WaiterTaskUpdated)
 
-  private def getActual(s: Iterable[StoredWaiterTask], perm: WaiterPermissions): WaiterTaskEvent = {
-    val x = s.filter(_.matches(perm)).map(_.adapt(perm)).count { v =>
-      v.unacked.find(_.can).isDefined
-    }
-    WaiterTaskHeader(x, "")
+  private def getHeaderRows = tasks.values.map(_.unacked)
+
+  private def getActual: HeaderSource = {
+    HeaderSource(getHeaderRows, None)
   }
 
   override def receive: Receive = {
@@ -170,6 +183,7 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     case task: StoredWaiterTask => {
       tasks.put(task.id, task)
       waiterChannel.push(WaiterTaskUpdated(task))
+      headerChannel.push(HeaderSource(getHeaderRows, Some(task)))
     }
 
     case AckTask(id, room) =>
@@ -182,6 +196,7 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
         val newMsg = StoredWaiterTask(stored.id, stored.when, stored.message, stored.rooms, stored.acked.updated(room, when))
         tasks.put(id, newMsg)
         waiterChannel.push(WaiterTaskUpdated(newMsg))
+        headerChannel.push(getActual)
       }
     }
 
@@ -197,15 +212,16 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
         val newMsg = StoredWaiterTask(stored.id, stored.when, stored.message, stored.rooms, stored.acked - room)
         tasks.put(id, newMsg)
         waiterChannel.push(WaiterTaskUpdated(newMsg))
+        headerChannel.push(getActual)
       }
     }
 
     case Join(perm, requestHeader) => {
       val r: Enumerator[Event] = Enumerator.enumerate(storedSnapshot)
-          .andThen(Enumerator(getActual(tasks.values, perm)))
         .andThen(waiterOut) &> filterByRooms(perm) &>
         wt2event2(perm, requestHeader)
-      sender ! Success(r)
+      val r2 = Enumerator(getActual).andThen(headerOut) &> convertHeaderSource(perm)
+      sender ! Success(Enumerator.interleave(r, r2))
     }
 
     case DeleteTask(id) => {

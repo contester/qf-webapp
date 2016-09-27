@@ -20,6 +20,8 @@ case class StoredWaiterTask(id: Long, when: DateTime, message: String, rooms: Se
     val un = rooms.filterNot(acked.contains).map(x => RoomWithPermission(x, odmin || perm.filter(x))).toSeq.sortBy(x => (!x.can, x.name))
     AdaptedWaiterTask(id, when, message, un, ac, odmin)
   }
+
+  def unacked = rooms -- acked.keys
 }
 
 case class RoomWithPermission(name: String, can: Boolean)
