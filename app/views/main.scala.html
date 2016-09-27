@@ -38,12 +38,12 @@
 
 @myScripts = {
 <script type="text/javascript">
-    document.addEventListener('DOMContentLoaded', function() {
+    $(function() {
         askForPermission();
         listenOnEvents('@routes.Application.feed(loggedIn.contest.id, loggedIn.team.localId)',
             '@routes.Assets.at("images/")',
             '@routes.Application.ackMessage');
-    })
+    });
 </script>
 }
 

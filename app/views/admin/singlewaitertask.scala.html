@@ -3,7 +3,7 @@
 @taskbutton(s: RoomWithPermission, action: (Long, String) => Call, st: String) = {
 @defining(s"wa-${task.id}-${s.name}") { btnid =>
 <a id="@btnid" href="javascript:void(0)"
-   @if(s.can){onclick="v4.V4().btn('@action(task.id, s.name)', '@btnid')"}
+   @if(s.can){onclick="btn('@action(task.id, s.name)', '@btnid')"}
    class="btn btn-raised btn-@st btn-sm" @if(!s.can){disabled}>@{s.name}</a>
 }
 }

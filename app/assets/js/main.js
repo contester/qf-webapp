@@ -125,6 +125,10 @@ function btn(target, btnid) {
     return $.post(target).done(function() { b.html('<span class="caret"></span>'); }).fail(function() { b.html('!'); });
 }
 
+function btnDelete(target, btnid, rowid) {
+    return btn(target, btnid).done(function() {$('#' + rowid).remove(); });
+}
+
 function rejudgePost(target, btnid) {
     $('#result-' + btnid).html('...');
     return btn(target, 'rejudge-' + btnid);
