@@ -213,14 +213,14 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
             if (ackMessagePath) {
                 if (obj.msgid) {
                     setTimeout(function() {
-                    var exists = localStorage.getItem(obj.msgid);
+                    var exists = sessionStorage.getItem(obj.msgid);
                     if (!exists) {
                         var icon = iconbase + 'error-icon.gif';
                         if (obj.result.success) {
                             icon = iconbase + 'baloons/baloon-' + obj.problem.toLowerCase() + '.png';
                         }
                         notifyMe("Задача " + obj.problem, icon, obj.result.message);
-                        localStorage.setItem(obj.msgid, "true");
+                        sessionStorage.setItem(obj.msgid, "true");
                     }
                     $.post(ackMessagePath, {'msgid': obj.msgid});
                     }, Math.random() * 3000);
@@ -232,10 +232,10 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
             if (ackMessagePath) {
                 if (obj.msgid) {
                     setTimeout(function() {
-                        var exists = localStorage.getItem(obj.msgid);
+                        var exists = sessionStorage.getItem(obj.msgid);
                         if (!exists) {
                           notifyMe("На вопрос по задаче " + obj.problem + " получен ответ", iconbase + 'icpc_logo.png', obj.text);
-                          localStorage.setItem(obj.msgid, "true");
+                          sessionStorage.setItem(obj.msgid, "true");
                         }
                         $.post(ackMessagePath, {'msgid': obj.msgid});
                     }, Math.random() * 3000);
@@ -254,7 +254,7 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
 
         add('clarificationPosted', function(obj) {
             setTimeout(function() {
-                var exists = localStorage.getItem(obj.text);
+                var exists = sessionStorage.getItem(obj.text);
                 if (!exists) {
                     var clrp = $("#clrPending");
                     clrp.text("!");
@@ -264,7 +264,7 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
                       msg += " по задаче " + obj.problem;
                     }
                     notifyMe(msg, iconbase + 'icpc_logo.png', obj.text);
-                    localStorage.setItem(obj.text, "true");
+                    sessionStorage.setItem(obj.text, "true");
                 }
             }, Math.random() * 3000);
 
