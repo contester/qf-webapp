@@ -33,7 +33,6 @@ class ByteLimiter(val maximumBytes: Long) extends GraphStage[FlowShape[ByteStrin
     private var count = 0
 
     setHandlers(in, out, new InHandler with OutHandler {
-
       override def onPull(): Unit = {
         pull(in)
       }
@@ -76,7 +75,7 @@ object GridfsTools {
         case 404 => Future.successful(None)
         case 200 =>
           val origSize = resp.headers.headers.get("X-Fs-Content-Length").map(_.head).map(_.toLong).getOrElse(0L)
-          resp.body.via(new ByteLimiter(sizeLimit)).runReduce((x, y) => x ++ y).map { x =>
+          resp.body.via(new ByteLimiter(sizeLimit)).runFold(ByteString.empty)((x, y) => x ++ y).map { x =>
             Some(GridfsContent(x.toByteBuffer.array(), origSize > sizeLimit))
           }
       }
