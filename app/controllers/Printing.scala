@@ -85,7 +85,7 @@ class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
     val parsed = printForm.bindFromRequest
     val solutionOpt = request.body.file("file").map { solution =>
       solution.filename -> FileUtils.readFileToByteArray(solution.ref.file)
-    }.map(x => x._1 -> fixEncoding(x._2))
+    }//.map(x => x._1 -> fixEncoding(x._2))
 
     val parsed0 = if (solutionOpt.isDefined) parsed
       else parsed.withGlobalError("can't read file")
