@@ -1,4 +1,4 @@
-@(tasks: Seq[AdaptedWaiterTask], contest: SelectedContest)
+@(tasks: Seq[AdaptedWaiterTask], contest: SelectedContest, admin: Admin)
 
 <div class="panel panel-success">
     <div class="panel-heading"><h3 class="panel-title">Tasks</h3></div>
@@ -15,6 +15,8 @@
             }
             </tbody>
         </table>
-        <a href="@routes.AdminApplication.postNewWaiterTaskForm(contest.contest.id)" class="btn btn-primary">Добавить задание</a>
+        @if(admin.canCreateTasks) {
+            <a href="@routes.AdminApplication.postNewWaiterTaskForm(contest.contest.id)" class="btn btn-primary">Добавить задание</a>
+        }
     </div>
 </div>

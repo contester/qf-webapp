@@ -112,7 +112,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
 
   def index = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
-    Future.successful(Redirect(routes.AdminApplication.submits(1)))
+    Future.successful(Redirect(routes.AdminApplication.submits(loggedIn.defaultContest)))
   }
 
   private val rangeRe = "(\\d*)\\.\\.(\\d*)".r
@@ -253,7 +253,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
       .zip(getAllWaiterTasks(loggedIn))
       .map {
         case (contest, tasks) =>
-          Ok(html.admin.waitertasksmain(tasks, contest))
+          Ok(html.admin.waitertasksmain(tasks, contest, loggedIn))
       }
   }
 
