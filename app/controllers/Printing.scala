@@ -1,5 +1,6 @@
 package controllers
 
+import java.nio.charset.StandardCharsets
 import javax.inject.Inject
 
 import akka.actor.{ActorSystem, Props}
@@ -71,11 +72,17 @@ class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
+  private val russianLetters = "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЬЫЪЭЮЯ"
+  private val russianSet = (russianLetters + russianLetters.toLowerCase).toSet
+  private def countRussianLetters(x: String) = x.count(russianSet)
+
+  private def toQ(x: Byte): Byte =
+    if (x > 127) {
+      "?".toByte
+    } else x
+
   private def fixEncoding(x: Array[Byte]): Array[Byte] = {
-    val v1 = Try(new String(x, "UTF-8"))
-    if (v1.isSuccess)
-      v1.get.getBytes("UTF-8")
-    else (new String(x, "CP866")).getBytes("UTF-8")
+    x.map(toQ)
   }
 
   def post = AsyncStack(parse.multipartFormData, AuthorityKey -> UserPermissions.any) { implicit request =>
@@ -85,7 +92,7 @@ class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
     val parsed = printForm.bindFromRequest
     val solutionOpt = request.body.file("file").map { solution =>
       solution.filename -> FileUtils.readFileToByteArray(solution.ref.file)
-    }//.map(x => x._1 -> fixEncoding(x._2))
+    }.map(x => x._1 -> fixEncoding(x._2))
 
     val parsed0 = if (solutionOpt.isDefined) parsed
       else parsed.withGlobalError("can't read file")
