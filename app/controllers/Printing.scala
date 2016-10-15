@@ -75,7 +75,7 @@ class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
     val v1 = Try(new String(x, "UTF-8"))
     if (v1.isSuccess)
       v1.get.getBytes("UTF-8")
-    else (new String(x, "CP1251")).getBytes("UTF-8")
+    else (new String(x, "CP866")).getBytes("UTF-8")
   }
 
   def post = AsyncStack(parse.multipartFormData, AuthorityKey -> UserPermissions.any) { implicit request =>
