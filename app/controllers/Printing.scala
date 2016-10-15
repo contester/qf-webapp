@@ -2,7 +2,7 @@ package controllers
 
 import javax.inject.Inject
 
-import akka.actor.{Props, ActorSystem}
+import akka.actor.{ActorSystem, Props}
 import com.spingo.op_rabbit.{Message, RabbitControl}
 import jp.t2v.lab.play2.auth.AuthElement
 import models._
@@ -13,12 +13,13 @@ import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
-import play.api.mvc.{RequestHeader, Controller}
+import play.api.mvc.{Controller, RequestHeader}
 import slick.driver.JdbcProfile
 import slick.jdbc.GetResult
 import views.html
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 
 package printing {
 
@@ -70,6 +71,13 @@ class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
+  private def fixEncoding(x: Array[Byte]): Array[Byte] = {
+    val v1 = Try(new String(x, "UTF-8"))
+    if (v1.isSuccess)
+      v1.get.getBytes("UTF-8")
+    else (new String(x, "CP1251")).getBytes("UTF-8")
+  }
+
   def post = AsyncStack(parse.multipartFormData, AuthorityKey -> UserPermissions.any) { implicit request =>
     val loggedInTeam = loggedIn
     implicit val ec = StackActionExecutionContext
@@ -77,7 +85,7 @@ class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
     val parsed = printForm.bindFromRequest
     val solutionOpt = request.body.file("file").map { solution =>
       solution.filename -> FileUtils.readFileToByteArray(solution.ref.file)
-    }
+    }.map(x => x._1 -> fixEncoding(x._2))
 
     val parsed0 = if (solutionOpt.isDefined) parsed
       else parsed.withGlobalError("can't read file")
