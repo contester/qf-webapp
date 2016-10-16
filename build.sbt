@@ -38,7 +38,7 @@ libraryDependencies ++= Seq(
   ws,
   "com.adrianhurt" %% "play-bootstrap" % "1.0-P25-B3",
   "org.webjars" %% "webjars-play" % "2.5.0",
-  "org.webjars" % "bootstrap" % "3.1.1-2",
+  "org.webjars" % "bootstrap" % "3.3.7-1",
   "org.webjars" % "font-awesome" % "4.6.3",
   "org.webjars" % "bootstrap-datepicker" % "1.6.1",
   "org.webjars.npm" % "arrive" % "2.3.1",

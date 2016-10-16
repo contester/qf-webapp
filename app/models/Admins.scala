@@ -28,6 +28,8 @@ case class Admin(username: String, passwordHash: String, spectator: Set[Int], ad
   def canModify(contestId: Int) =
     administrator.contains(contestId) || administrator.contains(-1)
 
+  lazy val defaultContest = spectator.union(administrator).min
+
   val canCreateTasks =
     locations.contains("*")
 
