@@ -20,17 +20,16 @@ object GridfsContent {
 }
 
 object GridfsTools {
-  def getFile(ws: WSClient, name: String, sizeLimit: Long)(implicit ec: ExecutionContext, mat: Materializer): Future[Option[GridfsContent]] = {
+  def getFile(ws: WSClient, name: String, sizeLimit: Long)(implicit ec: ExecutionContext): Future[Option[GridfsContent]] = {
     ws.url(name).withMethod("GET").withHeaders("X-Fs-Limit" -> sizeLimit.toString).get()
-      .flatMap { resp =>
+      .map { resp =>
         resp.status match {
-        case 404 => Future.successful(None)
         case 200 =>
           val truncated = resp.header("X-Fs-Truncated").map(_ == "true").getOrElse(false)
-          Future.successful(Some(GridfsContent(resp.bodyAsBytes.toArray, truncated)))
+          Some(GridfsContent(resp.bodyAsBytes.toArray, truncated))
         case _ =>
           Logger.info(s"getFile($name): ${resp.status} ${resp.statusText}")
-            Future.successful(None)
+          None
       }
     }
   }
