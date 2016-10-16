@@ -35,7 +35,7 @@
 
 @panel("Попытка") {
     @defining(sub.fsub.submit.submitId) { subId =>
-        <p>Задача @subId.problem</p>
+        <p>Задача @subId.problem.id</p>
         @defining(subId.arrived) { arrived =>
             <p>По часам: @{arrived.timestamp}, по контесту: @arrived.asString,
                 @if(arrived.afterFreeze){после}else{до} заморозки</p>
