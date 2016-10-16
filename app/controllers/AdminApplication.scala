@@ -52,7 +52,6 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
                                   waiterActorModel: WaiterActorModel,
                                   configuration: Configuration,
                                   ws: WSClient,
-                                  implicit val mat: Materializer,
                              val auth: AuthWrapper,
                              val messagesApi: MessagesApi) extends Controller with AuthElement with AdminAuthConfigImpl with I18nSupport{
 
@@ -67,7 +66,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   def monitor(id: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(id)) { implicit request =>
     import Contexts.adminExecutionContext
-    getSelectedContests(id, loggedIn).zip(monitorModel.getMonitor(id, true)).map {
+    getSelectedContests(id, loggedIn).zip(monitorModel.getMonitor(id, loggedIn.canSeeAll(id))).map {
       case (contest, status) => Ok(html.admin.monitor(contest, status.get.status))
     }
   }
@@ -97,7 +96,11 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     getSelectedContests(contestId, account).zip(
       db.run(Contests.getTeams(contestId)).map(_.map(x => x.localId -> x).toMap)
     ).zip(db.run(Submits.getContestSubmits(contestId))).flatMap {
-      case ((contest, teamMap), submits) =>
+      case ((contest, teamMap), submits0) =>
+        val canSeeAll = account.canSeeAll(contestId)
+        def canSeeSubmit(s: Submit) =
+          if (canSeeAll) true else !s.afterFreeze
+        val submits = submits0.filter(canSeeSubmit)
         Submits.groupAndAnnotate(db, contest.contest.schoolMode, limit.map(submits.reverse.take(_).reverse).getOrElse(submits)).map { fullyDescribedSubmits =>
           Ok(html.admin.submits(fullyDescribedSubmits, teamMap, contest, account))
         }

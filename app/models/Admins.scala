@@ -17,13 +17,16 @@ trait WaiterPermissions {
 }
 
 case class Admin(username: String, passwordHash: String, spectator: Set[Int], administrator: Set[Int],
-                 locations: Set[String]) extends WaiterPermissions {
+                 locations: Set[String], unrestricted: Set[Int]) extends WaiterPermissions {
   override def toString = s"$username:$passwordHash"
 
   def toId = AdminId(username, passwordHash)
 
   def canSpectate(contestId: Int) =
     spectator.contains(contestId) || spectator.contains(-1) || canModify(contestId)
+
+  def canSeeAll(contestId: Int) =
+    unrestricted.contains(contestId) || unrestricted.contains(-1) || canModify(contestId)
 
   def canModify(contestId: Int) =
     administrator.contains(contestId) || administrator.contains(-1)
@@ -62,7 +65,8 @@ object Admin {
     s.split(',').toSet
 
   private def buildAdmin(x: AdminModel.AdminEntry): Admin =
-    Admin(x.username, x.password, parseAcl(x.spectator), parseAcl(x.administrator), parseStringAcl(x.locations))
+    Admin(x.username, x.password, parseAcl(x.spectator), parseAcl(x.administrator), parseStringAcl(x.locations),
+      parseAcl(x.unrestricted))
 
   def query(db: JdbcBackend#DatabaseDef, username: String, passwordHash: String)(implicit ec: ExecutionContext) =
     db.run(AdminModel.admins.filter(x => x.username === username && x.password === passwordHash).take(1).result)
@@ -73,7 +77,8 @@ object AdminModel {
   import slick.driver.MySQLDriver.api._
   import utils.Db._
 
-  case class AdminEntry(username: String, password: String, spectator: String, administrator: String, locations: String)
+  case class AdminEntry(username: String, password: String, spectator: String, administrator: String,
+                        locations: String, unrestricted: String)
 
   case class Admins(tag: Tag) extends Table[AdminEntry](tag, "admins") {
     def username = column[String]("Username", O.PrimaryKey)
@@ -81,8 +86,9 @@ object AdminModel {
     def spectator = column[String]("Spectator")
     def administrator = column[String]("Administrator")
     def locations = column[String]("Locations")
+    def unrestricted = column[String]("UnrestrictedView")
 
-    override def * = (username, password, spectator, administrator, locations) <> (AdminEntry.tupled, AdminEntry.unapply)
+    override def * = (username, password, spectator, administrator, locations, unrestricted) <> (AdminEntry.tupled, AdminEntry.unapply)
   }
 
   val admins = TableQuery[Admins]
