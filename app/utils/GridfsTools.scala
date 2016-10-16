@@ -70,14 +70,13 @@ object GridfsTools {
 
   def getFile(ws: WSClient, name: String, sizeLimit: Long)(implicit ec: ExecutionContext, mat: Materializer): Future[Option[GridfsContent]] = {
     Logger.info(s"name=$name")
-    ws.url(name).withMethod("GET").stream().flatMap { resp =>
-      resp.headers.status match {
+    ws.url(name).withMethod("GET").withHeaders("X-Fs-Limit" -> sizeLimit.toString).get()
+      .flatMap { resp =>
+        resp.status match {
         case 404 => Future.successful(None)
         case 200 =>
-          val origSize = resp.headers.headers.get("X-Fs-Content-Length").map(_.head).map(_.toLong).getOrElse(0L)
-          resp.body.via(new ByteLimiter(sizeLimit)).runFold(ByteString.empty)((x, y) => x ++ y).map { x =>
-            Some(GridfsContent(x.toByteBuffer.array(), origSize > sizeLimit))
-          }
+          val truncated = resp.header("X-Fs-Truncated").map(_ == "true").getOrElse(false)
+          Future.successful(Some(GridfsContent(resp.bodyAsBytes.toArray, truncated)))
       }
     }
   }
