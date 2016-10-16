@@ -11,8 +11,8 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
 case class GridfsContent(content: String, truncated: Boolean, size: Option[Long]) {
-  def sizeStr = size.map(x => s"($x)").getOrElse("")
-  def truncStr = if (truncated) "[обрезан]" else None
+  def sizeStr = size.map(x => s"(${x}b)").getOrElse("")
+  def truncStr = if (truncated) "[обрезан]" else ""
 }
 
 object GridfsTools {
