@@ -33,9 +33,13 @@
 
 @adminmain(tab = "", contest = contest) {
 
-@panel("Попытка") {
-        <p>По часам: @{sub.fsub.submit.submitId.arrived.timestamp}, по контесту: @sub.fsub.submit.submitId.arrived.asString,
-            @if(sub.fsub.submit.submitId.arrived.afterFreeze){после}else{до} заморозки</p>
+@defining(sub.fsub.submit.submitId) { subId =>
+    @panel("Попытка") {
+        @defining(subId.arrived) { arrived =>
+            <p>По часам: @{arrived.timestamp}, по контесту: @arrived.asString,
+                @if(arrived.afterFreeze){после}else{до} заморозки</p>
+        }
+    }
 }
 
 @panel("Исходный текст", "info") {
