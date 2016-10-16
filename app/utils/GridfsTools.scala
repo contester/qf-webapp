@@ -1,9 +1,5 @@
 package utils
 
-import java.nio.charset.Charset
-
-import akka.stream._
-import org.apache.commons.codec.Charsets
 import play.api.Logger
 import play.api.libs.ws.WSClient
 
