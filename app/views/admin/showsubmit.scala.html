@@ -14,6 +14,18 @@
     }
 }
 
+@import utils.GridfsContent
+
+@fscontent1(name: String, c: GridfsContent) = {
+    @panel(s"$name${c.sizeStr}${c.truncStr}", "default", "nopadding") { <pre class="nopadding">@c.content</pre> }
+}
+
+@fscontent(name: String, c: Option[GridfsContent]) = {
+    @for(cs <- c) {
+        @fscontent1(name, cs)
+    }
+}
+
 @details(s: ResultEntry, wat: String) = {
 <p><b>Результат:</b> @s.resultString, <b>Время:</b> @s.time, <b>Память:</b> @s.memory,
 <b>Код возврата @wat</b>: @s.testerExitCode</p>
@@ -41,9 +53,11 @@
     } else {
         @panel(s"Тест ${s.test}", "primary") {
             @details(s, "чекера")
-            @stdpanel("Ввод", outputs.get(s.test).flatMap(_.input).map(_.toString).getOrElse(""))
-            @stdpanel("Вывод", outputs.get(s.test).flatMap(_.output).map(_.toString).getOrElse(""))
-            @stdpanel("Ответ жюри", outputs.get(s.test).flatMap(_.answer).map(_.toString).getOrElse(""))
+            @for(out <- outputs.get(s.test)) {
+                @fscontent("Ввод", out.input)
+                @fscontent("Вывод", out.output)
+                @fscontent("Ответ жюри", out.answer)
+            }
             @stdpanel("Комментарий чекера", s.testerOutput)
         }
     }
