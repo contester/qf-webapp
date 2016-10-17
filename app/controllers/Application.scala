@@ -137,7 +137,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
               Future.successful(BadRequest(html.sendsolution(loggedInTeam, parsed.withGlobalError("Contest is not running"),
                 problems, compilersForForm(compilers))))
             } else {
-              val df = if (!submitData.isEmpty) submitData.inline.getBytes(StandardCharsets.UTF_8) else solutionOpt.getOrElse(submitData.inline.getBytes(StandardCharsets.UTF_8))
+              val df = if (!submitData.inline.isEmpty) submitData.inline.getBytes(StandardCharsets.UTF_8) else solutionOpt.getOrElse(submitData.inline.getBytes(StandardCharsets.UTF_8))
               db.run(submitInsertQuery(loggedInTeam.contest.id, loggedInTeam.team.localId, submitData.problem,
                 submitData.compiler, df, request.remoteAddress)).map { wat =>
 
