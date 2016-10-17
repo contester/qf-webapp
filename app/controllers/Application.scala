@@ -133,15 +133,11 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
               Future.successful(BadRequest(html.sendsolution(loggedInTeam, parsed.withGlobalError("No solution"),
                 problems, compilersForForm(compilers))))
             } else
-            if (!submitData.inline.isEmpty && solutionOpt.isDefined) {
-              Future.successful(BadRequest(html.sendsolution(loggedInTeam, parsed.withGlobalError("Choose file or field"),
-                problems, compilersForForm(compilers))))
-            } else
             if (loggedIn.contest.finished || !loggedIn.contest.started) {
               Future.successful(BadRequest(html.sendsolution(loggedInTeam, parsed.withGlobalError("Contest is not running"),
                 problems, compilersForForm(compilers))))
             } else {
-              val df = solutionOpt.getOrElse(submitData.inline.getBytes(StandardCharsets.UTF_8))
+              val df = if (!submitData.isEmpty) submitData.inline.getBytes(StandardCharsets.UTF_8) else solutionOpt.getOrElse(submitData.inline.getBytes(StandardCharsets.UTF_8))
               db.run(submitInsertQuery(loggedInTeam.contest.id, loggedInTeam.team.localId, submitData.problem,
                 submitData.compiler, df, request.remoteAddress)).map { wat =>
 
