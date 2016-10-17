@@ -34,7 +34,10 @@
         <script>
             $('#submitform').validate({
                 rules: {
-                  problem: { required: true }, compiler: { required: true }}
+                  file: { required: "#inline:blank", filesize: 128000 },
+                  inline: { required: "#file:blank" },
+                  problem: { required: true },
+                  compiler: { required: true }}
             });
 
             var compilerId = localStorage.getItem("compilerId");
