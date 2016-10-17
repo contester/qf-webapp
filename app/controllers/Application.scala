@@ -1,5 +1,6 @@
 package controllers
 
+import java.nio.charset.StandardCharsets
 import javax.inject.{Inject, Singleton}
 
 import actors.StatusActor
@@ -23,7 +24,7 @@ import views.html
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
-case class SubmitData(problem: String, compiler: Int)
+case class SubmitData(problem: String, compiler: Int, inline: String)
 
 case class SubmitMessage(id: Int)
 
@@ -82,7 +83,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
     db.run(Contests.getProblems(contest)).map(Problems.toSelect(_))
 
   val submitForm = Form {
-    mapping("problem" -> text, "compiler" -> number)(SubmitData.apply)(SubmitData.unapply)
+    mapping("problem" -> text, "compiler" -> number, "inline" -> text)(SubmitData.apply)(SubmitData.unapply)
   }
 
   private def compilersForForm(compilers: Seq[Compiler]) =
@@ -114,25 +115,35 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
     getProblemsAndCompilers(loggedInTeam.contest.id).flatMap {
       case (problems, compilers) =>
         val parsed = submitForm.bindFromRequest
+
         val solutionOpt = request.body.file("file").map { solution =>
           FileUtils.readFileToByteArray(solution.ref.file)
         }
 
-        val parsed0 = if (solutionOpt.isDefined) parsed
-        else parsed.withGlobalError("can't open the file")
+        //val parsed0 = if (solutionOpt.isDefined) parsed
+        //else parsed.withGlobalError("can't open the file")
 
-        parsed0.fold(
+        parsed.fold(
           formWithErrors => {
             Future.successful(BadRequest(html.sendsolution(loggedInTeam, formWithErrors, problems,
               compilersForForm(compilers))))
           },
           submitData => {
+            if (submitData.inline.isEmpty && solutionOpt.isEmpty) {
+              Future.successful(BadRequest(html.sendsolution(loggedInTeam, parsed.withGlobalError("No solution"),
+                problems, compilersForForm(compilers))))
+            } else
+            if (!submitData.inline.isEmpty && solutionOpt.isDefined) {
+              Future.successful(BadRequest(html.sendsolution(loggedInTeam, parsed.withGlobalError("Choose file or field"),
+                problems, compilersForForm(compilers))))
+            } else
             if (loggedIn.contest.finished || !loggedIn.contest.started) {
-              Future.successful(BadRequest(html.sendsolution(loggedInTeam, parsed0.withGlobalError("Contest is not running"),
+              Future.successful(BadRequest(html.sendsolution(loggedInTeam, parsed.withGlobalError("Contest is not running"),
                 problems, compilersForForm(compilers))))
             } else {
+              val df = solutionOpt.getOrElse(submitData.inline.getBytes(StandardCharsets.UTF_8))
               db.run(submitInsertQuery(loggedInTeam.contest.id, loggedInTeam.team.localId, submitData.problem,
-                submitData.compiler, solutionOpt.get, request.remoteAddress)).map { wat =>
+                submitData.compiler, df, request.remoteAddress)).map { wat =>
 
                 Logger.info(s"$wat")
                 rabbitMq ! Message.queue(SubmitMessage(wat.head.toInt), queue = "contester.submitrequests")
