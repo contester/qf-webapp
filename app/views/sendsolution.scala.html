@@ -33,8 +33,7 @@
         }
         <script>
             $('#submitform').validate({
-                rules: { file: { required: "#inline:empty", filesize: 128000  },
-                  inline: { required: "#file:empty" },
+                rules: {
                   problem: { required: true }, compiler: { required: true }}
             });
 
