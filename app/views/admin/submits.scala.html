@@ -3,7 +3,7 @@
 @defining(admin.canModify(contest.contest.id)) { showRejudge =>
 <table id="submits" class="table table-hover table-bordered table-responsive">
     <thead>
-    <tr><th>ID</th>@if(showRejudge){<th>R</th>}<th>Время</th><th>Команда</th><th>Задача</th><th>Язык</th><th>Результат</th>
+    <tr><th id="lastSubmitId">ID</th>@if(showRejudge){<th>R</th>}<th>Время</th><th>Команда</th><th>Задача</th><th>Язык</th><th>Результат</th>
         <th>Баллы</th>
         <th>Время работы</th><th>Память</th></tr>
     </thead>

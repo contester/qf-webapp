@@ -286,7 +286,7 @@ function listenOnAdmin(path, iconbase) {
             if (tr.length) {
                 tr.html(obj.result.message);
             } else {
-                $('#submits > tbody').prepend('<tr><th scope="row">' + obj.submitId + '</th></tr>');
+                $('#lastSubmitId').html('<b>' + obj.submitId + '</b>');
             }
         });
 
