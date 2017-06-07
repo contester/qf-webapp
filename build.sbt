@@ -1,6 +1,6 @@
 name := "qf"
 
-scalaVersion  := "2.11.8"
+scalaVersion  := "2.11.11"
 
 organization := "org.stingray.contester"
 
@@ -20,7 +20,7 @@ scalaJSProjects := Seq(client)
 pipelineStages in Assets := Seq(scalaJSPipeline)
 
 lazy val client = (project in file("client")).settings(
-  scalaVersion := "2.11.8",
+  scalaVersion := "2.11.11",
   persistLauncher := true,
   persistLauncher in Test := false,
   libraryDependencies ++= Seq(
@@ -36,11 +36,11 @@ val spireVersion = "0.12.0"
 libraryDependencies ++= Seq(
   cache,
   ws,
-  "com.adrianhurt" %% "play-bootstrap" % "1.0-P25-B3",
+  "com.adrianhurt" %% "play-bootstrap" % "1.1-P25-B3",
   "org.webjars" %% "webjars-play" % "2.5.0",
   "org.webjars" % "bootstrap" % "3.3.7-1",
   "org.webjars" % "font-awesome" % "4.6.3",
-  "org.webjars" % "bootstrap-datepicker" % "1.6.1",
+  "org.webjars" % "bootstrap-datepicker" % "1.6.4",
   "org.webjars.npm" % "arrive" % "2.3.1",
   "org.webjars" % "momentjs" % "2.14.1",
   "org.webjars" % "bootstrap-material-design" % "0.5.9",
@@ -52,13 +52,13 @@ libraryDependencies ++= Seq(
   "jp.t2v" %% "play2-auth-test" % "0.14.2" % "test",
   "com.typesafe.play" %% "play-slick" % "2.0.2",
   "com.typesafe.play" %% "play-slick-evolutions" % "2.0.2",
-  "org.mariadb.jdbc" % "mariadb-java-client" % "1.4.6",
+  "org.mariadb.jdbc" % "mariadb-java-client" % "1.6.1",
   "commons-io" % "commons-io" % "2.5",
-  "com.github.nscala-time" %% "nscala-time" % "2.12.0",
+  "com.github.nscala-time" %% "nscala-time" % "2.16.0",
   "com.googlecode.htmlcompressor" % "htmlcompressor" % "1.5.2",
   "rhino" % "js" % "1.7R2",
-  "com.typesafe.slick" %% "slick" % "3.1.1",
-  "com.typesafe.slick" %% "slick-hikaricp" % "3.1.1",
+  "com.typesafe.slick" %% "slick" % "3.2.0",
+  "com.typesafe.slick" %% "slick-hikaricp" % "3.2.0",
   "com.vmunier" %% "scalajs-scripts" % "1.0.0",
   "com.zaxxer" % "HikariCP" % "2.4.5",
   "org.spire-math" %% "spire" % spireVersion,
