@@ -4,7 +4,9 @@ import javax.inject.{Inject, Singleton}
 
 import actors.{StatusActor, WaiterActor}
 import actors.StatusActor.ClarificationAnswered
+import akka.NotUsed
 import akka.stream.Materializer
+import akka.stream.scaladsl.Source
 import com.github.nscala_time.time.Imports._
 import com.google.common.collect.ImmutableRangeSet
 import com.spingo.op_rabbit.Message
@@ -16,6 +18,7 @@ import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.http.ContentTypes
 import play.api.i18n.{I18nSupport, MessagesApi}
+import play.api.libs.EventSource
 import play.api.libs.EventSource.Event
 import play.api.libs.iteratee.Enumerator
 import play.api.libs.json.Json
@@ -279,20 +282,21 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     Duration(5, SECONDS)
   }
 
-  private def joinAdminFeed(contestId: Int, perm: WaiterPermissions, requestHeader: RequestHeader): Future[Enumerator[Event]] = {
+  private def joinAdminFeed(contestId: Int, perm: WaiterPermissions, requestHeader: RequestHeader) = {
     import Contexts.adminExecutionContext
 
-    Ask[Enumerator[Event]](statusActorModel.statusActor, StatusActor.JoinAdmin(contestId)).zip(
+/*    Ask[Enumerator[Event]](statusActorModel.statusActor, StatusActor.JoinAdmin(contestId)).zip(
       Ask[Enumerator[Event]](waiterActorModel.waiterActor, WaiterActor.Join(perm, requestHeader))).map {
       case (one, two) =>
         Enumerator.interleave(one, two)
-    }
+    }*/
+    Ask[Source[Event, NotUsed]](statusActorModel.statusActor, StatusActor.JoinAdmin(contestId))
   }
 
   def feed(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
     import Contexts.adminExecutionContext
     joinAdminFeed(contestId, loggedIn, request).map { e =>
-      Ok.feed(e).as(ContentTypes.EVENT_STREAM)
+      Ok.chunked(e).as(ContentTypes.EVENT_STREAM)
     }
   }
 

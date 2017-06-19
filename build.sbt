@@ -59,7 +59,7 @@ libraryDependencies ++= Seq(
   "rhino" % "js" % "1.7R2",
   "com.typesafe.slick" %% "slick" % "3.2.0",
   "com.typesafe.slick" %% "slick-hikaricp" % "3.2.0",
-  "com.vmunier" %% "scalajs-scripts" % "1.1.0",
+  "com.vmunier" %% "scalajs-scripts" % "1.0.0",
   "com.zaxxer" % "HikariCP" % "2.6.1",
   "org.spire-math" %% "spire" % spireVersion,
   "org.spire-math" %% "spire-extras" % spireVersion,
