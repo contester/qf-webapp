@@ -157,6 +157,8 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   import scala.concurrent.duration._
 
+  implicit private val recoveryStrategy = RecoveryStrategy.none
+
   val finishedRef = Subscription.run(rabbitMq) {
     import Directives._
     channel(qos = 1) {

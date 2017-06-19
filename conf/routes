@@ -65,5 +65,5 @@ POST /admin/ackWaiterTask/:id/:room controllers.AdminApplication.ackWaiterTask(i
 POST /admin/unackWaiterTask/:id/:room controllers.AdminApplication.unackWaiterTask(id: Long, room: String)
 POST /admin/deleteWaiterTask/:id controllers.AdminApplication.deleteWaiterTask(id: Long)
 
-GET     /assets/*file				controllers.Assets.at(path="/public", file)
+GET     /assets/*file               controllers.Assets.versioned(path="/public", file: Asset)
 GET        /files/config.js        controllers.RjsHack.index

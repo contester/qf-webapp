@@ -54,7 +54,7 @@
 <script type="text/javascript">
 $(function() {
     askForPermission();
-    listenOnAdmin('@routes.AdminApplication.feed(contest.contest.id)', '@routes.Assets.at("images/")');
+    listenOnAdmin('@routes.AdminApplication.feed(contest.contest.id)', '@routes.Assets.versioned("images/")');
 });
 </script>
 }

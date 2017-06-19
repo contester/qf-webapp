@@ -14,7 +14,7 @@
     }
 }
 
-@import utils.GridfsContent
+@import _root_.utils.GridfsContent
 
 @fscontent1(name: String, c: GridfsContent) = {
     @panel(s"$name ${c.sizeStr} ${c.truncStr}", "default", "nopadding") { <pre class="nopadding">@c.content</pre> }

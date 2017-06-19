@@ -41,7 +41,7 @@
     $(function() {
         askForPermission();
         listenOnEvents('@routes.Application.feed(loggedIn.contest.id, loggedIn.team.localId)',
-            '@routes.Assets.at("images/")',
+            '@routes.Assets.versioned("images/")',
             '@routes.Application.ackMessage');
     });
 </script>

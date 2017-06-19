@@ -1,5 +1,5 @@
 @(title: String, dest: play.api.mvc.Call, form: Form[AuthData])(implicit flash: Flash, messages: Messages)
-@styles = {<link rel="stylesheet" media="screen" href="@routes.Assets.at("css/signin.css")">}
+@styles = {<link rel="stylesheet" media="screen" href="@routes.Assets.versioned("css/signin.css")">}
 @base(title, styles=styles) {
 <div class="container">
     <div class="row">
