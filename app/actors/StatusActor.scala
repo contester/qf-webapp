@@ -9,7 +9,6 @@ import models._
 import play.api.Logger
 import play.api.libs.EventSource
 import play.api.libs.EventSource.{Event, EventDataExtractor, EventNameExtractor}
-import play.api.libs.iteratee.{Concurrent, Enumeratee, Enumerator}
 import play.api.libs.json._
 import slick.jdbc.{GetResult, JdbcBackend}
 import utils.Ask
@@ -52,8 +51,6 @@ object StatusActor {
     implicit val eventDataExtractor = EventDataExtractor[ClarificationPosted] { state =>
       Json.stringify(Json.toJson(state))
     }
-
-    def filterContest(contestId: Int)(implicit ec: ExecutionContext) = Enumeratee.filter[ClarificationPosted](_.contest == contestId)
   }
 
   case class AckAllClarifications(contest: Int, team: Int)
@@ -143,16 +140,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
         self ! Message2(id, contest, team, kind, data)
       }
     }
-
-  private def filterContest(contestId: Int) = Enumeratee.filter[Contest](_.id == contestId)
-
-  private def filterMessage2(contest: Int, team: Int) = Enumeratee.filter[Message2] { msg =>
-    msg.contest == contest && msg.team == team
-  }
-
-  private def filterSubmits(contestId: Int) = Enumeratee.filter[AnnoSubmit](_.contest == contestId)
-
-  private def filterClarificationRequests(contest: Int) = Enumeratee.filter[ClarificationRequestState](_.contest == contest)
 
   private def loadAll = {
     val f = loadPersistentMessages.zip(loadClarificationRequestState).zip(

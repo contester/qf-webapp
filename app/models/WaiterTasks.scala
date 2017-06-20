@@ -99,7 +99,7 @@ object WaiterModel {
       case (records, tasks) =>
         tasks.map {
           case StoredWaiterTask(id, ts, message, roomsActive, _) =>
-            StoredWaiterTask(id, ts, message, roomsActive, records.get(id).getOrElse(Map.empty))
+            StoredWaiterTask(id, ts, message, roomsActive, records.getOrElse(id, Map.empty))
         }
     }
   }
