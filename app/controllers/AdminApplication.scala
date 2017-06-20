@@ -24,7 +24,7 @@ import play.api.libs.iteratee.Enumerator
 import play.api.libs.json.Json
 import play.api.libs.ws.WSClient
 import play.api.mvc.{Action, AnyContent, Controller, RequestHeader}
-import slick.driver.JdbcProfile
+import slick.jdbc.JdbcProfile
 import utils.{Ask, PolygonURL}
 import views.html
 
@@ -74,7 +74,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-  import slick.driver.MySQLDriver.api._
+  import slick.jdbc.MySQLProfile.api._
 
   private def getSubmitCid(submitId: Int)(implicit ec: ExecutionContext) =
     db.run(sql"""select Contest from NewSubmits where ID = $submitId""".as[Int]).map(_.headOption)

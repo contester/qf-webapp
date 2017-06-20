@@ -7,7 +7,7 @@ import akka.actor.ActorSystem
 import models.Foo.RankedRow
 import play.api.Configuration
 import play.api.db.slick.DatabaseConfigProvider
-import slick.driver.JdbcProfile
+import slick.jdbc.JdbcProfile
 import spire.math.Rational
 import utils.Ask
 

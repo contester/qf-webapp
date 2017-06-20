@@ -141,7 +141,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
       }
     }
 
-  private def loadAll = {
+  private def loadAll() = {
     val f = loadPersistentMessages.zip(loadClarificationRequestState).zip(
       ClarificationModel.loadAll(db).map {
         case (clarifications, clseen) => ClarificationsInitialState(clarifications, clseen)

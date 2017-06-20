@@ -18,7 +18,7 @@ case class ClarificationRequest(id: Int, contest: Int, team: Int, problem: Strin
 }
 
 object SlickModel {
-  import slick.driver.MySQLDriver.api._
+  import slick.jdbc.MySQLProfile.api._
   import utils.Db._
 
   case class Clarifications(tag: Tag) extends Table[Clarification](tag, "clarifications") {
@@ -62,7 +62,7 @@ object SlickModel {
 }
 
 object ClarificationModel {
-  import slick.driver.MySQLDriver.api._
+  import slick.jdbc.MySQLProfile.api._
 
   def loadAll(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext) =
     db.run(SlickModel.clarifications.result).zip(db.run(SlickModel.clrSeen2.result))
