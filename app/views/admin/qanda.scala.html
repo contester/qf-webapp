@@ -54,7 +54,7 @@
     @for(s <- clReqs) {
     <tr><th scope="row"><a href="@routes.AdminApplication.postAnswerForm(s.id)">@s.id</a></th>
         <td>@s.contest</td><td>@s.team</td>
-        <td>@s.problem</td><td>@s.request</td><td>@LocalDateFormat(s.arrived)</td><td>@s.answer</td><td>@s.answered</td></tr>
+        <td>@s.problem</td><td>@s.request</td><td>@LocalDateFormat(s.arrived)</td><td>@s.getAnswer</td><td>@s.answered</td></tr>
     }
 
     </tbody>

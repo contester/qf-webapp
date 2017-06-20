@@ -59,7 +59,7 @@
         </thead>
         <tbody>
         @for(s <- clReq) {
-        <tr><td>@LocalDateFormat(s.arrived)</td><td>@s.problem</td><td>@s.request</td><td>@s.answer</td></tr>
+        <tr><td>@LocalDateFormat(s.arrived)</td><td>@s.problem</td><td>@s.request</td><td>@s.getAnswer</td></tr>
         }
         </tbody>
     </table>

@@ -362,7 +362,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
       optClr.map { clr =>
         getSelectedContests(clr.contest, loggedIn).map { contest =>
           Ok(html.admin.postanswer(
-            clarificationResponseForm.fill(ClarificationResponse(clr.answer)), clr, answerList.toSeq, contest))
+            clarificationResponseForm.fill(ClarificationResponse(clr.getAnswer)), clr, answerList.toSeq, contest))
         }
       }.getOrElse(Future.successful(Redirect(routes.AdminApplication.showQandA(1))))
     }

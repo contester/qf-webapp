@@ -11,7 +11,11 @@ case class Clarification(id: Option[Int], contest: Int, problem: String, text: S
 case class MaxSeen(contest: Int, team: Int, timestamp: DateTime)
 
 case class ClarificationRequest(id: Int, contest: Int, team: Int, problem: String, request: String,
-                                answer: String, arrived: DateTime, answered: Boolean)
+                                answer: Option[String], arrived: DateTime, answered: Boolean) {
+  def getAnswer = if (answered)
+    answer.getOrElse("No comments")
+  else "..."
+}
 
 object SlickModel {
   import slick.driver.MySQLDriver.api._
@@ -36,7 +40,7 @@ object SlickModel {
     def team = column[Int]("Team")
     def problem = column[String]("Problem")
     def request = column[String]("Request")
-    def answer = column[String]("Answer")
+    def answer = column[Option[String]]("Answer")
     def arrived = column[DateTime]("Arrived")
     def answered = column[Boolean]("Status")
 
@@ -83,17 +87,6 @@ object ClarificationModel {
     f.onComplete(x => Logger.info(s"updated $x"))
     f
   }
-/*
-        val cOp = clarificationId.map { id =>
-          db.run(sqlu"""update clarifications set cl_task = ${data.problem}, cl_text = ${data.text},
-              cl_is_hidden = ${data.hidden} where cl_id = $id""").map(_ => clarificationId)
-        }.getOrElse(
-            db.run(
-              sqlu"""insert into clarifications (cl_contest_idf, cl_task, cl_text, cl_date, cl_is_hidden) values
-                 (${contestId}, ${data.problem}, ${data.text}, $cdate, ${data.hidden})
-                  """.andThen(sql"select last_insert_id()".as[Int]).withPinnedSession).map(_.headOption))
- */
-
 
   def getVisibleClarifications(db: JdbcBackend#DatabaseDef, contestId: Int)(implicit ec: ExecutionContext) =
     db.run(SlickModel.clarifications.filter(x => x.contest === contestId && !x.hidden).result).map(_.sortBy(_.arrived).reverse)
