@@ -18,7 +18,7 @@ import play.api.i18n.{I18nSupport, MessagesApi}
 import play.api.libs.json._
 import play.api.mvc.{Action, Controller}
 import play.api.{Configuration, Logger}
-import slick.driver.JdbcProfile
+import slick.jdbc.JdbcProfile
 import views.html
 
 import scala.concurrent.{ExecutionContext, Future}

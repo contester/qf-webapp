@@ -11,7 +11,7 @@ import play.api.libs.EventSource
 import play.api.libs.EventSource.{Event, EventDataExtractor, EventNameExtractor}
 import play.api.libs.json._
 import slick.jdbc.{GetResult, JdbcBackend}
-import utils.Ask
+import utils.{Ask, Concur}
 
 import scala.collection.mutable
 import scala.concurrent.Future
@@ -98,25 +98,14 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     30 seconds
   }
 
-  implicit val materializer = ActorMaterializer()
-
-  private def lbr[T]() = {
-    val (ch, out) = Source.queue[T](1024, OverflowStrategy.dropHead)
-      .toMat(BroadcastHub.sink)(Keep.both).run()
-    out.runWith(Sink.ignore)
-    (ch, out)
-  }
-
-  private val (contestChannel2, contestOut2) = lbr[Contest]()
+  private val (contestOut2, contestChannel2) = Concur.broadcast[Contest]()
   private val contestStates = mutable.Map[Int, Contest]()
-  private val (msg2Channel, msg2Out) = lbr[Message2]()
+  private val (msg2Out, msg2Channel) = Concur.broadcast[Message2]()
   private val unacked = mutable.Map[(Int, Int), mutable.Map[Int, Message2]]()
-  val (sub2Chan, sub2Out) = lbr[AnnoSubmit]()
+  private val (sub2Out, sub2Chan) = Concur.broadcast[AnnoSubmit]()
   private val pendingClarificationRequests = mutable.Map[Int, mutable.Set[Int]]().withDefaultValue(mutable.Set[Int]())
-
-  val (clr2Chan, clr2Out) = lbr[ClarificationRequestState]()
-
-  private val (clrPostChannel, clrPostOut) = lbr[ClarificationPosted]()
+  private val (clr2Out, clr2Chan) = Concur.broadcast[ClarificationRequestState]()
+  private val (clrPostOut, clrPostChannel) = Concur.broadcast[ClarificationPosted]()
 
   private val clarifications = {
     mutable.Map[Int, mutable.Map[Int, Clarification]]()
