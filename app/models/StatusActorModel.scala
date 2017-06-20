@@ -5,7 +5,7 @@ import javax.inject.{Inject, Singleton}
 import actors.{StatusActor, WaiterActor}
 import akka.actor.ActorSystem
 import play.api.db.slick.DatabaseConfigProvider
-import slick.driver.JdbcProfile
+import slick.jdbc.JdbcProfile
 
 @Singleton
 class StatusActorModel @Inject() (dbConfigProvider: DatabaseConfigProvider, system: ActorSystem) {
