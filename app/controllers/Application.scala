@@ -211,7 +211,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
     statusActorModel.statusActor.ask(StatusActor.JoinUser(contestId, teamId))(Duration(5, SECONDS)).map {
       case StatusActor.UserJoined(e) => {
-        Ok.feed(e).as(ContentTypes.EVENT_STREAM)
+        Ok.chunked(e).as(ContentTypes.EVENT_STREAM)
       }
       case _ => BadRequest("foo")
     }

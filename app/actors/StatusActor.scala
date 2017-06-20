@@ -1,5 +1,6 @@
 package actors
 
+import akka.NotUsed
 import akka.actor.{Actor, Props, Stash}
 import akka.stream.scaladsl.{BroadcastHub, Keep, Merge, Sink, Source}
 import akka.stream.{ActorMaterializer, OverflowStrategy}
@@ -27,7 +28,7 @@ object StatusActor {
   case class Ack(loggedInTeam: LoggedInTeam, msgid: Int)
   case class JoinAdmin(c: Int)
   case class JoinUser(contest: Int, team: Int)
-  case class UserJoined(enumerator: Enumerator[Event])
+  case class UserJoined(enumerator: Source[Event, NotUsed])
 
   case class ClarificationRequested(contest: Int, clrId: Int)
   case class ClarificationAnswered(contest: Int, clrId: Int, teamId: Int, problem: String, text: String)
@@ -95,11 +96,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     context.system.scheduler.schedule(0 seconds, 10 seconds, self, Tick)
   }
 
-  private val refreshTick = {
-    import scala.concurrent.duration._
-    context.system.scheduler.schedule(30 seconds, 30 seconds, self, RefreshTick)
-  }
-
   private val tickDuration = {
     import scala.concurrent.duration._
     30 seconds
@@ -107,33 +103,25 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
   implicit val materializer = ActorMaterializer()
 
-  def lbr[T]() = {
+  private def lbr[T]() = {
     val (ch, out) = Source.queue[T](1024, OverflowStrategy.dropHead)
       .toMat(BroadcastHub.sink)(Keep.both).run()
     out.runWith(Sink.ignore)
     (ch, out)
   }
 
-  val (contestChannel2, contestOut2) = lbr[Contest]()
-  private val (contestOut, contestChannel) = Concurrent.broadcast[Contest]
-  private val (userPingOut, userPingChannel) = Concurrent.broadcast[Event]
-
+  private val (contestChannel2, contestOut2) = lbr[Contest]()
   private val contestStates = mutable.Map[Int, Contest]()
-  private val (msg2Out, msg2Channel) = Concurrent.broadcast[Message2]
+  private val (msg2Channel, msg2Out) = lbr[Message2]()
   private val unacked = mutable.Map[(Int, Int), mutable.Map[Int, Message2]]()
-  private val (submitOut, submitChannel) = Concurrent.broadcast[AnnoSubmit]
-
   val (sub2Chan, sub2Out) = lbr[AnnoSubmit]()
-
   private val pendingClarificationRequests = mutable.Map[Int, mutable.Set[Int]]().withDefaultValue(mutable.Set[Int]())
-  private val (clrOut, clrChannel) = Concurrent.broadcast[ClarificationRequestState]
 
   val (clr2Chan, clr2Out) = lbr[ClarificationRequestState]()
 
-  private val (clrPostOut, clrPostChannel) = Concurrent.broadcast[ClarificationPosted]
+  private val (clrPostChannel, clrPostOut) = lbr[ClarificationPosted]()
 
   private val clarifications = {
-
     mutable.Map[Int, mutable.Map[Int, Clarification]]()
   }
   private val clarificationsSeen = {
@@ -145,7 +133,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   private def getUnacked(contest: Int, team: Int) =
     unacked.getOrElseUpdate((contest, team), mutable.Map[Int, Message2]())
 
-  import slick.driver.MySQLDriver.api._
+  import slick.jdbc.MySQLProfile.api._
 
   private def pushPersistent(contest: Int, team: Int, kind: String, data: JsValue) =
     db.run(
@@ -196,8 +184,11 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   private def catchMsg(msg2: Message2): Unit = {
     val m = getUnacked(msg2.contest, msg2.team)
     m += (msg2.id -> msg2)
-    msg2Channel.push(msg2)
+    msg2Channel.offer(msg2)
   }
+
+  private def contestStreamSource(contest: Int): Source[Contest, NotUsed] =
+    Source.apply[Contest](contestStates.get(contest).toList).concat(contestOut2.filter(_.id == contest))
 
   override def receive = {
     case Init => {
@@ -210,7 +201,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
           val pendingSet = mutable.Set[Int](pending:_*)
           pendingClarificationRequests.put(contest, pendingSet).foreach { old =>
             if (old != pendingSet) {
-              clrChannel.push(ClarificationRequestState(contest, pending.length, false))
               clr2Chan.offer(ClarificationRequestState(contest, pending.length, false))
             }
           }
@@ -234,13 +224,11 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   def initialized: Receive = {
     case ClarificationRequested(contest, clrId) => {
       pendingClarificationRequests(contest) += clrId
-      clrChannel.push(ClarificationRequestState(contest, pendingClarificationRequests(contest).size, true))
       clr2Chan.offer(ClarificationRequestState(contest, pendingClarificationRequests(contest).size, true))
     }
 
     case ClarificationAnswered(contest, clrId, teamId, problem, text) => {
       pendingClarificationRequests(contest) -= clrId
-      clrChannel.push(ClarificationRequestState(contest, pendingClarificationRequests(contest).size, false))
       clr2Chan.offer(ClarificationRequestState(contest, pendingClarificationRequests(contest).size, false))
       pushPersistent(contest, teamId, "clarificationAnswered", Json.obj("problem" -> problem, "text" -> text))
     }
@@ -253,13 +241,14 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
         val next = opt.getOrElse(cl)
         val ifp = if(cl.problem.isEmpty) None else Some(cl.problem)
         if (!next.hidden)
-          clrPostChannel.push(ClarificationPosted(next.id.get, next.contest, prevVisible, ifp, next.text))
+          clrPostChannel.offer(ClarificationPosted(next.id.get, next.contest, prevVisible, ifp, next.text))
         next
       }.onComplete(Ask.respond(saved, _))
     }
 
     case AckAllClarifications(contest, team) => {
       import com.github.nscala_time.time.Imports._
+      import utils.Db._
       clarifications.get(contest).map { cmap =>
         cmap.values.map(_.arrived).max
       }.foreach { now =>
@@ -282,7 +271,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     }
 
     case annotated: AnnoSubmit => {
-      submitChannel.push(annotated)
       sub2Chan.offer(annotated)
       pushPersistent(annotated.contest, annotated.team, "submit", Json.toJson(annotated))
     }
@@ -298,7 +286,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
       val old = contestStates.get(c.id)
       if (old.isEmpty || old.get != c) {
         contestStates.put(c.id, c)
-        contestChannel.push(c)
         contestChannel2.offer(c)
       }
     }
@@ -311,18 +298,15 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
       }
     }
 
-    case RefreshTick => {
-      userPingChannel.push(userPing)
-    }
-
     case JoinAdmin(c: Int) => {
       val enum = Try {
-        val cev = Source.apply[Contest](contestStates.get(c).toList).concat(contestOut2.filter(_.id == c)) via EventSource.flow
-        val sev = sub2Out.filter(_.contest == c) via EventSource.flow
+        val sev= sub2Out.filter(_.contest == c) via EventSource.flow
         val pings = Source.tick(tickDuration, tickDuration, userPing)
         val clars = Source.apply[ClarificationRequestState](Seq(ClarificationRequestState(c, pendingClarificationRequests(c).size, false)).toList)
             .concat(clr2Out.filter(_.contest == c)) via EventSource.flow
-        Source.combine(cev, sev, pings, clars)(Merge(_))
+        Source.combine(
+          contestStreamSource(c) via EventSource.flow,
+          sev, pings, clars)(Merge(_))
       }
       sender ! enum
     }
@@ -332,7 +316,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
         case (msgid, msg) => msg
       }
 
-      val eStored = Enumerator.enumerate(stored) &> EventSource()
       import com.github.nscala_time.time.Imports._
 
       val issued = clarifications.get(contest).flatMap { v =>
@@ -350,16 +333,16 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
         case None => false
       }
 
-      val clrevents = (Enumerator.apply(ClarificationState(contest, team, unseen)) &> EventSource()).andThen(
-        clrPostOut &> ClarificationPosted.filterContest(contest) &> EventSource()
-      )
+      val allSources = Source.combine(
+        contestStreamSource(contest) via EventSource.flow,
+        Source.apply(stored.toList) via EventSource.flow,
+        Source.single(ClarificationState(contest, team, unseen)) via EventSource.flow,
+        clrPostOut.filter(_.contest == contest) via EventSource.flow,
+        msg2Out.filter(p => p.contest == contest && p.team == team) via EventSource.flow,
+        Source.tick(tickDuration, tickDuration, userPing)
+      )(Merge(_))
 
-      sender ! UserJoined(
-        Enumerator.enumerate[Contest](contestStates.get(contest)).through(EventSource()).andThen(eStored).andThen(
-          Enumerator.interleave(contestOut &> filterContest(contest) &> EventSource(),
-            msg2Out &> filterMessage2(contest, team) &> EventSource(),
-            userPingOut,
-            clrevents)))
+      sender ! UserJoined(allSources)
     }
   }
 
