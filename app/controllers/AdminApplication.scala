@@ -6,7 +6,7 @@ import actors.{StatusActor, WaiterActor}
 import actors.StatusActor.ClarificationAnswered
 import akka.NotUsed
 import akka.stream.Materializer
-import akka.stream.scaladsl.Source
+import akka.stream.scaladsl.{Merge, Source}
 import com.github.nscala_time.time.Imports._
 import com.google.common.collect.ImmutableRangeSet
 import com.spingo.op_rabbit.Message
@@ -285,12 +285,11 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   private def joinAdminFeed(contestId: Int, perm: WaiterPermissions, requestHeader: RequestHeader) = {
     import Contexts.adminExecutionContext
 
-/*    Ask[Enumerator[Event]](statusActorModel.statusActor, StatusActor.JoinAdmin(contestId)).zip(
-      Ask[Enumerator[Event]](waiterActorModel.waiterActor, WaiterActor.Join(perm, requestHeader))).map {
+    Ask[Source[Event, NotUsed]](statusActorModel.statusActor, StatusActor.JoinAdmin(contestId)).zip(
+      Ask[Source[Event, NotUsed]](waiterActorModel.waiterActor, WaiterActor.Join(perm, requestHeader))).map {
       case (one, two) =>
-        Enumerator.interleave(one, two)
-    }*/
-    Ask[Source[Event, NotUsed]](statusActorModel.statusActor, StatusActor.JoinAdmin(contestId))
+        Source.combine(one, two)(Merge(_))
+    }
   }
 
   def feed(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>

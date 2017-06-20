@@ -309,10 +309,14 @@ function listenOnAdmin(path, iconbase) {
 
         add('waiterTaskUpdated', function(obj) {
             var tr = $('#wt-id-' + obj.id);
+            if (obj.content) {
             if (tr.length) {
                 tr.replaceWith(obj.content);
             } else {
                 $('#waitertasks > tbody').prepend(obj.content);
+            }
+            } else {
+                tr.remove();
             }
         });
 
@@ -328,10 +332,6 @@ function listenOnAdmin(path, iconbase) {
             if (obj.text) {
                 notifyMe("Новое задание дежурным", iconbase + 'icpc_logo.png', obj.text);
             }
-        });
-
-        add('waiterTaskDeleted', function(obj) {
-            $('#wt-id-' + obj.id).remove();
         });
     };
 

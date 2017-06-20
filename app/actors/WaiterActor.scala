@@ -1,6 +1,7 @@
 package actors
 
 import akka.actor.{Actor, Props, Stash}
+import akka.stream.scaladsl.{Merge, Source}
 import models._
 import play.api.Logger
 import play.api.libs.EventSource
@@ -9,13 +10,11 @@ import play.api.libs.iteratee.{Concurrent, Enumeratee, Enumerator}
 import play.api.libs.json.Json
 import play.api.mvc.RequestHeader
 import slick.jdbc.JdbcBackend
-import utils.Ask
+import utils.{Ask, Concur}
 
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.util.Success
-
-
 import com.github.nscala_time.time.Imports.DateTime
 
 // Task is visible:
@@ -46,14 +45,14 @@ object WaiterActor {
   case class Snapshot(tasks: Seq[AdaptedWaiterTask])
 
   // can be filtered against rooms
+  // List of list of rooms (outstanding tasks)
   type HeaderRows = Iterable[Iterable[String]]
 
   case class HeaderSource(rows: HeaderRows, added: Option[StoredWaiterTask])
 
-  def convertHeaderSource(perm: WaiterPermissions)(implicit ec: ExecutionContext): Enumeratee[HeaderSource, WaiterTaskHeader] =
-    Enumeratee.map { v =>
-    val count = v.rows.count(_.exists(perm.filter))
-    val msg = v.added.filter(_.matches(perm)).map(_.message).getOrElse("")
+  def adaptHeaderSource(perm: WaiterPermissions, source: HeaderSource): WaiterTaskHeader = {
+    val count = source.rows.count(_.exists(perm.filter))
+    val msg = source.added.filter(_.matches(perm)).map(_.message).getOrElse("")
     WaiterTaskHeader(count, msg)
   }
 }
@@ -61,15 +60,6 @@ object WaiterActor {
 trait WaiterTaskEvent {
   def filter(perm: WaiterPermissions): Boolean
   def toEvent(perm: WaiterPermissions, requestHeader: RequestHeader): Event
-}
-
-case class WaiterTaskDeleted(id: Long) extends WaiterTaskEvent {
-  override def filter(perm: WaiterPermissions): Boolean = true
-
-  implicit val format = Json.format[WaiterTaskDeleted]
-
-  override def toEvent(perm: WaiterPermissions, requestHeader: RequestHeader): Event =
-    Event(Json.stringify(Json.toJson(this)), None, Some("waiterTaskDeleted"))
 }
 
 case class WaiterTaskUpdate(id: Long, content: String)
@@ -85,6 +75,13 @@ case class WaiterTaskUpdated(inner: StoredWaiterTask) extends WaiterTaskEvent {
     val e = WaiterTaskUpdate(inner.id, c.body)
     Event(Json.stringify(Json.toJson(e)), None, Some("waiterTaskUpdated"))
   }
+}
+
+case class WaiterTaskDeleted(l: Long) extends WaiterTaskEvent {
+  override def filter(perm: WaiterPermissions): Boolean = true
+
+  override def toEvent(perm: WaiterPermissions, requestHeader: RequestHeader): Event =
+    Event(Json.stringify(Json.toJson(WaiterTaskUpdate(l, ""))), None, Some("waiterTaskUpdated"))
 }
 
 case class WaiterTaskHeader(outstanding: Int, text: String)
@@ -110,18 +107,10 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     self ! Load
   }
 
-  private val (waiterOut, waiterChannel) = Concurrent.broadcast[WaiterTaskEvent]
-
-  private val (headerOut, headerChannel) = Concurrent.broadcast[HeaderSource]
-
-  private def filterByRooms(perm: WaiterPermissions) = Enumeratee.filter[WaiterTaskEvent](_.filter(perm))
+  private val (waiterOut, waiterChannel) = Concur.broadcast[WaiterTaskEvent]
+  private val (headerOut, headerChannel) = Concur.broadcast[HeaderSource]
 
   import scala.language.implicitConversions
-
-  private def wt2event2(perm: WaiterPermissions, requestHeader: RequestHeader): Enumeratee[WaiterTaskEvent, Event] =
-    Enumeratee.map { e => e.toEvent(perm, requestHeader)}
-
-  private def storedSnapshot: Iterable[WaiterTaskEvent] = tasks.values.map(WaiterTaskUpdated)
 
   private def getHeaderRows = tasks.values.map(_.unacked)
 
@@ -171,8 +160,8 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
     case task: StoredWaiterTask => {
       tasks.put(task.id, task)
-      waiterChannel.push(WaiterTaskUpdated(task))
-      headerChannel.push(HeaderSource(getHeaderRows, Some(task)))
+      waiterChannel.offer(WaiterTaskUpdated(task))
+      headerChannel.offer(HeaderSource(getHeaderRows, Some(task)))
     }
 
     case AckTask(id, room) =>
@@ -184,8 +173,8 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
       tasks.get(id).foreach { stored =>
         val newMsg = StoredWaiterTask(stored.id, stored.when, stored.message, stored.rooms, stored.acked.updated(room, when))
         tasks.put(id, newMsg)
-        waiterChannel.push(WaiterTaskUpdated(newMsg))
-        headerChannel.push(getActual)
+        waiterChannel.offer(WaiterTaskUpdated(newMsg))
+        headerChannel.offer(getActual)
       }
     }
 
@@ -200,17 +189,16 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
       tasks.get(id).foreach { stored =>
         val newMsg = StoredWaiterTask(stored.id, stored.when, stored.message, stored.rooms, stored.acked - room)
         tasks.put(id, newMsg)
-        waiterChannel.push(WaiterTaskUpdated(newMsg))
-        headerChannel.push(getActual)
+        waiterChannel.offer(WaiterTaskUpdated(newMsg))
+        headerChannel.offer(getActual)
       }
     }
 
     case Join(perm, requestHeader) => {
-      val r: Enumerator[Event] = Enumerator.enumerate(storedSnapshot)
-        .andThen(waiterOut) &> filterByRooms(perm) &>
-        wt2event2(perm, requestHeader)
-      val r2 = Enumerator(getActual).andThen(headerOut) &> convertHeaderSource(perm) &> EventSource()
-      sender ! Success(Enumerator.interleave(r, r2))
+      sender ! Success(Source.combine(
+        Source.apply(tasks.values.map(WaiterTaskUpdated).toList).concat(waiterOut).filter(_.filter(perm)).map(_.toEvent(perm, requestHeader)),
+        Source.single(getActual).concat(headerOut).map(adaptHeaderSource(perm, _)) via EventSource.flow
+      )(Merge(_)))
     }
 
     case DeleteTask(id) => {
@@ -221,8 +209,8 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
     case TaskDeleted(id) => {
       tasks.remove(id)
-      waiterChannel.push(WaiterTaskDeleted(id))
-      headerChannel.push(getActual)
+      waiterChannel.offer(WaiterTaskDeleted(id))
+      headerChannel.offer(getActual)
     }
   }
 }
