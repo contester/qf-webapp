@@ -2,20 +2,18 @@ package actors
 
 import akka.actor.{Actor, Props, Stash}
 import akka.stream.scaladsl.{Merge, Source}
+import com.github.nscala_time.time.Imports.DateTime
 import models._
 import play.api.Logger
 import play.api.libs.EventSource
 import play.api.libs.EventSource.{Event, EventDataExtractor, EventNameExtractor}
-import play.api.libs.iteratee.{Concurrent, Enumeratee, Enumerator}
 import play.api.libs.json.Json
 import play.api.mvc.RequestHeader
 import slick.jdbc.JdbcBackend
 import utils.{Ask, Concur}
 
 import scala.collection.mutable
-import scala.concurrent.ExecutionContext
 import scala.util.Success
-import com.github.nscala_time.time.Imports.DateTime
 
 // Task is visible:
 // - to admins
