@@ -83,7 +83,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     import Contexts.adminExecutionContext
 
     getSubmitCid(submitId).map { cids =>
-      cids.exists(account.canSpectate(_))
+      cids.exists(account.canSpectate)
     }
   }
 

@@ -14,7 +14,7 @@ import slick.jdbc.{GetResult, JdbcBackend}
 import utils.Ask
 
 import scala.collection.mutable
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 import scala.util.Try
 
 object StatusActor {

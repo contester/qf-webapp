@@ -64,7 +64,7 @@ object Foo {
           (position + 1, position + 1)
       }.getOrElse((1, 1))
 
-    (state._1 :+ new RankedRow(nextR._1, next.team, next.score, next.cells), nextR._2)
+    (state._1 :+ RankedRow(nextR._1, next.team, next.score, next.cells), nextR._2)
   }
 
 
