@@ -1,10 +1,8 @@
 package actors
 
-import akka.NotUsed
-import akka.actor.Actor.Receive
 import akka.actor.{Actor, Props, Stash}
+import akka.stream.scaladsl.{BroadcastHub, Keep, Merge, Sink, Source}
 import akka.stream.{ActorMaterializer, OverflowStrategy}
-import akka.stream.scaladsl.{BroadcastHub, Flow, Keep, Sink, Source, Merge}
 import models.ContesterResults.{CustomTestResult, FinishedTesting}
 import models._
 import play.api.Logger
@@ -57,8 +55,6 @@ object StatusActor {
     def filterContest(contestId: Int)(implicit ec: ExecutionContext) = Enumeratee.filter[ClarificationPosted](_.contest == contestId)
   }
 
-  import com.github.nscala_time.time.Imports._
-
   case class AckAllClarifications(contest: Int, team: Int)
 
   private val userPing = Event("", None, Some("ping"))
@@ -84,7 +80,6 @@ object Message2 {
 class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   import StatusActor._
   import context.dispatcher
-  import utils.Db._
 
   import scala.language.postfixOps
 
@@ -138,7 +133,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   private val (clrPostOut, clrPostChannel) = Concurrent.broadcast[ClarificationPosted]
 
   private val clarifications = {
-    import com.github.nscala_time.time.Imports._
 
     mutable.Map[Int, mutable.Map[Int, Clarification]]()
   }
