@@ -55,6 +55,7 @@
 $(function() {
     askForPermission();
     listenOnAdmin('@routes.AdminApplication.feed(contest.contest.id)', '@routes.Assets.versioned("images/")');
+    QFWeb.listenAdmin('@routes.AdminApplication.feed(contest.contest.id)', '@routes.Assets.versioned("images/")');
 });
 </script>
 }

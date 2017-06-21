@@ -21,11 +21,16 @@ pipelineStages in Assets := Seq(scalaJSPipeline)
 
 lazy val client = (project in file("client")).settings(
   scalaVersion := "2.11.11",
-  persistLauncher := true,
-  persistLauncher in Test := false,
+  scalaJSUseMainModuleInitializer := true,
   libraryDependencies ++= Seq(
-    "org.scala-js" %%% "scalajs-dom" % "0.9.1",
-    "org.querki" %%% "jquery-facade" % "1.0-RC6"
+    "org.scala-js" %%% "scalajs-dom" % "0.9.2",
+    "org.querki" %%% "jquery-facade" % "1.0"
+  ),
+  jsDependencies ++= Seq(
+    "org.webjars" % "jquery" % "3.2.1" / "jquery.js" minified "jquery.min.js",
+    "org.webjars" % "bootstrap" % "3.3.7-1" / "bootstrap.js" minified "bootstrap.min.js" dependsOn "jquery.js",
+    "org.webjars" % "bootstrap-datepicker" % "1.6.4" / "bootstrap-datepicker.js" minified "bootstrap-datepicker.min.js" dependsOn "bootstrap.js",
+    "org.webjars.npm" % "arrive" % "2.3.1" / "arrive.js" minified "arrive.min.js" dependsOn "jquery.js"
   )
 ).enablePlugins(ScalaJSPlugin, ScalaJSWeb)
 
