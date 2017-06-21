@@ -39,7 +39,7 @@
 @myScripts = {
 <script type="text/javascript">
     $(function() {
-        askForPermission();
+        QFWeb.askForPermission();
         listenOnEvents('@routes.Application.feed(loggedIn.contest.id, loggedIn.team.localId)',
             '@routes.Assets.versioned("images/")',
             '@routes.Application.ackMessage');

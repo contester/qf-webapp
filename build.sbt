@@ -30,7 +30,9 @@ lazy val client = (project in file("client")).settings(
     "org.webjars" % "jquery" % "3.2.1" / "jquery.js" minified "jquery.min.js",
     "org.webjars" % "bootstrap" % "3.3.7-1" / "bootstrap.js" minified "bootstrap.min.js" dependsOn "jquery.js",
     "org.webjars" % "bootstrap-datepicker" % "1.6.4" / "bootstrap-datepicker.js" minified "bootstrap-datepicker.min.js" dependsOn "bootstrap.js",
-    "org.webjars.npm" % "arrive" % "2.3.1" / "arrive.js" minified "arrive.min.js" dependsOn "jquery.js"
+    "org.webjars.npm" % "arrive" % "2.3.1" / "arrive.js" minified "arrive.min.js" dependsOn "jquery.js",
+    "org.webjars" % "bootstrap-material-design" % "0.5.9" / "ripples.js" minified "ripples.min.js" dependsOn("jquery.js", "arrive.js"),
+    "org.webjars" % "bootstrap-material-design" % "0.5.9" / "material.js" minified "material.min.js" dependsOn("jquery.js", "arrive.js", "ripples.js")
   )
 ).enablePlugins(ScalaJSPlugin, ScalaJSWeb)
 

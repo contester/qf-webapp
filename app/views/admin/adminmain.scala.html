@@ -53,7 +53,7 @@
 @myScripts = {
 <script type="text/javascript">
 $(function() {
-    askForPermission();
+    QFWeb.askForPermission();
     listenOnAdmin('@routes.AdminApplication.feed(contest.contest.id)', '@routes.Assets.versioned("images/")');
     QFWeb.listenAdmin('@routes.AdminApplication.feed(contest.contest.id)', '@routes.Assets.versioned("images/")');
 });

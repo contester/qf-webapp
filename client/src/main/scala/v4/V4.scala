@@ -3,6 +3,7 @@ package v4
 import scala.scalajs.js
 import scala.scalajs.js.annotation._
 import org.querki.jquery.{$, JQuery}
+import org.scalajs.dom.experimental.Notification
 
 @js.native
 trait Material extends js.Object {
@@ -11,7 +12,7 @@ trait Material extends js.Object {
 
 @js.native
 trait JQueryMaterial extends JQuery {
-  def material: Material = js.native
+  val material: Material = js.native
 }
 
 object JQueryMaterial {
@@ -22,13 +23,7 @@ object JQueryMaterial {
 object V4 extends js.JSApp {
   override def main(): Unit = {
     $( () => {
-      println("blablabla")
-
-      import JQueryMaterial._
-
-      $().material.init()
-
-      println("ghr")
+      js.Dynamic.global.$.material.init()
     })
   }
 }
@@ -38,5 +33,12 @@ object QFWeb {
   @JSExport
   def listenAdmin(path: String, iconbase: String) = {
     println(s"$path - $iconbase")
+  }
+
+  @JSExport
+  def askForPermission(): Unit = {
+    if (Notification.permission != "granted") {
+      Notification.requestPermission((_: String) => ())
+    }
   }
 }
