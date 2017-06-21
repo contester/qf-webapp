@@ -6,7 +6,7 @@ addSbtPlugin("com.typesafe.play" % "sbt-plugin" % "2.5.15")
 
 addSbtPlugin("com.typesafe.sbt" % "sbt-jshint" % "1.0.4")
 
-addSbtPlugin("com.typesafe.sbt" % "sbt-rjs" % "1.0.7")
+addSbtPlugin("com.typesafe.sbt" % "sbt-rjs" % "1.0.9")
 
 addSbtPlugin("com.typesafe.sbt" % "sbt-coffeescript" % "1.0.0")
 
