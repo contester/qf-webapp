@@ -24,7 +24,8 @@ lazy val client = (project in file("client")).settings(
   scalaJSUseMainModuleInitializer := true,
   libraryDependencies ++= Seq(
     "org.scala-js" %%% "scalajs-dom" % "0.9.2",
-    "org.querki" %%% "jquery-facade" % "1.0"
+    "org.querki" %%% "jquery-facade" % "1.0",
+    "ru.pavkin" %%% "scala-js-momentjs" % "0.8.1"
   ),
   jsDependencies ++= Seq(
     "org.webjars" % "jquery" % "3.2.1" / "jquery.js" minified "jquery.min.js",
@@ -32,13 +33,12 @@ lazy val client = (project in file("client")).settings(
     "org.webjars" % "bootstrap-datepicker" % "1.6.4" / "bootstrap-datepicker.js" minified "bootstrap-datepicker.min.js" dependsOn "bootstrap.js",
     "org.webjars.npm" % "arrive" % "2.3.1" / "arrive.js" minified "arrive.min.js" dependsOn "jquery.js",
     "org.webjars" % "bootstrap-material-design" % "0.5.9" / "ripples.js" minified "ripples.min.js" dependsOn("jquery.js", "arrive.js"),
-    "org.webjars" % "bootstrap-material-design" % "0.5.9" / "material.js" minified "material.min.js" dependsOn("jquery.js", "arrive.js", "ripples.js")
+    "org.webjars" % "bootstrap-material-design" % "0.5.9" / "material.js" minified "material.min.js" dependsOn("jquery.js", "arrive.js", "ripples.js"),
+    "org.webjars" % "jquery-validation" % "1.16.0" / "jquery.validate.js" minified "jquery.validate.min.js" dependsOn "jquery.js"
   )
 ).enablePlugins(ScalaJSPlugin, ScalaJSWeb)
 
 val spireVersion = "0.13.0"
-
-// pipelineStages := Seq(rjs)
 
 libraryDependencies ++= Seq(
   cache,
@@ -48,10 +48,7 @@ libraryDependencies ++= Seq(
   "org.webjars" % "bootstrap" % "3.3.7-1",
   "org.webjars" % "font-awesome" % "4.7.0",
   "org.webjars" % "bootstrap-datepicker" % "1.6.4",
-  "org.webjars.npm" % "arrive" % "2.3.1",
-  "org.webjars" % "momentjs" % "2.18.1",
   "org.webjars" % "bootstrap-material-design" % "0.5.9",
-  "org.webjars" % "jquery-validation" % "1.16.0",
   "org.webjars.bower" % "roboto-fontface" % "0.7.0",
   "org.apache.httpcomponents" % "httpclient" % "4.5.3",
   "org.apache.httpcomponents" % "httpcore" % "4.4.6",
