@@ -16,6 +16,15 @@ case class RatedProblem(id: String, rating: Int)
 
 case class SubmitId(id: Int, arrived: Arrived, teamId: Int, contestId: Int, problem: RatedProblem, ext: String)
 
+trait UntestedSubmit {
+  def id: Int
+  def arrived: Arrived
+  def teamId: Int
+  def contestId: Int
+  def problemId: String
+  def ext: String
+}
+
 case class Submit(submitId: SubmitId, finished: Boolean, compiled: Boolean, passed: Int, taken: Int, testingId: Option[Int]) {
   val success = finished && compiled && taken > 0 && passed == taken
   def afterFreeze = submitId.arrived.afterFreeze
