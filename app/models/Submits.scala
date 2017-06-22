@@ -341,4 +341,24 @@ object Submits {
     db.run(
       sql"""select Test, Result, Timex, Memory, Info, TesterExitCode, TesterOutput, TesterError
            from Results where UID = $testingId order by Test""".as[ResultEntry])
+
+  def loadAllSubmits(db: JdbcBackend#DatabaseDef, contestId: Int, teamId: Int, problemId: String)(implicit ec: ExecutionContext) = {
+    db.run(
+      sql"""
+      select NewSubmits.ID,
+      NewSubmits.Arrived,
+      unix_timestamp(NewSubmits.Arrived) - unix_timestamp(Contests.Start) as ArrivedSeconds,
+      NewSubmits.Arrived > Contests.Finish as AfterFreeze,
+      NewSubmits.Team, NewSubmits.Contest,
+      NewSubmits.Problem, Problems.Rating,
+      Languages.Ext, Submits.Finished, Submits.Compiled,
+      Submits.Passed, Submits.Taken,
+      Submits.TestingID
+        from Contests, Problems, Languages, NewSubmits LEFT join Submits on NewSubmits.ID = Submits.ID where
+        NewSubmits.Contest = $contestId and NewSubmits.Team = $teamId and NewSubmits.Problem = $problemId
+      and NewSubmits.Arrived < Contests.End and NewSubmits.Arrived >= Contests.Start and
+      Contests.ID = NewSubmits.Contest and Problems.Contest = Contests.ID and
+      Languages.ID = NewSubmits.SrcLang and Languages.Contest = Contests.ID and
+      Problems.ID = NewSubmits.Problem order by ArrivedSeconds""".as[Submit])
+  }
 }
