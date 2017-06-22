@@ -91,7 +91,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     import Contexts.adminExecutionContext
 
     getSubmitCid(submitId).map { cids =>
-      cids.exists(account.canModify(_))
+      cids.exists(account.canModify)
     }
   }
 
