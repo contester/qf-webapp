@@ -15,23 +15,7 @@ resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repos
 
 updateOptions := updateOptions.value.withCachedResolution(true)
 
-scalaJSProjects := Seq(client)
-
-pipelineStages in Assets := Seq(scalaJSPipeline)
-
-lazy val client = (project in file("client")).settings(
-  scalaVersion := "2.11.11",
-  persistLauncher := true,
-  persistLauncher in Test := false,
-  libraryDependencies ++= Seq(
-    "org.scala-js" %%% "scalajs-dom" % "0.9.1",
-    "org.querki" %%% "jquery-facade" % "1.0-RC6"
-  )
-).enablePlugins(ScalaJSPlugin, ScalaJSWeb)
-
 val spireVersion = "0.13.0"
-
-// pipelineStages := Seq(rjs)
 
 libraryDependencies ++= Seq(
   cache,
@@ -57,6 +41,7 @@ libraryDependencies ++= Seq(
   "com.github.nscala-time" %% "nscala-time" % "2.16.0",
   "com.googlecode.htmlcompressor" % "htmlcompressor" % "1.5.2",
   "rhino" % "js" % "1.7R2",
+  "org.scala-lang.modules" %% "scala-async" % "0.9.6",
   "com.typesafe.slick" %% "slick" % "3.2.0",
   "com.typesafe.slick" %% "slick-hikaricp" % "3.2.0",
   "com.vmunier" %% "scalajs-scripts" % "1.0.0",

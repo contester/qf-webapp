@@ -76,8 +76,8 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   import slick.jdbc.MySQLProfile.api._
 
-  private def getSubmitCid(submitId: Int)(implicit ec: ExecutionContext) =
-    db.run(sql"""select Contest from NewSubmits where ID = $submitId""".as[Int]).map(_.headOption)
+  private def getSubmitCid(submitId: Int)(implicit ec: ExecutionContext): Future[Option[Int]] =
+    db.run(sql"""select Contest from NewSubmits where ID = $submitId limit 1""".as[Int]).map(_.headOption)
 
   private def canSeeSubmit(submitId: Int)(account: Admin): Future[Boolean] = {
     import Contexts.adminExecutionContext
