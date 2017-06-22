@@ -16,13 +16,15 @@ case class RatedProblem(id: String, rating: Int)
 
 case class SubmitId(id: Int, arrived: Arrived, teamId: Int, contestId: Int, problem: RatedProblem, ext: String)
 
-trait UntestedSubmit {
-  def id: Int
-  def arrived: Arrived
-  def teamId: Int
-  def contestId: Int
-  def problemId: String
-  def ext: String
+case class UntestedSubmit(id: Int, arrived: Arrived, teamId: Int, contestId: Int, problem: String, ext: String)
+
+
+
+trait TestedSubmit extends UntestedSubmit {
+  def testingId: Int
+  def result: SubmitResult
+  def score: Option[Score]
+  def stats: SubmitStats
 }
 
 case class Submit(submitId: SubmitId, finished: Boolean, compiled: Boolean, passed: Int, taken: Int, testingId: Option[Int]) {
@@ -166,7 +168,7 @@ case class FullyDescribedSubmit(submit: Submit, index: Int, score: Option[Score]
 
 object Submits {
 
-  import slick.driver.MySQLDriver.api._
+  import slick.jdbc.MySQLProfile.api._
 
   case class ScoredSubmit[Sc](submit: Submit, score: Score, index: Int)
 
@@ -362,7 +364,9 @@ object Submits {
       NewSubmits.Problem, Problems.Rating,
       Languages.Ext, Submits.Finished, Submits.Compiled,
       Submits.Passed, Submits.Taken,
-      Submits.TestingID
+      Submits.TestingID,
+           (select max(Timex) from Results where UID=Submits.TestingID) as MaxTime,
+           (select max(Memory) from Results where UID=Submits.TestingID) as MaxMemory
         from Contests, Problems, Languages, NewSubmits LEFT join Submits on NewSubmits.ID = Submits.ID where
         NewSubmits.Contest = $contestId and NewSubmits.Team = $teamId and NewSubmits.Problem = $problemId
       and NewSubmits.Arrived < Contests.End and NewSubmits.Arrived >= Contests.Start and
