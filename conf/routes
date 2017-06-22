@@ -67,3 +67,5 @@ POST /admin/deleteWaiterTask/:id controllers.AdminApplication.deleteWaiterTask(i
 
 GET     /assets/*file               controllers.Assets.versioned(path="/public", file: Asset)
 GET        /files/config.js        controllers.RjsHack.index
+
+GET        /lib/*file              controllers.WebJarAssets.at(file)

@@ -52,9 +52,11 @@
 
 @myScripts = {
 <script type="text/javascript">
+requirejs(['jquery'], function($) {
 $(function() {
     askForPermission();
     listenOnAdmin('@routes.AdminApplication.feed(contest.contest.id)', '@routes.Assets.versioned("images/")');
+});
 });
 </script>
 }

@@ -1,3 +1,5 @@
+requirejs(['jquery'], function($) {
+
 function askForPermission() {
     if (Notification.permission !== "granted") {
         Notification.requestPermission();
@@ -337,3 +339,5 @@ function listenOnAdmin(path, iconbase) {
 
     return listenV2(path, setup, setConnectedBadge);
 }
+
+});

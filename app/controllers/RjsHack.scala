@@ -10,5 +10,4 @@ class RjsHack extends Controller  {
     Action {
       Ok(org.webjars.RequireJS.getSetupJavaScript(routes.WebJarAssets.at("").url))
     }
-
 }
