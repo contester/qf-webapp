@@ -36,7 +36,7 @@ libraryDependencies ++= Seq(
   "jp.t2v" %% "play2-auth-test" % "0.14.2" % "test",
   "com.typesafe.play" %% "play-slick" % "2.1.0",
   "com.typesafe.play" %% "play-slick-evolutions" % "2.1.0",
-  "org.mariadb.jdbc" % "mariadb-java-client" % "1.6.1",
+  "org.mariadb.jdbc" % "mariadb-java-client" % "2.0.2",
   "commons-io" % "commons-io" % "2.5",
   "com.github.nscala-time" %% "nscala-time" % "2.16.0",
   "com.googlecode.htmlcompressor" % "htmlcompressor" % "1.5.2",
@@ -44,8 +44,7 @@ libraryDependencies ++= Seq(
   "org.scala-lang.modules" %% "scala-async" % "0.9.6",
   "com.typesafe.slick" %% "slick" % "3.2.0",
   "com.typesafe.slick" %% "slick-hikaricp" % "3.2.0",
-  "com.vmunier" %% "scalajs-scripts" % "1.0.0",
-  "com.zaxxer" % "HikariCP" % "2.6.1",
+  "com.zaxxer" % "HikariCP" % "2.6.3",
   "org.spire-math" %% "spire" % spireVersion,
   "org.spire-math" %% "spire-extras" % spireVersion,
   "com.google.guava" % "guava" % "22.0"
