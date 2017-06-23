@@ -16,16 +16,12 @@ case class RatedProblem(id: String, rating: Int)
 
 case class SubmitId(id: Int, arrived: Arrived, teamId: Int, contestId: Int, problem: RatedProblem, ext: String)
 
-case class UntestedSubmit(id: Int, arrived: Arrived, teamId: Int, contestId: Int, problem: String, ext: String)
-
-
-
-trait TestedSubmit extends UntestedSubmit {
-  def testingId: Int
-  def result: SubmitResult
-  def score: Option[Score]
-  def stats: SubmitStats
-}
+case class ProblemData(id: String, name: String, rating: Int)
+case class TeamData(id: Long, name: String)
+case class UntestedSubmit(id: Long, arrived: Arrived, team: TeamData, contest: Long, problem: ProblemData, ext: String)
+case class SubmitTestingData(testingId: Long, finished: Boolean, compiled: Boolean, passed: Int, taken: Int,
+                             maxTimeMs: Long, maxMemory: Long)
+case class DatabaseSubmitRow(submit: UntestedSubmit, testingData: Option[SubmitTestingData])
 
 case class Submit(submitId: SubmitId, finished: Boolean, compiled: Boolean, passed: Int, taken: Int, testingId: Option[Int]) {
   val success = finished && compiled && taken > 0 && passed == taken
@@ -354,24 +350,69 @@ object Submits {
            from Results where UID = $testingId order by Test""".as[ResultEntry])
 
   def loadAllSubmits(db: JdbcBackend#DatabaseDef, contestId: Int, teamId: Int, problemId: String)(implicit ec: ExecutionContext) = {
+    implicit val getResult = GetResult(r => {
+      //    case class UntestedSubmit(id: Int, arrived: Arrived, team: TeamData, contest: Int, problem: ProblemData, ext: String)
+      //    case class SubmitTestingData(testingId: Int, finished: Boolean, compiled: Boolean, passed: Int, taken: Int,
+      //                                 maxTimeMs: Long, maxMemory: Long)
+      import com.github.nscala_time.time.Imports._
+
+      val sub = UntestedSubmit(
+        r.nextLong(),
+        Arrived(
+          new DateTime(r.nextTimestamp()),
+          r.nextInt(),
+          r.nextBoolean()),
+        TeamData(r.nextInt(), ""),
+        r.nextLong(),
+        ProblemData(
+          r.nextString(),
+          r.nextString(),
+          r.nextInt()
+        ),
+        r.nextString()
+      )
+      val td = r.nextLongOption().map { testingId =>
+        SubmitTestingData(
+          testingId,
+          r.nextBoolean(),
+          r.nextBoolean(),
+          r.nextInt(),
+          r.nextInt(),
+          r.nextLong(),
+          r.nextLong()
+        )
+      }
+
+      DatabaseSubmitRow(sub, td)
+    }
+    )
     db.run(
       sql"""
       select NewSubmits.ID,
       NewSubmits.Arrived,
       unix_timestamp(NewSubmits.Arrived) - unix_timestamp(Contests.Start) as ArrivedSeconds,
       NewSubmits.Arrived > Contests.Finish as AfterFreeze,
-      NewSubmits.Team, NewSubmits.Contest,
-      NewSubmits.Problem, Problems.Rating,
-      Languages.Ext, Submits.Finished, Submits.Compiled,
-      Submits.Passed, Submits.Taken,
+      NewSubmits.Team,
+      NewSubmits.Contest,
+      NewSubmits.Problem,
+      Problems.Name,
+      Problems.Rating,
+      Languages.Ext,
       Submits.TestingID,
-           (select max(Timex) from Results where UID=Submits.TestingID) as MaxTime,
-           (select max(Memory) from Results where UID=Submits.TestingID) as MaxMemory
-        from Contests, Problems, Languages, NewSubmits LEFT join Submits on NewSubmits.ID = Submits.ID where
+      Submits.Finished,
+      Submits.Compiled,
+      Submits.Passed,
+      Submits.Taken,
+      max(Results.Timex) as MaxTime,
+      max(Results.Memory) as MaxMemory
+        from Contests, Problems, Languages, NewSubmits
+        LEFT join Submits on NewSubmits.ID = Submits.ID
+        left join Results on Submits.TestingID = Results.UID
+        where
         NewSubmits.Contest = $contestId and NewSubmits.Team = $teamId and NewSubmits.Problem = $problemId
       and NewSubmits.Arrived < Contests.End and NewSubmits.Arrived >= Contests.Start and
       Contests.ID = NewSubmits.Contest and Problems.Contest = Contests.ID and
       Languages.ID = NewSubmits.SrcLang and Languages.Contest = Contests.ID and
-      Problems.ID = NewSubmits.Problem order by ArrivedSeconds""".as[Submit])
+      Problems.ID = NewSubmits.Problem order by ArrivedSeconds""".as[DatabaseSubmitRow])
   }
 }
