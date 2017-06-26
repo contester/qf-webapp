@@ -1,6 +1,8 @@
 package models
 
 import models.ContesterResults.FinishedTesting
+import models.Submits.{indexGrouped, scoreGrouped}
+import play.api.Logger
 import play.api.i18n.Messages
 import play.api.libs.EventSource.{EventDataExtractor, EventNameExtractor}
 import play.api.libs.json.{JsValue, Json, Writes}
@@ -87,12 +89,24 @@ object SubmitResult {
       (sr, details, st)
     }
 
-  def annotateFinished(db: JdbcBackend#DatabaseDef, finished: FinishedTesting)(implicit ec: ExecutionContext): Future[AnnoSubmit] =
-    Submits.loadSubmitByID(db, finished.submit.id).map(_.get).flatMap { submit =>
+  def annotateFinished(db: JdbcBackend#DatabaseDef, finished: FinishedTesting)(implicit ec: ExecutionContext): Future[FullyDescribedSubmit] = {
+    Submits.loadAllSubmits(db, finished.submit.contest, finished.submit.team, finished.submit.problem).map(_.map(Submits.dbsub2sub)).flatMap { submits =>
+      Logger.info(s"submits: $submits")
+      val scored = if (finished.submit.schoolMode) scoreGrouped[SchoolCell](submits, SchoolCell.empty, SchoolScorer)
+      else scoreGrouped(submits, ACMCell.empty, ACMScorer)
+      val indexed: Seq[((Submit, Option[Score]), Int)] = indexGrouped(scored._2)
+
+      Logger.info(s"indexed: $indexed")
+      val submitEntry = indexed.find(_._1._1.submitId.id == finished.submit.id).get
+      Logger.info(s"submit: $submitEntry")
+      val index = submitEntry._2
+      val submit = submitEntry._1._1
       annotate(db, finished.submit.schoolMode, submit).map { submitResult =>
-        AnnoSubmit(finished.submit.id, finished.submit.contest, finished.submit.team, finished.submit.problem, submitResult._1)
+        Logger.info(s"sr: $submitResult")
+        FullyDescribedSubmit(submit, index, submitEntry._1._2, submitResult._1, submitResult._3, submitResult._2)
       }
     }
+  }
 
 /*  val message = Map(
     1 -> "compiled",

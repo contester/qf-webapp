@@ -8,6 +8,15 @@ import spire.math.extras.{FixedPoint, FixedScale}
 
 import scala.concurrent.{ExecutionContext, Future}
 
+/*
+
+Submit access patterns:
+
+1. All submits one contest (admin status) -
+
+ */
+
+
 case class Arrived(timestamp: DateTime, seconds: Int, afterFreeze: Boolean) {
   def asString = SecondsToTimeStr(seconds)
 }
@@ -349,6 +358,13 @@ object Submits {
       sql"""select Test, Result, Timex, Memory, Info, TesterExitCode, TesterOutput, TesterError
            from Results where UID = $testingId order by Test""".as[ResultEntry])
 
+  def dbsub2sub(s: DatabaseSubmitRow): Submit = {
+    Submit(SubmitId(s.submit.id.toInt, s.submit.arrived, s.submit.team.id.toInt, s.submit.contest.toInt, RatedProblem(s.submit.problem.id, s.submit.problem.rating), s.submit.ext),
+      s.testingData.map(_.finished).getOrElse(false), s.testingData.map(_.compiled).getOrElse(false),
+      s.testingData.map(_.passed).getOrElse(0), s.testingData.map(_.taken).getOrElse(0),
+      s.testingData.map(_.testingId.toInt))
+  }
+
   def loadAllSubmits(db: JdbcBackend#DatabaseDef, contestId: Int, teamId: Int, problemId: String)(implicit ec: ExecutionContext) = {
     implicit val getResult = GetResult(r => {
       //    case class UntestedSubmit(id: Int, arrived: Arrived, team: TeamData, contest: Int, problem: ProblemData, ext: String)
@@ -413,6 +429,6 @@ object Submits {
       and NewSubmits.Arrived < Contests.End and NewSubmits.Arrived >= Contests.Start and
       Contests.ID = NewSubmits.Contest and Problems.Contest = Contests.ID and
       Languages.ID = NewSubmits.SrcLang and Languages.Contest = Contests.ID and
-      Problems.ID = NewSubmits.Problem order by ArrivedSeconds""".as[DatabaseSubmitRow])
+      Problems.ID = NewSubmits.Problem group by NewSubmits.ID order by ArrivedSeconds""".as[DatabaseSubmitRow])
   }
 }

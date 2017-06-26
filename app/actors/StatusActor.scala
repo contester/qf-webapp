@@ -246,9 +246,12 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
       db.run(sqlu"update Messages2 set Seen = 1 where ID = $msgid")
     }
 
-    case annotated: AnnoSubmit => {
-      sub2Chan.offer(annotated)
-      pushPersistent(annotated.contest, annotated.team, "submit", Json.toJson(annotated))
+    case annotated: FullyDescribedSubmit => {
+      Logger.info(s"ann: $annotated")
+      val a = AnnoSubmit(annotated.submit.submitId.id, annotated.submit.submitId.contestId,
+        annotated.submit.submitId.teamId, annotated.submit.submitId.problem.id, annotated.result)
+      sub2Chan.offer(a)
+      pushPersistent(a.contest, a.team, "submit", Json.toJson(a))
     }
 
     case evalDone: CustomTestResult => {
