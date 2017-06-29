@@ -1,4 +1,4 @@
-@(submits: Seq[FullyDescribedSubmit], teams: Map[Int, LocalTeam], contest: SelectedContest, admin: Admin)(implicit request: RequestHeader)
+@(submits: Seq[FullyDescribedSubmit], teams: Map[Int, Team], contest: SelectedContest, admin: Admin)(implicit request: RequestHeader)
 @adminmain(tab = "status", contest = contest) {
 @defining(admin.canModify(contest.contest.id)) { showRejudge =>
 <table id="submits" class="table table-hover table-bordered table-responsive">

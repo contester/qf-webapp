@@ -173,7 +173,7 @@ case class StoredContestStatus(contest: Contest, frozen: AnyStatus, exposed: Any
 class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, system: ActorSystem, configuration: Configuration) {
   private val db = dbConfigProvider.get[JdbcProfile].db
   private val teamStateActor = system.actorOf(TeamStateActor.props(db), "team-state-actor")
-  private val teamClient = new TeamClient(teamStateActor)
+  val teamClient = new TeamClient(teamStateActor)
 
   private[this] val monitorActor = system.actorOf(MonitorActor.props(
     db, configuration.getString("monitor.static_location"), teamClient), "monitor-actor")

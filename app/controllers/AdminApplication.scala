@@ -96,7 +96,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   private def showSubs(contestId: Int, limit: Option[Int], account: Admin)(implicit request: RequestHeader, ec: ExecutionContext) =
     getSelectedContests(contestId, account).zip(
-      db.run(Contests.getTeams(contestId)).map(_.map(x => x.localId -> x).toMap)
+      monitorModel.teamClient.getTeams(contestId)
     ).zip(db.run(Submits.getContestSubmits(contestId))).flatMap {
       case ((contest, teamMap), submits0) =>
         val canSeeAll = account.canSeeAll(contestId)
