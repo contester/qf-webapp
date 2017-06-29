@@ -34,7 +34,8 @@ class TeamStateActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   private val dbioCombined =
     sql"""select ID, Name from Schools""".as[(Int, String)].zip(
       sql"""select ID, School, Num, Name from Teams""".as[(Int, Int, Int, String)]
-    ).zip(sql"""select Contest, Team, LocalID, Disabled, NoPrint, NotRated from Participants""".as[(Int, Int, Int, Boolean, Boolean, Boolean)])
+    ).zip(sql"""select Contest, Team, LocalID, Disabled, NoPrint, NotRated from Participants"""
+      .as[(Int, Int, Int, Boolean, Boolean, Boolean)])
 
   private def buildState()(implicit ec: ExecutionContext): Future[TeamState] =
     db.run(dbioCombined).map {

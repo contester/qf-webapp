@@ -107,17 +107,6 @@ object Contests {
 
   def getCompilers(contest: Int) =
     sql"""select ID, Name, Ext from Languages where Contest = $contest order by ID""".as[Compiler]
-
-  implicit val getLocalTeam = GetResult(r =>
-    LocalTeam(r.nextInt(), r.nextString(), r.nextIntOption(), r.nextString(), r.nextBoolean(),
-      r.nextBoolean(), r.nextBoolean()))
-
-
-  def getTeams(contest: Int) =
-    sql"""select Participants.LocalID, Schools.Name, Teams.Num, Teams.Name, Participants.NotRated,
-           Participants.NoPrint, Participants.Disabled from Participants, Schools, Teams where
-         Participants.Contest = $contest and Teams.ID = Participants.Team and Schools.ID = Teams.School
-       """.as[LocalTeam]
 }
 
 object Problems {
