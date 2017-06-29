@@ -21,7 +21,7 @@ object Location {
 }
 
 object Locator {
-  import slick.driver.MySQLDriver.api._
+  import slick.jdbc.MySQLProfile.api._
 
   def locate(db: JdbcBackend#DatabaseDef, remoteAddress: String)(implicit ec: ExecutionContext): Future[Option[Location]] =
     db.run(
