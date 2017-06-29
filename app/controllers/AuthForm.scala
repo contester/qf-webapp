@@ -36,8 +36,6 @@ class AuthForms @Inject() (val messagesApi: MessagesApi, val auth: AuthWrapper)
 
   def doAuth(username: String, password: String) =
     auth.authenticateUser(username, password)
-    //auth.resolve(username)
-    //Users.authenticate(db.db, username, password)
 
   def authenticate = Action.async { implicit request =>
     AuthData.form.bindFromRequest.fold(
