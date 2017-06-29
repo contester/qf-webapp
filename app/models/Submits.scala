@@ -367,9 +367,6 @@ object Submits {
 
   def loadAllSubmits(db: JdbcBackend#DatabaseDef, contestId: Int, teamId: Int, problemId: String)(implicit ec: ExecutionContext) = {
     implicit val getResult = GetResult(r => {
-      //    case class UntestedSubmit(id: Int, arrived: Arrived, team: TeamData, contest: Int, problem: ProblemData, ext: String)
-      //    case class SubmitTestingData(testingId: Int, finished: Boolean, compiled: Boolean, passed: Int, taken: Int,
-      //                                 maxTimeMs: Long, maxMemory: Long)
       import com.github.nscala_time.time.Imports._
 
       val sub = UntestedSubmit(
