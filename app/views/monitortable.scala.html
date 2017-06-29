@@ -26,12 +26,8 @@
     <tbody>
 
     @for(r <- status.anyRows) {
-    @if(current == r.team.localId) {
-    <tr class="info">
-        } else {
-    <tr>
-        }
-        <th scope="row">@r.rankStr</th><td>@r.team.localId</td>
+    <tr @if(current == r.team.id) { class="info" } >
+        <th scope="row">@r.rankStr</th><td>@r.team.id</td>
         <td>@r.team.schoolNameWithNum<br/><small>@r.team.teamName</small></td>
         @r.anyScore match {
         case sc: ACM.Score => {

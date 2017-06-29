@@ -6,7 +6,7 @@ import javax.inject.{Inject, Singleton}
 import models.{AdminId, Admin, Users}
 import play.api.Configuration
 import play.api.db.slick.DatabaseConfigProvider
-import slick.driver.JdbcProfile
+import slick.jdbc.JdbcProfile
 
 import scala.concurrent.ExecutionContext
 

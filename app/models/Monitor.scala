@@ -27,7 +27,7 @@ trait AnyStatus {
 
 trait AnyRankedRow {
   def rank: Int
-  def team: LocalTeam
+  def team: Team
 
   def anyScore: Any
   def anyCells: Map[String, ProblemCell]
@@ -38,12 +38,12 @@ trait AnyRankedRow {
 
 object Foo {
   trait MonitorRow[ScoreType, CellType] {
-    def team: LocalTeam
+    def team: Team
     def score: ScoreType
     def cells: Map[String, CellType]
   }
 
-  case class RankedRow[ScoreType, CellType <: ProblemCell](rank: Int, team: LocalTeam, score: ScoreType, cells: Map[String, CellType]) extends AnyRankedRow {
+  case class RankedRow[ScoreType, CellType <: ProblemCell](rank: Int, team: Team, score: ScoreType, cells: Map[String, CellType]) extends AnyRankedRow {
     override def anyScore: Any = score
 
     override def anyCells: Map[String, ProblemCell] = cells
@@ -71,7 +71,7 @@ object Foo {
   def rank[ScoreType, CellType <: ProblemCell](rows: Seq[MonitorRow[ScoreType, CellType]]): Seq[RankedRow[ScoreType, CellType]] =
     rows.foldLeft((Seq[RankedRow[ScoreType, CellType]](), 0))(pullRank)._1
 
-  case class SomeRow[ScoreType, CellType](team: LocalTeam, score: ScoreType,
+  case class SomeRow[ScoreType, CellType](team: Team, score: ScoreType,
                                                                 cells: Map[String, CellType]) extends MonitorRow[ScoreType, CellType]
 
   def groupAndRank[ScoreType, CellType <: ProblemCell](teams: Seq[LocalTeam], submits: Seq[Submit],

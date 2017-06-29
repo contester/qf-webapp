@@ -51,7 +51,7 @@ object AdminId {
 }
 
 object Admin {
-  import slick.driver.MySQLDriver.api._
+  import slick.jdbc.MySQLProfile.api._
 
   private def parseSingleAcl(s: String): Option[Int] =
     if (s == "*")
@@ -74,7 +74,7 @@ object Admin {
 }
 
 object AdminModel {
-  import slick.driver.MySQLDriver.api._
+  import slick.jdbc.MySQLProfile.api._
   import utils.Db._
 
   case class AdminEntry(username: String, password: String, spectator: String, administrator: String,

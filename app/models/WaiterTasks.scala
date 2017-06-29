@@ -30,7 +30,7 @@ case class AdaptedWaiterTask(id: Long, when: DateTime, message: String, unacked:
                              acked: Seq[RoomWithPermission], canDelete: Boolean)
 
 object WaiterModel {
-  import slick.driver.MySQLDriver.api._
+  import slick.jdbc.MySQLProfile.api._
   import utils.Db._
 
   case class WaiterTaskRecord(id: Long, room: String, ts: DateTime)

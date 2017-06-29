@@ -9,6 +9,8 @@ trait Team {
   def schoolName: String
   def teamNum: Option[Int]
   def teamName: String
+  def notRated: Boolean
+  def id: Int
 
   def schoolNameWithNum: String = s"$schoolName" + teamNum.map(x => s" #$x").getOrElse("")
   def teamFullName: String = {
@@ -19,7 +21,9 @@ trait Team {
 }
 
 case class LocalTeam(localId: Int, schoolName: String, teamNum: Option[Int], teamName: String,
-                     notRated: Boolean, noPrint: Boolean, disabled: Boolean) extends Team
+                     notRated: Boolean, noPrint: Boolean, disabled: Boolean) extends Team {
+  override def id: Int = localId
+}
 
 case class LoggedInTeam(username: String, contest: Contest, team: LocalTeam, einfo: Seq[Extrainfo]) {
   def matching(ctid: ContestTeamIds) =
