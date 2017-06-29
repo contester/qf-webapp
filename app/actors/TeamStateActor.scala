@@ -1,10 +1,10 @@
 package org.stingray.qf.actors
 
-import akka.actor.{Actor, Props, Stash}
+import akka.actor.Props
 import org.stingray.qf.models.{GlobalTeamState, LocalTeamState, TeamSchool}
 import slick.jdbc.JdbcBackend
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 
 object TeamStateActor {
   type TeamState = Map[Int, Map[Int, LocalTeamState]]
