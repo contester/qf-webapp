@@ -411,22 +411,16 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   }
 
   def ackWaiterTask(id: Long, room: String) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
-    import Contexts.adminExecutionContext
-
     statusActorModel.waiterActor ! WaiterActor.AckTask(id, room)
     Future.successful(Ok("ok"))
   }
 
   def unackWaiterTask(id: Long, room: String) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
-    import Contexts.adminExecutionContext
-
     statusActorModel.waiterActor ! WaiterActor.UnackTask(id, room)
     Future.successful(Ok("ok"))
   }
 
   def deleteWaiterTask(id: Long) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
-    import Contexts.adminExecutionContext
-
     statusActorModel.waiterActor ! WaiterActor.DeleteTask(id)
     Future.successful(Ok("ok"))
   }
