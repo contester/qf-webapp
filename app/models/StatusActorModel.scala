@@ -9,10 +9,7 @@ import slick.jdbc.JdbcProfile
 
 @Singleton
 class StatusActorModel @Inject() (dbConfigProvider: DatabaseConfigProvider, system: ActorSystem) {
-  val statusActor = system.actorOf(StatusActor.props(dbConfigProvider.get[JdbcProfile].db), "status-actor")
-}
-
-@Singleton
-class WaiterActorModel @Inject() (dbConfigProvider: DatabaseConfigProvider, system: ActorSystem) {
-  val waiterActor = system.actorOf(WaiterActor.props(dbConfigProvider.get[JdbcProfile].db), "waiter-actor")
+  private val db = dbConfigProvider.get[JdbcProfile].db
+  val statusActor = system.actorOf(StatusActor.props(db), "status-actor")
+  val waiterActor = system.actorOf(WaiterActor.props(db), "waiter-actor")
 }

@@ -52,7 +52,6 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
                              monitorModel: Monitor,
                                  rabbitMqModel: RabbitMqModel,
                              statusActorModel: StatusActorModel,
-                                  waiterActorModel: WaiterActorModel,
                                   configuration: Configuration,
                                   ws: WSClient,
                              val auth: AuthWrapper,
@@ -239,7 +238,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   }
 
   private def getAllWaiterTasks(perm: WaiterPermissions)(implicit ec: ExecutionContext) =
-    Ask[WaiterActor.Snapshot](waiterActorModel.waiterActor, WaiterActor.GetSnapshot(perm)).map(_.tasks)
+    Ask[WaiterActor.Snapshot](statusActorModel.waiterActor, WaiterActor.GetSnapshot(perm)).map(_.tasks)
 
   def showQandA(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
     import Contexts.adminExecutionContext
@@ -286,7 +285,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     import Contexts.adminExecutionContext
 
     Ask[Source[Event, NotUsed]](statusActorModel.statusActor, StatusActor.JoinAdmin(contestId)).zip(
-      Ask[Source[Event, NotUsed]](waiterActorModel.waiterActor, WaiterActor.Join(perm, requestHeader))).map {
+      Ask[Source[Event, NotUsed]](statusActorModel.waiterActor, WaiterActor.Join(perm, requestHeader))).map {
       case (one, two) =>
         Source.combine(one, two)(Merge(_))
     }
@@ -404,7 +403,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
         BadRequest(html.admin.postwaitertask(id, formWithErrors, contest))
       },
       data => {
-        Ask.apply[StoredWaiterTask](waiterActorModel.waiterActor, WaiterActor.NewTask(data.message, Nil)).map { posted =>
+        Ask.apply[StoredWaiterTask](statusActorModel.waiterActor, WaiterActor.NewTask(data.message, Nil)).map { posted =>
           Redirect(routes.AdminApplication.tasks(contestId))
         }
       }
@@ -414,21 +413,21 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
   def ackWaiterTask(id: Long, room: String) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
     import Contexts.adminExecutionContext
 
-    waiterActorModel.waiterActor ! WaiterActor.AckTask(id, room)
+    statusActorModel.waiterActor ! WaiterActor.AckTask(id, room)
     Future.successful(Ok("ok"))
   }
 
   def unackWaiterTask(id: Long, room: String) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
     import Contexts.adminExecutionContext
 
-    waiterActorModel.waiterActor ! WaiterActor.UnackTask(id, room)
+    statusActorModel.waiterActor ! WaiterActor.UnackTask(id, room)
     Future.successful(Ok("ok"))
   }
 
   def deleteWaiterTask(id: Long) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
     import Contexts.adminExecutionContext
 
-    waiterActorModel.waiterActor ! WaiterActor.DeleteTask(id)
+    statusActorModel.waiterActor ! WaiterActor.DeleteTask(id)
     Future.successful(Ok("ok"))
   }
 }

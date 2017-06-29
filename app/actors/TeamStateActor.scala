@@ -1,15 +1,10 @@
 package org.stingray.qf.actors
 
 import akka.actor.{Actor, Stash}
+import org.stingray.qf.models.{GlobalTeamState, LocalTeamState, TeamSchool}
 import slick.jdbc.{GetResult, JdbcBackend}
 
 import scala.concurrent.{ExecutionContext, Future}
-
-case class TeamSchool(id: Int, name: String)
-
-case class GlobalTeamState(id: Int, school: TeamSchool, num: Int, name: String)
-
-case class LocalTeamState(contest: Int, team: GlobalTeamState, id: Int, disabled: Boolean, noPrint: Boolean, notRated: Boolean)
 
 object TeamStateActor {
   type TeamState = Map[Int, Map[Int, LocalTeamState]]
