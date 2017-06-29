@@ -23,21 +23,27 @@ case class ClarificationReqData(problem: String, text: String)
 
 class QandA @Inject() (dbConfigProvider: DatabaseConfigProvider,
                        val auth: AuthWrapper,
+                       monitorModel: Monitor,
                        statusActorModel: StatusActorModel,
                        val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport {
   private val dbConfig = dbConfigProvider.get[JdbcProfile]
   private val db = dbConfig.db
-  import dbConfig.driver.api._
+  import dbConfig.profile.api._
 
   private val clarificationReqForm = Form {
     mapping("problem" -> text, "text" -> text)(ClarificationReqData.apply)(ClarificationReqData.unapply)
   }
 
+  private implicit val standardTimeout: akka.util.Timeout = {
+    import scala.concurrent.duration._
+    Duration(5, SECONDS)
+  }
+
   private def clrForm(loggedInTeam: LoggedInTeam, form: Form[ClarificationReqData])(implicit request: RequestHeader, ec: ExecutionContext) =
-    db.run(loggedInTeam.contest.getProblems).flatMap { probs =>
+    monitorModel.problemClient.getProblems(loggedInTeam.contest.id).flatMap { probs =>
       ClarificationModel.getVisibleClarifications(db, loggedInTeam.contest.id).flatMap { clars =>
         ClarificationModel.getTeamClarificationReqs(db, loggedInTeam.contest.id, loggedInTeam.team.localId).map { clReq =>
-          html.clarifications(loggedInTeam, clars, clReq, Seq[(String, String)](("", "Выберите задачу")) ++ Problems.toSelect(probs), form)
+          html.clarifications(loggedInTeam, clars, clReq, Seq[(String, String)](("", "Выберите задачу")) ++ Problems.toSelect(probs.values.toSeq.sortBy(_.id)), form)
         }
       }
     }
