@@ -26,7 +26,6 @@ case class Contest(id: Int, name: String, schoolMode: Boolean, startTime: DateTi
       (DateTime.now to startTime).toDurationMillis
       )
 
-  def getProblems = Contests.getProblems(id)
   def getCompilers = Contests.getCompilers(id)
 }
 
@@ -71,8 +70,8 @@ case class Problem(id: String, name: String, tests: Int, rating: Int)
 
 class ProblemClient(problemStateActor: ActorRef) {
   import akka.pattern.ask
-  def getProblems(contest: Int)(implicit timeout: akka.util.Timeout): Future[Map[Int, Problem]] =
-    (problemStateActor ? ProblemStateActor.GetProblems(contest)).mapTo[Map[Int, Problem]]
+  def getProblems(contest: Int)(implicit timeout: akka.util.Timeout): Future[Seq[Problem]] =
+    (problemStateActor ? ProblemStateActor.GetProblems(contest)).mapTo[Seq[Problem]]
 }
 
 case class Compiler(id: Int, name: String, ext: String)
@@ -104,12 +103,6 @@ object Contests {
 
   def getContest(contestId: Int) =
     sql"""select ID, Name, SchoolMode, Start, End, Finish, Expose from Contests where ID = $contestId""".as[Contest]
-
-  implicit private val getProblem = GetResult(r => Problem(r.nextString().toUpperCase, r.nextString(),
-    r.nextInt(), r.nextInt()))
-
-  def getProblems(contest: Int) =
-    sql"""select ID, Name, Tests, Rating from Problems where Contest = $contest order by ID""".as[Problem]
 
   implicit private val getCompiler = GetResult(
     r => Compiler(r.nextInt(), r.nextString(), r.nextString())

@@ -43,7 +43,7 @@ class QandA @Inject() (dbConfigProvider: DatabaseConfigProvider,
     monitorModel.problemClient.getProblems(loggedInTeam.contest.id).flatMap { probs =>
       ClarificationModel.getVisibleClarifications(db, loggedInTeam.contest.id).flatMap { clars =>
         ClarificationModel.getTeamClarificationReqs(db, loggedInTeam.contest.id, loggedInTeam.team.localId).map { clReq =>
-          html.clarifications(loggedInTeam, clars, clReq, Seq[(String, String)](("", "Выберите задачу")) ++ Problems.toSelect(probs.values.toSeq.sortBy(_.id)), form)
+          html.clarifications(loggedInTeam, clars, clReq, Seq[(String, String)](("", "Выберите задачу")) ++ Problems.toSelect(probs), form)
         }
       }
     }

@@ -64,6 +64,11 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   private def getSubmits(team: LoggedInTeam) =
     db.run(Submits.getContestTeamSubmits(team.contest.id, team.team.localId))
 
+  private implicit val standardTimeout: akka.util.Timeout = {
+    import scala.concurrent.duration._
+    Duration(5, SECONDS)
+  }
+
   def index = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>
     val loggedInTeam = loggedIn
     implicit val ec = StackActionExecutionContext
@@ -80,7 +85,7 @@ class Application @Inject() (dbConfigProvider: DatabaseConfigProvider,
   }
 
   private def getProblems(contest: Int)(implicit ec: ExecutionContext) =
-    db.run(Contests.getProblems(contest)).map(Problems.toSelect(_))
+    monitorModel.problemClient.getProblems(contest).map(Problems.toSelect)
 
   val submitForm = Form {
     mapping("problem" -> text, "compiler" -> number, "inline" -> text)(SubmitData.apply)(SubmitData.unapply)

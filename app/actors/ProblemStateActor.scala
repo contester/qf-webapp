@@ -7,7 +7,7 @@ import slick.jdbc.JdbcBackend
 import scala.concurrent.Future
 
 object ProblemStateActor {
-  type ProblemState = Map[Int, Map[String, Problem]]
+  type ProblemState = Map[Int, Seq[Problem]]
 
   case class GetProblems(contest: Int)
 
@@ -30,8 +30,8 @@ class ProblemStateActor(db: JdbcBackend#DatabaseDef) extends AnyStateActor[Probl
     db.run(dbioCombined).map { problemRows =>
       problemRows.groupBy(_._1).mapValues { rows =>
         rows.map { row =>
-          row._2 -> Problem(row._2, row._4, row._3, row._5)
-        }.toMap
+          Problem(row._2.toUpperCase(), row._4, row._3, row._5)
+        }.sortBy(_.id)
       }
     }
 
@@ -43,7 +43,7 @@ class ProblemStateActor(db: JdbcBackend#DatabaseDef) extends AnyStateActor[Probl
     case Refresh => doRefresh()
     case State(m) => setState(m)
     case GetProblems(contest) => {
-      sender() ! problems.getOrElse(contest, Map.empty)
+      sender() ! problems.getOrElse(contest, Seq.empty)
     }
   }
 }
