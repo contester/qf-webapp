@@ -305,10 +305,14 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     )(PostClarification.apply)(PostClarification.unapply)
   }
 
+  def selectableProblems(problems: Seq[Problem]) = Seq[(String, String)](("", "Выберите задачу")) ++ Problems.toSelect(problems)
+
   def postNewClarification(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canModify(contestId)) { implicit request =>
     import Contexts.adminExecutionContext
-    getSelectedContests(contestId, loggedIn).map { contest =>
-      Ok(html.admin.postclarification(None, postClarificationForm, contest))
+    getSelectedContests(contestId, loggedIn).flatMap { contest =>
+      monitorModel.problemClient.getProblems(contest.contest.id).map { problems =>
+        Ok(html.admin.postclarification(None, postClarificationForm, selectableProblems(problems), contest))
+      }
     }
   }
 
@@ -319,8 +323,10 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
         val clObj = PostClarification(
           cl.problem, cl.text, cl.hidden
         )
-        getSelectedContests(cl.contest, loggedIn).map { contest =>
-          Ok(html.admin.postclarification(cl.id, postClarificationForm.fill(clObj), contest))
+        getSelectedContests(cl.contest, loggedIn).flatMap { contest =>
+          monitorModel.problemClient.getProblems(contest.contest.id).map { problems =>
+            Ok(html.admin.postclarification(cl.id, postClarificationForm.fill(clObj), selectableProblems(problems), contest))
+          }
         }
       }.getOrElse(Future.successful(Redirect(routes.AdminApplication.postNewClarification(1))))
     }
@@ -330,8 +336,10 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     import Contexts.adminExecutionContext
     import utils.Db._
     postClarificationForm.bindFromRequest.fold(
-      formWithErrors => getSelectedContests(1, loggedIn).map { contest =>
-        BadRequest(html.admin.postclarification(clarificationId, formWithErrors, contest))
+      formWithErrors => getSelectedContests(1, loggedIn).flatMap { contest =>
+        monitorModel.problemClient.getProblems(contest.contest.id).map { problems =>
+          BadRequest(html.admin.postclarification(clarificationId, formWithErrors, selectableProblems(problems), contest))
+        }
       },
       data => {
         Ask.apply[Clarification](statusActorModel.statusActor,

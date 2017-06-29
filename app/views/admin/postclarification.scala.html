@@ -1,4 +1,4 @@
-@(currentId: Option[Int], form: Form[PostClarification], contest: SelectedContest)(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@(currentId: Option[Int], form: Form[PostClarification], problems: Seq[(String, String)],contest: SelectedContest)(implicit flash: Flash, messages: Messages, request: RequestHeader)
 
 @import helper.Implicits._
 @import b3.vertical.fieldConstructor
@@ -27,7 +27,7 @@
             @b3.static("ID"){ @id }
         }
         @b3.static("Contest"){ @contest.contest.name }
-        @b3.text(form("problem"), '_label -> "Задача")
+        @b3.select(form("problem"), options = problems, '_label -> "Задача")
         @b3.textarea(form("text"), '_label -> "Clarification text", 'rows -> 6)
         @b3.checkbox(form("isHidden"), '_text -> "Не показывать")
         @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Update}
