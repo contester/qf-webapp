@@ -1,6 +1,6 @@
 @(s: FullyDescribedSubmit, teams: Function[Int, LocalTeam], showRejudge: Boolean)
 
-<tr><th scope="row"><a href="@routes.AdminApplication.showSubmit(s.submit.submitId.contestId, s.submit.submitId.id)">@s.submit.submitId.id</a></th>
+<tr id="result-row-@{s.submit.submitId.id}"><th scope="row"><a href="@routes.AdminApplication.showSubmit(s.submit.submitId.contestId, s.submit.submitId.id)">@s.submit.submitId.id</a></th>
     @if(showRejudge){<td>
         <div class="btn-group btn-nomargin">
             <a href="javascript:void(0)" class="btn btn-primary btn-xs btn-nomargin dropdown-toggle" data-toggle="dropdown" id="rejudge-@{s.submit.submitId.id}">

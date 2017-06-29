@@ -290,6 +290,15 @@ function listenOnAdmin(path, iconbase) {
             }
         });
 
+        add('adminSubmit', function(obj) {
+            var tr = $('#result-row-' + obj.submitId);
+            if (tr.length) {
+                tr.html(obj.rendered);
+            } else {
+                $('#submits > tbody').prepend(obj.rendered);
+            }
+        });
+
         add('clarificationRequestState', function(obj) {
             var clrp = $("#clrPending");
             clrp.text(obj.pending);
