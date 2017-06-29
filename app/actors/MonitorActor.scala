@@ -3,9 +3,10 @@ package actors
 import java.io.File
 import java.nio.file.{Files, StandardCopyOption}
 
-import akka.actor.{Actor, Props, Stash}
+import akka.actor.{Actor, ActorRef, Props, Stash}
 import models._
 import org.apache.commons.io.{Charsets, FileUtils}
+import org.stingray.qf.models.TeamClient
 import play.twirl.api.HtmlFormat
 import slick.jdbc.JdbcBackend
 
@@ -14,7 +15,8 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.Try
 
 object MonitorActor {
-  def props(db: JdbcBackend#DatabaseDef, staticLocation: Option[String]) = Props(classOf[MonitorActor], db, staticLocation)
+  def props(db: JdbcBackend#DatabaseDef, staticLocation: Option[String], teamClient: TeamClient) =
+    Props(new MonitorActor(db, staticLocation, teamClient))
 
   case class Get(contest: Int)
   case object Start
@@ -22,7 +24,7 @@ object MonitorActor {
   case object Refresh
 }
 
-class MonitorActor(db: JdbcBackend#DatabaseDef, staticLocation: Option[String]) extends Actor with Stash {
+class MonitorActor(db: JdbcBackend#DatabaseDef, staticLocation: Option[String], teamClient: TeamClient) extends Actor with Stash {
   import MonitorActor._
   import context.dispatcher
 
@@ -37,19 +39,24 @@ class MonitorActor(db: JdbcBackend#DatabaseDef, staticLocation: Option[String]) 
     self ! Refresh
   }
 
+  private implicit val standardTimeout: akka.util.Timeout = {
+    import scala.concurrent.duration._
+    Duration(5, SECONDS)
+  }
+
   private def getContestMonitor(contest: Contest)(implicit ec: ExecutionContext) = {
     val cid = contest.id
 
     db.run(Contests.getProblems(cid))
-      .zip(db.run(Contests.getTeams(cid)))
+      .zip(teamClient.getTeams(cid))
       .zip(db.run(Submits.getContestSubmits(cid)))
       .map {
       case ((problems, teams), submits) =>
         val calcStatus: (Seq[Submit]) => AnyStatus with Product with Serializable =
           if (contest.schoolMode)
-            School.calculateStatus(problems, teams, _)
+            School.calculateStatus(problems, teams.values.toSeq, _)
           else
-            ACM.calculateStatus(problems, teams, _)
+            ACM.calculateStatus(problems, teams.values.toSeq, _)
 
         val subs0 = submits.filter(_.finished)
 

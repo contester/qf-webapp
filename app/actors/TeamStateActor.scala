@@ -1,8 +1,8 @@
 package org.stingray.qf.actors
 
-import akka.actor.{Actor, Stash}
+import akka.actor.{Actor, Props, Stash}
 import org.stingray.qf.models.{GlobalTeamState, LocalTeamState, TeamSchool}
-import slick.jdbc.{GetResult, JdbcBackend}
+import slick.jdbc.JdbcBackend
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -13,9 +13,11 @@ object TeamStateActor {
   case class State(m: TeamState)
   case class GetTeam(contest: Int, team: Int)
   case class GetTeams(contest: Int)
+
+  def props(db: JdbcBackend#DatabaseDef) = Props(new TeamStateActor(db))
 }
 
-class TeamStateActor(db: JdbcBackend#DatabaseDef, staticLocation: Option[String]) extends Actor with Stash {
+class TeamStateActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   import TeamStateActor._
   import context.dispatcher
 
@@ -67,6 +69,7 @@ class TeamStateActor(db: JdbcBackend#DatabaseDef, staticLocation: Option[String]
       unstashAll()
       context.become(initialized)
     }
+    case _ => stash()
   }
 
   private def initialized: Receive = {

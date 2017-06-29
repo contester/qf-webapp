@@ -5,6 +5,8 @@ import javax.inject.{Inject, Singleton}
 import actors.MonitorActor
 import akka.actor.ActorSystem
 import models.Foo.RankedRow
+import org.stingray.qf.actors.TeamStateActor
+import org.stingray.qf.models.TeamClient
 import play.api.Configuration
 import play.api.db.slick.DatabaseConfigProvider
 import slick.jdbc.JdbcProfile
@@ -74,7 +76,7 @@ object Foo {
   case class SomeRow[ScoreType, CellType](team: Team, score: ScoreType,
                                                                 cells: Map[String, CellType]) extends MonitorRow[ScoreType, CellType]
 
-  def groupAndRank[ScoreType, CellType <: ProblemCell](teams: Seq[LocalTeam], submits: Seq[Submit],
+  def groupAndRank[ScoreType, CellType <: ProblemCell](teams: Seq[Team], submits: Seq[Submit],
                                                                getCell: (Seq[Submit]) => CellType,
                                                                getScore: (Seq[CellType]) => ScoreType)(implicit ord: Ordering[ScoreType]): Seq[RankedRow[ScoreType, CellType]] = {
     val rows = submits.groupBy(_.submitId.teamId).map {
@@ -88,7 +90,7 @@ object Foo {
     }
 
     val teamRows = teams.map { team =>
-      val cells = rows.getOrElse(team.localId, Seq()).toMap
+      val cells = rows.getOrElse(team.id, Seq()).toMap
       val score = getScore(cells.values.toSeq)
 
       SomeRow(team, score, cells)
@@ -117,7 +119,7 @@ object School {
     }
   }
 
-    def calculateStatus(problems: Seq[Problem], teams: Seq[LocalTeam], submits: Seq[Submit]): Status = {
+    def calculateStatus(problems: Seq[Problem], teams: Seq[Team], submits: Seq[Submit]): Status = {
       implicit val ord = Ordering[Rational].reverse
       Status(problems.map(_.id), Foo.groupAndRank(teams, submits, Cell(_), Score(_)))
     }
@@ -152,7 +154,7 @@ object ACM {
   def getScore(cells: Seq[ACMCell]) =
     cells.foldLeft(Score(0, 0, 0))(cellFold)
 
-  def calculateStatus(problems: Seq[Problem], teams: Seq[LocalTeam], submits: Seq[Submit]) =
+  def calculateStatus(problems: Seq[Problem], teams: Seq[Team], submits: Seq[Submit]) =
     Status(problems.map(_.id), Foo.groupAndRank(teams, submits, getCell(_), getScore(_)))
 }
 
@@ -169,7 +171,12 @@ case class StoredContestStatus(contest: Contest, frozen: AnyStatus, exposed: Any
 
 @Singleton
 class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, system: ActorSystem, configuration: Configuration) {
-  private[this] val monitorActor = system.actorOf(MonitorActor.props(dbConfigProvider.get[JdbcProfile].db, configuration.getString("monitor.static_location")), "monitor-actor")
+  private val db = dbConfigProvider.get[JdbcProfile].db
+  private val teamStateActor = system.actorOf(TeamStateActor.props(db), "team-state-actor")
+  private val teamClient = new TeamClient(teamStateActor)
+
+  private[this] val monitorActor = system.actorOf(MonitorActor.props(
+    db, configuration.getString("monitor.static_location"), teamClient), "monitor-actor")
 
   private implicit val monitorTimeout: akka.util.Timeout = {
     import scala.concurrent.duration._
