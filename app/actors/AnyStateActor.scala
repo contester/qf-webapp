@@ -6,7 +6,7 @@ import scala.concurrent.Future
 import scala.util.{Failure, Success}
 
 object AnyStateActor {
-  case object Start
+  case object Refresh
 }
 
 trait AnyStateActor[StateType] extends Actor with Stash {
@@ -18,23 +18,28 @@ trait AnyStateActor[StateType] extends Actor with Stash {
   @throws[Exception](classOf[Exception])
   override def preStart(): Unit = {
     super.preStart()
-    self ! Start
+    self ! Refresh
+  }
+
+  val defaultRefresh = {
+    import scala.concurrent.duration._
+    import scala.language.postfixOps
+    20 seconds
   }
 
   def loadStart(): Future[StateType]
   def setState(v: StateType)
 
-  override def receive: Receive = {
-    case Start => {
-      loadStart().onComplete {
-        case Success(v) => self ! State(v)
-        case Failure(_) => {
-          import scala.concurrent.duration._
-          import scala.language.postfixOps
-          context.system.scheduler.scheduleOnce(20 seconds, self, Start)
-        }
-      }
+  def doRefresh() = {
+    val fu = loadStart()
+    fu.foreach(x => self ! State(x))
+    fu.onComplete { _ =>
+      context.system.scheduler.scheduleOnce(defaultRefresh, self, Refresh)
     }
+  }
+
+  override def receive: Receive = {
+    case Refresh => doRefresh()
     case State(m) => {
       setState(m)
       unstashAll()

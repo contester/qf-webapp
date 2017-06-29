@@ -9,23 +9,16 @@ import scala.concurrent.{ExecutionContext, Future}
 object TeamStateActor {
   type TeamState = Map[Int, Map[Int, LocalTeamState]]
 
-  case object Refresh
-  case class State(m: TeamState)
   case class GetTeam(contest: Int, team: Int)
   case class GetTeams(contest: Int)
 
   def props(db: JdbcBackend#DatabaseDef) = Props(new TeamStateActor(db))
 }
 
-class TeamStateActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
+class TeamStateActor(db: JdbcBackend#DatabaseDef) extends AnyStateActor[TeamStateActor.TeamState] {
+  import AnyStateActor._
   import TeamStateActor._
   import context.dispatcher
-
-  @throws[Exception](classOf[Exception])
-  override def preStart(): Unit = {
-    super.preStart()
-    self ! Refresh
-  }
 
   private var teams: TeamState = Map.empty
 
@@ -37,7 +30,7 @@ class TeamStateActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     ).zip(sql"""select Contest, Team, LocalID, Disabled, NoPrint, NotRated from Participants"""
       .as[(Int, Int, Int, Boolean, Boolean, Boolean)])
 
-  private def buildState()(implicit ec: ExecutionContext): Future[TeamState] =
+  override def loadStart(): Future[TeamState] =
     db.run(dbioCombined).map {
       case ((schoolRows, teamRows), localRows) =>
         val schoolMap = schoolRows.map(x => x._1 -> TeamSchool(x._1, x._2)).toMap
@@ -52,32 +45,13 @@ class TeamStateActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
         }.groupBy(_._2.contest).mapValues(_.toMap)
     }
 
-  private def loadState()(implicit ec: ExecutionContext) = {
-    val fu = buildState()
-    fu.foreach(x => self ! State(x))
-    fu.onComplete { _ =>
-      import scala.concurrent.duration._
-      import scala.language.postfixOps
-      context.system.scheduler.scheduleOnce(20 seconds, self, Refresh)
-    }
-    fu
+  override def setState(v: TeamState): Unit = {
+    teams = v
   }
 
-  override def receive: Receive = {
-    case Refresh => loadState()
-    case State(m) => {
-      teams = m
-      unstashAll()
-      context.become(initialized)
-    }
-    case _ => stash()
-  }
-
-  private def initialized: Receive = {
-    case Refresh => loadState()
-    case State(m) => {
-      teams = m
-    }
+  override def initialized: Receive = {
+    case Refresh => doRefresh()
+    case State(m) => setState(m)
     case GetTeam(contest, team) => {
       sender() ! teams.get(contest).flatMap(_.get(team))
     }
