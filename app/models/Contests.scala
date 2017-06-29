@@ -1,10 +1,14 @@
 package models
 
+import akka.actor.ActorRef
 import com.github.nscala_time.time.Imports._
-import play.api.libs.EventSource.{EventNameExtractor, EventIdExtractor, EventDataExtractor}
+import org.stingray.qf.actors.ProblemStateActor
+import play.api.libs.EventSource.{EventDataExtractor, EventIdExtractor, EventNameExtractor}
 import play.api.libs.json.Json.JsValueWrapper
 import play.api.libs.json.{JsValue, Json, Writes}
 import slick.jdbc.GetResult
+
+import scala.concurrent.Future
 
 case class Contest(id: Int, name: String, schoolMode: Boolean, startTime: DateTime, endTime: DateTime,
                    freezeTime: DateTime, exposeTime: DateTime) {
@@ -64,6 +68,12 @@ object Contest {
 case class SelectedContest(contest: Contest, contests: Seq[(Int, String)])
 
 case class Problem(id: String, name: String, tests: Int, rating: Int)
+
+class ProblemClient(problemStateActor: ActorRef) {
+  import akka.pattern.ask
+  def getProblems(contest: Int)(implicit timeout: akka.util.Timeout): Future[Map[Int, Problem]] =
+    (problemStateActor ? ProblemStateActor.GetProblems(contest)).mapTo[Map[Int, Problem]]
+}
 
 case class Compiler(id: Int, name: String, ext: String)
 

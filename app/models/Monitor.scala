@@ -5,7 +5,7 @@ import javax.inject.{Inject, Singleton}
 import actors.MonitorActor
 import akka.actor.ActorSystem
 import models.Foo.RankedRow
-import org.stingray.qf.actors.TeamStateActor
+import org.stingray.qf.actors.{ProblemStateActor, TeamStateActor}
 import org.stingray.qf.models.TeamClient
 import play.api.Configuration
 import play.api.db.slick.DatabaseConfigProvider
@@ -174,9 +174,12 @@ class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, system: Actor
   private val db = dbConfigProvider.get[JdbcProfile].db
   private val teamStateActor = system.actorOf(TeamStateActor.props(db), "team-state-actor")
   val teamClient = new TeamClient(teamStateActor)
+  private val problemStateActor = system.actorOf(ProblemStateActor.props(db), "problem-state-actor")
+  val problemClient = new ProblemClient(problemStateActor)
 
   private[this] val monitorActor = system.actorOf(MonitorActor.props(
-    db, configuration.getString("monitor.static_location"), teamClient), "monitor-actor")
+    db, configuration.getString("monitor.static_location"),
+    teamClient, problemClient), "monitor-actor")
 
   private implicit val monitorTimeout: akka.util.Timeout = {
     import scala.concurrent.duration._

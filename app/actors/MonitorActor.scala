@@ -15,8 +15,9 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.Try
 
 object MonitorActor {
-  def props(db: JdbcBackend#DatabaseDef, staticLocation: Option[String], teamClient: TeamClient) =
-    Props(new MonitorActor(db, staticLocation, teamClient))
+  def props(db: JdbcBackend#DatabaseDef, staticLocation: Option[String],
+            teamClient: TeamClient, problemClient: ProblemClient) =
+    Props(new MonitorActor(db, staticLocation, teamClient, problemClient))
 
   case class Get(contest: Int)
   case object Start
@@ -24,7 +25,10 @@ object MonitorActor {
   case object Refresh
 }
 
-class MonitorActor(db: JdbcBackend#DatabaseDef, staticLocation: Option[String], teamClient: TeamClient) extends Actor with Stash {
+class MonitorActor(db: JdbcBackend#DatabaseDef,
+                   staticLocation: Option[String],
+                   teamClient: TeamClient,
+                   problemClient: ProblemClient) extends Actor with Stash {
   import MonitorActor._
   import context.dispatcher
 
@@ -47,16 +51,16 @@ class MonitorActor(db: JdbcBackend#DatabaseDef, staticLocation: Option[String], 
   private def getContestMonitor(contest: Contest)(implicit ec: ExecutionContext) = {
     val cid = contest.id
 
-    db.run(Contests.getProblems(cid))
+    problemClient.getProblems(cid)
       .zip(teamClient.getTeams(cid))
       .zip(db.run(Submits.getContestSubmits(cid)))
       .map {
       case ((problems, teams), submits) =>
         val calcStatus: (Seq[Submit]) => AnyStatus with Product with Serializable =
           if (contest.schoolMode)
-            School.calculateStatus(problems, teams.values.toSeq, _)
+            School.calculateStatus(problems.values.toSeq.sortBy(_.id), teams.values.toSeq, _)
           else
-            ACM.calculateStatus(problems, teams.values.toSeq, _)
+            ACM.calculateStatus(problems.values.toSeq.sortBy(_.id), teams.values.toSeq, _)
 
         val subs0 = submits.filter(_.finished)
 
