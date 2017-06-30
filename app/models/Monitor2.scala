@@ -42,6 +42,8 @@ trait AbstractRow {
 
 case class ConcreteRow[ScoreType <: AbstractScore](team: Int, score: ScoreType, cells: Map[String, Cell[ScoreType]]) extends AbstractRow
 
+case class FullMonitor[ScoreType <: AbstractScore](rows: Seq[(ConcreteRow[ScoreType], Option[Int])])
+
 case class SchoolScore(val r: Rational) extends AbstractScore
 
 object SchoolCell {
