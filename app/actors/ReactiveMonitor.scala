@@ -1,14 +1,13 @@
 package org.stingray.qf.actors
 
-import akka.actor.{Actor, ActorRef, Stash}
-import models.{Contest, Problem, Submit, Team}
-import org.stingray.qf.actors.ReactiveMonitor.ResetContest
+import akka.actor.{Actor, ActorRef, PoisonPill, Props, Stash}
+import models._
 import slick.jdbc.JdbcBackend
 
 import scala.collection.mutable
+import scala.concurrent.Future
 
 object ReactiveMonitor {
-  case class ResetContest(contest: Contest)
   case class ResetTeams(teams: Map[Int, Team])
   case class ResetProblems(problems: Map[String, Problem])
   case class ResetSubmits(submits: Iterable[Submit])
@@ -18,28 +17,57 @@ object ReactiveMonitor {
   case class UpdateSubmit(s: Submit)
 
   //===
+  def props(contestData: Contest) = Props(new ReactiveMonitor(contestData))
 }
 
 class ReactiveMonitor(var contestData: Contest) extends Actor {
   val teamData: mutable.Map[Int, Team] = mutable.HashMap.empty
   val problemData: mutable.Map[String, Problem] = mutable.HashMap.empty
 
-
   override def receive: Receive = {
-    case ResetContest(contest) =>
+    case contest: Contest =>
       contestData = contest
   }
 }
 
 object MegaMonitor {
-  type MegaState = Map[Int, Contest]
+  type MegaState = Seq[Contest]
+
+  final case class ContestWithActor(contest: Contest, actor: ActorRef)
 }
 
-class MegaMonitor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
-  val childActors: mutable.Map[Int, ActorRef] = mutable.HashMap.empty
-  val contests: mutable.Map[Int, Contest] = mutable.HashMap.empty
+class MegaMonitor(db: JdbcBackend#DatabaseDef) extends AnyStateActor[MegaMonitor.MegaState] {
+  import MegaMonitor._
+  var contests: Map[Int, ContestWithActor] = Map.empty
 
-  override def receive: Receive = {
-    case AnyStateActor.Refresh =>
+  override def loadStart(): Future[MegaState] = {
+    db.run(Contests.getContests)
+  }
+
+  private def updatedContest(contest: Contest) =
+    contests.get(contest.id) match {
+      case Some(other) =>
+        if (other.contest != contest) {
+          other.actor ! contest
+          ContestWithActor(contest, other.actor)
+        } else {
+          other
+        }
+      case None =>
+        ContestWithActor(contest, context.actorOf(ReactiveMonitor.props(contest)))
+    }
+
+
+  override def setState(v: MegaState): Unit = {
+    val removed = contests -- v.map(_.id)
+    val updated = v.map(updatedContest).map(x => x.contest.id -> x).toMap
+    removed.values.foreach(_.actor ! PoisonPill)
+    contests = updated
+  }
+
+  override def initialized: Receive = {
+    case contest: Contest =>
+      val updated = updatedContest(contest)
+      contests = contests.updated(contest.id, updated)
   }
 }
