@@ -91,8 +91,21 @@ case class MonitorSourceData(contest: Contest, problems: Map[String, Problem], t
 
 object MonitorBuilder {
   def filterSubmits(data: MonitorSourceData) =
-    data.submits.withFilter { x =>
+    data.submits.filter { x =>
       x.finished && x.compiled && !x.afterFreeze && data.problems.isDefinedAt(x.submitId.problem.id) &&
       data.teams.isDefinedAt(x.submitId.teamId)
-    }.map(StaticCellSubmit(_))
+    }
+
+  def buildRows(data: MonitorSourceData) = {
+    filterSubmits(data).groupBy(_.submitId.teamId).mapValues { perTeam =>
+      perTeam.groupBy(_.submitId.problem.id).mapValues { perCell =>
+        val index = StaticSubmitIndex(perCell.map(StaticCellSubmit))
+        SchoolCell(30, index, SchoolCell.scoreSubmits(30, index.submits))
+      }
+    }.map {
+      case (teamId, cells) =>
+        val sc = cells.values.foldLeft(Rational(0))((a, b) => a + b.score.r)
+        ConcreteRow(teamId, SchoolScore(sc), cells)
+    }.toSeq.sortBy(_.score).reverse
+  }
 }
