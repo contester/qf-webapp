@@ -20,10 +20,7 @@ object ReactiveMonitor {
   def props(contestData: Contest) = Props(new ReactiveMonitor(contestData))
 }
 
-class ReactiveMonitor(var contestData: Contest) extends Actor {
-  val teamData: mutable.Map[Int, Team] = mutable.HashMap.empty
-  val problemData: mutable.Map[String, Problem] = mutable.HashMap.empty
-
+class ReactiveMonitor(var data: MonitorSourceData) extends Actor {
   override def receive: Receive = {
     case contest: Contest =>
       contestData = contest
