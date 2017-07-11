@@ -1,5 +1,6 @@
 package org.stingray.qf.models.monitor
 
+import cats.kernel.Monoid
 import models.{Contest, Problem, Submit, Team}
 import spire.math.Rational
 
@@ -64,6 +65,15 @@ case class FullMonitor[ScoreType <: AbstractScore](rows: Seq[(ConcreteRow[ScoreT
 
 case class SchoolScore(val r: Rational) extends AbstractScore
 
+object SchoolScore {
+  implicit val schoolScoreMonoid = new Monoid[SchoolScore] {
+    override def empty: SchoolScore = SchoolScore(0)
+
+    override def combine(x: SchoolScore, y: SchoolScore): SchoolScore =
+      SchoolScore(x.r + y.r)
+  }
+}
+
 object SchoolCell {
   def scoreSubmits(base: Int, submits: Seq[CellSubmit]):SchoolScore =
     SchoolScore(submits.foldLeft((base, Rational.zero)) {
@@ -72,6 +82,11 @@ object SchoolCell {
       val nextScore: Rational = if (sub.fraction == 1) nextBase else nextBase * 2 * sub.fraction / 3
       (nextBase, if (nextScore > 5) nextScore else 0)
   }._2)
+
+  def apply(submits: Seq[CellSubmit]): SchoolCell = {
+    val index = StaticSubmitIndex(submits)
+    SchoolCell(30, index, SchoolCell.scoreSubmits(30, index.submits))
+  }
 }
 
 case class SchoolCell(base: Int, submits: SubmitIndex, score: SchoolScore) extends Cell[SchoolScore] {
@@ -96,7 +111,7 @@ object MonitorBuilder {
       data.teams.isDefinedAt(x.submitId.teamId)
     }
 
-  def buildRows(data: MonitorSourceData) = {
+  def buildRows[ScoreType <: AbstractScore](data: MonitorSourceData, empty: ScoreType): Seq[ConcreteRow[SchoolScore]] = {
     filterSubmits(data).groupBy(_.submitId.teamId).mapValues { perTeam =>
       perTeam.groupBy(_.submitId.problem.id).mapValues { perCell =>
         val index = StaticSubmitIndex(perCell.map(StaticCellSubmit))

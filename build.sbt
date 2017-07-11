@@ -45,6 +45,7 @@ libraryDependencies ++= Seq(
   "com.typesafe.slick" %% "slick" % "3.2.0",
   "com.typesafe.slick" %% "slick-hikaricp" % "3.2.0",
   "com.zaxxer" % "HikariCP" % "2.6.3",
+  "org.typelevel" %% "cats" % "0.9.0",
   "org.spire-math" %% "spire" % spireVersion,
   "org.spire-math" %% "spire-extras" % spireVersion,
   "com.google.guava" % "guava" % "22.0"
