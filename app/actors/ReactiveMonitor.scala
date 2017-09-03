@@ -2,6 +2,7 @@ package org.stingray.qf.actors
 
 import akka.actor.{Actor, ActorRef, PoisonPill, Props, Stash}
 import models._
+import org.stingray.qf.models.monitor.MonitorSourceData
 import slick.jdbc.JdbcBackend
 
 import scala.collection.mutable
@@ -17,13 +18,13 @@ object ReactiveMonitor {
   case class UpdateSubmit(s: Submit)
 
   //===
-  def props(contestData: Contest) = Props(new ReactiveMonitor(contestData))
+  def props(contestData: Contest) = Props(new ReactiveMonitor(MonitorSourceData(contestData, Map.empty, Map.empty, Seq.empty)))
 }
 
 class ReactiveMonitor(var data: MonitorSourceData) extends Actor {
   override def receive: Receive = {
     case contest: Contest =>
-      contestData = contest
+      data = data.copy(contest=contest)
   }
 }
 

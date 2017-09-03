@@ -111,6 +111,10 @@ object MonitorBuilder {
       data.teams.isDefinedAt(x.submitId.teamId)
     }
 
+  implicit val schoolOrder = Ordering.by { foo: SchoolScore =>
+    foo.r
+  }
+
   def buildRows[ScoreType <: AbstractScore](data: MonitorSourceData, empty: ScoreType): Seq[ConcreteRow[SchoolScore]] = {
     filterSubmits(data).groupBy(_.submitId.teamId).mapValues { perTeam =>
       perTeam.groupBy(_.submitId.problem.id).mapValues { perCell =>
