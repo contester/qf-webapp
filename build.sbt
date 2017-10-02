@@ -11,11 +11,17 @@ lazy val root = (project in file(".")).enablePlugins(PlayScala)
 scalacOptions ++= Seq("-unchecked", "-deprecation", "-optimise", "-explaintypes", "-Xcheckinit",
   "-Xlint", "-feature")
 
-resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"
+resolvers ++= Seq(
+  "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/",
+  "Atlassian Releases" at "https://maven.atlassian.com/public/",
+  "SpinGo OSS" at "http://spingo-oss.s3.amazonaws.com/repositories/releases"
+)
 
 updateOptions := updateOptions.value.withCachedResolution(true)
 
 val spireVersion = "0.13.0"
+
+val silhouetteVersion = "4.0.0"
 
 libraryDependencies ++= Seq(
   cache,
@@ -31,31 +37,32 @@ libraryDependencies ++= Seq(
   "org.webjars" % "jquery-validation" % "1.16.0",
   "org.webjars.bower" % "roboto-fontface" % "0.7.0",
   "org.apache.httpcomponents" % "httpclient" % "4.5.3",
-  "org.apache.httpcomponents" % "httpcore" % "4.4.6",
+  "org.apache.httpcomponents" % "httpcore" % "4.4.7",
   "jp.t2v" %% "play2-auth"      % "0.14.2",
   "jp.t2v" %% "play2-auth-test" % "0.14.2" % "test",
-  "com.typesafe.play" %% "play-slick" % "2.1.0",
-  "com.typesafe.play" %% "play-slick-evolutions" % "2.1.0",
-  "org.mariadb.jdbc" % "mariadb-java-client" % "2.0.2",
+  "com.typesafe.play" %% "play-slick" % "2.1.1",
+  "com.typesafe.play" %% "play-slick-evolutions" % "2.1.1",
+  "org.mariadb.jdbc" % "mariadb-java-client" % "2.0.3",
   "commons-io" % "commons-io" % "2.5",
   "com.github.nscala-time" %% "nscala-time" % "2.16.0",
   "com.googlecode.htmlcompressor" % "htmlcompressor" % "1.5.2",
   "rhino" % "js" % "1.7R2",
   "org.scala-lang.modules" %% "scala-async" % "0.9.6",
-  "com.typesafe.slick" %% "slick" % "3.2.0",
-  "com.typesafe.slick" %% "slick-hikaricp" % "3.2.0",
+  "com.typesafe.slick" %% "slick" % "3.2.1",
+  "com.typesafe.slick" %% "slick-hikaricp" % "3.2.1",
   "com.zaxxer" % "HikariCP" % "2.6.3",
   "org.typelevel" %% "cats" % "0.9.0",
+//  "com.mohiva" %% "play-silhouette" % silhouetteVersion,
+//  "com.mohiva" %% "play-silhouette-password-bcrypt" % silhouetteVersion,
+//  "com.mohiva" %% "play-silhouette-crypto-jca" % silhouetteVersion,
+//  "com.mohiva" %% "play-silhouette-persistence" % silhouetteVersion,
+//  "com.mohiva" %% "play-silhouette-testkit" % silhouetteVersion % "test",
   "org.spire-math" %% "spire" % spireVersion,
   "org.spire-math" %% "spire-extras" % spireVersion,
-  "com.google.guava" % "guava" % "22.0"
+  "com.google.guava" % "guava" % "23.0"
 ).map(_.exclude("com.zaxxer", "HikariCP-java6"))
 
-resolvers ++= Seq(
-  "SpinGo OSS" at "http://spingo-oss.s3.amazonaws.com/repositories/releases"
-)
-
-val opRabbitVersion = "2.0.0-rc1"
+val opRabbitVersion = "2.0.0"
 
 libraryDependencies ++= Seq(
   "com.spingo" %% "op-rabbit-core"        % opRabbitVersion,
