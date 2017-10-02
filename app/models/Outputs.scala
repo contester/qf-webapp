@@ -3,12 +3,13 @@ package models
 import play.api.libs.ws.WSClient
 import utils.{GridfsContent, GridfsTools, PolygonProblemHandle}
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 case class ResultAssets(test: Int, input: Option[GridfsContent], output: Option[GridfsContent], answer: Option[GridfsContent])
 
 object Outputs {
-  import Contexts.gridfsExecutionContext
+  import play.api.libs.concurrent.Execution.Implicits._
+
   def getOutput(ws: WSClient, prefix: String, shortName: String, submitId: Int, testingId: Int, test: Int): Future[Option[GridfsContent]] =
     GridfsTools.getFile(ws, s"${prefix}submit/${shortName}/${submitId}/${testingId}/$test/output", 1024)
 
