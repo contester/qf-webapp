@@ -3,7 +3,17 @@
 @import helper.Implicits._
 @import b3.vertical.fieldConstructor
 
-@main(loggedIn, tab = "print") {
+@myscripts = {
+<script>
+            $(function() {
+            $('#submitform').validate({
+                rules: { file: { required: true, filesize: 20000  }}
+            });
+            })
+        </script>
+}
+
+@main(loggedIn, tab = "print", scripts = myscripts) {
 
 @contestteaminfo(loggedIn, optLocation)
 
@@ -35,11 +45,6 @@
         @filex(form("file"), '_label -> "Файл с текстом для печати")
         @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Отправить}
         }
-        <script>
-            $('#submitform').validate({
-                rules: { file: { required: true, filesize: 20000  }}
-            });
-        </script>
     </div>
 </div>
 
