@@ -1,8 +1,9 @@
 package controllers
 
+import java.nio.charset.StandardCharsets
 import javax.inject.Inject
 
-import akka.actor.{Props, ActorSystem}
+import akka.actor.{ActorSystem, Props}
 import com.spingo.op_rabbit.{Message, RabbitControl}
 import jp.t2v.lab.play2.auth.AuthElement
 import models._
@@ -12,16 +13,17 @@ import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
 import play.api.libs.json.Json
-import play.api.mvc.{RequestHeader, Controller}
+import play.api.mvc.{Controller, RequestHeader}
 import slick.jdbc.JdbcProfile
 import slick.jdbc.GetResult
+import utils.FormUtil
 import views.html
 
 import scala.concurrent.{ExecutionContext, Future}
 
 package serversideeval {
 
-case class ServerSideData(compiler: Int)
+case class ServerSideData(compiler: Int, inlinesolution: String, inlinedata: String)
 }
 
 import com.github.nscala_time.time.Imports.DateTime
@@ -45,7 +47,7 @@ class ServerSideEval @Inject() (val dbConfigProvider: DatabaseConfigProvider,
   import com.spingo.op_rabbit.PlayJsonSupport._
 
   private val serverSideForm = Form {
-    mapping("compiler" -> number)(ServerSideData.apply)(ServerSideData.unapply)
+    mapping("compiler" -> number, "inlinesolution" -> text, "inlinedata" -> text)(ServerSideData.apply)(ServerSideData.unapply)
   }
 
   private def evalQuery(contest: Int, team: Int) =
@@ -101,24 +103,17 @@ class ServerSideEval @Inject() (val dbConfigProvider: DatabaseConfigProvider,
 
     db.run(loggedInTeam.contest.getCompilers).flatMap { compilers =>
         val parsed = serverSideForm.bindFromRequest
-        val solutionOpt = request.body.file("file").map { solution =>
-          FileUtils.readFileToByteArray(solution.ref.file)
-        }
-        val inputFile = request.body.file("inputfile").map { ifile =>
-          FileUtils.readFileToByteArray(ifile.ref.file)
-        }.getOrElse(new Array[Byte](0))
 
-        val parsed0 = if (solutionOpt.isDefined) parsed
-        else parsed.withGlobalError("can't open the file")
-
-        parsed0.fold(
+        parsed.fold(
           formWithErrors => getEvalForm(loggedInTeam, compilers, formWithErrors).map(BadRequest(_)),
           submitData => {
             val cext = compilers.map(x => x.id -> x).toMap.apply(submitData.compiler).ext
+            val solutionBytes = FormUtil.inlineOrFile(submitData.inlinesolution, request.body.file("file")).getOrElse(FormUtil.emptyBytes)
+            val dataBytes = FormUtil.inlineOrFile(submitData.inlinedata, request.body.file("inputfile")).getOrElse(FormUtil.emptyBytes)
             db.run(
               (sqlu"""insert into Eval (Contest, Team, Ext, Source, Input, Arrived) values
-                    (${loggedInTeam.contest.id}, ${loggedInTeam.team.localId}, ${cext}, ${solutionOpt.get},
-                ${inputFile}, CURRENT_TIMESTAMP())
+                    (${loggedInTeam.contest.id}, ${loggedInTeam.team.localId}, ${cext}, ${solutionBytes},
+                ${dataBytes}, CURRENT_TIMESTAMP())
                   """.andThen(sql"select last_insert_id()".as[Int])).withPinnedSession
             ).map { wat =>
               wat.foreach { wid =>
