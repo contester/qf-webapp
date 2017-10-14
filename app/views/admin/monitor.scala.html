@@ -1,10 +1,13 @@
 @(contest: SelectedContest, status: models.AnyStatus)(implicit request: RequestHeader)
 
-@adminmain(tab = "monitor", contest=contest) {
-
+@myScripts = {
 <script>
     setTimeout(function() { location.reload() }, 60000);
 </script>
+}
+
+@adminmain(tab = "monitor", contest=contest, scripts = myScripts) {
+
 
 <h3>@contest.contest.name</h3>
 @contestinfoshort(contest.contest)
