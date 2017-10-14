@@ -51,7 +51,7 @@
 
         @b3.select(form("problem"), options = problems, '_label -> "Задача")
         @b3.select(form("compiler"), options = languages, '_label -> "Компилятор")
-        @b3.textarea(form("inline"), '_label -> "Решение", 'rows -> 15, 'style -> "style="font-family:monospace;")
+        @b3.textarea(form("inline"), '_label -> "Решение", 'rows -> 15, 'style -> "font-family:monospace;")
         @filex(form("file"), '_label -> "Файл с решением")
         @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Отправить}
         }
