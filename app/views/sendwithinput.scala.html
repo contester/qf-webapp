@@ -51,9 +51,9 @@
         }
 
         @b3.select(form("compiler"), options = languages, '_label -> "Компилятор")
-        @b3.textarea(form("inlinesolution"), '_label -> "Решение", 'rows -> 15, 'style -> "font-family:monospace;")
+        @b3.textarea(form("inlinesolution"), '_label -> "Решение", 'rows -> 5, 'style -> "font-family:monospace;")
         @filex(form("file"), '_label -> "Файл с решением")
-        @b3.textarea(form("inlinedata"), '_label -> "Входные данные", 'rows -> 15, 'style -> "font-family:monospace;")
+        @b3.textarea(form("inlinedata"), '_label -> "Входные данные", 'rows -> 5, 'style -> "font-family:monospace;")
         @filex(form("inputfile"), '_label -> "Файл с данными")
         @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Отправить}
         }
