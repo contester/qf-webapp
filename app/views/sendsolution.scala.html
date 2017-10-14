@@ -32,6 +32,7 @@
         @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Отправить}
         }
         <script>
+            $(function() {
             $('#submitform').validate({
                 rules: {
                   file: { required: "#inline:blank", filesize: 128000 },
@@ -48,6 +49,7 @@
             $("#submitform").submit(function() {
                 localStorage.setItem("compilerId", $('#compiler').val());
                 return true;
+            });
             })
         </script>
     </div>
