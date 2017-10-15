@@ -249,7 +249,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
     case annotated: FullyDescribedSubmit => {
       subChan.offer(annotated)
-      Logger.info(s"ann: $annotated")
       val a = AnnoSubmit(annotated.submit.submitId.id, annotated.submit.submitId.contestId,
         annotated.submit.submitId.teamId, annotated.submit.submitId.problem.id, annotated.result)
       sub2Chan.offer(a)

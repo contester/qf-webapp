@@ -97,8 +97,10 @@ class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
     val parsed0 = if (solutionOpt.isDefined) parsed
       else parsed.withGlobalError("can't read file")
 
-    Logger.info(s"Remote addr: ${request.remoteAddress}")
     Locator.locate(db, request.remoteAddress).flatMap { location =>
+      if (location.isEmpty) {
+        Logger.debug(s"Printing from UNKNOWN LOCATION remote addr: ${request.remoteAddress}")
+      }
       parsed0.fold(
         formWithErrors => getPrintForm(loggedIn, formWithErrors, location).map(BadRequest(_)),
         submitData => {

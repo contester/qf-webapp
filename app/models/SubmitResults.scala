@@ -102,7 +102,7 @@ object SubmitResult {
       val index = submitEntry._2
       val submit = submitEntry._1._1
       annotate(db, finished.submit.schoolMode, submit).map { submitResult =>
-        Logger.info(s"sr: $submitResult")
+        Logger.debug(s"Annotated submit result: $submitResult")
         FullyDescribedSubmit(submit, index, submitEntry._1._2, submitResult._1, submitResult._3, submitResult._2)
       }
     }
