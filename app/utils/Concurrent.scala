@@ -14,7 +14,7 @@ object Concur {
     implicit val materializer = ActorMaterializer()
 
     val (ch, out) = Source.queue[T](8192, OverflowStrategy.dropHead)
-      .toMat(BroadcastHub.sink(bufferSize = 8192))(Keep.both).run()
+      .toMat(BroadcastHub.sink(bufferSize = 2048))(Keep.both).run()
     out.runWith(Sink.ignore)
     (out, ch)
   }
