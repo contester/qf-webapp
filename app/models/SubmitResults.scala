@@ -25,7 +25,7 @@ object TimeMs {
   implicit val ordering: Ordering[TimeMs] = Ordering.by(_.underlying)
 }
 
-case class SubmitStats(timeMs: TimeMs, memory: Memory)
+case class SubmitStats(timeMs: TimeMs, memory: Memory, timeLimitExceeded: Boolean = false)
 
 case object SubmitWaiting extends SubmitResult {
   override val success: Boolean = false

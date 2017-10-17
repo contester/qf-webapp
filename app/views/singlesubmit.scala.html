@@ -9,4 +9,4 @@
         }
         <a href="@routes.Application.showSubmit(s.submit.submitId.id)">@s.result.message</a></td><td id="score-@{s.submit.submitId.id}">@s.score.map(x => s"$plus$x").getOrElse("")</td>
     </td>
-    <td id="time-@{s.submit.submitId.id}">@s.stats.timeMs</td><td  id="memory-@{s.submit.submitId.id}">@s.stats.memory</td></tr>
+    <td id="time-@{s.submit.submitId.id}">@if(!s.stats.timeLimitExceeded){ @s.stats.timeMs }</td><td  id="memory-@{s.submit.submitId.id}">@s.stats.memory</td></tr>

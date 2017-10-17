@@ -153,6 +153,8 @@ case class ResultEntry(test: Int, result: Int, time: TimeMs, memory: Memory, inf
                        testerOutput: String, testerError: String) {
   def resultString = SubmitResult.message(result)
 
+  def timeLimitExceeded = result == 11
+
   def success =
     if (test == 0) result == 1
     else result == 10
@@ -281,7 +283,7 @@ object Submits {
 
   def getTestingStats(details: Seq[ResultEntry]) =
     trOption(details.filter(_.test != 0)).map { detlist =>
-      SubmitStats(detlist.map(_.time).max, detlist.map(_.memory).max)
+      SubmitStats(detlist.map(_.time).max, detlist.map(_.memory).max, detlist.find(_.timeLimitExceeded).isDefined)
     }.getOrElse(SubmitStats(TimeMs(0), Memory(0)))
 
   def getTestingLastResult(details: Seq[ResultEntry]) =
