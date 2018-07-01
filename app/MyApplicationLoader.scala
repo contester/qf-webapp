@@ -6,6 +6,7 @@ import com.mohiva.play.silhouette.api.{Environment, EventBus, Silhouette, Silhou
 import com.mohiva.play.silhouette.crypto.{JcaCrypter, JcaCrypterSettings}
 import com.mohiva.play.silhouette.impl.authenticators.{SessionAuthenticator, SessionAuthenticatorService, SessionAuthenticatorSettings}
 import com.mohiva.play.silhouette.impl.util.{DefaultFingerprintGenerator, SecureRandomIDGenerator}
+import models.{TeamsProvider, TeamsService, TeamsServiceImpl}
 import play.api._
 import play.api.db.slick.{DbName, SlickComponents}
 import play.api.mvc.{BodyParsers, DefaultSessionCookieBaker}
@@ -13,7 +14,7 @@ import play.api.routing.Router
 import play.filters.HttpFiltersComponents
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
-import utils.auth.DefaultEnv
+import utils.auth.{DefaultEnv, TeamsEnv}
 
 class MyApplicationLoader extends ApplicationLoader {
   private var components: MyComponents = _
@@ -53,8 +54,8 @@ class MyComponents(context: ApplicationLoader.Context)
   }
 
 
-  lazy val env: Environment[DefaultEnv] = Environment[DefaultEnv](
-    userService, authenticatorService, List(), eventBus)
+  lazy val teamsEnv: Environment[TeamsEnv] = Environment[TeamsEnv](
+    teamService, authenticatorService, List(), eventBus)
 
   lazy val securedErrorHandler: SecuredErrorHandler = new _root_.controllers.CustomSecuredErrorHandler
   lazy val unSecuredErrorHandler: UnsecuredErrorHandler = wire[DefaultUnsecuredErrorHandler]
@@ -69,17 +70,13 @@ class MyComponents(context: ApplicationLoader.Context)
 
   lazy val bpDefault: BodyParsers.Default = wire[BodyParsers.Default]
 
-  lazy val ldapTools = new LdapTools(configuration)
+  lazy val teamService: TeamsService = wire[TeamsServiceImpl]
 
-  lazy val userService: UserService = wire[UserServiceImpl]
+  lazy val teamsProvider = wire[TeamsProvider]
 
-  lazy val credentialsProvider = wire[NetmapUserProvider]
-
-  lazy val silhouetteDefaultEnv: Silhouette[DefaultEnv] = wire[SilhouetteProvider[DefaultEnv]]
+  lazy val silhouetteTeamsEnv: Silhouette[TeamsEnv] = wire[SilhouetteProvider[TeamsEnv]]
 
   lazy val dbConfig: DatabaseConfig[JdbcProfile] = slickApi.dbConfig[JdbcProfile](DbName("default"))
-
- //  lazy val db = dbConfig.db
 
   lazy val homeController = wire[_root_.controllers.AsyncController]
 

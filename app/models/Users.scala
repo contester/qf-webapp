@@ -1,7 +1,12 @@
 package models
 
-import com.mohiva.play.silhouette.api.Identity
+import com.mohiva.play.silhouette.api.{Identity, LoginInfo, Provider}
+import com.mohiva.play.silhouette.api.services.IdentityService
+import com.mohiva.play.silhouette.api.util.Credentials
+import com.mohiva.play.silhouette.impl.exceptions.InvalidPasswordException
 import org.joda.time.DateTime
+import slick.basic.DatabaseConfig
+import slick.jdbc.JdbcProfile
 import slick.jdbc.{GetResult, JdbcBackend}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -26,6 +31,13 @@ case class LocalTeam(localId: Int, schoolName: String, teamNum: Option[Int], tea
   override def id: Int = localId
 }
 
+trait TeamsService extends IdentityService[LoggedInTeam]
+
+class TeamsServiceImpl(dbConfig: DatabaseConfig[JdbcProfile]) extends TeamsService {
+  override def retrieve(loginInfo: LoginInfo): Future[Option[LoggedInTeam]] =
+    Users.resolve(dbConfig.db, loginInfo.providerKey)
+}
+
 case class LoggedInTeam(username: String, contest: Contest, team: LocalTeam, einfo: Seq[Extrainfo]) extends Identity {
   def matching(ctid: ContestTeamIds) =
     ctid.contestId == contest.id && ctid.teamId == team.localId
@@ -39,6 +51,16 @@ object Extrainfo {
   implicit val getResult = GetResult(r =>
     Extrainfo(r.nextInt(), r.nextInt(), r.nextString(), r.nextString())
   )
+}
+
+class TeamsProvider(dbConfig: DatabaseConfig[JdbcProfile]) extends Provider {
+  override def id: String = "team"
+  def authenticate(credentials: Credentials)(implicit ec: ExecutionContext): Future[LoginInfo] = {
+    Users.authenticate(dbConfig.db, credentials.identifier, credentials.password).map {
+      case Some(v) => LoginInfo(id, v.username)
+      case None => throw new InvalidPasswordException("foo")
+    }
+  }
 }
 
 object Users {
