@@ -1,17 +1,15 @@
 name := "qf"
 
-scalaVersion  := "2.11.11"
+scalaVersion := "2.12.4"
 
 organization := "org.stingray.contester"
 
-version := "0.2"
+version := "2018.6"
 
 lazy val root = (project in file(".")).enablePlugins(PlayScala)
 
-scalacOptions ++= Seq("-unchecked", "-deprecation", "-optimise", "-explaintypes", "-Xcheckinit",
-  "-Xlint", "-feature")
-
 resolvers ++= Seq(
+  Resolver.jcenterRepo,
   "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/",
   "Atlassian Releases" at "https://maven.atlassian.com/public/",
   "SpinGo OSS" at "http://spingo-oss.s3.amazonaws.com/repositories/releases"
@@ -21,15 +19,18 @@ updateOptions := updateOptions.value.withCachedResolution(true)
 
 val spireVersion = "0.13.0"
 
-val silhouetteVersion = "4.0.0"
+val silhouetteVersion = "5.0.4"
 
 libraryDependencies ++= Seq(
-  cache,
+  "com.typesafe.play" %% "play-slick" % "3.0.3",
+  "com.softwaremill.macwire" %% "macros" % "2.3.1" % "provided",
+  "javax.xml.bind" % "jaxb-api" % "2.3.0",
+  "com.adrianhurt" %% "play-bootstrap" % "1.4-P26-B3-SNAPSHOT",
+  cacheApi,
   ws,
-  "com.adrianhurt" %% "play-bootstrap" % "1.1.1-P25-B3",
-  "org.webjars" %% "webjars-play" % "2.5.0",
+  "org.webjars" %% "webjars-play" % "2.6.3",
   "org.webjars" % "bootstrap" % "3.3.7-1",
-  "org.webjars" % "font-awesome" % "4.7.0",
+  "org.webjars" % "font-awesome" % "5.0.10",
   "org.webjars" % "bootstrap-datepicker" % "1.6.4",
   "org.webjars.npm" % "arrive" % "2.3.1",
   "org.webjars" % "momentjs" % "2.18.1",
@@ -38,13 +39,9 @@ libraryDependencies ++= Seq(
   "org.webjars.bower" % "roboto-fontface" % "0.7.0",
   "org.apache.httpcomponents" % "httpclient" % "4.5.3",
   "org.apache.httpcomponents" % "httpcore" % "4.4.7",
-  "jp.t2v" %% "play2-auth"      % "0.14.2",
-  "jp.t2v" %% "play2-auth-test" % "0.14.2" % "test",
-  "com.typesafe.play" %% "play-slick" % "2.1.1",
-  "com.typesafe.play" %% "play-slick-evolutions" % "2.1.1",
-  "org.mariadb.jdbc" % "mariadb-java-client" % "2.0.3",
-  "commons-io" % "commons-io" % "2.5",
-  "com.github.nscala-time" %% "nscala-time" % "2.16.0",
+  "org.mariadb.jdbc" % "mariadb-java-client" % "2.2.3",
+  "commons-io" % "commons-io" % "2.6",
+  "com.github.nscala-time" %% "nscala-time" % "2.18.0",
   "com.googlecode.htmlcompressor" % "htmlcompressor" % "1.5.2",
   "rhino" % "js" % "1.7R2",
   "org.scala-lang.modules" %% "scala-async" % "0.9.6",
@@ -52,11 +49,10 @@ libraryDependencies ++= Seq(
   "com.typesafe.slick" %% "slick-hikaricp" % "3.2.1",
   "com.zaxxer" % "HikariCP" % "2.6.3",
   "org.typelevel" %% "cats" % "0.9.0",
-//  "com.mohiva" %% "play-silhouette" % silhouetteVersion,
-//  "com.mohiva" %% "play-silhouette-password-bcrypt" % silhouetteVersion,
-//  "com.mohiva" %% "play-silhouette-crypto-jca" % silhouetteVersion,
-//  "com.mohiva" %% "play-silhouette-persistence" % silhouetteVersion,
-//  "com.mohiva" %% "play-silhouette-testkit" % silhouetteVersion % "test",
+  "com.mohiva" %% "play-silhouette" % silhouetteVersion,
+  "com.mohiva" %% "play-silhouette-password-bcrypt" % silhouetteVersion,
+  "com.mohiva" %% "play-silhouette-persistence" % silhouetteVersion,
+  "com.mohiva" %% "play-silhouette-crypto-jca" % silhouetteVersion,
   "org.spire-math" %% "spire" % spireVersion,
   "org.spire-math" %% "spire-extras" % spireVersion,
   "com.google.guava" % "guava" % "23.0"

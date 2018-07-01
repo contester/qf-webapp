@@ -1,5 +1,6 @@
 package models
 
+import com.mohiva.play.silhouette.api.Identity
 import org.joda.time.DateTime
 import slick.jdbc.{GetResult, JdbcBackend}
 
@@ -25,7 +26,7 @@ case class LocalTeam(localId: Int, schoolName: String, teamNum: Option[Int], tea
   override def id: Int = localId
 }
 
-case class LoggedInTeam(username: String, contest: Contest, team: LocalTeam, einfo: Seq[Extrainfo]) {
+case class LoggedInTeam(username: String, contest: Contest, team: LocalTeam, einfo: Seq[Extrainfo]) extends Identity {
   def matching(ctid: ContestTeamIds) =
     ctid.contestId == contest.id && ctid.teamId == team.localId
 }

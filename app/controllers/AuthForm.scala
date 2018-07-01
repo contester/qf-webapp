@@ -15,6 +15,15 @@ import views.html
 
 import scala.concurrent.Future
 
+class CustomSecuredErrorHandler extends SecuredErrorHandler {
+  import play.api.mvc.Results._
+  override def onNotAuthenticated(implicit request: RequestHeader): Future[Result] =
+    Future.successful(Redirect(routes.LoginController.index()))
+
+  override def onNotAuthorized(implicit request: RequestHeader): Future[Result] =
+    Future.successful(Unauthorized)
+}
+
 case class AuthData(username: String, password: String)
 
 object AuthData {
