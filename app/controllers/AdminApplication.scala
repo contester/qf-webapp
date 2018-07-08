@@ -1,15 +1,15 @@
 package controllers
 
 import javax.inject.{Inject, Singleton}
-
 import actors.{StatusActor, WaiterActor}
 import actors.StatusActor.ClarificationAnswered
 import akka.NotUsed
 import akka.stream.scaladsl.{Merge, Source}
 import com.github.nscala_time.time.Imports._
 import com.google.common.collect.ImmutableRangeSet
+import com.mohiva.play.silhouette.api.{Authorization, Silhouette}
+import com.mohiva.play.silhouette.impl.authenticators.SessionAuthenticator
 import com.spingo.op_rabbit.Message
-import jp.t2v.lab.play2.auth.AuthElement
 import models._
 import play.api.{Configuration, Logger}
 import play.api.data.Form
@@ -20,8 +20,10 @@ import play.api.i18n.{I18nSupport, MessagesApi}
 import play.api.libs.EventSource.Event
 import play.api.libs.json.Json
 import play.api.libs.ws.WSClient
-import play.api.mvc.{Controller, RequestHeader}
+import play.api.mvc._
+import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
+import utils.auth.{AdminEnv, TeamsEnv}
 import utils.{Ask, PolygonURL}
 import views.html
 
@@ -45,16 +47,15 @@ object SubmitTicketLite {
 }
 
 @Singleton
-class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
+class AdminApplication (cc: ControllerComponents,
+                        silhouette: Silhouette[AdminEnv],
+                        dbConfig: DatabaseConfig[JdbcProfile],
                              monitorModel: Monitor,
                                  rabbitMqModel: RabbitMqModel,
                              statusActorModel: StatusActorModel,
                                   configuration: Configuration,
-                                  ws: WSClient,
-                             val auth: AuthWrapper,
-                             val messagesApi: MessagesApi) extends Controller with AuthElement with AdminAuthConfigImpl with I18nSupport{
+                                  ws: WSClient) extends AbstractController(cc)  with I18nSupport{
 
-  private val dbConfig = dbConfigProvider.get[JdbcProfile]
   private val db = dbConfig.db
   import com.spingo.op_rabbit.PlayJsonSupport._
 
@@ -114,26 +115,29 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
 
   import play.api.libs.concurrent.Execution.Implicits._
 
-  def monitor(id: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(id)) { implicit request =>
-    getSelectedContests(id, loggedIn).zip(monitorModel.getMonitor(id, loggedIn.canSeeAll(id))).map {
+  def monitor(id: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(id)).async { implicit request =>
+    getSelectedContests(id, request.identity).zip(monitorModel.getMonitor(id, request.identity.canSeeAll(id))).map {
       case (contest, status) => Ok(html.admin.monitor(contest, status.get.status))
     }
   }
 
-  private def canSeeSubmit(submitId: Int)(account: Admin): Future[Boolean] = {
-    getSubmitCid(submitId).map { cids =>
-      cids.exists(account.canSpectate)
-    }
+
+  case class canSeeSubmit(submitId: Int) extends Authorization[Admin, SessionAuthenticator] {
+    override def isAuthorized[B](identity: Admin, authenticator: SessionAuthenticator)(implicit request: Request[B]): Future[Boolean] =
+      getSubmitCid(submitId).map { cids =>
+        cids.exists(identity.canSpectate)
+      }
   }
 
-  private def canRejudgeSubmit(submitId: Int)(account: Admin): Future[Boolean] = {
-    getSubmitCid(submitId).map { cids =>
-      cids.exists(account.canModify)
-    }
+  case class canRejudgeSubmit(submitId: Int) extends Authorization[Admin, SessionAuthenticator] {
+    override def isAuthorized[B](identity: Admin, authenticator: SessionAuthenticator)(implicit request: Request[B]): Future[Boolean] =
+      getSubmitCid(submitId).map { cids =>
+        cids.exists(identity.canModify)
+      }
   }
 
-  def index = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
-    Future.successful(Redirect(routes.AdminApplication.submits(loggedIn.defaultContest)))
+  def index = silhouette.SecuredAction.async { implicit request =>
+    Future.successful(Redirect(routes.AdminApplication.submits(request.identity.defaultContest)))
   }
 
   private val rangeRe = "(\\d*)\\.\\.(\\d*)".r
@@ -159,30 +163,30 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     } else com.google.common.collect.Range.singleton[Integer](item.toInt)
 
 
-  def submits(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
-    val lim = if (loggedIn.canModify(contestId))
+  def submits(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
+    val lim = if (request.identity.canModify(contestId))
       None
     else
       Some(100)
-    showSubs(contestId, lim, loggedIn)
+    showSubs(contestId, lim, request.identity)
   }
 
   val rejudgeSubmitRangeForm = Form {
     mapping("range" -> text)(RejudgeSubmitRange.apply)(RejudgeSubmitRange.unapply)
   }
 
-  def rejudgePage(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canModify(contestId)) { implicit request =>
-    getSelectedContests(contestId, loggedIn).map { contest =>
+  def rejudgePage(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request =>
+    getSelectedContests(contestId, request.identity).map { contest =>
       Ok(html.admin.rejudge(rejudgeSubmitRangeForm, contest))
     }
   }
 
-  def rejudgeRange(contestId: Int) = AsyncStack(parse.multipartFormData, AuthorityKey -> AdminPermissions.canModify(contestId)) { implicit request =>
+  def rejudgeRange(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestId))(parse.multipartFormData).async { implicit request =>
     rejudgeSubmitRangeForm.bindFromRequest.fold(
-      formWithErrors => getSelectedContests(contestId, loggedIn).map { contest =>
+      formWithErrors => getSelectedContests(contestId, request.identity).map { contest =>
         BadRequest(html.admin.rejudge(formWithErrors, contest))
       },
-      data => rejudgeRangeEx(data.range, loggedIn).map { rejudged =>
+      data => rejudgeRangeEx(data.range, request.identity).map { rejudged =>
         Redirect(routes.AdminApplication.rejudgePage(contestId)).flashing(
           "success" -> rejudged.mkString(" ")
         )
@@ -190,7 +194,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     )
   }
 
-  def rejudgeSubmit(submitId: Int) = AsyncStack(AuthorityKey -> canRejudgeSubmit(submitId)) { implicit request =>
+  def rejudgeSubmit(submitId: Int) = silhouette.SecuredAction(canRejudgeSubmit(submitId)).async { implicit request =>
     rabbitMq ! Message.queue(SubmitMessage(submitId), queue = "contester.submitrequests")
     db.run(sql"select Contest from NewSubmits where ID = $submitId".as[Int]).map { cids =>
       cids.headOption match {
@@ -200,7 +204,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-  def showSubmit(contestId: Int, submitId: Int) = AsyncStack(AuthorityKey -> canSeeSubmit(submitId)) { implicit request =>
+  def showSubmit(contestId: Int, submitId: Int) = silhouette.SecuredAction(canSeeSubmit(submitId)).async { implicit request =>
     Submits.getSubmitById(db, submitId).flatMap { optSubmit =>
       optSubmit.map { submit =>
         submit.fsub.submit.testingId.map { testingId =>
@@ -214,7 +218,7 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
             }
           }.getOrElse(Future.successful(Map[Int, ResultAssets]()))
         }.zip(
-        getSelectedContests(contestId, loggedIn)).map {
+        getSelectedContests(contestId, request.identity)).map {
           case (outputs, contest) =>
             Ok(html.admin.showsubmit(submit, contest, outputs))
         }
@@ -222,38 +226,39 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-  def reprintSubmit(submitId: Int) = AsyncStack(AuthorityKey -> canRejudgeSubmit(submitId)) { implicit request =>
+  def reprintSubmit(submitId: Int) = silhouette.SecuredAction(canRejudgeSubmit(submitId)).async { implicit request =>
     rabbitMq ! Message.queue(SubmitTicketLite(SubmitIdLite(submitId)), queue = "contester.tickets")
     Future.successful(Ok("ok"))
   }
 
-  def showQandA(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
+  def showQandA(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
     ClarificationModel.getClarifications(db, contestId)
       .zip(ClarificationModel.getClarificationReqs(db, contestId))
-      .zip(getSelectedContests(contestId, loggedIn))
-        .zip(getAllWaiterTasks(loggedIn))
+      .zip(getSelectedContests(contestId, request.identity))
+        .zip(getAllWaiterTasks(request.identity))
       .map {
       case (((clarifications, clReqs), contest), tasks) =>
         Ok(html.admin.qanda(tasks, clarifications, clReqs, contest))
     }
   }
 
-  def tasks(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
-    getSelectedContests(contestId, loggedIn)
-      .zip(getAllWaiterTasks(loggedIn))
+  def tasks(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
+    getSelectedContests(contestId, request.identity)
+      .zip(getAllWaiterTasks(request.identity))
       .map {
         case (contest, tasks) =>
-          Ok(html.admin.waitertasksmain(tasks, contest, loggedIn))
+          Ok(html.admin.waitertasksmain(tasks, contest, request.identity))
       }
   }
 
-  def toggleClarification(clrId: Int) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
+  // TODO: check permissions
+  def toggleClarification(clrId: Int) = silhouette.SecuredAction.async { implicit request =>
     ClarificationModel.toggleClarification(db, clrId).map { _ =>
       Ok("ok")
     }
   }
 
-  def deleteClarification(contestId: Int, clrId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canModify(contestId)) { implicit request =>
+  def deleteClarification(contestId: Int, clrId: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request =>
     ClarificationModel.deleteClarification(db, clrId).map { _ =>
       Ok("ok")
     }
@@ -272,8 +277,8 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-  def feed(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canSpectate(contestId)) { implicit request =>
-    joinAdminFeed(contestId, loggedIn, request).map { e =>
+  def feed(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
+    joinAdminFeed(contestId, request.identity, request).map { e =>
       Ok.chunked(e).as(ContentTypes.EVENT_STREAM)
     }
   }
@@ -285,23 +290,24 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     )(PostClarification.apply)(PostClarification.unapply)
   }
 
-  def selectableProblems(problems: Seq[Problem]) = Seq[(String, String)](("", "Выберите задачу")) ++ Problems.toSelect(problems)
+  private def selectableProblems(problems: Seq[Problem]) = Seq[(String, String)](("", "Выберите задачу")) ++ Problems.toSelect(problems)
 
-  def postNewClarification(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canModify(contestId)) { implicit request =>
-    getSelectedContests(contestId, loggedIn).flatMap { contest =>
+  def postNewClarification(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request =>
+    getSelectedContests(contestId, request.identity).flatMap { contest =>
       monitorModel.problemClient.getProblems(contest.contest.id).map { problems =>
         Ok(html.admin.postclarification(None, postClarificationForm, selectableProblems(problems), contest))
       }
     }
   }
 
-  def postUpdateClarification(clarificationId: Int) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
+  // TODO: check permissions
+  def postUpdateClarification(clarificationId: Int) = silhouette.SecuredAction.async { implicit request =>
     ClarificationModel.getClarification(db, clarificationId).flatMap { clOpt =>
       clOpt.map { cl =>
         val clObj = PostClarification(
           cl.problem, cl.text, cl.hidden
         )
-        getSelectedContests(cl.contest, loggedIn).flatMap { contest =>
+        getSelectedContests(cl.contest, request.identity).flatMap { contest =>
           monitorModel.problemClient.getProblems(contest.contest.id).map { problems =>
             Ok(html.admin.postclarification(cl.id, postClarificationForm.fill(clObj), selectableProblems(problems), contest))
           }
@@ -310,10 +316,11 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-  def postClarification(contestId: Int, clarificationId: Option[Int]) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
+  // TODO: check permissions
+  def postClarification(contestId: Int, clarificationId: Option[Int]) = silhouette.SecuredAction.async { implicit request =>
     import utils.Db._
     postClarificationForm.bindFromRequest.fold(
-      formWithErrors => getSelectedContests(1, loggedIn).flatMap { contest =>
+      formWithErrors => getSelectedContests(1, request.identity).flatMap { contest =>
         monitorModel.problemClient.getProblems(contest.contest.id).map { problems =>
           BadRequest(html.admin.postclarification(clarificationId, formWithErrors, selectableProblems(problems), contest))
         }
@@ -339,10 +346,11 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     "Pending" -> "Pending"
   )
 
-  def postAnswerForm(clrId: Int) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
+  // TODO: check permissions
+  def postAnswerForm(clrId: Int) = silhouette.SecuredAction.async { implicit request =>
     ClarificationModel.getClarificationReq(db, clrId).flatMap { optClr =>
       optClr.map { clr =>
-        getSelectedContests(clr.contest, loggedIn).map { contest =>
+        getSelectedContests(clr.contest, request.identity).map { contest =>
           Ok(html.admin.postanswer(
             clarificationResponseForm.fill(ClarificationResponse(clr.getAnswer)), clr, answerList.toSeq, contest))
         }
@@ -350,11 +358,12 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     }
   }
 
-  def postAnswer(clrId: Int) = AsyncStack(parse.multipartFormData, AuthorityKey -> Permissions.any) { implicit request =>
+  // TODO: check permissions
+  def postAnswer(clrId: Int) = silhouette.SecuredAction(parse.multipartFormData).async { implicit request =>
     ClarificationModel.getClarificationReq(db, clrId).flatMap { optClr =>
       optClr.map { clr =>
         clarificationResponseForm.bindFromRequest.fold(
-          formWithErrors => getSelectedContests(clr.contest, loggedIn).map { contest =>
+          formWithErrors => getSelectedContests(clr.contest, request.identity).map { contest =>
             BadRequest(html.admin.postanswer(formWithErrors, clr, answerList.toSeq, contest))
           },
           data => {
@@ -372,15 +381,15 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     mapping("message" -> nonEmptyText, "rooms" -> text)(PostWaiterTask.apply)(PostWaiterTask.unapply)
   }
 
-  def postNewWaiterTaskForm(contestId: Int) = AsyncStack(AuthorityKey -> AdminPermissions.canCreateTasks) { implicit request =>
-    getSelectedContests(contestId, loggedIn).map { contest =>
+  def postNewWaiterTaskForm(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withCreateTasks).async { implicit request =>
+    getSelectedContests(contestId, request.identity).map { contest =>
       Ok(html.admin.postwaitertask(None, waiterTaskForm, contest))
     }
   }
 
-  def postWaiterTask(contestId: Int, id: Option[Int]) = AsyncStack(AuthorityKey -> AdminPermissions.canCreateTasks) { implicit request =>
+  def postWaiterTask(contestId: Int, id: Option[Int]) = silhouette.SecuredAction(AdminPermissions.withCreateTasks).async { implicit request =>
     waiterTaskForm.bindFromRequest.fold(
-      formWithErrors => getSelectedContests(contestId, loggedIn).map { contest =>
+      formWithErrors => getSelectedContests(contestId, request.identity).map { contest =>
         BadRequest(html.admin.postwaitertask(id, formWithErrors, contest))
       },
       data => {
@@ -391,17 +400,17 @@ class AdminApplication @Inject() (dbConfigProvider: DatabaseConfigProvider,
     )
   }
 
-  def ackWaiterTask(id: Long, room: String) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
+  def ackWaiterTask(id: Long, room: String) = silhouette.SecuredAction.async { implicit request =>
     statusActorModel.waiterActor ! WaiterActor.AckTask(id, room)
     Future.successful(Ok("ok"))
   }
 
-  def unackWaiterTask(id: Long, room: String) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
+  def unackWaiterTask(id: Long, room: String) = silhouette.SecuredAction.async { implicit request =>
     statusActorModel.waiterActor ! WaiterActor.UnackTask(id, room)
     Future.successful(Ok("ok"))
   }
 
-  def deleteWaiterTask(id: Long) = AsyncStack(AuthorityKey -> Permissions.any) { implicit request =>
+  def deleteWaiterTask(id: Long) = silhouette.SecuredAction.async { implicit request =>
     statusActorModel.waiterActor ! WaiterActor.DeleteTask(id)
     Future.successful(Ok("ok"))
   }

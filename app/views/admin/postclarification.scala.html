@@ -14,7 +14,8 @@
 <div class="panel panel-success">
     <div class="panel-heading"><h3 class="panel-title">Post clarification</h3></div>
     <div class="panel-body">
-        @b3.form(controllers.routes.AdminApplication.postClarification(contest.contest.id, currentId)) {
+        @b3.horizontal.form(controllers.routes.AdminApplication.postClarification(contest.contest.id, currentId),
+        "col-md-2", "col-md-10") { implicit fc =>
         @form.globalError.map { error =>
         <div class="alert alert-danger" role="alert">
             <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>

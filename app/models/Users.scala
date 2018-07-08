@@ -33,7 +33,7 @@ case class LocalTeam(localId: Int, schoolName: String, teamNum: Option[Int], tea
 
 trait TeamsService extends IdentityService[LoggedInTeam]
 
-class TeamsServiceImpl(dbConfig: DatabaseConfig[JdbcProfile]) extends TeamsService {
+class TeamsServiceImpl(dbConfig: DatabaseConfig[JdbcProfile])(implicit val ec: ExecutionContext) extends TeamsService {
   override def retrieve(loginInfo: LoginInfo): Future[Option[LoggedInTeam]] =
     Users.resolve(dbConfig.db, loginInfo.providerKey)
 }

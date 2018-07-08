@@ -27,7 +27,7 @@
             Невозможно определить ваше местонахождение. Ничего напечатать не получится.
         </div>
         }
-        @b3.form(controllers.routes.Printing.post, 'enctype -> "multipart/form-data", 'id -> "submitform") {
+        @b3.horizontal.form(controllers.routes.Printing.post, "col-md-2", "col-md-10", 'enctype -> "multipart/form-data", 'id -> "submitform") { implicit fc =>
         @form.globalError.map { error =>
         <div class="alert alert-danger" role="alert">
             <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>

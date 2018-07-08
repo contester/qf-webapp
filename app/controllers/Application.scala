@@ -5,7 +5,6 @@ import javax.inject.{Inject, Singleton}
 
 import actors.StatusActor
 import com.spingo.op_rabbit._
-import jp.t2v.lab.play2.auth.AuthElement
 import models.ContesterResults.{CustomTestResult, FinishedTesting}
 import models._
 import org.apache.commons.io.FileUtils

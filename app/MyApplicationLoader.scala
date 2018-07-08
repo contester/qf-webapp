@@ -14,7 +14,7 @@ import play.api.routing.Router
 import play.filters.HttpFiltersComponents
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
-import utils.auth.{DefaultEnv, TeamsEnv}
+import utils.auth.{AdminEnv, TeamsEnv}
 
 class MyApplicationLoader extends ApplicationLoader {
   private var components: MyComponents = _
@@ -50,7 +50,7 @@ class MyComponents(context: ApplicationLoader.Context)
       new DefaultFingerprintGenerator(),
       new CrypterAuthenticatorEncoder(crypter),
       new DefaultSessionCookieBaker(),
-      Clock())
+      clock)
   }
 
 
@@ -78,9 +78,13 @@ class MyComponents(context: ApplicationLoader.Context)
 
   lazy val dbConfig: DatabaseConfig[JdbcProfile] = slickApi.dbConfig[JdbcProfile](DbName("default"))
 
-  lazy val homeController = wire[_root_.controllers.AsyncController]
+  lazy val homeController = wire[_root_.controllers.Application]
+  lazy val qAndAController = wire[_root_.controllers.QandA]
+  lazy val sseController = wire[_root_.controllers.ServerSideEval]
+  lazy val printingController = wire[_root_.controllers.Printing]
+  lazy val adminController = wire[_root_.controllers.AdminApplication]
 
-  lazy val loginController = wire[_root_.controllers.LoginController]
+  lazy val authFormsController = wire[_root_.controllers.AuthForms]
 
   lazy val iPrefix: String = "/"
 

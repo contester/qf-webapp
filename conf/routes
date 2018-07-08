@@ -1,7 +1,5 @@
 GET / controllers.Application.index
 
-GET     /webjars/*file                    controllers.WebJarAssets.at(file)
-
 GET /clarifications controllers.QandA.index
 POST /clarifications controllers.QandA.post
 
@@ -66,4 +64,3 @@ POST /admin/unackWaiterTask/:id/:room controllers.AdminApplication.unackWaiterTa
 POST /admin/deleteWaiterTask/:id controllers.AdminApplication.deleteWaiterTask(id: Long)
 
 GET     /assets/*file               controllers.Assets.versioned(path="/public", file: Asset)
-GET        /files/config.js        controllers.RjsHack.index
