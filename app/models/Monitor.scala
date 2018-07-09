@@ -1,7 +1,6 @@
 package models
 
 import javax.inject.{Inject, Singleton}
-
 import actors.MonitorActor
 import akka.actor.ActorSystem
 import models.Foo.RankedRow
@@ -9,6 +8,7 @@ import org.stingray.qf.actors.{ProblemStateActor, TeamStateActor}
 import org.stingray.qf.models.TeamClient
 import play.api.Configuration
 import play.api.db.slick.DatabaseConfigProvider
+import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import spire.math.Rational
 import utils.Ask
@@ -169,9 +169,8 @@ case class StoredContestStatus(contest: Contest, frozen: AnyStatus, exposed: Any
     ContestMonitor(contest, status(overrideFreeze))
 }
 
-@Singleton
-class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, system: ActorSystem, configuration: Configuration) {
-  private val db = dbConfigProvider.get[JdbcProfile].db
+class Monitor(dbConfig: DatabaseConfig[JdbcProfile], system: ActorSystem, configuration: Configuration) {
+  private val db = dbConfig.db
   private val teamStateActor = system.actorOf(TeamStateActor.props(db), "team-state-actor")
   val teamClient = new TeamClient(teamStateActor)
   private val problemStateActor = system.actorOf(ProblemStateActor.props(db), "problem-state-actor")

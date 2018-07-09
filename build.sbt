@@ -1,6 +1,6 @@
 name := "qf"
 
-scalaVersion := "2.12.4"
+scalaVersion := "2.12.6"
 
 organization := "org.stingray.contester"
 
@@ -37,16 +37,16 @@ libraryDependencies ++= Seq(
   "org.webjars" % "bootstrap-material-design" % "0.5.9",
   "org.webjars" % "jquery-validation" % "1.16.0",
   "org.webjars.bower" % "roboto-fontface" % "0.7.0",
-  "org.apache.httpcomponents" % "httpclient" % "4.5.3",
-  "org.apache.httpcomponents" % "httpcore" % "4.4.7",
+  "org.apache.httpcomponents" % "httpclient" % "4.5.6",
+  "org.apache.httpcomponents" % "httpcore" % "4.4.10",
   "org.mariadb.jdbc" % "mariadb-java-client" % "2.2.3",
   "commons-io" % "commons-io" % "2.6",
   "com.github.nscala-time" %% "nscala-time" % "2.18.0",
   "com.googlecode.htmlcompressor" % "htmlcompressor" % "1.5.2",
   "rhino" % "js" % "1.7R2",
   "org.scala-lang.modules" %% "scala-async" % "0.9.6",
-  "com.typesafe.slick" %% "slick" % "3.2.1",
-  "com.typesafe.slick" %% "slick-hikaricp" % "3.2.1",
+  "com.typesafe.slick" %% "slick" % "3.2.3",
+  "com.typesafe.slick" %% "slick-hikaricp" % "3.2.3",
   "com.zaxxer" % "HikariCP" % "2.6.3",
   "org.typelevel" %% "cats" % "0.9.0",
   "com.mohiva" %% "play-silhouette" % silhouetteVersion,
@@ -58,7 +58,7 @@ libraryDependencies ++= Seq(
   "com.google.guava" % "guava" % "23.0"
 ).map(_.exclude("com.zaxxer", "HikariCP-java6"))
 
-val opRabbitVersion = "2.0.0"
+val opRabbitVersion = "2.1.0"
 
 libraryDependencies ++= Seq(
   "com.spingo" %% "op-rabbit-core"        % opRabbitVersion,

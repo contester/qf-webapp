@@ -66,6 +66,8 @@ class Printing (cc: ControllerComponents,
       html.printform(loggedIn,location, form, printJobs)
     }
 
+  import scala.concurrent.ExecutionContext.Implicits.global
+
   def index = silhouette.SecuredAction.async { implicit request =>
     Locator.locate(db, request.remoteAddress).flatMap { location =>
       getPrintForm(request.identity, printForm, location).map(Ok(_))

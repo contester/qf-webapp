@@ -4,7 +4,6 @@ import akka.actor.ActorRef
 import com.github.nscala_time.time.Imports._
 import org.stingray.qf.actors.ProblemStateActor
 import play.api.libs.EventSource.{EventDataExtractor, EventIdExtractor, EventNameExtractor}
-import play.api.libs.json.Json.JsValueWrapper
 import play.api.libs.json.{JsValue, Json, Writes}
 import slick.jdbc.GetResult
 
@@ -15,6 +14,7 @@ case class Contest(id: Int, name: String, schoolMode: Boolean, startTime: DateTi
   def frozen = (DateTime.now >= freezeTime) && (DateTime.now < exposeTime)
   def finished = DateTime.now >= endTime
   def started = DateTime.now >= startTime
+  def running = started && !finished
 
   def timevalHMS =
     Contests.formatHMS(if (started) {
@@ -31,8 +31,7 @@ case class Contest(id: Int, name: String, schoolMode: Boolean, startTime: DateTi
 
 object Contest {
   implicit val writes = new Writes[Contest] {
-    def writes(c: Contest) = {
-      import com.github.nscala_time.time.Imports._
+    override def writes(c: Contest): JsValue = {
       val now = DateTime.now
 
       def ntm(x: DateTime) =
@@ -40,6 +39,8 @@ object Contest {
           (now to x).toDurationMillis
         else
           -((x to now).toDurationMillis)
+
+      import play.api.libs.json.JodaWrites._
 
       Json.obj(
         "id" -> c.id,
