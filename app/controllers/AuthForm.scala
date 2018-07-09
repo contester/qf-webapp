@@ -10,12 +10,11 @@ import play.api.Configuration
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.i18n.{I18nSupport, MessagesApi}
-import play.api.libs.concurrent.Execution.Implicits.defaultContext
 import play.api.mvc._
 import utils.auth.{AdminEnv, TeamsEnv}
 import views.html
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 class CustomSecuredErrorHandler extends SecuredErrorHandler {
   import play.api.mvc.Results._
@@ -34,13 +33,14 @@ object AuthData {
   }
 }
 
+
+// TODO: fix this copy&paste
 class AuthForms (cc: ControllerComponents,
                            silhouette: Silhouette[TeamsEnv],
-                           configuration: Configuration,
-                           eventBus: EventBus,
-                           teamsService: TeamsService,
-                           credentialsProvider: TeamsProvider,
-                           authenticatorService: AuthenticatorService[SessionAuthenticator]) extends AbstractController(cc) with I18nSupport {
+                           credentialsProvider: TeamsProvider)(implicit ec: ExecutionContext) extends AbstractController(cc) with I18nSupport {
+  private def authenticatorService = silhouette.env.authenticatorService
+  private def eventBus = silhouette.env.eventBus
+  private def teamsService = silhouette.env.identityService
 
   def login = silhouette.UnsecuredAction { implicit request =>
     Ok(html.login(AuthData.form))
@@ -75,12 +75,10 @@ class AuthForms (cc: ControllerComponents,
 
 class AdminAuthForms (cc: ControllerComponents,
                  silhouette: Silhouette[AdminEnv],
-                 override val messagesApi: MessagesApi,
-                 configuration: Configuration,
-                 eventBus: EventBus,
-                      adminService: AdminsService,
-                 credentialsProvider: AdminsProvider,
-                 authenticatorService: AuthenticatorService[SessionAuthenticator]) extends AbstractController(cc) with I18nSupport {
+                 credentialsProvider: AdminsProvider)(implicit ec: ExecutionContext) extends AbstractController(cc) with I18nSupport {
+  private def authenticatorService = silhouette.env.authenticatorService
+  private def eventBus = silhouette.env.eventBus
+  private def adminService = silhouette.env.identityService
 
   def login = silhouette.UnsecuredAction { implicit request =>
     Ok(html.admin.login(AuthData.form))

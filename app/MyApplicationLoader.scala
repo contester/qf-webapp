@@ -25,12 +25,42 @@ class MyApplicationLoader extends ApplicationLoader {
     components.application
   }
 }
+/*
+trait MyEnvBuilder {
+  import com.softwaremill.macwire.wire
+
+  lazy val adminService = wire[AdminsServiceImpl]
+  lazy val adminsProvider = wire[AdminsProvider]
+
+  private lazy val authenticatorService: AuthenticatorService[SessionAuthenticator] = {
+    val config = SessionAuthenticatorSettings()
+
+    val crypter = {
+      val settings = new JcaCrypterSettings("foo")
+      new JcaCrypter(settings)
+    }
+
+    new SessionAuthenticatorService(config,
+      new DefaultFingerprintGenerator(),
+      new CrypterAuthenticatorEncoder(crypter),
+      new DefaultSessionCookieBaker(),
+      clock)
+  }
+
+
+  lazy val adminsEnv: Environment[AdminEnv] = Environment[AdminEnv](
+    adminService, authenticatorService, List(), eventBus
+  )
+
+  lazy val silhouetteAdminEnv: Silhouette[AdminEnv] = wire[SilhouetteProvider[AdminEnv]]
+}
+*/
 
 class MyComponents(context: ApplicationLoader.Context)
   extends BuiltInComponentsFromContext(context)
     with HttpFiltersComponents
     with SlickComponents
-  with AhcWSComponents
+    with AhcWSComponents
     with _root_.controllers.AssetsComponents {
 
   import com.softwaremill.macwire.wire
@@ -55,13 +85,24 @@ class MyComponents(context: ApplicationLoader.Context)
       clock)
   }
 
-
   lazy val teamsEnv: Environment[TeamsEnv] = Environment[TeamsEnv](
     teamService, authenticatorService, List(), eventBus)
 
   lazy val adminsEnv: Environment[AdminEnv] = Environment[AdminEnv](
-    adminService, authenticatorService, List(), eventBus
-  )
+    adminService, {
+      val config = SessionAuthenticatorSettings("adminkey")
+
+      val crypter = {
+        val settings = new JcaCrypterSettings("bar")
+        new JcaCrypter(settings)
+      }
+
+      new SessionAuthenticatorService(config,
+        new DefaultFingerprintGenerator(),
+        new CrypterAuthenticatorEncoder(crypter),
+        new DefaultSessionCookieBaker(),
+        clock)
+    }, List(), eventBus)
 
   lazy val securedErrorHandler: SecuredErrorHandler = new _root_.controllers.CustomSecuredErrorHandler
   lazy val unSecuredErrorHandler: UnsecuredErrorHandler = wire[DefaultUnsecuredErrorHandler]
