@@ -2,14 +2,11 @@ package controllers
 
 import com.mohiva.play.silhouette.api._
 import com.mohiva.play.silhouette.api.actions.SecuredErrorHandler
-import com.mohiva.play.silhouette.api.services.AuthenticatorService
 import com.mohiva.play.silhouette.api.util.Credentials
-import com.mohiva.play.silhouette.impl.authenticators.SessionAuthenticator
 import models._
-import play.api.Configuration
 import play.api.data.Form
 import play.api.data.Forms._
-import play.api.i18n.{I18nSupport, MessagesApi}
+import play.api.i18n.I18nSupport
 import play.api.mvc._
 import utils.auth.{AdminEnv, TeamsEnv}
 import views.html
@@ -17,9 +14,12 @@ import views.html
 import scala.concurrent.{ExecutionContext, Future}
 
 class CustomSecuredErrorHandler extends SecuredErrorHandler {
+
+  val p: () => Call = routes.AuthForms.login _
+
   import play.api.mvc.Results._
   override def onNotAuthenticated(implicit request: RequestHeader): Future[Result] =
-    Future.successful(Redirect(routes.AuthForms.login()))
+    Future.successful(Redirect(p()))
 
   override def onNotAuthorized(implicit request: RequestHeader): Future[Result] =
     Future.successful(Unauthorized)
@@ -32,7 +32,6 @@ object AuthData {
     mapping("username" -> text, "password" -> text)(AuthData.apply)(AuthData.unapply)
   }
 }
-
 
 // TODO: fix this copy&paste
 class AuthForms (cc: ControllerComponents,

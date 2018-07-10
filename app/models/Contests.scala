@@ -83,7 +83,7 @@ object Compilers {
 }
 
 object Contests {
-  import slick.driver.MySQLDriver.api._
+  import slick.jdbc.MySQLProfile.api._
 
   def formatHMS(ms: Long) = {
     val s = ms / 1000
