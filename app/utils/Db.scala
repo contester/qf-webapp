@@ -44,3 +44,8 @@ object Ask {
   def respond[T](ref: ActorRef, v: Try[T]) =
     ref ! v
 }
+
+object Selectable {
+  def forSelect(x: Seq[(String, String)], top: String) =
+    Seq(("", top)) ++ x
+}

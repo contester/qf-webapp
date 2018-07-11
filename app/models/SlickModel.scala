@@ -17,6 +17,8 @@ case class ClarificationRequest(id: Int, contest: Int, team: Int, problem: Strin
   else "..."
 }
 
+case class Compiler(id: Int, contest: Int, name: String, ext: String)
+
 object SlickModel {
   import slick.jdbc.MySQLProfile.api._
   import utils.Db._
@@ -59,6 +61,17 @@ object SlickModel {
   }
 
   val clrSeen2 = TableQuery[ClrSeen2]
+
+  case class Compilers(tag: Tag) extends Table[Compiler](tag, "Languages") {
+    def id = column[Int]("ID")
+    def contest = column[Int]("Contest")
+    def name = column[String]("Name")
+    def ext = column[String]("Ext")
+
+    override def * = (id, contest, name, ext) <> (Compiler.tupled, Compiler.unapply)
+  }
+
+  val compilers = TableQuery[Compilers]
 }
 
 object ClarificationModel {

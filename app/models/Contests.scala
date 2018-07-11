@@ -6,6 +6,7 @@ import org.stingray.qf.actors.ProblemStateActor
 import play.api.libs.EventSource.{EventDataExtractor, EventIdExtractor, EventNameExtractor}
 import play.api.libs.json.{JsValue, Json, Writes}
 import slick.jdbc.GetResult
+import utils.Selectable
 
 import scala.concurrent.Future
 
@@ -75,11 +76,12 @@ class ProblemClient(problemStateActor: ActorRef) {
     (problemStateActor ? ProblemStateActor.GetProblems(contest)).mapTo[Seq[Problem]]
 }
 
-case class Compiler(id: Int, name: String, ext: String)
-
 object Compilers {
   def toSelect(compilers: Seq[Compiler]) =
-    Seq(("", "Выберите компилятор")) ++ compilers.sortBy(_.name).map(x => x.id.toString -> x.name)
+    compilers.sortBy(_.name).map(x => x.id.toString -> x.name)
+
+  def forForm(compilers: Seq[Compiler]) =
+    Selectable.forSelect(toSelect(compilers), "Выберите компилятор")
 }
 
 object Contests {
@@ -105,16 +107,15 @@ object Contests {
   def getContest(contestId: Int) =
     sql"""select ID, Name, SchoolMode, Start, End, Finish, Expose from Contests where ID = $contestId""".as[Contest]
 
-  implicit private val getCompiler = GetResult(
-    r => Compiler(r.nextInt(), r.nextString(), r.nextString())
-  )
-
   def getCompilers(contest: Int) =
-    sql"""select ID, Name, Ext from Languages where Contest = $contest order by ID""".as[Compiler]
+    SlickModel.compilers.filter(_.contest === contest).sortBy(_.id)
 }
 
 object Problems {
   def toSelect(problems: Seq[Problem]) =
     problems.map(x => x.id -> s"${x.id}. ${x.name}")
+
+  def forForm(problems: Seq[Problem]) =
+    Selectable.forSelect(toSelect(problems), "Выберите задачу")
 }
 

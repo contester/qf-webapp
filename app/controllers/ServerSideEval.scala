@@ -69,7 +69,7 @@ class ServerSideEval (cc: ControllerComponents,
   private def getEvalForm(loggedInTeam: LoggedInTeam, compilers:Seq[Compiler],
                           form: Form[ServerSideData])(implicit request: RequestHeader, ec: ExecutionContext) =
     getEvals(loggedInTeam.contest.id, loggedInTeam.team.localId).map { evals =>
-      html.sendwithinput(loggedInTeam, form, Compilers.toSelect(compilers), evals)
+      html.sendwithinput(loggedInTeam, form, Compilers.forForm(compilers), evals)
     }
 
   case class canSeeEval(id: Int)(implicit ec: ExecutionContext) extends Authorization[LoggedInTeam, SessionAuthenticator] {
@@ -84,7 +84,7 @@ class ServerSideEval (cc: ControllerComponents,
 
 
   def index = silhouette.SecuredAction.async { implicit request =>
-    db.run(request.identity.contest.getCompilers).flatMap { compilers =>
+    db.run(request.identity.contest.getCompilers.result).flatMap { compilers =>
       getEvalForm(request.identity, compilers, serverSideForm).map(Ok(_))
     }
   }
@@ -98,7 +98,7 @@ class ServerSideEval (cc: ControllerComponents,
   }
 
   def post = silhouette.SecuredAction(parse.multipartFormData).async { implicit request =>
-    db.run(request.identity.contest.getCompilers).flatMap { compilers =>
+    db.run(request.identity.contest.getCompilers.result).flatMap { compilers =>
         val parsed = serverSideForm.bindFromRequest
 
         parsed.fold(

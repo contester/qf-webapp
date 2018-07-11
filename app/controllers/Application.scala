@@ -85,10 +85,10 @@ class Application (cc: ControllerComponents,
   }
 
   private def getProblems(contest: Int)(implicit ec: ExecutionContext) =
-    monitorModel.problemClient.getProblems(contest).map(Problems.toSelect)
+    monitorModel.problemClient.getProblems(contest)
 
   private def getProblemsAndCompilers(contestId: Int)(implicit ec: ExecutionContext) =
-    getProblems(contestId).zip(db.run(Contests.getCompilers(contestId)))
+    getProblems(contestId).zip(db.run(Contests.getCompilers(contestId).result))
 
   import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -121,14 +121,15 @@ class Application (cc: ControllerComponents,
     mapping("problem" -> text, "compiler" -> number, "inline" -> text)(SubmitData.apply)(SubmitData.unapply)
   }
 
-  private def compilersForForm(compilers: Seq[Compiler]) =
-    Seq(("", "Выберите компилятор")) ++ compilers.sortBy(_.name).map(x => x.id.toString -> x.name)
+  private def sendSolutionForm(identity: LoggedInTeam, form: Form[SubmitData], problems: Seq[Problem], compilers: Seq[Compiler])(implicit request: RequestHeader) =
+    html.sendsolution(identity, form,
+      Problems.forForm(problems), Compilers.forForm(compilers))
 
   def submit = silhouette.SecuredAction.async { implicit request =>
     getProblemsAndCompilers(request.identity.contest.id).map {
       case (problems, compilers) => {
-        Ok(html.sendsolution(request.identity, submitForm, Seq[(String, String)](("", "Выберите задачу")) ++ problems,
-          compilersForForm(compilers)))
+        Ok(sendSolutionForm(request.identity, submitForm, problems,
+          compilers))
       }
     }
   }
@@ -152,30 +153,36 @@ class Application (cc: ControllerComponents,
 
         parsed.fold(
           formWithErrors => {
-            Future.successful(BadRequest(html.sendsolution(request.identity, formWithErrors, problems,
-              compilersForForm(compilers))))
+            Future.successful(Some(formWithErrors))
           },
           submitData => {
             if (submitData.inline.isEmpty && solutionOpt.isEmpty) {
-              Future.successful(BadRequest(html.sendsolution(request.identity, parsed.withGlobalError("No solution"),
-                problems, compilersForForm(compilers))))
+              Future.successful(Some(parsed.withGlobalError("No solution")))
             } else
             if (!request.identity.contest.running) {
-              Future.successful(BadRequest(html.sendsolution(request.identity, parsed.withGlobalError("Contest is not running"),
-                problems, compilersForForm(compilers))))
+              Future.successful(Some(parsed.withGlobalError("Contest is not running")))
             } else {
-              val df = if (!submitData.inline.isEmpty) submitData.inline.getBytes(StandardCharsets.UTF_8) else solutionOpt.getOrElse(submitData.inline.getBytes(StandardCharsets.UTF_8))
+              val df = if (!submitData.inline.isEmpty)
+                submitData.inline.getBytes(StandardCharsets.UTF_8)
+              else solutionOpt.getOrElse(submitData.inline.getBytes(StandardCharsets.UTF_8))
+
               db.run(submitInsertQuery(request.identity.contest.id, request.identity.team.localId, submitData.problem,
                 submitData.compiler, df, request.remoteAddress)).map { wat =>
 
                 Logger.info(s"$wat")
                 rabbitMq ! Message.queue(SubmitMessage(wat.head.toInt), queue = "contester.submitrequests")
 
-                Redirect(routes.Application.index)
+                None
               }
             }
           }
-        )
+        ).map { vform =>
+          vform match {
+            case Some(form) => BadRequest(sendSolutionForm(request.identity, form,
+              problems, compilers))
+            case None => Redirect(routes.Application.index)
+          }
+        }
     }
   }
 
