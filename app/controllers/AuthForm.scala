@@ -13,17 +13,25 @@ import views.html
 
 import scala.concurrent.{ExecutionContext, Future}
 
-class CustomSecuredErrorHandler extends SecuredErrorHandler {
+class CustomSecuredErrorHandler extends MySecuredErrorHandler {
+  override val loginForm: () => Call = routes.AuthForms.login _
+}
 
-  val p: () => Call = routes.AuthForms.login _
+class AdminSecuredErrorHandler extends MySecuredErrorHandler {
+  override val loginForm: () => Call = routes.AdminAuthForms.login _
+}
+
+trait MySecuredErrorHandler extends SecuredErrorHandler {
+  def loginForm: () => Call
 
   import play.api.mvc.Results._
   override def onNotAuthenticated(implicit request: RequestHeader): Future[Result] =
-    Future.successful(Redirect(p()))
+    Future.successful(Redirect(loginForm()))
 
   override def onNotAuthorized(implicit request: RequestHeader): Future[Result] =
     Future.successful(Unauthorized)
 }
+
 
 case class AuthData(username: String, password: String)
 
