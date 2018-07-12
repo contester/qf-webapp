@@ -11,7 +11,8 @@ import utils.Selectable
 import scala.concurrent.Future
 
 case class Contest(id: Int, name: String, schoolMode: Boolean, startTime: DateTime, endTime: DateTime,
-                   freezeTime: DateTime, exposeTime: DateTime) {
+                   freezeTime: DateTime, exposeTime: DateTime, printTickets: Boolean, paused: Boolean,
+                   polygonID: String, language: String) {
   def frozen = (DateTime.now >= freezeTime) && (DateTime.now < exposeTime)
   def finished = DateTime.now >= endTime
   def started = DateTime.now >= startTime
@@ -31,6 +32,7 @@ case class Contest(id: Int, name: String, schoolMode: Boolean, startTime: DateTi
 }
 
 object Contest {
+  def tupled = (Contest.apply _).tupled
   implicit val writes = new Writes[Contest] {
     override def writes(c: Contest): JsValue = {
       val now = DateTime.now
@@ -97,15 +99,11 @@ object Contests {
     f"$hours%02d:$minutes%02d:$seconds%02d"
   }
 
-  implicit val convertContests = GetResult(r => Contest(r.nextInt(), r.nextString(), r.nextBoolean(),
-    new DateTime(r.nextTimestamp()), new DateTime(r.nextTimestamp()), new DateTime(r.nextTimestamp()),
-    new DateTime(r.nextTimestamp())))
-
   val getContests =
-    sql"""select ID, Name, SchoolMode, Start, End, Finish, Expose from Contests""".as[Contest]
+    SlickModel.contests
 
   def getContest(contestId: Int) =
-    sql"""select ID, Name, SchoolMode, Start, End, Finish, Expose from Contests where ID = $contestId""".as[Contest]
+    SlickModel.contests.filter(_.id === contestId)
 
   def getCompilers(contest: Int) =
     SlickModel.compilers.filter(_.contest === contest).sortBy(_.id)

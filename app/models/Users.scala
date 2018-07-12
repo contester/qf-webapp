@@ -45,14 +45,6 @@ case class LoggedInTeam(username: String, contest: Contest, team: LocalTeam, ein
 
 case class Extrainfo(contest: Int, num: Int, heading: String, data: String)
 
-object Extrainfo {
-  import slick.jdbc.GetResult
-
-  implicit val getResult = GetResult(r =>
-    Extrainfo(r.nextInt(), r.nextInt(), r.nextString(), r.nextString())
-  )
-}
-
 class TeamsProvider(dbConfig: DatabaseConfig[JdbcProfile]) extends Provider {
   override def id: String = "team"
   def authenticate(credentials: Credentials)(implicit ec: ExecutionContext): Future[LoginInfo] = {
@@ -67,15 +59,7 @@ object Users {
   import slick.driver.MySQLDriver.api._
   import slick.jdbc.GetResult
 
-  implicit val getLoggedInTeam = GetResult(r => LoggedInTeam(
-    r.nextString(),
-    Contest(r.nextInt(), r.nextString(), r.nextBoolean(),
-      new DateTime(r.nextTimestamp()), new DateTime(r.nextTimestamp()), new DateTime(r.nextTimestamp()),
-      new DateTime(r.nextTimestamp())),
-    LocalTeam(r.nextInt(), r.nextString(), r.nextIntOption(), r.nextString(), r.nextBoolean(),
-    r.nextBoolean(), r.nextBoolean()), Seq()))
-
-
+/*
   def authQuery(username: String, password: String) =
     sql"""select Assignments.Username,
           Assignments.Contest as ContestID,
@@ -121,7 +105,10 @@ object Users {
 
   def extraInfoQuery(contest: Int) =
     sql"""select Contest, Num, Heading, Data from Extrainfo where Contest = $contest order by Num""".as[Extrainfo]
+*/
 
+  def resolveQuery(username: String) =
+    SlickModel.joinedLoginQuery.filter(_.username === username)
   def resolve(db: JdbcBackend#DatabaseDef, username: String)(implicit ec: ExecutionContext): Future[Option[LoggedInTeam]] =
     db.run(resolveQuery(username)).map(_.headOption).flatMap { opt =>
       opt.map { lt =>

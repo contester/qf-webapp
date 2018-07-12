@@ -58,7 +58,7 @@ class MonitorActor(db: JdbcBackend#DatabaseDef,
       case ((problems, teams), submits) =>
         val calcStatus: (Seq[Submit]) => AnyStatus with Product with Serializable =
           if (contest.schoolMode)
-            School.calculateStatus(problems, teams.values.toSeq, _)
+            MonitorSchool.calculateStatus(problems, teams.values.toSeq, _)
           else
             ACM.calculateStatus(problems, teams.values.toSeq, _)
 
@@ -69,7 +69,7 @@ class MonitorActor(db: JdbcBackend#DatabaseDef,
   }
 
   private def loadMonitors()(implicit ec: ExecutionContext) = {
-    val fu = db.run(Contests.getContests).flatMap { contests =>
+    val fu = db.run(SlickModel.contests.result).flatMap { contests =>
       Future.sequence(contests.map(getContestMonitor))
     }
     fu.foreach(st => self ! State(st))

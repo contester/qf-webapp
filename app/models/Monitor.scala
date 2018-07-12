@@ -102,7 +102,7 @@ object Foo {
 
 }
 
-object School {
+object MonitorSchool {
   case class Status(problems: Seq[String], rows: Seq[RankedRow[Rational, SchoolCell]]) extends AnyStatus {
     override def anyRows: Seq[AnyRankedRow] = rows
   }
