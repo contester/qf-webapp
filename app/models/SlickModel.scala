@@ -81,6 +81,13 @@ object SlickModel {
 
   val compilers = TableQuery[Compilers]
 
+  case class LiftedContest(id: Rep[Int], name: Rep[String], schoolMode: Rep[Boolean], startTime: Rep[DateTime],
+                           freezeTime: Rep[DateTime], endTime: Rep[DateTime], exposeTime: Rep[DateTime],
+                           printTickets: Rep[Boolean], paused: Rep[Boolean], polygonId: Rep[String],
+                           language: Rep[String])
+
+  implicit object ContestShape extends CaseClassShape(LiftedContest.tupled, Contest.tupled)
+
   case class Contests(tag: Tag) extends Table[Contest](tag, "Contests") {
     def id = column[Int]("ID")
     def name = column[String]("Name")
@@ -94,8 +101,8 @@ object SlickModel {
     def polygonId = column[String]("PolygonID")
     def language = column[String]("Language")
 
-    override def * = (id, name, schoolMode, startTime, freezeTime, endTime, exposeTime,
-      printTickets, paused, polygonId, language) <> (Contest.tupled, Contest.unapply)
+    override def * = LiftedContest(id, name, schoolMode, startTime, freezeTime, endTime, exposeTime,
+      printTickets, paused, polygonId, language)
   }
 
   val contests = TableQuery[Contests]
@@ -107,7 +114,7 @@ object SlickModel {
     override def * = (id, name) <> (School.tupled, School.unapply)
   }
 
-  val schools = TableQuery[School]
+  val schools = TableQuery[Schools]
 
   case class Teams(tag: Tag) extends Table[Team](tag, "Teams") {
     def id = column[Int]("ID")
@@ -131,7 +138,8 @@ object SlickModel {
     override def * = (contest, team, localId, disabled, noPrint, notRated) <> (Participant.tupled, Participant.unapply)
   }
 
-  val participants = TableQuery[Participant]
+  val participants = TableQuery[Participants]
+
 
   case class Assignments(tag: Tag) extends Table[Assignment](tag, "Assignments") {
     def contest = column[Int]("Contest")
@@ -153,46 +161,29 @@ object SlickModel {
     override def * = (contest, num, heading, data) <> (Extrainfo.tupled, Extrainfo.unapply)
   }
 
-/*
+  val extraInfos = TableQuery[ExtraInfos]
 
-case class LocalTeam(localId: Int, schoolName: String, teamNum: Option[Int], teamName: String,
-                     notRated: Boolean, noPrint: Boolean, disabled: Boolean) extends Team {
-  override def id: Int = localId
-}
- */
-
-  case class LiftedLocalTeam(localId: Rep[Int], schoolName: Rep[String], teamNum: Rep[Option[Int]],
+  case class LiftedLocalTeam(teamId: Rep[Int], contest: Rep[Int], localId: Rep[Int], schoolName: Rep[String], teamNum: Rep[Option[Int]],
                              teamName: Rep[String], notRated: Rep[Boolean], noPrint: Rep[Boolean],
                              disabled: Rep[Boolean])
 
   implicit object LocalTeamShape extends CaseClassShape(LiftedLocalTeam.tupled, LocalTeam.tupled)
 
-  /*
-  case class LoggedInTeam(username: String, contest: Contest, team: LocalTeam, einfo: Seq[Extrainfo]) extends Identity {
-  def matching(ctid: ContestTeamIds) =
-    ctid.contestId == contest.id && ctid.teamId == team.localId
-}
-
-   */
+  val localTeamQuery = for {
+    ((p, t), s) <- participants join teams on (_.team === _.id) join schools on (_._2.school === _.id)
+  } yield LiftedLocalTeam(p.team, p.contest, p.localId, s.name, t.num, t.name, p.notRated, p.noPrint, p.disabled)
 
   case class LoggedInTeam0(username: String, password: String,  contest: Contest, team: LocalTeam)
 
-  case class LiftedLoggedInTeam0(username: Rep[String], password: Rep[String], contest: Rep[Contest], team: LiftedLocalTeam)
+  case class LiftedLoggedInTeam0(username: Rep[String], password: Rep[String], contest: LiftedContest, team: LiftedLocalTeam)
 
   implicit object LoggedInTeam0Shape extends CaseClassShape(LiftedLoggedInTeam0.tupled, LoggedInTeam0.tupled)
 
   val joinedLoginQuery = for {
-    assignment <- assignments
-    participant <- participants if ((participant.localId === assignment.localId) && (assignment.contest === participant.contest))
-    contest <- contests if (contest.id === assignment.contest)
-    team <- teams if (team.id === participant.team)
-    school <- schools if (school.id === team.school)
-  } yield LiftedLoggedInTeam0(assignment.username, assignment.password,
-    contest, LiftedLocalTeam(participant.localId, school.name,team.num,team.name,participant.notRated,
-      participant.noPrint,participant.disabled)
-  )
-
-
+    ((assignment, team), contest) <- assignments join
+      localTeamQuery on { case (a, lt) => (a.localId === lt.localId) && (a.contest === lt.contest) } join
+      contests on (_._1.contest === _.id)
+  } yield LiftedLoggedInTeam0(assignment.username, assignment.password, contest, team)
 }
 
 object ClarificationModel {

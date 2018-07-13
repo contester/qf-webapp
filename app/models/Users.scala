@@ -26,7 +26,7 @@ trait Team {
   }
 }
 
-case class LocalTeam(localId: Int, schoolName: String, teamNum: Option[Int], teamName: String,
+case class LocalTeam(teamId: Int, contest: Int, localId: Int, schoolName: String, teamNum: Option[Int], teamName: String,
                      notRated: Boolean, noPrint: Boolean, disabled: Boolean) extends Team {
   override def id: Int = localId
 }
@@ -107,11 +107,19 @@ object Users {
     sql"""select Contest, Num, Heading, Data from Extrainfo where Contest = $contest order by Num""".as[Extrainfo]
 */
 
+
+  private def extraInfoQuery(contest: Int) =
+    SlickModel.extraInfos.filter(_.contest === contest).result
+
   def resolveQuery(username: String) =
-    SlickModel.joinedLoginQuery.filter(_.username === username)
+    SlickModel.joinedLoginQuery.filter(_.username === username).result
+
+  def toLoginInfo(x: SlickModel.LoggedInTeam0): LoggedInTeam =
+    LoggedInTeam(x.username, x.contest, x.team, Seq())
+
   def resolve(db: JdbcBackend#DatabaseDef, username: String)(implicit ec: ExecutionContext): Future[Option[LoggedInTeam]] =
     db.run(resolveQuery(username)).map(_.headOption).flatMap { opt =>
-      opt.map { lt =>
+      opt.map(toLoginInfo).map { lt =>
         db.run(extraInfoQuery(lt.contest.id)).map { einfo =>
           Some(LoggedInTeam(lt.username, lt.contest, lt.team, einfo))
         }
