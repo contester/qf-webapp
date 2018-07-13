@@ -69,6 +69,7 @@ class MonitorActor(db: JdbcBackend#DatabaseDef,
   }
 
   private def loadMonitors()(implicit ec: ExecutionContext) = {
+    import slick.jdbc.MySQLProfile.api._
     val fu = db.run(SlickModel.contests.result).flatMap { contests =>
       Future.sequence(contests.map(getContestMonitor))
     }
