@@ -1,13 +1,13 @@
 package org.stingray.qf.actors
 
 import akka.actor.Props
-import org.stingray.qf.models.{GlobalTeamState, LocalTeamState, TeamSchool}
+import models.{LocalTeam, SlickModel}
 import slick.jdbc.JdbcBackend
 
 import scala.concurrent.Future
 
 object TeamStateActor {
-  type TeamState = Map[Int, Map[Int, LocalTeamState]]
+  type TeamState = Map[Int, Map[Int, LocalTeam]]
 
   case class GetTeam(contest: Int, team: Int)
   case class GetTeams(contest: Int)
@@ -25,22 +25,21 @@ class TeamStateActor(db: JdbcBackend#DatabaseDef) extends AnyStateActor[TeamStat
   import slick.jdbc.MySQLProfile.api._
 
   private val dbioCombined =
-    sql"""select ID, Name from Schools""".as[(Int, String)].zip(
-      sql"""select ID, School, Num, Name from Teams""".as[(Int, Int, Int, String)]
-    ).zip(sql"""select Contest, Team, LocalID, Disabled, NoPrint, NotRated from Participants"""
-      .as[(Int, Int, Int, Boolean, Boolean, Boolean)])
+    SlickModel.schools.result zip SlickModel.teams.result zip SlickModel.participants.result
 
   override def loadStart(): Future[TeamState] =
     db.run(dbioCombined).map {
       case ((schoolRows, teamRows), localRows) =>
-        val schoolMap = schoolRows.map(x => x._1 -> TeamSchool(x._1, x._2)).toMap
+        val schoolMap = schoolRows.map(x => x.id -> x).toMap
         val globalTeamMap = teamRows.flatMap{x =>
-          schoolMap.get(x._2).map{ teamSchool =>
-            x._1 -> GlobalTeamState(x._1, teamSchool, x._3, x._4)
+          schoolMap.get(x.school).map{ teamSchool =>
+            x.id -> x
           }}.toMap
         localRows.flatMap { x =>
-          globalTeamMap.get(x._2).map { globalTeam =>
-            x._3 -> LocalTeamState(x._1, globalTeam, x._3, x._4, x._5, x._6)
+          globalTeamMap.get(x.team).flatMap { globalTeam =>
+            schoolMap.get(globalTeam.school).map { school =>
+              x.localId -> LocalTeam(x.team, x.contest, x.localId, school.name, globalTeam.num, globalTeam.name, x.notRated, x.noPrint, x.disabled)
+            }
           }
         }.groupBy(_._2.contest).mapValues(_.toMap)
     }
