@@ -100,7 +100,7 @@ object Contests {
   }
 
   val getContests =
-    SlickModel.contests
+    SlickModel.contests.result
 
   def getContest(contestId: Int) =
     SlickModel.contests.filter(_.id === contestId)

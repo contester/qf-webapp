@@ -101,11 +101,16 @@ object SlickModel {
     def polygonId = column[String]("PolygonID")
     def language = column[String]("Language")
 
-    override def * = LiftedContest(id, name, schoolMode, startTime, freezeTime, endTime, exposeTime,
-      printTickets, paused, polygonId, language)
+    override def * = (id, name, schoolMode, startTime, freezeTime, endTime, exposeTime,
+      printTickets, paused, polygonId, language) <> (Contest.tupled, Contest.unapply)
   }
 
   val contests = TableQuery[Contests]
+
+  val contests0 = for {
+    c <- contests
+  } yield LiftedContest(c.id, c.name, c.schoolMode, c.startTime, c.freezeTime, c.endTime, c.exposeTime, c.printTickets,
+    c.paused, c.polygonId, c.language)
 
   case class Schools(tag: Tag) extends Table[School](tag, "Schools") {
     def id = column[Int]("ID")
@@ -182,7 +187,7 @@ object SlickModel {
   val joinedLoginQuery = for {
     ((assignment, team), contest) <- assignments join
       localTeamQuery on { case (a, lt) => (a.localId === lt.localId) && (a.contest === lt.contest) } join
-      contests on (_._1.contest === _.id)
+      contests0 on (_._1.contest === _.id)
   } yield LiftedLoggedInTeam0(assignment.username, assignment.password, contest, team)
 }
 
