@@ -5,6 +5,7 @@ import java.sql.Timestamp
 import actors.WaiterActor
 import akka.actor.ActorRef
 import com.github.nscala_time.time.Imports
+import play.api.libs.json.{JsValue, Json}
 import slick.jdbc.{PositionedParameters, SetParameter}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -26,6 +27,11 @@ object Db {
   implicit val datetimeColumnType = MappedColumnType.base[DateTime, Timestamp](
     x => new Timestamp(x.getMillis),
     x => new DateTime(x)
+  )
+
+  implicit val jsValueColumnType = MappedColumnType.base[JsValue, String](
+    x => Json.stringify(x),
+    x => Json.parse(x)
   )
 
   // TODO: implement fsequence (future sequence)

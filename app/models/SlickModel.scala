@@ -2,6 +2,7 @@ package models
 
 import com.github.nscala_time.time.Imports._
 import play.api.Logger
+import play.api.libs.json.JsValue
 import slick.jdbc.JdbcBackend
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -20,6 +21,8 @@ case class ClarificationRequest(id: Int, contest: Int, team: Int, problem: Strin
 case class Compiler(id: Int, contest: Int, name: String, ext: String)
 
 case class School(id: Int, name: String)
+
+case class Message2(id: Option[Int], contest: Int, team: Int, kind: String, data: JsValue, seen: Boolean)
 
 object SlickModel {
   import slick.jdbc.MySQLProfile.api._
@@ -44,6 +47,9 @@ object SlickModel {
 
   val clarifications = TableQuery[Clarifications]
 
+  def getClarificationsForContest(contestId: Int) =
+    clarifications.filter(_.contest === contestId).sortBy(_.arrived.desc)
+
   case class ClarificationRequests(tag: Tag) extends Table[ClarificationRequest](tag, "ClarificationRequests") {
     def id = column[Int]("ID", O.PrimaryKey)
     def contest = column[Int]("Contest")
@@ -59,6 +65,10 @@ object SlickModel {
   }
 
   val clarificationRequests = TableQuery[ClarificationRequests]
+
+  val clarificationRequestsUnanswered = for {
+    c <- clarificationRequests.filter(!_.answered)
+  } yield (c.id, c.contest)
 
   case class ClrSeen2(tag: Tag) extends Table[MaxSeen](tag, "ClrSeen2") {
     def contest = column[Int]("Contest")
@@ -168,6 +178,19 @@ object SlickModel {
 
   val extraInfos = TableQuery[ExtraInfos]
 
+  case class Messages2(tag: Tag) extends Table[Message2](tag, "Messages2") {
+    def id = column[Int]("ID", O.AutoInc)
+    def contest = column[Int]("Contest")
+    def team = column[Int]("Team")
+    def kind = column[String]("Kind")
+    def value = column[JsValue]("Value")
+    def seen = column[Boolean]("Seen")
+
+    override def * = (id.?, contest, team, kind, value, seen) <> (Message2.tupled, Message2.unapply)
+  }
+
+  val messages2 = TableQuery[Messages2]
+
   case class LiftedLocalTeam(teamId: Rep[Int], contest: Rep[Int], localId: Rep[Int], schoolName: Rep[String], teamNum: Rep[Option[Int]],
                              teamName: Rep[String], notRated: Rep[Boolean], noPrint: Rep[Boolean],
                              disabled: Rep[Boolean])
@@ -194,11 +217,8 @@ object SlickModel {
 object ClarificationModel {
   import slick.jdbc.MySQLProfile.api._
 
-  def loadAll(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext) =
-    db.run(SlickModel.clarifications.result).zip(db.run(SlickModel.clrSeen2.result))
-
   def getClarifications(db: JdbcBackend#DatabaseDef, contestId: Int)(implicit ec: ExecutionContext) =
-    db.run(SlickModel.clarifications.filter(_.contest === contestId).result).map(_.sortBy(_.arrived).reverse)
+    db.run(SlickModel.getClarificationsForContest(contestId).result)
 
   def getClarification(db: JdbcBackend#DatabaseDef, id: Int)(implicit ec: ExecutionContext) =
     db.run(SlickModel.clarifications.filter(_.id === id).result).map(_.headOption)

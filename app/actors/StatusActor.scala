@@ -62,24 +62,17 @@ object StatusActor {
                                      clarifications: ClarificationsInitialState)
 }
 
-case class Message2(id: Int, contest: Int, team: Int, kind: String, data: JsValue)
-
-object Message2 {
-  implicit val getResult = GetResult(r =>
-    Message2(r.nextInt(), r.nextInt(), r.nextInt(), r.nextString(), Json.parse(r.nextString()))
-  )
-
-  implicit val eventNameExtractor = EventNameExtractor[Message2](x => Some(x.kind))
-  implicit val eventDataExtractor = EventDataExtractor[Message2] { msg2 =>
-    Json.stringify(Json.fromJson[JsObject](msg2.data).get + ("msgid" -> JsNumber(msg2.id)))
-  }
-}
-
 class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   import StatusActor._
   import context.dispatcher
 
   import scala.language.postfixOps
+
+  implicit val msg2eventNameExtractor = EventNameExtractor[Message2](x => Some(x.kind))
+  implicit val msg2eventDataExtractor = EventDataExtractor[Message2] { msg2 =>
+    Json.stringify(Json.fromJson[JsObject](msg2.data).get + ("msgid" -> JsNumber(msg2.id.getOrElse(0).toInt)))
+  }
+
 
   @throws[Exception](classOf[Exception])
   override def preStart(): Unit = {
@@ -124,45 +117,33 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
   private def pushPersistent(contest: Int, team: Int, kind: String, data: JsValue) =
     db.run(
-      sqlu"""insert into Messages2 (Contest, Team, Kind, Value) values ($contest, $team, $kind, ${Json.stringify(data)})"""
-        .andThen(sql"select last_insert_id()".as[Int]).withPinnedSession).map { iid =>
-      for (id <- iid) {
-        self ! Message2(id, contest, team, kind, data)
-      }
-    }
+      (SlickModel.messages2 returning SlickModel.messages2.map(_.id) into ((user, id) => user.copy(id=Some(id)))) += Message2(None, contest, team, kind, data, false))
 
   private def loadAll() = {
-    Logger.info(s"${db.source}")
 
-    val f = loadPersistentMessages.zip(loadClarificationRequestState).zip(
-      ClarificationModel.loadAll(db).map {
-        case (clarifications, clseen) => ClarificationsInitialState(clarifications, clseen)
-      }
-    )
-    f.onSuccess {
-      case ((msgs, clrs), cls) =>
-        self ! StatusActorInitialState(msgs, clrs, cls)
+    val f =
+      db.run(
+        SlickModel.messages2.filter(!_.seen).result zip
+        SlickModel.clarificationRequestsUnanswered.result zip
+          SlickModel.clarifications.result zip
+          SlickModel.clrSeen2.result
+      )
+
+    f.foreach {
+      case (((msgs, clst), clrs), seen2) =>
+        val clst2 = clst.groupBy(_._1).mapValues(x => x.map(_._2))
+        self ! StatusActorInitialState(msgs, clst2, ClarificationsInitialState(clrs, seen2))
+
     }
-    f.onFailure {
+
+    f.failed.foreach {
       case e => Logger.error("loading status actor:", e)
     }
   }
 
-  private def loadPersistentMessages: Future[Iterable[Message2]] =
-    db.run(
-      sql"""select ID, Contest, Team, Kind, Value from Messages2 where Seen != 1""".as[Message2]
-    )
-
-  private def loadClarificationRequestState: Future[Map[Int, Seq[Int]]] =
-    db.run(
-      sql"""select Contest, ID from ClarificationRequests where Status != 1""".as[(Int, Int)]
-    ).map { msgs =>
-      msgs.groupBy(_._1).mapValues(x => x.map(_._2))
-    }
-
   private def catchMsg(msg2: Message2): Unit = {
     val m = getUnacked(msg2.contest, msg2.team)
-    m += (msg2.id -> msg2)
+    msg2.id.foreach(m+= _ -> msg2)
     msg2Channel.offer(msg2)
   }
 
