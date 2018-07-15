@@ -14,7 +14,7 @@
 <div class="panel panel-success">
     <div class="panel-heading"><h3 class="panel-title">Rejudge</h3></div>
     <div class="panel-body">
-        @b3.horizontal.form(controllers.routes.AdminApplication.rejudgeRange(contest.contest.id), "col-md-2", "col-md-10",
+        @b3.horizontal.formCSRF(controllers.routes.AdminApplication.rejudgeRange(contest.contest.id), "col-md-2", "col-md-10",
         'enctype -> "multipart/form-data") { implicit fc =>
         @formRange.globalError.map { error =>
         <div class="alert alert-danger" role="alert">

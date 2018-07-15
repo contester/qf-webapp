@@ -5,6 +5,7 @@ import com.mohiva.play.silhouette.api.services.IdentityService
 import com.mohiva.play.silhouette.api.util.Credentials
 import com.mohiva.play.silhouette.impl.exceptions.InvalidPasswordException
 import org.joda.time.DateTime
+import play.api.Logger
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import slick.jdbc.{GetResult, JdbcBackend}
@@ -127,7 +128,9 @@ object Users {
 
   def resolve(db: JdbcBackend#DatabaseDef, username: String)(implicit ec: ExecutionContext): Future[Option[LoggedInTeam]] =
     db.run(resolveQuery(username)).map(_.headOption).flatMap { opt =>
+      Logger.info(s"opt: $opt")
       opt.map(toLoginInfo).map { lt =>
+        Logger.info(s"loginInfo: $lt")
         db.run(extraInfoQuery(lt.contest.id)).map { einfo =>
           Some(LoggedInTeam(lt.username, lt.contest, lt.team, einfo))
         }

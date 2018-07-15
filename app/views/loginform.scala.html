@@ -1,10 +1,10 @@
-@(title: String, dest: play.api.mvc.Call, form: Form[AuthData])(implicit flash: Flash, messages: Messages)
+@(title: String, dest: play.api.mvc.Call, form: Form[AuthData])(implicit flash: Flash, messages: Messages, request: RequestHeader)
 @styles = {<link rel="stylesheet" media="screen" href="@routes.Assets.versioned("css/signin.css")">}
 @base(title, styles=styles) {
 <div class="container">
     <div class="row">
         <div class="col-md-6 col-md-offset-3 well">
-            @b3.vertical.form(dest, 'class -> "form-signin") { implicit ifc =>
+            @b3.vertical.formCSRF(dest, 'class -> "form-signin") { implicit ifc =>
             <h2 class="form-signin-heading">@title</h2>
 
             @form.globalError.map { error =>

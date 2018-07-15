@@ -35,7 +35,7 @@
 <div class="panel panel-success">
     <div class="panel-heading"><h3 class="panel-title">Запустить решение на сервере</h3></div>
     <div class="panel-body">
-        @b3.horizontal.form(controllers.routes.ServerSideEval.post,
+        @b3.horizontal.formCSRF(controllers.routes.ServerSideEval.post,
         "col-md-2", "col-md-10", 'enctype -> "multipart/form-data", 'id -> "submitform") { implicit fc =>
         @form.globalError.map { error =>
         <div class="alert alert-danger" role="alert">
