@@ -104,8 +104,11 @@ class AdminApplication (cc: ControllerComponents,
         Future.successful(Redirect(routes.AdminApplication.index))
     }
 
+  private def getAllContests(implicit ec: ExecutionContext) =
+    Ask[StatusActor.AllContests](statusActorModel.statusActor, StatusActor.GetAllContests).map(_.contests)
+
   private def getSelectedContests(contestId: Int, account: Admin)(implicit ec: ExecutionContext): Future[SelectedContest] =
-    db.run(Contests.getContests).map(_.filter(c => account.canSpectate(c.id)).sortBy(_.id)).map { contests =>
+    getAllContests.map(_.filter(c => account.canSpectate(c.id)).sortBy(_.id)).map { contests =>
       val cmap = contests.map(x => x.id -> x).toMap
       SelectedContest(cmap.getOrElse(contestId, contests.head), cmap.mapValues(_.name).toSeq)
     }
@@ -113,7 +116,8 @@ class AdminApplication (cc: ControllerComponents,
   private def getAllWaiterTasks(perm: WaiterPermissions)(implicit ec: ExecutionContext) =
     Ask[WaiterActor.Snapshot](statusActorModel.waiterActor, WaiterActor.GetSnapshot(perm)).map(_.tasks)
 
-  import play.api.libs.concurrent.Execution.Implicits._
+
+  import scala.concurrent.ExecutionContext.Implicits.global
 
   def monitor(id: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(id)).async { implicit request =>
     getSelectedContests(id, request.identity).zip(monitorModel.getMonitor(id, request.identity.canSeeAll(id))).map {

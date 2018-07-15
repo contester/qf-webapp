@@ -24,10 +24,14 @@ object StatusActor {
   case object Tick
   case object RefreshTick
   case class NewContestState(c: Contest)
+  case class NewMultiContestState(cs: Iterable[Contest])
   case class Ack(loggedInTeam: LoggedInTeam, msgid: Int)
   case class JoinAdmin(c: Int)
   case class JoinUser(contest: Int, team: Int)
   case class UserJoined(enumerator: Source[Event, NotUsed])
+
+  case object GetAllContests
+  case class AllContests(contests: Seq[Contest])
 
   case class ClarificationRequested(contest: Int, clrId: Int)
   case class ClarificationAnswered(contest: Int, clrId: Int, teamId: Int, problem: String, text: String)
@@ -231,6 +235,10 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
       db.run(sqlu"update Messages2 set Seen = 1 where ID = $msgid")
     }
 
+    case GetAllContests => {
+      sender ! AllContests(contestStates.values.toSeq)
+    }
+
     case annotated: FullyDescribedSubmit => {
       subChan.offer(annotated)
       val a = AnnoSubmit(annotated.submit.submitId.id, annotated.submit.submitId.contestId,
@@ -246,19 +254,19 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
     case msg2: Message2 => catchMsg(msg2)
 
-    case NewContestState(c) => {
-      val old = contestStates.get(c.id)
-      if (old.isEmpty || old.get != c) {
-        contestStates.put(c.id, c)
-        contestChannel2.offer(c)
+    case NewMultiContestState(cs) => {
+      for (c <- cs) {
+        val old = contestStates.get(c.id)
+        if (old.isEmpty || old.get != c) {
+          contestStates.put(c.id, c)
+          contestChannel2.offer(c)
+        }
       }
     }
 
     case Tick => {
       db.run(Contests.getContests).map { contests =>
-        for (c <- contests) {
-          self ! NewContestState(c)
-        }
+        self ! NewMultiContestState(contests)
       }
     }
 
