@@ -57,8 +57,7 @@ class TeamsProvider(dbConfig: DatabaseConfig[JdbcProfile]) extends Provider {
 }
 
 object Users {
-  import slick.driver.MySQLDriver.api._
-  import slick.jdbc.GetResult
+  import slick.jdbc.MySQLProfile.api._
 
 /*
   def authQuery(username: String, password: String) =
@@ -128,9 +127,7 @@ object Users {
 
   def resolve(db: JdbcBackend#DatabaseDef, username: String)(implicit ec: ExecutionContext): Future[Option[LoggedInTeam]] =
     db.run(resolveQuery(username)).map(_.headOption).flatMap { opt =>
-      Logger.info(s"opt: $opt")
       opt.map(toLoginInfo).map { lt =>
-        Logger.info(s"loginInfo: $lt")
         db.run(extraInfoQuery(lt.contest.id)).map { einfo =>
           Some(LoggedInTeam(lt.username, lt.contest, lt.team, einfo))
         }

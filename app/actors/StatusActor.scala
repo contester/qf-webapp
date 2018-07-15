@@ -132,6 +132,8 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     }
 
   private def loadAll() = {
+    Logger.info(s"${db.source}")
+
     val f = loadPersistentMessages.zip(loadClarificationRequestState).zip(
       ClarificationModel.loadAll(db).map {
         case (clarifications, clseen) => ClarificationsInitialState(clarifications, clseen)
@@ -175,6 +177,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     case StatusActorInitialState(msgs, clrs, cls) => {
       clrs.foreach {
         case (contest, pending) => {
+          Logger.info(s"initialState: $contest, $pending")
           val pendingSet = mutable.Set[Int](pending:_*)
           pendingClarificationRequests.put(contest, pendingSet).foreach { old =>
             if (old != pendingSet) {

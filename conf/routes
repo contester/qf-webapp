@@ -14,6 +14,7 @@ GET /evaldetails/:id controllers.ServerSideEval.details(id: Int)
 GET /print controllers.Printing.index
 POST /print controllers.Printing.post
 
++ nocsrf
 POST /ackMessage controllers.Application.ackMessage
 
 GET /monitor controllers.Application.monitorDefault
@@ -36,14 +37,21 @@ GET /admin/monitor/:contestId controllers.AdminApplication.monitor(contestId: In
 
 GET /admin/rejudge/:contestId controllers.AdminApplication.rejudgePage(contestId: Int)
 POST /admin/rejudgeRange/:contestId controllers.AdminApplication.rejudgeRange(contestId: Int)
+
++ nocsrf
 POST /admin/rejudgeSubmit/:submitId controllers.AdminApplication.rejudgeSubmit(submitId: Int)
 
++ nocsrf
 POST /admin/reprintSubmit/:submitId controllers.AdminApplication.reprintSubmit(submitId: Int)
 
 GET /admin/postNewClarification/:contestId controllers.AdminApplication.postNewClarification(contestId: Int)
 GET /admin/updateClarification/:clrId controllers.AdminApplication.postUpdateClarification(clrId: Int)
 POST /admin/postClarification/:contestId controllers.AdminApplication.postClarification(contestId: Int, clarificationId: Option[Int])
+
++ nocsrf
 POST /admin/toggleClarification/:clrId controllers.AdminApplication.toggleClarification(clrId: Int)
+
++ nocsrf
 POST /admin/deleteClarification/:contestId/:clrId controllers.AdminApplication.deleteClarification(contestId: Int, clrId: Int)
 GET /admin/qanda/:contestId controllers.AdminApplication.showQandA(contestId: Int)
 GET /admin/tasks/:contestId controllers.AdminApplication.tasks(contestId: Int)
@@ -59,8 +67,11 @@ GET /admin/feed/:contestId controllers.AdminApplication.feed(contestId: Int)
 
 GET /admin/:contestId/postNewWaiterForm controllers.AdminApplication.postNewWaiterTaskForm(contestId: Int)
 POST /admin/:contestId/postWaiterTask controllers.AdminApplication.postWaiterTask(contestId: Int, id: Option[Int])
++ nocsrf
 POST /admin/ackWaiterTask/:id/:room controllers.AdminApplication.ackWaiterTask(id: Long, room: String)
++ nocsrf
 POST /admin/unackWaiterTask/:id/:room controllers.AdminApplication.unackWaiterTask(id: Long, room: String)
++ nocsrf
 POST /admin/deleteWaiterTask/:id controllers.AdminApplication.deleteWaiterTask(id: Long)
 
 GET     /assets/*file               controllers.Assets.versioned(path="/public", file: Asset)
