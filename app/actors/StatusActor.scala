@@ -23,7 +23,6 @@ object StatusActor {
   case object Init
   case object Tick
   case object RefreshTick
-  case class NewContestState(c: Contest)
   case class NewMultiContestState(cs: Iterable[Contest])
   case class Ack(loggedInTeam: LoggedInTeam, msgid: Int)
   case class JoinAdmin(c: Int)
