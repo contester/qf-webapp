@@ -255,10 +255,17 @@ class AdminApplication (cc: ControllerComponents,
       }
   }
 
-  // TODO: check permissions
+  // TODO: check permissions, do just toggle instead of full update
   def toggleClarification(clrId: Int) = silhouette.SecuredAction.async { implicit request =>
-    ClarificationModel.toggleClarification(db, clrId).map { _ =>
-      Ok("ok")
+    db.run(SlickModel.clarifications.filter(_.id === clrId).result).flatMap { found =>
+      found.headOption match {
+        case Some(clr) =>
+          Ask.apply[Clarification](statusActorModel.statusActor, clr.copy(hidden = !clr.hidden))
+            .map { _ =>
+              Ok("ok")
+            }
+        case None => Future.successful(NotFound)
+      }
     }
   }
 

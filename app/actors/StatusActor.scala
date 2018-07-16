@@ -197,6 +197,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
       pushPersistent(contest, teamId, "clarificationAnswered", Json.obj("problem" -> problem, "text" -> text))
     }
 
+      // This handles both toggles and full edits.
     case cl: Clarification => {
       val orig = cl.id.flatMap(id => clarifications.get(cl.contest).flatMap(_.get(id)))
       val saved = sender()

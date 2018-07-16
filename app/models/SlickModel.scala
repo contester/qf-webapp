@@ -223,13 +223,6 @@ object ClarificationModel {
   def getClarification(db: JdbcBackend#DatabaseDef, id: Int)(implicit ec: ExecutionContext) =
     db.run(SlickModel.clarifications.filter(_.id === id).result).map(_.headOption)
 
-  def toggleClarification(db: JdbcBackend#DatabaseDef, id: Int)(implicit ec: ExecutionContext) =
-    getClarification(db, id).flatMap { clrs =>
-      Future.sequence(clrs.toSeq.map { clr =>
-        db.run(SlickModel.clarifications.filter(_.id === id).map(_.hidden).update(!clr.hidden))
-      })
-    }.map(_ => ())
-
   def updateClarification(db: JdbcBackend#DatabaseDef, cl: Clarification)(implicit ec: ExecutionContext) = {
     val f = db.run(SlickModel.clarifications.returning(SlickModel.clarifications.map(_.id)).insertOrUpdate(cl)).map { opt =>
       opt.map(x => cl.copy(id = Some(x)))
