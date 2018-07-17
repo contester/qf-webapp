@@ -231,9 +231,6 @@ object ClarificationModel {
     f
   }
 
-  def getVisibleClarifications(db: JdbcBackend#DatabaseDef, contestId: Int)(implicit ec: ExecutionContext) =
-    db.run(SlickModel.clarifications.filter(x => x.contest === contestId && !x.hidden).result).map(_.sortBy(_.arrived).reverse)
-
   def deleteClarification(db: JdbcBackend#DatabaseDef, id: Int)(implicit ec: ExecutionContext) =
     db.run(SlickModel.clarifications.filter(_.id === id).delete)
 

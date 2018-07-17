@@ -15,7 +15,7 @@ import utils.{Ask, Concur}
 
 import scala.collection.mutable
 import scala.concurrent.Future
-import scala.util.Try
+import scala.util.{Success, Try}
 
 object StatusActor {
   def props(db: JdbcBackend#DatabaseDef) = Props(classOf[StatusActor], db)
@@ -38,6 +38,7 @@ object StatusActor {
 
   case class ClarificationsInitialState(clr: Seq[Clarification], seen: Seq[MaxSeen])
   case class DeleteClarification(id: Int)
+  case class GetVisibleClarifications(contestId: Int)
 
   case class ClarificationState(contest: Int, team: Int, unseen: Boolean)
   object ClarificationState {
@@ -124,7 +125,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
       (SlickModel.messages2 returning SlickModel.messages2.map(_.id) into ((user, id) => user.copy(id=Some(id)))) += Message2(None, contest, team, kind, data, false))
 
   private def loadAll() = {
-
     val f =
       db.run(
         SlickModel.messages2.filter(!_.seen).result zip
@@ -227,6 +227,12 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
       ClarificationModel.deleteClarification(db, clarificationId).map { _ =>
         deleteClarification(clarificationId)
       }.onComplete(Ask.respond(saved, _))
+    }
+
+    case GetVisibleClarifications(contestId) => {
+      import com.github.nscala_time.time.Imports._
+      val v = clarifications.get(contestId).map(_.values.filter(!_.hidden).toSeq.sortBy(_.arrived).reverse).getOrElse(Seq.empty)
+      Ask.respond(sender(), Success(v))
     }
 
     case AckAllClarifications(contest, team) => {

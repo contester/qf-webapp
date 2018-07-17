@@ -34,9 +34,11 @@ class QandA (cc: ControllerComponents,
     Duration(5, SECONDS)
   }
 
+  import utils.Ask
+
   private def clrForm(loggedInTeam: LoggedInTeam, form: Form[ClarificationReqData])(implicit request: RequestHeader, ec: ExecutionContext) =
     monitorModel.problemClient.getProblems(loggedInTeam.contest.id).flatMap { probs =>
-      ClarificationModel.getVisibleClarifications(db, loggedInTeam.contest.id).flatMap { clars =>
+      Ask.apply[Seq[Clarification]](statusActorModel.statusActor, StatusActor.GetVisibleClarifications(loggedInTeam.contest.id)).flatMap { clars =>
         ClarificationModel.getTeamClarificationReqs(db, loggedInTeam.contest.id, loggedInTeam.team.localId).map { clReq =>
           html.clarifications(loggedInTeam, clars, clReq, Seq[(String, String)](("", "Выберите задачу")) ++ Problems.toSelect(probs), form)
         }
