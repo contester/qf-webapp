@@ -270,7 +270,7 @@ class AdminApplication (cc: ControllerComponents,
   }
 
   def deleteClarification(contestId: Int, clrId: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request =>
-    ClarificationModel.deleteClarification(db, clrId).map { _ =>
+    Ask.apply[Option[Clarification]](statusActorModel.statusActor, StatusActor.DeleteClarification(clrId)).map { _ =>
       Ok("ok")
     }
   }

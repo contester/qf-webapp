@@ -37,6 +37,7 @@ object StatusActor {
   case class ClarificationRequestsStoredState(values: Map[Int, Seq[Int]])
 
   case class ClarificationsInitialState(clr: Seq[Clarification], seen: Seq[MaxSeen])
+  case class DeleteClarification(id: Int)
 
   case class ClarificationState(contest: Int, team: Int, unseen: Boolean)
   object ClarificationState {
@@ -153,6 +154,16 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   private def contestStreamSource(contest: Int): Source[Contest, NotUsed] =
     Source.apply[Contest](contestStates.get(contest).toList).concat(contestOut2.filter(_.id == contest))
 
+  private def insertClarification(cl: Clarification) =
+    for (id <- cl.id) {
+      clarifications.getOrElseUpdate(cl.contest, mutable.Map[Int, Clarification]()).put(id, cl)
+    }
+
+  private def deleteClarification(id: Int) =
+    clarifications.values.flatMap { m =>
+      m.remove(id)
+    }.headOption
+
   override def receive = {
     case Init => {
       loadAll
@@ -171,8 +182,8 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
         }
       }
 
-      for (cl <- cls.clr.filter(_.id.isDefined)) {
-        clarifications.getOrElseUpdate(cl.contest, mutable.Map[Int, Clarification]()).put(cl.id.get, cl)
+      for (cl <- cls.clr) {
+        insertClarification(cl)
       }
       for (s <- cls.seen) {
         clarificationsSeen.put((s.contest, s.team), s.timestamp)
@@ -208,6 +219,13 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
         if (!next.hidden)
           clrPostChannel.offer(ClarificationPosted(next.id.get, next.contest, prevVisible, ifp, next.text))
         next
+      }.onComplete(Ask.respond(saved, _))
+    }
+
+    case DeleteClarification(clarificationId) => {
+      val saved = sender()
+      ClarificationModel.deleteClarification(db, clarificationId).map { _ =>
+        deleteClarification(clarificationId)
       }.onComplete(Ask.respond(saved, _))
     }
 
