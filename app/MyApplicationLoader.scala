@@ -98,14 +98,11 @@ class MyComponents(context: ApplicationLoader.Context)
 
   lazy val adminsEnv: Environment[AdminEnv] = makeEnv[AdminEnv](adminService, clock, eventBus, "adminkey")
 
-  lazy val securedErrorHandler: SecuredErrorHandler = new _root_.controllers.CustomSecuredErrorHandler
   lazy val unSecuredErrorHandler: UnsecuredErrorHandler = wire[DefaultUnsecuredErrorHandler]
 
-  lazy val securedRequestHandler: SecuredRequestHandler = wire[DefaultSecuredRequestHandler]
   lazy val unsecuredRequestHandler: UnsecuredRequestHandler = wire[DefaultUnsecuredRequestHandler]
   lazy val userAwareRequestHandler: UserAwareRequestHandler = wire[DefaultUserAwareRequestHandler]
 
-  lazy val securedAction: SecuredAction = wire[DefaultSecuredAction]
   lazy val unsecuredAction: UnsecuredAction = wire[DefaultUnsecuredAction]
   lazy val userAwareAction: UserAwareAction = wire[DefaultUserAwareAction]
 
@@ -117,9 +114,21 @@ class MyComponents(context: ApplicationLoader.Context)
   lazy val adminService = wire[AdminsServiceImpl]
   lazy val adminsProvider = wire[AdminsProvider]
 
-  lazy val silhouetteTeamsEnv: Silhouette[TeamsEnv] = wire[SilhouetteProvider[TeamsEnv]]
+  lazy val silhouetteTeamsEnv: Silhouette[TeamsEnv] = {
+    lazy val securedErrorHandler: SecuredErrorHandler = new _root_.controllers.CustomSecuredErrorHandler
+    lazy val securedRequestHandler: SecuredRequestHandler = wire[DefaultSecuredRequestHandler]
+    lazy val securedAction: SecuredAction = wire[DefaultSecuredAction]
 
-  lazy val silhouetteAdminEnv: Silhouette[AdminEnv] = wire[SilhouetteProvider[AdminEnv]]
+    wire[SilhouetteProvider[TeamsEnv]]
+  }
+
+  lazy val silhouetteAdminEnv: Silhouette[AdminEnv] = {
+    lazy val securedErrorHandler: SecuredErrorHandler = new _root_.controllers.AdminSecuredErrorHandler
+    lazy val securedRequestHandler: SecuredRequestHandler = wire[DefaultSecuredRequestHandler]
+    lazy val securedAction: SecuredAction = wire[DefaultSecuredAction]
+
+    wire[SilhouetteProvider[AdminEnv]]
+  }
 
   lazy val dbConfig: DatabaseConfig[JdbcProfile] = slickApi.dbConfig[JdbcProfile](DbName("default"))
 
