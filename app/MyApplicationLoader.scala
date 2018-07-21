@@ -24,6 +24,9 @@ class MyApplicationLoader extends ApplicationLoader {
   private var components: MyComponents = _
 
   def load(context: ApplicationLoader.Context): Application = {
+    LoggerConfigurator(context.environment.classLoader).foreach {
+      _.configure(context.environment, context.initialConfiguration, Map.empty)
+    }
     components = new MyComponents(context)
     components.application
   }

@@ -133,16 +133,18 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
           SlickModel.clrSeen2.result
       )
 
-    f.foreach {
-      case (((msgs, clst), clrs), seen2) =>
-        val clst2 = clst.groupBy(_._1).mapValues(x => x.map(_._2))
-        self ! StatusActorInitialState(msgs, clst2, ClarificationsInitialState(clrs, seen2))
-
-    }
-
     f.failed.foreach {
       case e => Logger.error("loading status actor:", e)
     }
+
+    f.map {
+      case (((msgs, clst), clrs), seen2) =>
+        val clst2 = clst.groupBy(_._1).mapValues(x => x.map(_._2))
+        val sis = StatusActorInitialState(msgs, clst2, ClarificationsInitialState(clrs, seen2))
+        Logger.info(s"sis: $sis")
+        sis
+    }
+
   }
 
   private def catchMsg(msg2: Message2): Unit = {
@@ -166,10 +168,14 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
   override def receive = {
     case Init => {
-      loadAll
+      Logger.info("LOADING STATUS ACTOR")
+      loadAll.foreach { sis =>
+        self ! sis
+      }
     }
 
     case StatusActorInitialState(msgs, clrs, cls) => {
+      Logger.info(s"STATUS ACTOR initial state received")
       clrs.foreach {
         case (contest, pending) => {
           Logger.info(s"initialState: $contest, $pending")
@@ -294,6 +300,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     }
 
     case Tick => {
+      Logger.info(s"Tick!")
       db.run(Contests.getContests).map { contests =>
         self ! NewMultiContestState(contests)
       }

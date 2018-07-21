@@ -58,8 +58,8 @@ class Application (cc: ControllerComponents,
 
   val finishedRef = Subscription.run(rabbitMq) {
     import Directives._
+    import scala.concurrent.ExecutionContext.Implicits.global
     channel(qos = 1) {
-      import play.api.libs.concurrent.Execution.Implicits.defaultContext
       consume(queue("contester.finished")) {
         body(as[FinishedTesting]) { submit =>
           Logger.info(s"Received $submit")
@@ -72,8 +72,8 @@ class Application (cc: ControllerComponents,
 
   val finishedEvalRef = Subscription.run(rabbitMq) {
     import Directives._
+    import scala.concurrent.ExecutionContext.Implicits.global
     channel(qos = 1) {
-      import play.api.libs.concurrent.Execution.Implicits.defaultContext
       consume(queue("contester.evals")) {
         body(as[CustomTestResult]) { submit =>
           Logger.info(s"Received $submit")
@@ -83,6 +83,12 @@ class Application (cc: ControllerComponents,
       }
     }
   }
+
+{    import scala.concurrent.ExecutionContext.Implicits.global
+  finishedRef.initialized.foreach { _ =>
+    Logger.info("SUBSCRIPTION initialized")
+  }
+}
 
   private def getProblems(contest: Int)(implicit ec: ExecutionContext) =
     monitorModel.problemClient.getProblems(contest)
