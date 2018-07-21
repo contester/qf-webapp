@@ -256,7 +256,9 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
     case Ack(loggedInTeam, msgid) => {
       getUnacked(loggedInTeam.contest.id, loggedInTeam.team.localId) -= msgid
-      db.run(sqlu"update Messages2 set Seen = 1 where ID = $msgid")
+      val loc = for {c <- SlickModel.messages2 if c.id === msgid } yield c.seen
+      val upd = loc.update(true)
+      db.run(upd)
     }
 
     case GetAllContests => {
