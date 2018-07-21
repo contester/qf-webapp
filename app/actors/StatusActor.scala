@@ -251,7 +251,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
         self ! annotated
       }
 
-      sender ! {}
+      sender() ! {}
     }
 
     case Ack(loggedInTeam, msgid) => {
@@ -260,7 +260,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     }
 
     case GetAllContests => {
-      sender ! AllContests(contestStates.values.toSeq)
+      sender() ! Success(AllContests(contestStates.values.toSeq))
     }
 
     case annotated: FullyDescribedSubmit => {
