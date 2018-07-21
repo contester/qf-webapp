@@ -247,6 +247,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     }
 
     case finished: FinishedTesting => {
+      Logger.info(s"received finished: $finished")
       SubmitResult.annotateFinished(db, finished).map { annotated =>
         self ! annotated
       }
