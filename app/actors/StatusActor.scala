@@ -198,8 +198,11 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
       for (msg <- msgs)
         catchMsg(msg)
 
+      unstashAll()
       context.become(initialized)
     }
+
+    case _ => stash()
   }
 
   def initialized: Receive = {
