@@ -212,6 +212,25 @@ object SlickModel {
       localTeamQuery on { case (a, lt) => (a.localId === lt.localId) && (a.contest === lt.contest) } join
       contests0 on (_._1.contest === _.id)
   } yield LiftedLoggedInTeam0(assignment.username, assignment.password, contest, team)
+
+  case class NewSubmit(id: Option[Int], contest: Int, team: Int, problem: String, srcLang: Int, source: Array[Byte],
+                       arrived: DateTime, computer: Option[Long], processed: Option[Int])
+
+  case class NewSubmits(tag: Tag) extends Table[NewSubmit](tag, "NewSubmits") {
+    def id = column[Int]("ID", O.AutoInc)
+    def contest = column[Int]("Contest")
+    def team = column[Int]("Team")
+    def problem = column[String]("Problem")
+    def srcLang = column[Int]("SrcLang")
+    def source = column[Array[Byte]]("Source")
+    def arrived = column[DateTime]("Arrived")
+    def computer = column[Option[Long]]("Computer")
+    def processed = column[Option[Int]]("Processed")
+
+    override def * = (id.?, contest, team, problem, srcLang, source, arrived, computer, processed) <> (NewSubmit.tupled, NewSubmit.unapply)
+  }
+
+  val newSubmits = TableQuery[NewSubmits]
 }
 
 object ClarificationModel {

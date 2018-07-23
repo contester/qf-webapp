@@ -338,7 +338,8 @@ object Submits {
     }.map(_.flatten)
   }
 
-  def loadSubmitByID(db: JdbcBackend#DatabaseDef, submitId: Int)(implicit ec: ExecutionContext) = {
+  // Why do I have this method here?
+  private def loadSubmitByID(db: JdbcBackend#DatabaseDef, submitId: Int)(implicit ec: ExecutionContext) = {
     db.run(sql"""select NewSubmits.ID,
           NewSubmits.Arrived,
           unix_timestamp(NewSubmits.Arrived) - unix_timestamp(Contests.Start) as ArrivedSeconds,
