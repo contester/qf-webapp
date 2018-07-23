@@ -61,8 +61,8 @@ class AdminApplication (cc: ControllerComponents,
 
   private val rabbitMq = rabbitMqModel.rabbitMq
 
-  private val fileserverUrl = configuration.getString("fileserver.url")
-  private val shortn = configuration.getString("fileserver.shortn")
+  private val fileserverUrl = configuration.get[String]("fileserver.url")
+  private val shortn = configuration.get[String]("fileserver.shortn")
 
   import slick.jdbc.MySQLProfile.api._
 
@@ -210,23 +210,26 @@ class AdminApplication (cc: ControllerComponents,
 
   def showSubmit(contestId: Int, submitId: Int) = silhouette.SecuredAction(canSeeSubmit(submitId)).async { implicit request =>
     Submits.getSubmitById(db, submitId).flatMap { optSubmit =>
-      optSubmit.map { submit =>
-        submit.fsub.submit.testingId.map { testingId =>
-          db.run(sql"select ID, Submit, Start, Finish, ProblemID from Testings where ID = $testingId".as[Testing])
-            .map(_.headOption)
-        }.getOrElse(Future.successful(None)).flatMap { testingOpt =>
-          testingOpt.flatMap { testing =>
-            testing.problemId.map { problemId =>
-              val phandle = PolygonURL(problemId)
-              Outputs.getAllAssets(ws, fileserverUrl.get, shortn.get, submit.fsub.submit.submitId.id, testing.id, submit.fsub.details.map(_.test), phandle)
-            }
-          }.getOrElse(Future.successful(Map[Int, ResultAssets]()))
-        }.zip(
-        getSelectedContests(contestId, request.identity)).map {
-          case (outputs, contest) =>
-            Ok(html.admin.showsubmit(submit, contest, outputs))
-        }
-      }.getOrElse(Future.successful(Redirect(routes.AdminApplication.submits(contestId))))
+      optSubmit match {
+        case Some(submit) =>
+          submit.fsub.submit.testingId.map { testingId =>
+            db.run(sql"select ID, Submit, Start, Finish, ProblemID from Testings where ID = $testingId".as[Testing])
+              .map(_.headOption)
+          }.getOrElse(Future.successful(None)).flatMap { testingOpt =>
+            testingOpt.flatMap { testing =>
+              testing.problemId.map { problemId =>
+                val phandle = PolygonURL(problemId)
+                Outputs.getAllAssets(ws, fileserverUrl, shortn, submit.fsub.submit.submitId.id, testing.id, submit.fsub.details.map(_.test), phandle)
+              }
+            }.getOrElse(Future.successful(Map[Int, ResultAssets]()))
+          }.zip(
+            getSelectedContests(contestId, request.identity)).map {
+            case (outputs, contest) =>
+              Ok(html.admin.showsubmit(submit, contest, outputs))
+          }
+        case None =>
+          Future.successful(Redirect(routes.AdminApplication.submits(contestId)))
+      }
     }
   }
 

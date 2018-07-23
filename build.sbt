@@ -19,7 +19,7 @@ updateOptions := updateOptions.value.withCachedResolution(true)
 
 val spireVersion = "0.13.0"
 
-val silhouetteVersion = "5.0.4"
+val silhouetteVersion = "5.0.5"
 
 libraryDependencies ++= Seq(
   "com.typesafe.play" %% "play-slick" % "3.0.3",
@@ -39,12 +39,12 @@ libraryDependencies ++= Seq(
   "org.webjars.bower" % "roboto-fontface" % "0.7.0",
   "org.apache.httpcomponents" % "httpclient" % "4.5.6",
   "org.apache.httpcomponents" % "httpcore" % "4.4.10",
-  "org.mariadb.jdbc" % "mariadb-java-client" % "2.2.3",
+  "org.mariadb.jdbc" % "mariadb-java-client" % "2.2.6",
   "commons-io" % "commons-io" % "2.6",
   "com.github.nscala-time" %% "nscala-time" % "2.18.0",
   "com.googlecode.htmlcompressor" % "htmlcompressor" % "1.5.2",
   "rhino" % "js" % "1.7R2",
-  "org.scala-lang.modules" %% "scala-async" % "0.9.6",
+  "org.scala-lang.modules" %% "scala-async" % "0.9.7",
   "com.typesafe.slick" %% "slick" % "3.2.3",
   "com.typesafe.slick" %% "slick-hikaricp" % "3.2.3",
   "org.typelevel" %% "cats" % "0.9.0",
