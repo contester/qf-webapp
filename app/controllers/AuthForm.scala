@@ -106,7 +106,7 @@ class AdminAuthForms (cc: ControllerComponents,
               authenticator => {
                 eventBus.publish(LoginEvent(user, request))
                 authenticatorService.init(authenticator).flatMap { v =>
-                  authenticatorService.embed(v, Redirect(routes.Application.index))
+                  authenticatorService.embed(v, Redirect(routes.AdminApplication.index))
                 }
               }
             }
