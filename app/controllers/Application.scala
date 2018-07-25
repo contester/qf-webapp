@@ -48,47 +48,6 @@ class Application (cc: ControllerComponents,
   import scala.language.postfixOps
 
   private val rabbitMq = rabbitMqModel.rabbitMq
-  import com.spingo.op_rabbit.PlayJsonSupport._
-
-  import akka.pattern.ask
-
-  import scala.concurrent.duration._
-
-  implicit private val recoveryStrategy = RecoveryStrategy.none
-
-  val finishedRef = Subscription.run(rabbitMq) {
-    import Directives._
-    import scala.concurrent.ExecutionContext.Implicits.global
-    channel(qos = 1) {
-      consume(queue("contester.finished")) {
-        body(as[FinishedTesting]) { submit =>
-          Logger.info(s"Received $submit")
-          val acked = statusActorModel.statusActor.ask(submit)(1 minute)
-          ack(acked)
-        }
-      }
-    }
-  }
-
-  val finishedEvalRef = Subscription.run(rabbitMq) {
-    import Directives._
-    import scala.concurrent.ExecutionContext.Implicits.global
-    channel(qos = 1) {
-      consume(queue("contester.evals")) {
-        body(as[CustomTestResult]) { submit =>
-          Logger.info(s"Received $submit")
-          val acked = statusActorModel.statusActor.ask(submit)(1 minute)
-          ack(acked)
-        }
-      }
-    }
-  }
-
-{    import scala.concurrent.ExecutionContext.Implicits.global
-  finishedRef.initialized.foreach { _ =>
-    Logger.info("SUBSCRIPTION initialized")
-  }
-}
 
   private def getProblems(contest: Int)(implicit ec: ExecutionContext) =
     monitorModel.problemClient.getProblems(contest)
@@ -145,6 +104,8 @@ class Application (cc: ControllerComponents,
           values ($contestId, $teamId, $problemId, $srcLang, $source, inet_aton($remoteAddr), CURRENT_TIMESTAMP())
         """.andThen(sql"""select LAST_INSERT_ID()""".as[Long]).withPinnedSession
 
+  import com.spingo.op_rabbit.PlayJsonSupport._
+
   def submitPost = silhouette.SecuredAction(parse.multipartFormData).async { implicit request =>
     getProblemsAndCompilers(request.identity.contest.id).flatMap {
       case (problems, compilers) =>
@@ -174,8 +135,7 @@ class Application (cc: ControllerComponents,
 
               db.run(submitInsertQuery(request.identity.contest.id, request.identity.team.localId, submitData.problem,
                 submitData.compiler, df, request.remoteAddress)).map { wat =>
-
-                Logger.info(s"$wat")
+                Logger.info(s"Inserted submit id: $wat")
                 rabbitMq ! Message.queue(SubmitMessage(wat.head.toInt), queue = "contester.submitrequests")
 
                 None
