@@ -199,7 +199,7 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     }
 
     case DeleteTask(id) => {
-      WaiterModel.delete(db, id).onCompl ete {
+      WaiterModel.delete(db, id).onComplete {
         case _ => self ! TaskDeleted(id)
       }
     }
