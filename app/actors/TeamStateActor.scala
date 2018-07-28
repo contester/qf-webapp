@@ -24,11 +24,8 @@ class TeamStateActor(db: JdbcBackend#DatabaseDef) extends AnyStateActor[TeamStat
 
   import slick.jdbc.MySQLProfile.api._
 
-  private val dbioCombined =
-    SlickModel.schools.result zip SlickModel.teams.result zip SlickModel.participants.result
-
   override def loadStart(): Future[TeamState] =
-    db.run(dbioCombined).map {
+    db.run(SlickModel.schools.result zip SlickModel.teams.result zip SlickModel.participants.result).map {
       case ((schoolRows, teamRows), localRows) =>
         val schoolMap = schoolRows.map(x => x.id -> x).toMap
         val globalTeamMap = teamRows.flatMap{x =>

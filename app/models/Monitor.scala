@@ -177,7 +177,7 @@ class Monitor(dbConfig: DatabaseConfig[JdbcProfile], system: ActorSystem, config
   val problemClient = new ProblemClient(problemStateActor)
 
   private[this] val monitorActor = system.actorOf(MonitorActor.props(
-    db, configuration.getString("monitor.static_location"),
+    db, configuration.getOptional[String]("monitor.static_location"),
     teamClient, problemClient), "monitor-actor")
 
   private implicit val monitorTimeout: akka.util.Timeout = {
