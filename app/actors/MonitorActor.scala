@@ -1,17 +1,17 @@
 package actors
 
 import java.io.File
+import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, StandardCopyOption}
 
-import akka.actor.{Actor, ActorRef, Props, Stash}
+import akka.actor.{Actor, Props, Stash}
 import models._
-import org.apache.commons.io.{Charsets, FileUtils}
+import org.apache.commons.io.FileUtils
 import org.stingray.qf.models.TeamClient
-import play.twirl.api.HtmlFormat
 import slick.jdbc.JdbcBackend
 
 import scala.collection.mutable
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
 object MonitorActor {
@@ -89,7 +89,7 @@ class MonitorActor(db: JdbcBackend#DatabaseDef,
       for (location <- staticLocationFile) {
         val tmpFile = new File(location, s"${st.contest.id}.html.new")
         FileUtils.writeStringToFile(tmpFile,
-          Compressor(views.html.staticmonitor(st.contest, st.monitor(false).status).body), Charsets.UTF_8)
+          Compressor(views.html.staticmonitor(st.contest, st.monitor(false).status).body), StandardCharsets.UTF_8)
         Files.move(tmpFile.toPath, new File(location, s"${st.contest.id}.html").toPath, StandardCopyOption.ATOMIC_MOVE)
       }
     }
