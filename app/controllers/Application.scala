@@ -6,8 +6,6 @@ import actors.StatusActor
 import com.mohiva.play.silhouette.api.{Authorization, Silhouette}
 import com.mohiva.play.silhouette.impl.authenticators.SessionAuthenticator
 import com.spingo.op_rabbit._
-import javax.inject.{Inject, Singleton}
-import models.ContesterResults.{CustomTestResult, FinishedTesting}
 import models._
 import org.apache.commons.io.FileUtils
 import play.api.data.Form
@@ -33,7 +31,6 @@ object SubmitMessage {
   implicit val formatSubmitMessage = Json.format[SubmitMessage]
 }
 
-@Singleton
 class Application (cc: ControllerComponents,
                              silhouette: Silhouette[TeamsEnv],
                              dbConfig: DatabaseConfig[JdbcProfile],
@@ -112,11 +109,8 @@ class Application (cc: ControllerComponents,
         val parsed = submitForm.bindFromRequest
 
         val solutionOpt = request.body.file("file").map { solution =>
-          FileUtils.readFileToByteArray(solution.ref.file)
+          FileUtils.readFileToByteArray(solution.ref.path.toFile)
         }
-
-        //val parsed0 = if (solutionOpt.isDefined) parsed
-        //else parsed.withGlobalError("can't open the file")
 
         parsed.fold(
           formWithErrors => {
@@ -151,7 +145,6 @@ class Application (cc: ControllerComponents,
         }
     }
   }
-
 
   def ackMessage = silhouette.SecuredAction.async { implicit request =>
     request.body.asFormUrlEncoded.flatMap(_.get("msgid")).flatMap(_.headOption).flatMap(x => Try(x.toInt).toOption).foreach { msgid =>
@@ -188,12 +181,11 @@ class Application (cc: ControllerComponents,
   // TODO: dafuq is this
   def getCompilerOutput(testingId: Int) = silhouette.SecuredAction.async { implicit request =>
     db.run(
-      sql"""select Test, Result, Timex, Memory, Info, TesterExitCode, TesterOutput, TesterError
-           from Results where UID = $testingId and Test = 0 order by Test""".as[ResultEntry])
-      .map(_.headOption)
+      sql"""select TesterOutput, TesterError
+           from Results where UID = $testingId and Test = 0 order by Test""".as[(String, String)].headOption)
       .map { opt =>
         opt.map { res =>
-          Ok(Json.obj("output" -> res.testerOutput, "error" -> res.testerError))
+          Ok(Json.obj("output" -> res._1, "error" -> res._2))
         }.getOrElse(BadRequest(Json.obj()))
       }
   }
