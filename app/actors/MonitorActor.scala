@@ -108,7 +108,7 @@ class MonitorActor(db: JdbcBackend#DatabaseDef,
       unstashAll()
       context.become(initialized)
     }
-    case Get(id) =>
+    case _ =>
       stash()
   }
 }
