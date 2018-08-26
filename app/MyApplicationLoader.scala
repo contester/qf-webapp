@@ -41,7 +41,7 @@ trait MakeEnv {
       val config = SessionAuthenticatorSettings(key)
 
       val crypter = {
-        val settings = new JcaCrypterSettings("bar")
+        val settings = JcaCrypterSettings("bar")
         new JcaCrypter(settings)
       }
 

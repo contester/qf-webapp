@@ -54,6 +54,7 @@ libraryDependencies ++= Seq(
   "com.mohiva" %% "play-silhouette-crypto-jca" % silhouetteVersion,
   "org.spire-math" %% "spire" % spireVersion,
   "org.spire-math" %% "spire-extras" % spireVersion,
+  "info.faljse" % "SDNotify" % "1.1",
   "com.google.guava" % "guava" % "23.0"
 ).map(_.exclude("com.zaxxer", "HikariCP-java6"))
 

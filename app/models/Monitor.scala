@@ -155,7 +155,7 @@ object ACM {
     cells.foldLeft(Score(0, 0, 0))(cellFold)
 
   def calculateStatus(problems: Seq[Problem], teams: Seq[Team], submits: Seq[Submit]) =
-    Status(problems.map(_.id), Foo.groupAndRank(teams, submits, getCell(_), getScore(_)))
+    Status(problems.map(_.id), Foo.groupAndRank(teams, submits, getCell, getScore))
 }
 
 case class StoredContestStatus(contest: Contest, frozen: AnyStatus, exposed: AnyStatus) {
