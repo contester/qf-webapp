@@ -6,6 +6,7 @@ import com.mohiva.play.silhouette.api.util.Clock
 import com.mohiva.play.silhouette.crypto.{JcaCrypter, JcaCrypterSettings}
 import com.mohiva.play.silhouette.impl.authenticators.{SessionAuthenticator, SessionAuthenticatorService, SessionAuthenticatorSettings}
 import com.mohiva.play.silhouette.impl.util.{DefaultFingerprintGenerator, SecureRandomIDGenerator}
+import info.faljse.SDNotify.SDNotify
 import models._
 import play.api._
 import play.api.db.slick.{DbName, SlickComponents}
@@ -28,7 +29,9 @@ class MyApplicationLoader extends ApplicationLoader {
       _.configure(context.environment, context.initialConfiguration, Map.empty)
     }
     components = new MyComponents(context)
-    components.application
+    val result = components.application
+    SDNotify.sendNotify
+    result
   }
 }
 
