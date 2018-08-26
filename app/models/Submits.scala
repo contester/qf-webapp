@@ -68,7 +68,7 @@ object SchoolCell {
     }
   }
 
-  def empty = SchoolCell(0, 0, false)
+  def empty = SchoolCell(0, 0, fullSolution = false)
 }
 
 object RationalToScoreStr {
@@ -111,7 +111,7 @@ case class SchoolCell(attempt: Int, score: Rational, fullSolution: Boolean) exte
 }
 
 object ACMCell {
-  def empty = ACMCell(0, 0, false)
+  def empty = ACMCell(0, 0, fullSolution = false)
 }
 
 object SecondsToTimeStr {

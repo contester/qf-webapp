@@ -56,7 +56,7 @@ class Application (cc: ControllerComponents,
   import scala.concurrent.ExecutionContext.Implicits.global
 
   def monitorDefault = silhouette.SecuredAction.async { implicit request =>
-    monitorModel.getMonitor(request.identity.contest.id, false).map(x => {
+    monitorModel.getMonitor(request.identity.contest.id, overrideFreeze = false).map(x => {
       Ok(html.loggedinmonitor(x.get.contest, x.get.status, request.identity))})
   }
 
@@ -129,12 +129,10 @@ class Application (cc: ControllerComponents,
               }
             }
           }
-        ).map { vform =>
-          vform match {
-            case Some(form) => BadRequest(sendSolutionForm(request.identity, form,
-              problems, compilers))
-            case None => Redirect(routes.Application.index)
-          }
+        ).map {
+          case Some(form) => BadRequest(sendSolutionForm(request.identity, form,
+            problems, compilers))
+          case None => Redirect(routes.Application.index)
         }
     }
   }

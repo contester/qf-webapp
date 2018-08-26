@@ -53,34 +53,6 @@ trait MakeEnv {
     }, List(), eventBus)
 }
 
-trait MyEnvBuilder extends MakeEnv {
-  import com.softwaremill.macwire.wire
-  import scala.concurrent.ExecutionContext.Implicits.global
-
-  def dbConfig: DatabaseConfig[JdbcProfile] = ???
-  def bpDefault: BodyParsers.Default = ???
-  def messagesApi: MessagesApi = ???
-  lazy val adminService = wire[AdminsServiceImpl]
-  lazy val clock = wire[Clock]
-  lazy val eventBus = wire[EventBus]
-  import com.mohiva.play.silhouette.api.Environment
-
-  lazy val adminsEnv: Environment[AdminEnv] = makeEnv[AdminEnv](adminService, clock, eventBus, "adminkey")
-
-  lazy val securedErrorHandler: SecuredErrorHandler = new _root_.controllers.CustomSecuredErrorHandler
-  lazy val unSecuredErrorHandler: UnsecuredErrorHandler = wire[DefaultUnsecuredErrorHandler]
-  lazy val securedRequestHandler: SecuredRequestHandler = wire[DefaultSecuredRequestHandler]
-  lazy val unsecuredRequestHandler: UnsecuredRequestHandler = wire[DefaultUnsecuredRequestHandler]
-  lazy val userAwareRequestHandler: UserAwareRequestHandler = wire[DefaultUserAwareRequestHandler]
-
-  lazy val securedAction: SecuredAction = wire[DefaultSecuredAction]
-  lazy val unsecuredAction: UnsecuredAction = wire[DefaultUnsecuredAction]
-  lazy val userAwareAction: UserAwareAction = wire[DefaultUserAwareAction]
-
-  lazy val silhouetteAdminEnv: Silhouette[AdminEnv] = wire[SilhouetteProvider[AdminEnv]]
-}
-
-
 class MyComponents(context: ApplicationLoader.Context)
   extends BuiltInComponentsFromContext(context)
     with HttpFiltersComponents

@@ -122,7 +122,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
   private def pushPersistent(contest: Int, team: Int, kind: String, data: JsValue) =
     db.run(
-      (SlickModel.messages2 returning SlickModel.messages2.map(_.id) into ((user, id) => user.copy(id=Some(id)))) += Message2(None, contest, team, kind, data, false))
+      (SlickModel.messages2 returning SlickModel.messages2.map(_.id) into ((user, id) => user.copy(id=Some(id)))) += Message2(None, contest, team, kind, data, seen = false))
 
   private def loadAll() = {
     val f =
@@ -182,7 +182,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
           val pendingSet = mutable.Set[Int](pending:_*)
           pendingClarificationRequests.put(contest, pendingSet).foreach { old =>
             if (old != pendingSet) {
-              clr2Chan.offer(ClarificationRequestState(contest, pending.length, false))
+              clr2Chan.offer(ClarificationRequestState(contest, pending.length, newRequest = false))
             }
           }
         }
@@ -208,12 +208,12 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   def initialized: Receive = {
     case ClarificationRequested(contest, clrId) => {
       pendingClarificationRequests(contest) += clrId
-      clr2Chan.offer(ClarificationRequestState(contest, pendingClarificationRequests(contest).size, true))
+      clr2Chan.offer(ClarificationRequestState(contest, pendingClarificationRequests(contest).size, newRequest = true))
     }
 
     case ClarificationAnswered(contest, clrId, teamId, problem, text) => {
       pendingClarificationRequests(contest) -= clrId
-      clr2Chan.offer(ClarificationRequestState(contest, pendingClarificationRequests(contest).size, false))
+      clr2Chan.offer(ClarificationRequestState(contest, pendingClarificationRequests(contest).size, newRequest = false))
       pushPersistent(contest, teamId, "clarificationAnswered", Json.obj("problem" -> problem, "text" -> text))
     }
 
@@ -313,7 +313,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
       val enum = Try {
         val sev= sub2Out.filter(_.contest == c) via EventSource.flow
         val pings = Source.tick(tickDuration, tickDuration, userPing)
-        val clars = Source.apply[ClarificationRequestState](Seq(ClarificationRequestState(c, pendingClarificationRequests(c).size, false)).toList)
+        val clars = Source.apply[ClarificationRequestState](Seq(ClarificationRequestState(c, pendingClarificationRequests(c).size, newRequest = false)).toList)
             .concat(clr2Out.filter(_.contest == c)) via EventSource.flow
         Source.combine(
           contestStreamSource(c) via EventSource.flow,
