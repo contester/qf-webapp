@@ -17,7 +17,7 @@ trait SubmitResult {
   def message: String
 }
 
-case class TimeMs(val underlying: Int) extends AnyVal {
+case class TimeMs(underlying: Int) extends AnyVal {
   override def toString: String = s"${underlying}"
 }
 

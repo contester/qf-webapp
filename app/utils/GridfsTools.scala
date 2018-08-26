@@ -19,7 +19,7 @@ object GridfsTools {
       .map { resp =>
         resp.status match {
         case 200 =>
-          val truncated = resp.header("X-Fs-Truncated").map(_ == "true").getOrElse(false)
+          val truncated = resp.header("X-Fs-Truncated").exists(_ == "true")
           val origSize = resp.header("X-Fs-Content-Length").flatMap(x => Try(x.toLong).toOption)
           Some(GridfsContent(resp.body, truncated, origSize))
         case _ =>

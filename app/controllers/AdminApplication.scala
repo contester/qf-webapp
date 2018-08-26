@@ -97,7 +97,7 @@ class AdminApplication (cc: ControllerComponents,
         def canSeeSubmit(s: Submit) =
           if (canSeeAll) true else !s.afterFreeze
         val submits = submits0.filter(canSeeSubmit)
-        Submits.groupAndAnnotate(db, contest.contest.schoolMode, limit.map(submits.reverse.take(_).reverse).getOrElse(submits)).map { fullyDescribedSubmits =>
+        Submits.groupAndAnnotate(db, contest.contest.schoolMode, limit.map(submits.takeRight(_)).getOrElse(submits)).map { fullyDescribedSubmits =>
           Ok(html.admin.submits(fullyDescribedSubmits, teamMap, contest, account))
         }
       case _ =>

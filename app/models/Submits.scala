@@ -141,7 +141,7 @@ case class ACMCell(attempt: Int, arrivedSeconds: Int, fullSolution: Boolean) ext
     else s"-$attempt"
 }
 
-case class Memory(val underlying: Long) extends AnyVal {
+case class Memory(underlying: Long) extends AnyVal {
   override def toString: String = s"${underlying / 1024}"
 }
 
@@ -283,7 +283,7 @@ object Submits {
 
   def getTestingStats(details: Seq[ResultEntry]) =
     trOption(details.filter(_.test != 0)).map { detlist =>
-      SubmitStats(detlist.map(_.time).max, detlist.map(_.memory).max, detlist.find(_.timeLimitExceeded).isDefined)
+      SubmitStats(detlist.map(_.time).max, detlist.map(_.memory).max, detlist.exists(_.timeLimitExceeded))
     }.getOrElse(SubmitStats(TimeMs(0), Memory(0)))
 
   def getTestingLastResult(details: Seq[ResultEntry]) =
@@ -363,7 +363,7 @@ object Submits {
 
   def dbsub2sub(s: DatabaseSubmitRow): Submit = {
     Submit(SubmitId(s.submit.id.toInt, s.submit.arrived, s.submit.team.id.toInt, s.submit.contest.toInt, RatedProblem(s.submit.problem.id, s.submit.problem.rating), s.submit.ext),
-      s.testingData.map(_.finished).getOrElse(false), s.testingData.map(_.compiled).getOrElse(false),
+      s.testingData.exists(_.finished), s.testingData.exists(_.compiled),
       s.testingData.map(_.passed).getOrElse(0), s.testingData.map(_.taken).getOrElse(0),
       s.testingData.map(_.testingId.toInt))
   }

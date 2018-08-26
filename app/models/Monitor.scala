@@ -126,7 +126,7 @@ object MonitorSchool {
 }
 
 object ACM {
-  case class Status(val problems: Seq[String], val rows: Seq[RankedRow[Score, ACMCell]]) extends AnyStatus {
+  case class Status(problems: Seq[String], rows: Seq[RankedRow[Score, ACMCell]]) extends AnyStatus {
     override def anyRows: Seq[AnyRankedRow] = rows
   }
 

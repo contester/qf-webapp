@@ -66,7 +66,7 @@ object Admin {
     else Try(s.toInt).toOption
 
   private def parseAcl(s: String): Set[Int] =
-    s.split(',').map(parseSingleAcl).flatten.toSet
+    s.split(',').flatMap(parseSingleAcl).toSet
 
   private def parseStringAcl(s: String): Set[String] =
     s.split(',').toSet
