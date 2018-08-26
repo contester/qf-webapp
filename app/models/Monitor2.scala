@@ -63,7 +63,9 @@ case class ConcreteRow[ScoreType <: AbstractScore](team: Int, score: ScoreType, 
 
 case class FullMonitor[ScoreType <: AbstractScore](rows: Seq[(ConcreteRow[ScoreType], Option[Int])])
 
-case class SchoolScore(val r: Rational) extends AbstractScore
+case class SchoolScore(r: Rational) extends AbstractScore
+
+case class ACMScore(total: Int, penalty: Int) extends AbstractScore
 
 object SchoolScore {
   implicit val schoolScoreMonoid = new Monoid[SchoolScore] {

@@ -17,6 +17,7 @@ import play.api.mvc._
 import play.api.{Configuration, Logger}
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
+import utils.FormUtil
 import utils.auth.TeamsEnv
 import views.html
 
@@ -108,27 +109,19 @@ class Application (cc: ControllerComponents,
       case (problems, compilers) =>
         val parsed = submitForm.bindFromRequest
 
-        val solutionOpt = request.body.file("file").map { solution =>
-          FileUtils.readFileToByteArray(solution.ref.path.toFile)
-        }
-
         parsed.fold(
           formWithErrors => {
             Future.successful(Some(formWithErrors))
           },
           submitData => {
-            if (submitData.inline.isEmpty && solutionOpt.isEmpty) {
+            val solutionBytes = FormUtil.inlineOrFile(submitData.inline, request.body.file("file")).getOrElse(FormUtil.emptyBytes)
+            if (solutionBytes.isEmpty) {
               Future.successful(Some(parsed.withGlobalError("No solution")))
-            } else
-            if (!request.identity.contest.running) {
+            } else if (!request.identity.contest.running) {
               Future.successful(Some(parsed.withGlobalError("Contest is not running")))
             } else {
-              val df = if (!submitData.inline.isEmpty)
-                submitData.inline.getBytes(StandardCharsets.UTF_8)
-              else solutionOpt.getOrElse(submitData.inline.getBytes(StandardCharsets.UTF_8))
-
               db.run(submitInsertQuery(request.identity.contest.id, request.identity.team.localId, submitData.problem,
-                submitData.compiler, df, request.remoteAddress)).map { wat =>
+                submitData.compiler, solutionBytes, request.remoteAddress)).map { wat =>
                 Logger.info(s"Inserted submit id: $wat")
                 rabbitMq ! Message.queue(SubmitMessage(wat.head.toInt), queue = "contester.submitrequests")
 
