@@ -15,7 +15,7 @@ object GridfsTools {
   def getFile(ws: WSClient, name: String, sizeLimit: Long)(implicit ec: ExecutionContext): Future[Option[GridfsContent]] = {
     import scala.concurrent.duration._
     ws.url(name).withRequestTimeout(1.seconds)
-      .withHeaders("X-Fs-Limit" -> sizeLimit.toString).get()
+      .withHttpHeaders("X-Fs-Limit" -> sizeLimit.toString).get()
       .map { resp =>
         resp.status match {
         case 200 =>

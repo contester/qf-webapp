@@ -133,9 +133,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
           SlickModel.clrSeen2.result
       )
 
-    f.failed.foreach {
-      case e => Logger.error("loading status actor:", e)
-    }
+    f.failed.foreach(e => Logger.error("loading status actor:", e))
 
     f.map {
       case (((msgs, clst), clrs), seen2) =>

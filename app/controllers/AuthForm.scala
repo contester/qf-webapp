@@ -64,9 +64,9 @@ class AuthForms (cc: ControllerComponents,
       user => credentialsProvider.authenticate(Credentials(user.username, user.password)).flatMap {
         loginInfo: LoginInfo =>
           teamsService.retrieve(loginInfo).flatMap {
-            case Some(user) => authenticatorService.create(loginInfo).flatMap {
+            case Some(vuser) => authenticatorService.create(loginInfo).flatMap {
               authenticator => {
-                eventBus.publish(LoginEvent(user, request))
+                eventBus.publish(LoginEvent(vuser, request))
                 authenticatorService.init(authenticator).flatMap { v =>
                   authenticatorService.embed(v, Redirect(routes.Application.index))
                 }
@@ -102,9 +102,9 @@ class AdminAuthForms (cc: ControllerComponents,
       user => credentialsProvider.authenticate(Credentials(user.username, user.password)).flatMap {
         loginInfo: LoginInfo =>
           adminService.retrieve(loginInfo).flatMap {
-            case Some(user) => authenticatorService.create(loginInfo).flatMap {
+            case Some(vuser) => authenticatorService.create(loginInfo).flatMap {
               authenticator => {
-                eventBus.publish(LoginEvent(user, request))
+                eventBus.publish(LoginEvent(vuser, request))
                 authenticatorService.init(authenticator).flatMap { v =>
                   authenticatorService.embed(v, Redirect(routes.AdminApplication.index))
                 }

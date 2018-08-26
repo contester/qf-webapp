@@ -118,9 +118,7 @@ object Users {
     LoggedInTeam(x.username, x.contest, x.team, Seq())
 
   def authQuery(username: String, password: String) =
-    SlickModel.joinedLoginQuery.filter {
-      case  a => (a.username === username) && (a.password === password)
-    }.result
+    SlickModel.joinedLoginQuery.filter(a => (a.username === username) && (a.password === password)).result
 
   def authenticate(db: JdbcBackend#DatabaseDef, username: String, password: String)(implicit ec: ExecutionContext): Future[Option[LoggedInTeam]] =
     db.run(authQuery(username, password)).map(_.headOption.map(toLoginInfo))
