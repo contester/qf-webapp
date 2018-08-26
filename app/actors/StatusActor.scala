@@ -138,9 +138,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     f.map {
       case (((msgs, clst), clrs), seen2) =>
         val clst2 = clst.groupBy(_._1).mapValues(x => x.map(_._2))
-        val sis = StatusActorInitialState(msgs, clst2, ClarificationsInitialState(clrs, seen2))
-        Logger.info(s"sis: $sis")
-        sis
+        StatusActorInitialState(msgs, clst2, ClarificationsInitialState(clrs, seen2))
     }
 
   }
@@ -166,17 +164,14 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
   override def receive = {
     case Init => {
-      Logger.info("LOADING STATUS ACTOR")
       loadAll.foreach { sis =>
         self ! sis
       }
     }
 
     case StatusActorInitialState(msgs, clrs, cls) => {
-      Logger.info(s"STATUS ACTOR initial state received")
       clrs.foreach {
         case (contest, pending) => {
-          Logger.info(s"initialState: $contest, $pending")
           val pendingSet = mutable.Set[Int](pending:_*)
           pendingClarificationRequests.put(contest, pendingSet).foreach { old =>
             if (old != pendingSet) {
@@ -301,7 +296,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     }
 
     case Tick => {
-      Logger.info(s"Tick!")
       db.run(Contests.getContests).map { contests =>
         self ! NewMultiContestState(contests)
       }
