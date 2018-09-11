@@ -48,11 +48,8 @@ case class Extrainfo(contest: Int, num: Int, heading: String, data: String)
 
 class TeamsProvider(dbConfig: DatabaseConfig[JdbcProfile]) extends Provider {
   override def id: String = "team"
-  def authenticate(credentials: Credentials)(implicit ec: ExecutionContext): Future[LoginInfo] = {
-    Users.authenticate(dbConfig.db, credentials.identifier, credentials.password).map {
-      case Some(v) => LoginInfo(id, v.username)
-      case None => throw new InvalidPasswordException("foo")
-    }
+  def authenticate(credentials: Credentials)(implicit ec: ExecutionContext): Future[Option[LoginInfo]] = {
+    Users.authenticate(dbConfig.db, credentials.identifier, credentials.password).map(_.map(v => LoginInfo(id, v.username)))
   }
 }
 

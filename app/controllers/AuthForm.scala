@@ -62,19 +62,22 @@ class AuthForms (cc: ControllerComponents,
     AuthData.form.bindFromRequest.fold(
       formWithErrors => Future.successful(BadRequest(html.login(formWithErrors))),
       user => credentialsProvider.authenticate(Credentials(user.username, user.password)).flatMap {
-        loginInfo: LoginInfo =>
-          teamsService.retrieve(loginInfo).flatMap {
-            case Some(vuser) => authenticatorService.create(loginInfo).flatMap {
-              authenticator => {
-                eventBus.publish(LoginEvent(vuser, request))
-                authenticatorService.init(authenticator).flatMap { v =>
-                  authenticatorService.embed(v, Redirect(routes.Application.index))
-                }
+        case Some(loginInfo) => teamsService.retrieve(loginInfo).flatMap {
+          case Some(vuser) => authenticatorService.create(loginInfo).flatMap {
+            authenticator => {
+              eventBus.publish(LoginEvent(vuser, request))
+              authenticatorService.init(authenticator).flatMap { v =>
+                authenticatorService.embed(v, Redirect(routes.Application.index)).map(Some(_))
               }
             }
-            case None => Future.successful(BadRequest(html.login(AuthData.form.fill(AuthData(user.username, ""))
-              .withGlobalError("Неверное имя пользователя или пароль"))))
           }
+          case None => Future.successful(None)
+        }
+        case None => Future.successful(None)
+      }.map {
+        case Some(v) => v
+        case None => BadRequest(html.login(AuthData.form.fill(AuthData(user.username, ""))
+          .withGlobalError("Неверное имя пользователя или пароль")))
       }
     )
   }
