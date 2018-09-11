@@ -114,7 +114,7 @@ class MyComponents(context: ApplicationLoader.Context)
   lazy val rabbitModel = wire[RabbitMqModel]
   lazy val statusActorModel = wire[StatusActorModel]
 
-  lazy val subscriptionsModel = wire[SubscriptionsModel]
+  val subscriptionsModel = wire[SubscriptionsModel]
 
   lazy val homeController = wire[_root_.controllers.Application]
   lazy val qAndAController = wire[_root_.controllers.QandA]

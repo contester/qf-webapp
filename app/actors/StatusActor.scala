@@ -78,7 +78,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     Json.stringify(Json.fromJson[JsObject](msg2.data).get + ("msgid" -> JsNumber(msg2.id.getOrElse(0).toInt)))
   }
 
-
   @throws[Exception](classOf[Exception])
   override def preStart(): Unit = {
     super.preStart()
@@ -111,7 +110,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
   }
   private val clarificationsSeen = {
     import com.github.nscala_time.time.Imports._
-
     mutable.Map[(Int, Int), DateTime]()
   }
 
