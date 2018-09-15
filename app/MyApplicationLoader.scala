@@ -10,7 +10,6 @@ import info.faljse.SDNotify.SDNotify
 import models._
 import play.api._
 import play.api.db.slick.{DbName, SlickComponents}
-import play.api.i18n.MessagesApi
 import play.api.libs.ws.ahc.AhcWSComponents
 import play.api.mvc.{BodyParsers, DefaultSessionCookieBaker}
 import play.api.routing.Router

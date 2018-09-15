@@ -142,13 +142,13 @@ class AdminsServiceImpl(dbConfig: DatabaseConfig[JdbcProfile])(implicit val ec: 
     }
 }
 
-class AdminsProvider(dbConfig: DatabaseConfig[JdbcProfile]) extends Provider {
+class AdminsProvider(dbConfig: DatabaseConfig[JdbcProfile]) extends OneUserProvider {
   override def id: String = "admin"
-  def authenticate(credentials: Credentials)(implicit ec: ExecutionContext): Future[LoginInfo] = {
+  def authenticate(credentials: Credentials)(implicit ec: ExecutionContext): Future[Option[LoginInfo]] = {
     val pw = Hasher.getSha1(credentials.password)
     Admin.query(dbConfig.db, credentials.identifier, pw).map {
-      case Some(v) => LoginInfo(id, AdminId(v.username, pw).toString)
-      case None => throw new InvalidPasswordException("foo")
+      case Some(v) => Some(LoginInfo(id, AdminId(v.username, pw).toString))
+      case None => None
     }
   }
 }

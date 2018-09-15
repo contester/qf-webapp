@@ -46,7 +46,11 @@ case class LoggedInTeam(username: String, contest: Contest, team: LocalTeam, ein
 
 case class Extrainfo(contest: Int, num: Int, heading: String, data: String)
 
-class TeamsProvider(dbConfig: DatabaseConfig[JdbcProfile]) extends Provider {
+trait OneUserProvider extends Provider {
+  def authenticate(credentials: Credentials)(implicit ec: ExecutionContext): Future[Option[LoginInfo]]
+}
+
+class TeamsProvider(dbConfig: DatabaseConfig[JdbcProfile]) extends OneUserProvider {
   override def id: String = "team"
   def authenticate(credentials: Credentials)(implicit ec: ExecutionContext): Future[Option[LoginInfo]] = {
     Users.authenticate(dbConfig.db, credentials.identifier, credentials.password).map(_.map(v => LoginInfo(id, v.username)))

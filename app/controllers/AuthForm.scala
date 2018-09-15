@@ -8,8 +8,10 @@ import play.api.data.Form
 import play.api.data.Forms._
 import play.api.i18n.I18nSupport
 import play.api.mvc._
-import utils.auth.{AdminEnv, TeamsEnv}
+import play.twirl.api.HtmlFormat
+import utils.auth.{AdminEnv, BaseEnv, TeamsEnv}
 import views.html
+import views.html.login
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -39,6 +41,56 @@ object AuthData {
   val form = Form {
     mapping("username" -> text, "password" -> text)(AuthData.apply)(AuthData.unapply)
   }
+}
+
+trait CommonAuthForms[E <: BaseEnv, P <: OneUserProvider] {
+  this: AbstractController with I18nSupport =>
+
+  def silhouette: Silhouette[E]
+  def credentialsProvider: P
+
+  private def authenticatorService = silhouette.env.authenticatorService
+  private def eventBus = silhouette.env.eventBus
+  private def teamsService = silhouette.env.identityService
+
+  def loginForm(f: Form[AuthData])(implicit request: RequestHeader): HtmlFormat.Appendable
+  def loginRoute: Call
+  def indexRoute: Call
+  implicit def ec: ExecutionContext
+
+  def login = silhouette.UnsecuredAction { implicit request =>
+    Ok(loginForm(AuthData.form))
+  }
+
+  def logout = silhouette.SecuredAction.async { implicit request =>
+    eventBus.publish(LogoutEvent(request.identity, request))
+    authenticatorService.discard(request.authenticator, Redirect(loginRoute))
+  }
+
+  def authenticate = silhouette.UnsecuredAction.async { implicit request =>
+    AuthData.form.bindFromRequest.fold(
+      formWithErrors => Future.successful(BadRequest(loginForm(formWithErrors))),
+      user => credentialsProvider.authenticate(Credentials(user.username, user.password)).flatMap {
+        case Some(loginInfo) => teamsService.retrieve(loginInfo).flatMap {
+          case Some(vuser) => authenticatorService.create(loginInfo).flatMap {
+            authenticator => {
+              eventBus.publish(LoginEvent(vuser, request))
+              authenticatorService.init(authenticator).flatMap { v =>
+                authenticatorService.embed(v, Redirect(indexRoute)).map(Some(_))
+              }
+            }
+          }
+          case None => Future.successful(None)
+        }
+        case None => Future.successful(None)
+      }.map {
+        case Some(v) => v
+        case None => BadRequest(loginForm(AuthData.form.fill(AuthData(user.username, ""))
+          .withGlobalError("Неверное имя пользователя или пароль")))
+      }
+    )
+  }
+
 }
 
 // TODO: fix this copy&paste
@@ -84,39 +136,13 @@ class AuthForms (cc: ControllerComponents,
 }
 
 class AdminAuthForms (cc: ControllerComponents,
-                 silhouette: Silhouette[AdminEnv],
-                 credentialsProvider: AdminsProvider)(implicit ec: ExecutionContext) extends AbstractController(cc) with I18nSupport {
-  private def authenticatorService = silhouette.env.authenticatorService
-  private def eventBus = silhouette.env.eventBus
-  private def adminService = silhouette.env.identityService
+                      val silhouette: Silhouette[AdminEnv],
+                      val credentialsProvider: AdminsProvider)(implicit val ec: ExecutionContext) extends AbstractController(cc) with I18nSupport with CommonAuthForms[AdminEnv, AdminsProvider] {
 
-  def login = silhouette.UnsecuredAction { implicit request =>
-    Ok(html.admin.login(AuthData.form))
-  }
 
-  def logout = silhouette.SecuredAction.async { implicit request =>
-    eventBus.publish(LogoutEvent(request.identity, request))
-    authenticatorService.discard(request.authenticator, Redirect(routes.AdminAuthForms.login))
-  }
+  override def loginForm(f: Form[AuthData])(implicit request: RequestHeader): HtmlFormat.Appendable = html.admin.login(f)
 
-  def authenticate = silhouette.UnsecuredAction.async { implicit request =>
-    AuthData.form.bindFromRequest.fold(
-      formWithErrors => Future.successful(BadRequest(html.login(formWithErrors))),
-      user => credentialsProvider.authenticate(Credentials(user.username, user.password)).flatMap {
-        loginInfo: LoginInfo =>
-          adminService.retrieve(loginInfo).flatMap {
-            case Some(vuser) => authenticatorService.create(loginInfo).flatMap {
-              authenticator => {
-                eventBus.publish(LoginEvent(vuser, request))
-                authenticatorService.init(authenticator).flatMap { v =>
-                  authenticatorService.embed(v, Redirect(routes.AdminApplication.index))
-                }
-              }
-            }
-            case None => Future.successful(BadRequest(html.login(AuthData.form.fill(AuthData(user.username, ""))
-              .withGlobalError("Неверное имя пользователя или пароль"))))
-          }
-      }
-    )
-  }
+  override def loginRoute: Call = routes.AdminAuthForms.login
+
+  override def indexRoute: Call = routes.AdminApplication.index
 }
