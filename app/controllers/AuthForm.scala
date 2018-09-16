@@ -95,44 +95,13 @@ trait CommonAuthForms[E <: BaseEnv, P <: OneUserProvider] {
 
 // TODO: fix this copy&paste
 class AuthForms (cc: ControllerComponents,
-                           silhouette: Silhouette[TeamsEnv],
-                           credentialsProvider: TeamsProvider)(implicit ec: ExecutionContext) extends AbstractController(cc) with I18nSupport {
-  private def authenticatorService = silhouette.env.authenticatorService
-  private def eventBus = silhouette.env.eventBus
-  private def teamsService = silhouette.env.identityService
+                 val silhouette: Silhouette[TeamsEnv],
+                 val credentialsProvider: TeamsProvider)(implicit val ec: ExecutionContext) extends AbstractController(cc) with I18nSupport with CommonAuthForms[TeamsEnv, TeamsProvider] {
+  override def loginForm(f: Form[AuthData])(implicit request: RequestHeader): HtmlFormat.Appendable = html.login(f)
 
-  def login = silhouette.UnsecuredAction { implicit request =>
-    Ok(html.login(AuthData.form))
-  }
+  override def loginRoute: Call = routes.AuthForms.login
 
-  def logout = silhouette.SecuredAction.async { implicit request =>
-    eventBus.publish(LogoutEvent(request.identity, request))
-    authenticatorService.discard(request.authenticator, Redirect(routes.AuthForms.login))
-  }
-
-  def authenticate = silhouette.UnsecuredAction.async { implicit request =>
-    AuthData.form.bindFromRequest.fold(
-      formWithErrors => Future.successful(BadRequest(html.login(formWithErrors))),
-      user => credentialsProvider.authenticate(Credentials(user.username, user.password)).flatMap {
-        case Some(loginInfo) => teamsService.retrieve(loginInfo).flatMap {
-          case Some(vuser) => authenticatorService.create(loginInfo).flatMap {
-            authenticator => {
-              eventBus.publish(LoginEvent(vuser, request))
-              authenticatorService.init(authenticator).flatMap { v =>
-                authenticatorService.embed(v, Redirect(routes.Application.index)).map(Some(_))
-              }
-            }
-          }
-          case None => Future.successful(None)
-        }
-        case None => Future.successful(None)
-      }.map {
-        case Some(v) => v
-        case None => BadRequest(html.login(AuthData.form.fill(AuthData(user.username, ""))
-          .withGlobalError("Неверное имя пользователя или пароль")))
-      }
-    )
-  }
+  override def indexRoute: Call = routes.Application.index
 }
 
 class AdminAuthForms (cc: ControllerComponents,
