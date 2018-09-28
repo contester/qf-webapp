@@ -231,6 +231,14 @@ class AdminApplication (cc: ControllerComponents,
     }
   }
 
+  def downloadArchiveSubmit(contestId: Int, submitId: Int) = silhouette.SecuredAction(canSeeSubmit(submitId)).async { implicit request =>
+    Submits.getSubmitById(db, submitId).flatMap {
+      case Some(submit) => Future.successful(NotFound)
+      case None =>
+        Future.successful(NotFound)
+    }
+  }
+
   def reprintSubmit(submitId: Int) = silhouette.SecuredAction(canRejudgeSubmit(submitId)).async { implicit request =>
     rabbitMq ! Message.queue(SubmitTicketLite(SubmitIdLite(submitId)), queue = "contester.tickets")
     Future.successful(Ok("ok"))
