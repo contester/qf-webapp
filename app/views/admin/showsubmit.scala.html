@@ -40,6 +40,7 @@
             <p>По часам: @{arrived.timestamp}, по контесту: @arrived.asString,
                 @if(arrived.afterFreeze){после}else{до} заморозки</p>
         }
+    <a href="@routes.AdminApplication.downloadArchiveSubmit(subId.contestId, subId.id)">Download</a>
     }
 }
 

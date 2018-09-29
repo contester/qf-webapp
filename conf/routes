@@ -59,6 +59,7 @@ POST /admin/postAnswer/:clrId controllers.AdminApplication.postAnswer(clrId: Int
 GET /admin/postAnswer/:clrId controllers.AdminApplication.postAnswerForm(clrId: Int)
 
 GET /admin/showsubmit/:contestId/:id controllers.AdminApplication.showSubmit(contestId: Int, id: Int)
+GET /admin/downloadSubmit/:contestId/:id controllers.AdminApplication.downloadArchiveSubmit(contestId: Int, id: Int)
 
 GET /admin/login controllers.AdminAuthForms.login
 POST /admin/login controllers.AdminAuthForms.authenticate
