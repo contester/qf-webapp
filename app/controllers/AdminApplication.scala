@@ -223,25 +223,20 @@ class AdminApplication (cc: ControllerComponents,
     }
 
   def showSubmit(contestId: Int, submitId: Int) = silhouette.SecuredAction(canSeeSubmit(submitId)).async { implicit request =>
-    Submits.getSubmitById(db, submitId).flatMap {
-      case Some(submit) =>
-        submit.fsub.submit.testingId.map { testingId =>
-          db.run(sql"select ID, Submit, Start, Finish, ProblemID from Testings where ID = $testingId".as[Testing])
-            .map(_.headOption)
-        }.getOrElse(Future.successful(None)).flatMap { testingOpt =>
+    getSubmitAndTesting(submitId).flatMap {
+      case Some((submit, testingOpt)) =>
           testingOpt.flatMap { testing =>
             testing.problemId.map { problemId =>
               val phandle = PolygonURL(problemId)
               Outputs.getAllAssets(ws, fileserverUrl, shortn, submit.fsub.submit.submitId.id, testing.id, submit.fsub.details.map(_.test), phandle)
             }
-          }.getOrElse(Future.successful(Map[Int, ResultAssets]()))
-        }.zip(
+          }.getOrElse(Future.successful(Map[Int, ResultAssets]())).zip(
           getSelectedContests(contestId, request.identity)).map {
           case (outputs, contest) =>
             Ok(html.admin.showsubmit(submit, contest, outputs))
         }
       case None =>
-        Future.successful(Redirect(routes.AdminApplication.submits(contestId)))
+        Future.successful(NotFound)
     }
   }
 
