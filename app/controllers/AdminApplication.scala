@@ -208,6 +208,20 @@ class AdminApplication (cc: ControllerComponents,
     }
   }
 
+  private def getTestingByID(testingID: Int) =
+    db.run(sql"select ID, Submit, Start, Finish, ProblemID from Testings where ID = $testingID".as[Testing])
+      .map(_.headOption)
+
+  private def getSubmitAndTesting(submitId: Int) =
+    Submits.getSubmitById(db, submitId).flatMap {
+      case Some(submit) =>
+        submit.fsub.submit.testingId.map(x => getTestingByID(x))
+          .getOrElse(Future.successful(None)).map { testing =>
+          Some((submit, testing))
+        }
+      case None => Future.successful(None)
+    }
+
   def showSubmit(contestId: Int, submitId: Int) = silhouette.SecuredAction(canSeeSubmit(submitId)).async { implicit request =>
     Submits.getSubmitById(db, submitId).flatMap {
       case Some(submit) =>
@@ -232,24 +246,18 @@ class AdminApplication (cc: ControllerComponents,
   }
 
   def downloadArchiveSubmit(contestId: Int, submitId: Int) = silhouette.SecuredAction(canSeeSubmit(submitId)).async { implicit request =>
-    Submits.getSubmitById(db, submitId).flatMap {
-      case Some(submit) =>
-        submit.fsub.submit.testingId.map { testingId =>
-          db.run(sql"select ID, Submit, Start, Finish, ProblemID from Testings where ID = $testingId".as[Testing])
-            .map(_.headOption)
-        }.getOrElse(Future.successful(None)).flatMap { testingOpt =>
-          testingOpt.flatMap { testing =>
-            testing.problemId.map { problemId =>
-              val phandle = PolygonURL(problemId)
-              val pprefix = phandle.prefix.stripPrefix("problem/")
-              val downloadLoc = s"/fs2/?contest=$shortn&submit=${submit.fsub.submit.submitId.id}&testing=${testing.id}&problem=${pprefix}"
-              Logger.trace(s"download: $downloadLoc")
-              Future.successful(Ok("download").as("application/zip").withHeaders("X-Accel-Redirect" -> downloadLoc))
-            }
-          }.getOrElse(Future.successful(NotFound))
+    getSubmitAndTesting(submitId).map {
+      case Some((submit, testingOpt)) =>
+        testingOpt.flatMap { testing =>
+          testing.problemId.map { problemId =>
+            val phandle = PolygonURL(problemId)
+            val pprefix = phandle.prefix.stripPrefix("problem/")
+            val downloadLoc = s"/fs2/?contest=$shortn&submit=${submit.fsub.submit.submitId.id}&testing=${testing.id}&problem=${pprefix}"
+            Logger.trace(s"download: $downloadLoc")
+            Ok("download").as("application/zip").withHeaders("X-Accel-Redirect" -> downloadLoc)
+          }
         }
-      case None =>
-        Future.successful(NotFound)
+      case None => NotFound
     }
   }
 
