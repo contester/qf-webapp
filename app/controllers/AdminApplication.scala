@@ -256,7 +256,7 @@ class AdminApplication (cc: ControllerComponents,
             Logger.trace(s"download: $downloadLoc")
             Ok("download").as("application/zip").withHeaders("X-Accel-Redirect" -> downloadLoc)
           }
-        }
+        }.getOrElse(NotFound)
       case None => NotFound
     }
   }
