@@ -156,7 +156,12 @@ class Application (cc: ControllerComponents,
     Submits.getSubmitById(db, submitId).map(x => Ok(html.showsubmit(request.identity, x)))
   }
 
-  def feed(contestId: Int, teamId: Int) = silhouette.SecuredAction.async { implicit request =>
+  private case class canSeeFeed(contestId: Int, teamId: Int) extends Authorization[LoggedInTeam, SessionAuthenticator] {
+    override def isAuthorized[B](identity: LoggedInTeam, authenticator: SessionAuthenticator)(implicit request: Request[B]): Future[Boolean] =
+      Future.successful(identity.contest.id == contestId && identity.team.teamId == teamId)
+  }
+
+  def feed(contestId: Int, teamId: Int) = silhouette.SecuredAction(canSeeFeed(contestId, teamId)).async { implicit request =>
     import akka.pattern.ask
 
     import scala.concurrent.duration._
