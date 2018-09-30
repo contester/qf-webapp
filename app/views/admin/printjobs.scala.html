@@ -1,0 +1,30 @@
+@(jobs: Seq[AdminPrintJob], contest: SelectedContest, admin: Admin)(implicit request: RequestHeader)
+
+@adminmain(tab = "print", contest=contest) {
+
+<div class="panel panel-success">
+    <div class="panel-heading"><h3 class="panel-title">Print jobs</h3></div>
+    <div class="panel-body">
+
+        <table id="printjobs" class="table table-hover table-bordered table-responsive">
+            <thead>
+            <tr><th>ID</th><th>Computer</th><th>Team</th><th>Filename</th>
+                <th>Arrived</th><th>Printed</th></tr>
+            </thead>
+            <tbody>
+            @for(s <- jobs) {
+            <tr id="@s.id" @if(s.printed){ class="success" }>
+                <th scope="row">@s.id</th>
+                <td>@s.computerName</td>
+                <td>@s.team.teamFullName</td>
+                <td>@s.filename</td>
+                <td>@s.arrived</td>
+                <td>@s.printed</td>
+            </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+}

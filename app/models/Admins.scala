@@ -131,6 +131,7 @@ object AdminNavlinkMatch {
       case "qanda" => routes.AdminApplication.showQandA(_)
       case "rejudge" => routes.AdminApplication.rejudgePage(_)
       case "tasks" => routes.AdminApplication.tasks(_)
+      case "print" => routes.AdminApplication.printJobs(_)
       case _ => routes.AdminApplication.submits(_)
     }
 }

@@ -22,7 +22,7 @@ import play.api.libs.json.Json
 import play.api.libs.ws.WSClient
 import play.api.mvc._
 import slick.basic.DatabaseConfig
-import slick.jdbc.JdbcProfile
+import slick.jdbc.{GetResult, JdbcProfile}
 import utils.auth.{AdminEnv, TeamsEnv}
 import utils.{Ask, PolygonURL}
 import views.html
@@ -35,6 +35,10 @@ case class PostClarification(problem: String, text: String, hidden: Boolean)
 case class ClarificationResponse(answer: String)
 
 case class PostWaiterTask(message: String, rooms: String)
+
+case class AdminDBPrintJob(id: Int, contestID: Int, teamID: Int, filename: String, arrived: DateTime, printed: Boolean, computerName: String)
+
+case class AdminPrintJob(id: Int, contestID: Int, team: Team, filename: String, arrived: DateTime, printed: Boolean, computerName: String)
 
 case class SubmitIdLite(id: Int)
 object SubmitIdLite {
@@ -451,4 +455,33 @@ class AdminApplication (cc: ControllerComponents,
     statusActorModel.waiterActor ! WaiterActor.DeleteTask(id)
     Future.successful(Ok("ok"))
   }
+
+  implicit val getAdminPrintJob = GetResult(r =>
+    AdminDBPrintJob(r.nextInt(), r.nextInt(), r.nextInt(), r.nextString(), new DateTime(r.nextTimestamp()), r.nextIntOption().getOrElse(0) == 255, r.nextString())
+  )
+
+  private def getPrintJobs(contestID: Int) =
+    db.run(
+      sql"""select PrintJobs.ID, Contest, Team, Filename, Arrived, Printed, CompLocations.Name from PrintJobs, CompLocations
+           where PrintJobs.Computer = CompLocations.ID and Contest = $contestID
+           order by Arrived desc""".as[AdminDBPrintJob])
+    .zip(monitorModel.teamClient.getTeams(contestID)).map {
+      case (jobs, teams) =>
+        jobs.flatMap { src =>
+          teams.get(src.teamID).map { team =>
+            AdminPrintJob(src.id, src.contestID, team, src.filename, src.arrived, src.printed, src.computerName)
+          }
+        }
+    }
+
+  def printJobs(contestID: Int)= silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
+    getSelectedContests(contestID, request.identity)
+      .zip(getPrintJobs(contestID))
+      .map {
+        case (contest, jobs) =>
+          Ok(html.admin.printjobs(jobs, contest, request.identity))
+      }
+
+  }
+
 }
