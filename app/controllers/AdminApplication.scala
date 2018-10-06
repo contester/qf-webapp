@@ -484,4 +484,9 @@ class AdminApplication (cc: ControllerComponents,
 
   }
 
+  def reprintJob(printJobID: Long) = silhouette.SecuredAction.async { implicit request =>
+    rabbitMq ! Message.queue(printing.PrintJobID(printJobID), queue = "contester.printrequests")
+    Future.successful(Ok("ok"))
+  }
+
 }

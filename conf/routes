@@ -77,4 +77,8 @@ POST /admin/unackWaiterTask/:id/:room controllers.AdminApplication.unackWaiterTa
 + nocsrf
 POST /admin/deleteWaiterTask/:id controllers.AdminApplication.deleteWaiterTask(id: Long)
 
++ nocsrf
+POST /admin/reprintPrintJob/:id controllers.AdminApplication.reprintJob(id: Long)
+
 GET     /assets/*file               controllers.Assets.versioned(path="/public", file: Asset)
+
