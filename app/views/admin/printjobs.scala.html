@@ -8,13 +8,23 @@
 
         <table id="printjobs" class="table table-hover table-bordered table-responsive">
             <thead>
-            <tr><th>ID</th><th>Computer</th><th>Team</th><th>Filename</th>
+            <tr><th>ID</th><th></th><th>Computer</th><th>Team</th><th>Filename</th>
                 <th>Arrived</th><th>Printed</th></tr>
             </thead>
             <tbody>
             @for(s <- jobs) {
             <tr id="@s.id" @if(s.printed){ class="success" }>
                 <th scope="row">@s.id</th>
+                <td>
+                <div class="btn-group btn-nomargin">
+                    <a href="javascript:void(0)" class="btn btn-primary btn-xs btn-nomargin dropdown-toggle" data-toggle="dropdown" id="printJob-@{s.id}">
+                        <span class="caret"></span>
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a href="javascript:void(0)" onclick="btn('@controllers.routes.AdminApplication.reprintJob(s.id)', 'printjob-@{s.id}')">Reprint</a></li>
+                    </ul>
+                </div>
+                </td>
                 <td>@s.computerName</td>
                 <td>@s.team.teamFullName</td>
                 <td>@s.filename</td>
