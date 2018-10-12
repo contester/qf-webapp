@@ -120,7 +120,9 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
   private def pushPersistent(contest: Int, team: Int, kind: String, data: JsValue) =
     db.run(
-      (SlickModel.messages2 returning SlickModel.messages2.map(_.id) into ((user, id) => user.copy(id=Some(id)))) += Message2(None, contest, team, kind, data, seen = false))
+      (SlickModel.messages2 returning SlickModel.messages2.map(_.id) into ((user, id) => user.copy(id=Some(id)))) += Message2(None, contest, team, kind, data, seen = false)).foreach { m2 =>
+      self ! m2
+    }
 
   private def loadAll() = {
     val f =
@@ -317,6 +319,8 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
       val stored = getUnacked(contest, team).map {
         case (msgid, msg) => msg
       }
+
+      Logger.info(s"Unacked: $unacked")
 
       import com.github.nscala_time.time.Imports._
 
