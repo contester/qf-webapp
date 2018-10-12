@@ -313,7 +313,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     }
 
     case JoinUser(contest: Int, team: Int) => {
-      Logging.info(s"Join user: $contest, $team")
+      Logger.info(s"Join user: $contest, $team")
       val stored = getUnacked(contest, team).map {
         case (msgid, msg) => msg
       }
@@ -335,7 +335,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
         case None => false
       }
 
-      Logging.info(s"unseen: $unseen")
+      Logger.info(s"unseen: $unseen")
 
       val allSources = Source.combine(
         contestStreamSource(contest) via EventSource.flow,
