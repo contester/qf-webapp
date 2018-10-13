@@ -154,7 +154,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
   private def insertClarification(cl: Clarification) =
     for (id <- cl.id) {
-      Logger.info(s"inserting clarification $cl")
       clarifications.getOrElseUpdate(cl.contest, mutable.Map[Int, Clarification]()).put(id, cl)
     }
 
@@ -317,12 +316,9 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     }
 
     case JoinUser(contest: Int, team: Int) => {
-      Logger.info(s"Join user: $contest, $team")
       val stored = getUnacked(contest, team).map {
         case (msgid, msg) => msg
       }
-
-      Logger.info(s"Unacked: $unacked")
 
       import com.github.nscala_time.time.Imports._
 
@@ -340,8 +336,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
         }
         case None => false
       }
-
-      Logger.info(s"unseen: $unseen")
 
       val allSources = Source.combine(
         contestStreamSource(contest) via EventSource.flow,
