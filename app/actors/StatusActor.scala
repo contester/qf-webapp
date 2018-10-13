@@ -154,6 +154,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
   private def insertClarification(cl: Clarification) =
     for (id <- cl.id) {
+      Logger.info(s"inserting clarification $cl")
       clarifications.getOrElseUpdate(cl.contest, mutable.Map[Int, Clarification]()).put(id, cl)
     }
 
@@ -218,6 +219,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
         val prevVisible = orig.exists(!_.hidden)
         val next = opt.getOrElse(cl)
         val ifp = if(cl.problem.isEmpty) None else Some(cl.problem)
+        insertClarification(next)
         if (!next.hidden)
           clrPostChannel.offer(ClarificationPosted(next.id.get, next.contest, prevVisible, ifp, next.text))
         next
