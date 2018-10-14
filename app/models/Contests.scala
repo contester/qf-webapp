@@ -10,8 +10,8 @@ import utils.Selectable
 
 import scala.concurrent.Future
 
-case class Contest(id: Int, name: String, schoolMode: Boolean, startTime: DateTime, endTime: DateTime,
-                   freezeTime: DateTime, exposeTime: DateTime, printTickets: Boolean, paused: Boolean,
+case class Contest(id: Int, name: String, schoolMode: Boolean, startTime: DateTime, freezeTime: DateTime,
+                   endTime: DateTime, exposeTime: DateTime, printTickets: Boolean, paused: Boolean,
                    polygonID: String, language: String) {
   def frozen = (DateTime.now >= freezeTime) && (DateTime.now < exposeTime)
   def finished = DateTime.now >= endTime
