@@ -30,17 +30,17 @@ case class SubmitStats(timeMs: TimeMs, memory: Memory, timeLimitExceeded: Boolea
 case object SubmitWaiting extends SubmitResult {
   override val success: Boolean = false
 
-  override val message: String = "Выполняется"
+  override val message: String = "Running..."
 }
 
 case object SubmitAccepted extends SubmitResult {
   override val success = true
-  override val message = "Полное решение"
+  override val message = "ACCEPTED"
 }
 
 case object SubmitCompileError extends SubmitResult {
   override val success = false
-  override val message = "Ошибка компиляции"
+  override val message = "Compilation error"
 }
 
 case class SubmitPartialResult(passed: Int, taken: Int) extends SubmitResult {
@@ -54,7 +54,7 @@ case class SubmitACMPartialResult(text: String, test: Option[Int]) extends Submi
   override val success = false
 
   override def message =
-    s"${text}${test.map(x => s" на тесте $x").getOrElse("")}"
+    s"${text}${test.map(x => s" on test $x").getOrElse("")}"
 }
 
 object SubmitResult {
@@ -123,16 +123,16 @@ object SubmitResult {
   */
 
   val message = Map(
-    1 -> "Скомпилировалось",
-    2 -> "Ошибка компиляции",
+    1 -> "Compilation successful",
+    2 -> "Compilation error",
     10 -> "Ok",
-    11 -> "Превышен лимит времени",
-    12 -> "Ошибка выполнения",
-    13 -> "Неверный ответ",
-    14 -> "Неверный ответ",
-    15 -> "Превышен лимит памяти",
-    16 -> "Ошибка тестера",
-    21 -> "Отвергнуто"
+    11 -> "Time limit exceeded",
+    12 -> "Runtime error",
+    13 -> "Wrong answer",
+    14 -> "Wrong answer",
+    15 -> "Time limit exceeded",
+    16 -> "Tester error",
+    21 -> "Rejected"
   )
 
   def success(code: Int) =
