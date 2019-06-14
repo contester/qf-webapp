@@ -120,7 +120,9 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
   private def pushPersistent(contest: Int, team: Int, kind: String, data: JsValue) =
     db.run(
-      (SlickModel.messages2 returning SlickModel.messages2.map(_.id) into ((user, id) => user.copy(id=Some(id)))) += Message2(None, contest, team, kind, data, seen = false))
+      (SlickModel.messages2 returning SlickModel.messages2.map(_.id) into ((user, id) => user.copy(id=Some(id)))) += Message2(None, contest, team, kind, data, seen = false)).foreach { m2 =>
+      self ! m2
+    }
 
   private def loadAll() = {
     val f =
@@ -216,6 +218,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
         val prevVisible = orig.exists(!_.hidden)
         val next = opt.getOrElse(cl)
         val ifp = if(cl.problem.isEmpty) None else Some(cl.problem)
+        insertClarification(next)
         if (!next.hidden)
           clrPostChannel.offer(ClarificationPosted(next.id.get, next.contest, prevVisible, ifp, next.text))
         next
