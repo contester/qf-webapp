@@ -1,6 +1,6 @@
 name := "qf"
 
-scalaVersion := "2.12.6"
+scalaVersion := "2.12.8"
 
 organization := "org.stingray.contester"
 
@@ -19,7 +19,7 @@ updateOptions := updateOptions.value.withCachedResolution(true)
 
 val spireVersion = "0.13.0"
 
-val silhouetteVersion = "5.0.5"
+val silhouetteVersion = "5.0.7"
 
 libraryDependencies ++= Seq(
   "com.typesafe.play" %% "play-slick" % "3.0.3",
@@ -29,11 +29,11 @@ libraryDependencies ++= Seq(
   cacheApi,
   ws,
   "org.webjars" %% "webjars-play" % "2.6.3",
-  "org.webjars" % "bootstrap" % "3.3.7-1",
+  "org.webjars" % "bootstrap" % "3.4.1-1",
   "org.webjars" % "font-awesome" % "5.1.0",
   "org.webjars" % "bootstrap-datepicker" % "1.6.4",
-  "org.webjars.npm" % "arrive" % "2.3.1",
-  "org.webjars" % "momentjs" % "2.18.1",
+  "org.webjars.npm" % "arrive" % "2.4.1",
+  "org.webjars" % "momentjs" % "2.24.0",
   "org.webjars" % "bootstrap-material-design" % "0.5.9",
   "org.webjars" % "jquery-validation" % "1.16.0",
   "org.webjars.bower" % "roboto-fontface" % "0.7.0",
@@ -41,10 +41,10 @@ libraryDependencies ++= Seq(
   "org.apache.httpcomponents" % "httpcore" % "4.4.10",
   "org.mariadb.jdbc" % "mariadb-java-client" % "2.2.6",
   "commons-io" % "commons-io" % "2.6",
-  "com.github.nscala-time" %% "nscala-time" % "2.18.0",
+  "com.github.nscala-time" %% "nscala-time" % "2.22.0",
   "com.googlecode.htmlcompressor" % "htmlcompressor" % "1.5.2",
   "rhino" % "js" % "1.7R2",
-  "org.scala-lang.modules" %% "scala-async" % "0.9.7",
+  "org.scala-lang.modules" %% "scala-async" % "0.10.0",
   "com.typesafe.slick" %% "slick" % "3.2.3",
   "com.typesafe.slick" %% "slick-hikaricp" % "3.2.3",
   "org.typelevel" %% "cats" % "0.9.0",
