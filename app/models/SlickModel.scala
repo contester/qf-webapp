@@ -1,7 +1,7 @@
 package models
 
 import com.github.nscala_time.time.Imports._
-import play.api.Logger
+import play.api.{Logger, Logging}
 import play.api.libs.json.JsValue
 import slick.jdbc.JdbcBackend
 
@@ -233,7 +233,7 @@ object SlickModel {
   val newSubmits = TableQuery[NewSubmits]
 }
 
-object ClarificationModel {
+object ClarificationModel extends Logging {
   import slick.jdbc.MySQLProfile.api._
 
   def getClarifications(db: JdbcBackend#DatabaseDef, contestId: Int)(implicit ec: ExecutionContext) =
@@ -246,7 +246,7 @@ object ClarificationModel {
     val f = db.run(SlickModel.clarifications.returning(SlickModel.clarifications.map(_.id)).insertOrUpdate(cl)).map { opt =>
       opt.map(x => cl.copy(id = Some(x)))
     }
-    f.onComplete(x => Logger.info(s"updated $x"))
+    f.onComplete(x => logger.info(s"updated $x"))
     f
   }
 

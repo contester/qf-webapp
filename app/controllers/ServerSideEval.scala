@@ -43,7 +43,7 @@ class ServerSideEval (cc: ControllerComponents,
                              ) extends AbstractController(cc) with I18nSupport {
   private val db = dbConfig.db
   import utils.Db._
-  import dbConfig.driver.api._
+  import dbConfig.profile.api._
   import controllers.serversideeval.ServerSideData
 
   val rabbitMq = rabbitMqModel.rabbitMq

@@ -4,7 +4,7 @@ import akka.actor.{Actor, Props, Stash}
 import akka.stream.scaladsl.{Merge, Source}
 import com.github.nscala_time.time.Imports.DateTime
 import models._
-import play.api.Logger
+import play.api.{Logger, Logging}
 import play.api.libs.EventSource
 import play.api.libs.EventSource.{Event, EventDataExtractor, EventNameExtractor}
 import play.api.libs.json.Json
@@ -92,7 +92,7 @@ object WaiterTaskHeader {
   }
 }
 
-class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
+class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Logging {
   val tasks = mutable.Map[Long, StoredWaiterTask]()
 
   import WaiterActor._
@@ -122,7 +122,7 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
       f.foreach { loaded => self ! Loaded(loaded) }
       f.failed.foreach { x =>
-          Logger.error("failed to load waiter model, reloading", x)
+          logger.error(s"failed to load waiter model, reloading: $x")
           // reload in 5 seconds
           import scala.concurrent.duration._
           import scala.language.postfixOps

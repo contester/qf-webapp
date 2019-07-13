@@ -11,7 +11,7 @@ import com.mohiva.play.silhouette.api.{Authorization, Silhouette}
 import com.mohiva.play.silhouette.impl.authenticators.SessionAuthenticator
 import com.spingo.op_rabbit.Message
 import models._
-import play.api.{Configuration, Logger}
+import play.api.{Configuration, Logger, Logging}
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
@@ -58,7 +58,7 @@ class AdminApplication (cc: ControllerComponents,
                                  rabbitMqModel: RabbitMqModel,
                              statusActorModel: StatusActorModel,
                                   configuration: Configuration,
-                                  ws: WSClient) extends AbstractController(cc)  with I18nSupport{
+                                  ws: WSClient) extends AbstractController(cc)  with I18nSupport with Logging {
 
   private val db = dbConfig.db
   import com.spingo.op_rabbit.PlayJsonSupport._
@@ -252,7 +252,7 @@ class AdminApplication (cc: ControllerComponents,
             val phandle = PolygonURL(problemId)
             val pprefix = phandle.prefix.stripPrefix("problem/")
             val downloadLoc = s"/fs2/?contest=$shortn&submit=${submit.fsub.submit.submitId.id}&testing=${testing.id}&problem=${pprefix}"
-            Logger.trace(s"download: $downloadLoc")
+            logger.trace(s"download: $downloadLoc")
             Ok("download").as("application/zip").withHeaders("X-Accel-Redirect" -> downloadLoc)
           }
         }.getOrElse(NotFound)

@@ -14,7 +14,7 @@ import play.api.http.ContentTypes
 import play.api.i18n.I18nSupport
 import play.api.libs.json._
 import play.api.mvc._
-import play.api.{Configuration, Logger}
+import play.api.{Configuration, Logger, Logging}
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import utils.FormUtil
@@ -38,7 +38,7 @@ class Application (cc: ControllerComponents,
                              monitorModel: Monitor,
                             rabbitMqModel: RabbitMqModel,
                             statusActorModel: StatusActorModel,
-                            configuration: Configuration) extends AbstractController(cc) with I18nSupport{
+                            configuration: Configuration) extends AbstractController(cc) with I18nSupport with Logging {
 
   private val db = dbConfig.db
   import dbConfig.profile.api._
@@ -122,7 +122,7 @@ class Application (cc: ControllerComponents,
             } else {
               db.run(submitInsertQuery(request.identity.contest.id, request.identity.team.localId, submitData.problem,
                 submitData.compiler, solutionBytes, request.remoteAddress)).map { wat =>
-                Logger.info(s"Inserted submit id: $wat")
+                logger.info(s"Inserted submit id: $wat")
                 rabbitMq ! Message.queue(SubmitMessage(wat.head.toInt), queue = "contester.submitrequests")
 
                 None
@@ -139,7 +139,7 @@ class Application (cc: ControllerComponents,
 
   def ackMessage = silhouette.SecuredAction.async { implicit request =>
     request.body.asFormUrlEncoded.flatMap(_.get("msgid")).flatMap(_.headOption).flatMap(x => Try(x.toInt).toOption).foreach { msgid =>
-      Logger.info(s"Acking: $msgid")
+      logger.info(s"Acking: $msgid")
       statusActorModel.statusActor ! StatusActor.Ack(request.identity, msgid)
     }
     Future.successful(Ok("ok"))

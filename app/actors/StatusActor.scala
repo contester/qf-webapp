@@ -6,7 +6,7 @@ import akka.stream.scaladsl.{BroadcastHub, Keep, Merge, Sink, Source}
 import akka.stream.{ActorMaterializer, OverflowStrategy}
 import models.ContesterResults.{CustomTestResult, FinishedTesting}
 import models._
-import play.api.Logger
+import play.api.{Logger, Logging}
 import play.api.libs.EventSource
 import play.api.libs.EventSource.{Event, EventDataExtractor, EventNameExtractor}
 import play.api.libs.json._
@@ -67,7 +67,7 @@ object StatusActor {
                                      clarifications: ClarificationsInitialState)
 }
 
-class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
+class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Logging {
   import StatusActor._
   import context.dispatcher
 
@@ -133,7 +133,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
           SlickModel.clrSeen2.result
       )
 
-    f.failed.foreach(e => Logger.error("loading status actor:", e))
+    f.failed.foreach(e => logger.error(s"loading status actor: $e"))
 
     f.map {
       case (((msgs, clst), clrs), seen2) =>
@@ -250,7 +250,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     }
 
     case finished: FinishedTesting => {
-      Logger.info(s"received finished: $finished")
+      logger.info(s"received finished: $finished")
       SubmitResult.annotateFinished(db, finished).map { annotated =>
         self ! annotated
       }
@@ -270,7 +270,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     }
 
     case annotated: FullyDescribedSubmit => {
-      Logger.info(s"received annotated: $annotated")
+      logger.info(s"received annotated: $annotated")
 
       subChan.offer(annotated)
       val a = AnnoSubmit(annotated.submit.submitId.id, annotated.submit.submitId.contestId,
@@ -352,7 +352,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
 
   @throws[Exception](classOf[Exception])
   override def postStop(): Unit = {
-    Logger.debug(s"Disconnected")
+    logger.debug(s"Disconnected")
     tick.cancel()
     super.postStop()
   }

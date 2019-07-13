@@ -2,7 +2,7 @@ package models
 
 import models.ContesterResults.FinishedTesting
 import models.Submits.{indexGrouped, scoreGrouped}
-import play.api.Logger
+import play.api.{Logger, Logging}
 import play.api.i18n.Messages
 import play.api.libs.EventSource.{EventDataExtractor, EventNameExtractor}
 import play.api.libs.json.{JsValue, Json, Writes}
@@ -57,7 +57,7 @@ case class SubmitACMPartialResult(text: String, test: Option[Int]) extends Submi
     s"${text}${test.map(x => s" on test $x").getOrElse("")}"
 }
 
-object SubmitResult {
+object SubmitResult extends Logging {
   implicit val submitResultWrites = new Writes[SubmitResult] {
     override def writes(o: SubmitResult): JsValue = Json.obj(
       "success" -> o.success,
@@ -91,18 +91,18 @@ object SubmitResult {
 
   def annotateFinished(db: JdbcBackend#DatabaseDef, finished: FinishedTesting)(implicit ec: ExecutionContext): Future[FullyDescribedSubmit] = {
     Submits.loadAllSubmits(db, finished.submit.contest, finished.submit.team, finished.submit.problem).map(_.map(Submits.dbsub2sub)).flatMap { submits =>
-      Logger.info(s"submits: $submits")
+      logger.info(s"submits: $submits")
       val scored = if (finished.submit.schoolMode) scoreGrouped[SchoolCell](submits, SchoolCell.empty, SchoolScorer)
       else scoreGrouped(submits, ACMCell.empty, ACMScorer)
       val indexed: Seq[((Submit, Option[Score]), Int)] = indexGrouped(scored._2)
 
-      Logger.info(s"indexed: $indexed")
+      logger.info(s"indexed: $indexed")
       val submitEntry = indexed.find(_._1._1.submitId.id == finished.submit.id).get
-      Logger.info(s"submit: $submitEntry")
+      logger.info(s"submit: $submitEntry")
       val index = submitEntry._2
       val submit = submitEntry._1._1
       annotate(db, finished.submit.schoolMode, submit).map { submitResult =>
-        Logger.debug(s"Annotated submit result: $submitResult")
+        logger.debug(s"Annotated submit result: $submitResult")
         FullyDescribedSubmit(submit, index, submitEntry._1._2, submitResult._1, submitResult._3, submitResult._2)
       }
     }

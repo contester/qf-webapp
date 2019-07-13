@@ -9,7 +9,7 @@ import com.spingo.op_rabbit.{Message, RabbitControl}
 import models._
 import org.apache.commons.io.FileUtils
 import org.joda.time.DateTime
-import play.api.Logger
+import play.api.{Logger, Logging}
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
@@ -47,7 +47,7 @@ case class SubmitData(textOnly: Boolean)
 class Printing (cc: ControllerComponents,
                 silhouette: Silhouette[TeamsEnv],
                 rabbitMqModel: RabbitMqModel,
-                dbConfig: DatabaseConfig[JdbcProfile]) extends AbstractController(cc) with I18nSupport {
+                dbConfig: DatabaseConfig[JdbcProfile]) extends AbstractController(cc) with I18nSupport with Logging {
   private val db = dbConfig.db
   import dbConfig.driver.api._
   import utils.Db._
@@ -90,7 +90,7 @@ class Printing (cc: ControllerComponents,
   def post = silhouette.SecuredAction(parse.multipartFormData).async { implicit request =>
     val parsed = printForm.bindFromRequest
     val solutionOpt = request.body.file("file").map { solution =>
-      solution.filename -> FileUtils.readFileToByteArray(solution.ref.file)
+      solution.filename -> FileUtils.readFileToByteArray(solution.ref.path.toFile)
     }.map(x => x._1 -> fixEncoding(x._2))
 
     val parsed0 = if (solutionOpt.isDefined) parsed
@@ -98,7 +98,7 @@ class Printing (cc: ControllerComponents,
 
     Locator.locate(db, request.remoteAddress).flatMap { location =>
       if (location.isEmpty) {
-        Logger.debug(s"Printing from UNKNOWN LOCATION remote addr: ${request.remoteAddress}")
+        logger.debug(s"Printing from UNKNOWN LOCATION remote addr: ${request.remoteAddress}")
       }
       parsed0.fold(
         formWithErrors => getPrintForm(request.identity, formWithErrors, location).map(BadRequest(_)),
