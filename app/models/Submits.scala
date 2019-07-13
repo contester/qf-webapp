@@ -1,7 +1,7 @@
 package models
 
 import org.joda.time.DateTime
-import play.api.Logger
+import play.api.{Logger, Logging}
 import slick.jdbc.{GetResult, JdbcBackend}
 import spire.math.Rational
 import spire.math.extras.{FixedPoint, FixedScale}
@@ -79,11 +79,11 @@ object RationalToScoreStr {
     else FixedPoint(r).toString(scale)
 }
 
-object SchoolScorer extends SubmitScorer[SchoolCell] {
+object SchoolScorer extends SubmitScorer[SchoolCell] with Logging {
   def apply(cell: SchoolCell, submit: Submit) =
     if (!submit.compiled || !submit.finished || submit.taken == 0 || submit.failedOnFirst) {
       if (submit.compiled && submit.taken == 0) {
-        Logger.info(s"Compiled but taken = 0: $submit")
+        logger.info(s"Compiled but taken = 0: $submit")
       }
       (cell, None)
     } else {

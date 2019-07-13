@@ -1,6 +1,6 @@
 package utils
 
-import play.api.Logger
+import play.api.{Logger, Logging}
 import play.api.libs.ws.WSClient
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -11,7 +11,7 @@ case class GridfsContent(content: String, truncated: Boolean, size: Option[Long]
   def truncStr = if (truncated) "[обрезан]" else ""
 }
 
-object GridfsTools {
+object GridfsTools extends Logging {
   def getFile(ws: WSClient, name: String, sizeLimit: Long)(implicit ec: ExecutionContext): Future[Option[GridfsContent]] = {
     import scala.concurrent.duration._
     ws.url(name).withRequestTimeout(1.seconds)
@@ -23,7 +23,7 @@ object GridfsTools {
           val origSize = resp.header("X-Fs-Content-Length").flatMap(x => Try(x.toLong).toOption)
           Some(GridfsContent(resp.body, truncated, origSize))
         case _ =>
-          Logger.info(s"getFile($name): ${resp.status} ${resp.statusText}")
+          logger.info(s"getFile($name): ${resp.status} ${resp.statusText}")
           None
       }
     }
