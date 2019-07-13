@@ -75,3 +75,7 @@ libraryDependencies ~= { _ map {
   case m => m
 }}
 
+PB.targets in Compile := Seq(
+  scalapb.gen() -> (sourceManaged in Compile).value
+)
+

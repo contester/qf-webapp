@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package protos;
+
+message Asset {
+    string name = 1;
+    bool truncated = 2;
+    bytes data = 3;
+}
+
+message Assets {
+    repeated Asset asset = 1;
+}
