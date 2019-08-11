@@ -6,8 +6,22 @@ message Asset {
     string name = 1;
     bool truncated = 2;
     bytes data = 3;
+    int64 original_size = 4;
 }
 
 message Assets {
     repeated Asset asset = 1;
+}
+
+message TestRecord {
+    int64 test_id = 1;
+    Asset input = 2;
+    Asset output = 3;
+    Asset answer = 4;
+    Asset tester_output = 5;
+}
+
+message TestingRecord {
+    Asset solution = 1;
+    repeated TestRecord test = 2;
 }
