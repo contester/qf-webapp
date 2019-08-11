@@ -68,6 +68,8 @@ class AdminApplication (cc: ControllerComponents,
   private val fileserverUrl = configuration.get[String]("fileserver.url")
   private val shortn = configuration.get[String]("fileserver.shortn")
 
+  private val fileserverBase = fileserverUrl.stripSuffix("fs/")
+
   import slick.jdbc.MySQLProfile.api._
 
   private def getSubmitCid(submitId: Int)(implicit ec: ExecutionContext): Future[Option[Int]] =

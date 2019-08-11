@@ -38,7 +38,7 @@ object Outputs extends Logging {
 
   def getAllAssets2(ws: WSClient, prefix: String, shortName: String, submitId: Int, testingId: Int, tests: Seq[Int], handle: PolygonProblemHandle)(implicit ec: ExecutionContext) = {
     import scala.concurrent.duration._
-    ws.url(s"${prefix}protopackage")
+    ws.url(s"${prefix}protopackage/")
       .withQueryStringParameters(
         "problem" -> handle.prefix,
         "submit" -> submitId.toString,
