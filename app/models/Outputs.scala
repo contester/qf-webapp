@@ -3,6 +3,7 @@ package models
 import controllers.Assets
 import play.api.Logging
 import play.api.libs.ws.WSClient
+import protos.Assets.{Asset, TestingRecord}
 import utils.GridfsTools.logger
 import utils.{GridfsContent, GridfsTools, PolygonProblemHandle}
 
@@ -12,6 +13,10 @@ import scala.util.Try
 case class ResultAssets(test: Int, input: Option[GridfsContent], output: Option[GridfsContent], answer: Option[GridfsContent])
 
 object Outputs extends Logging {
+  def assetToGc(a: Asset): GridfsContent = {
+    GridfsContent(a.data.toStringUtf8, a.truncated, Some(a.originalSize))
+  }
+
   def getOutput(ws: WSClient, prefix: String, shortName: String, submitId: Int, testingId: Int, test: Int)(implicit ec: ExecutionContext): Future[Option[GridfsContent]] =
     GridfsTools.getFile(ws, s"${prefix}submit/${shortName}/${submitId}/${testingId}/$test/output", 1024)
 
@@ -43,13 +48,17 @@ object Outputs extends Logging {
       resp =>
         resp.status match {
           case 200 =>
-            val truncated = resp.header("X-Fs-Truncated").exists(_ == "true")
-            val origSize = resp.header("X-Fs-Content-Length").flatMap(x => Try(x.toLong).toOption)
-            Some(GridfsContent(resp.body, truncated, origSize))
+            Try(TestingRecord.parseFrom(resp.body.getBytes)).toOption
           case _ =>
             logger.info(s"get($prefix, $shortName, $submitId, $testingId, $handle): ${resp.status} ${resp.statusText}")
             None
         }
+    }.map { optRecord =>
+      optRecord.map { tr =>
+        tr.test.map { otr =>
+          ResultAssets(otr.testId.toInt, otr.input.map(assetToGc(_)), otr.output.map(assetToGc(_)), otr.answer.map(assetToGc(_)))
+        }
+      }.getOrElse(Seq()).map(r => r.test -> r).toMap
     }
   }
 }

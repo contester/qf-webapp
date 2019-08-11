@@ -4,9 +4,12 @@ scalaVersion := "2.12.8"
 
 organization := "org.stingray.contester"
 
-version := "2018.6"
+maintainer := "i@stingr.net"
+
+version := "2019.1"
 
 lazy val root = (project in file(".")).enablePlugins(PlayScala)
+//.enablePlugins(ProtocPlugin)
 
 resolvers ++= Seq(
   Resolver.jcenterRepo,

@@ -232,7 +232,7 @@ class AdminApplication (cc: ControllerComponents,
           testingOpt.flatMap { testing =>
             testing.problemId.map { problemId =>
               val phandle = PolygonURL(problemId)
-              Outputs.getAllAssets(ws, fileserverUrl, shortn, submit.fsub.submit.submitId.id, testing.id, submit.fsub.details.map(_.test), phandle)
+              Outputs.getAllAssets2(ws, fileserverUrl, shortn, submit.fsub.submit.submitId.id, testing.id, submit.fsub.details.map(_.test), phandle)
             }
           }.getOrElse(Future.successful(Map[Int, ResultAssets]())).zip(
           getSelectedContests(contestId, request.identity)).map {
