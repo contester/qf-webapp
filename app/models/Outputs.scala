@@ -48,7 +48,7 @@ object Outputs extends Logging {
       resp =>
         resp.status match {
           case 200 =>
-            Try(TestingRecord.parseFrom(resp.body.getBytes)).toOption
+            Some(TestingRecord.parseFrom(resp.bodyAsBytes.toArray))
           case _ =>
             logger.info(s"get($prefix, $shortName, $submitId, $testingId, $handle): ${resp.status} ${resp.statusText}")
             None

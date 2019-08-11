@@ -70,6 +70,8 @@ class AdminApplication (cc: ControllerComponents,
 
   private val fileserverBase = fileserverUrl.stripSuffix("fs/")
 
+  logger.info(s"fileserverBase: $fileserverBase")
+
   import slick.jdbc.MySQLProfile.api._
 
   private def getSubmitCid(submitId: Int)(implicit ec: ExecutionContext): Future[Option[Int]] =
@@ -234,7 +236,7 @@ class AdminApplication (cc: ControllerComponents,
           testingOpt.flatMap { testing =>
             testing.problemId.map { problemId =>
               val phandle = PolygonURL(problemId)
-              Outputs.getAllAssets2(ws, fileserverUrl, shortn, submit.fsub.submit.submitId.id, testing.id, submit.fsub.details.map(_.test), phandle)
+              Outputs.getAllAssets2(ws, fileserverBase, shortn, submit.fsub.submit.submitId.id, testing.id, submit.fsub.details.map(_.test), phandle)
             }
           }.getOrElse(Future.successful(Map[Int, ResultAssets]())).zip(
           getSelectedContests(contestId, request.identity)).map {
