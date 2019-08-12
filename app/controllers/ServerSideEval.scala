@@ -66,6 +66,14 @@ class ServerSideEval (cc: ControllerComponents,
     db.run(sql"""SELECT ID, Touched, Ext, Source, Input, Output, Timex, Memory, Info, Result, Contest, Team, Processed, Arrived
     FROM Eval WHERE ID = $id ORDER BY Arrived DESC""".as[EvalEntry]).map(_.headOption)
 
+  private def insertEval(contest:Int, team:Int, ext:String, solution: Array[Byte], data: Array[Byte]) =
+    db.run(
+      (sqlu"""insert into Eval (Contest, Team, Ext, Source, Input, Arrived) values
+                    ($contest, $team, $ext, $solution,
+                $data, CURRENT_TIMESTAMP())
+                  """.andThen(sql"select last_insert_id()".as[Int].head)).withPinnedSession
+    )
+
   private def getEvalForm(loggedInTeam: LoggedInTeam, compilers:Seq[Compiler],
                           form: Form[ServerSideData])(implicit request: RequestHeader, ec: ExecutionContext) =
     getEvals(loggedInTeam.contest.id, loggedInTeam.team.localId).map { evals =>
@@ -107,16 +115,8 @@ class ServerSideEval (cc: ControllerComponents,
             val cext = compilers.map(x => x.id -> x).toMap.apply(submitData.compiler).ext
             val solutionBytes = FormUtil.inlineOrFile(submitData.inlinesolution, request.body.file("file")).getOrElse(FormUtil.emptyBytes)
             val dataBytes = FormUtil.inlineOrFile(submitData.inlinedata, request.body.file("inputfile")).getOrElse(FormUtil.emptyBytes)
-            db.run(
-              (sqlu"""insert into Eval (Contest, Team, Ext, Source, Input, Arrived) values
-                    (${request.identity.contest.id}, ${request.identity.team.localId}, ${cext}, ${solutionBytes},
-                ${dataBytes}, CURRENT_TIMESTAMP())
-                  """.andThen(sql"select last_insert_id()".as[Int])).withPinnedSession
-            ).map { wat =>
-              wat.foreach { wid =>
-                rabbitMq ! Message.queue(ServerSideEvalID(wid), queue = "contester.evalrequests")
-              }
-
+            insertEval(request.identity.contest.id, request.identity.team.localId, cext, solutionBytes, dataBytes).map {  wid =>
+              rabbitMq ! Message.queue(ServerSideEvalID(wid), queue = "contester.evalrequests")
               Redirect(routes.ServerSideEval.index)
             }
           }
