@@ -1,4 +1,4 @@
-@(tab: String = "", styles: Html = Html(""), scripts: Html = Html(""), contest: SelectedContest)(content: Html)(implicit request: RequestHeader)
+@(tab: String = "", styles: Html = Html(""), scripts: Html = Html(""), contest: SelectedContest)(content: Html)(implicit request: RequestHeader, messages: Messages)
 
 @navlink(myid: String, mytext: Html) = {
 @if(myid == tab) {
@@ -9,8 +9,8 @@
 }
 
 @adminNavlinks = {
-@navlink("status", Html("Статус"))
-@navlink("monitor", Html("Монитор"))
+@navlink("status", Html(messages("status")))
+@navlink("monitor", Html(messages("scoreboard")))
 @navlink("qanda", Html("Вопросы <span id='clrPending' class='badge'>-</span>"))
 @navlink("tasks", Html("Задания <span id='tasksPending' class='badge'>-</span>"))
 @navlink("rejudge", Html("Rejudge"))

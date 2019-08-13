@@ -1,4 +1,4 @@
-@(jobs: Seq[AdminPrintJob], contest: SelectedContest, admin: Admin)(implicit request: RequestHeader)
+@(jobs: Seq[AdminPrintJob], contest: SelectedContest, admin: Admin)(implicit request: RequestHeader, messages: Messages)
 
 @adminmain(tab = "print", contest=contest) {
 

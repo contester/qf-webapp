@@ -1,4 +1,4 @@
-@(sub: SubmitDetails, contest: SelectedContest, outputs: Map[Int, ResultAssets])(implicit request: RequestHeader)
+@(sub: SubmitDetails, contest: SelectedContest, outputs: Map[Int, ResultAssets])(implicit request: RequestHeader, messages: Messages)
 
 @panel(name: String, style: String = "default", style2: String = "")(content: Html) = {
 <div class="panel panel-@style">

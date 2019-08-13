@@ -18,13 +18,13 @@
 @contestteaminfo(loggedIn)
 
 <div class="panel panel-success">
-    <div class="panel-heading"><h3 class="panel-title">Задать вопрос жюри</h3></div>
+    <div class="panel-heading"><h3 class="panel-title">@messages("heading.sendClarificationRequest")</h3></div>
     <div class="panel-body">
         @b3.horizontal.formCSRF(controllers.routes.QandA.post, "col-md-2", "col-md-10", 'id -> "submitform") { implicit fc =>
         @form.globalError.map { error =>
         <div class="alert alert-danger" role="alert">
             <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
-            <span class="sr-only">Error:</span>
+            <span class="sr-only">@messages("label.error"):</span>
             @error.message
         </div>
         }
@@ -35,18 +35,18 @@
         </div>
         }
 
-        @b3.select(form("problem"), options = problems, '_label -> "Задача")
-        @b3.textarea(form("text"), '_label -> "Текст вопроса")
+        @b3.select(form("problem"), options = problems, '_label -> messages("label.problem"))
+        @b3.textarea(form("text"), '_label -> messages("label.questionText"))
         @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Отправить}
         }
     </div>
 </div>
 
 <div class="panel panel-warning">
-    <div class="panel-heading"><h3 class="panel-title">Сообщения жюри</h3></div>
+    <div class="panel-heading"><h3 class="panel-title">@messages("heading.clarifications")</h3></div>
 <table class="table">
     <thead>
-    <tr><th>Время</th><th>Задача</th><th>Текст</th></tr>
+    <tr><th>@messages("label.time")</th><th>@messages("label.problem")</th><th>@messages("label.text")</th></tr>
     </thead>
     <tbody>
     @for(s <- clarifications) {
@@ -57,10 +57,10 @@
 </div>
 
 <div class="panel panel-info">
-    <div class="panel-heading"><h3 class="panel-title">Ваши вопросы</h3></div>
+    <div class="panel-heading"><h3 class="panel-title">@messages("heading.yourClarifications")</h3></div>
     <table class="table">
         <thead>
-        <tr><th>Время</th><th>Задача</th><th>Текст</th><th>Ответ</th></tr>
+        <tr><th>@messages("label.time")</th><th>@messages("label.problem")</th><th>@messages("label.text")</th><th>@messages("label.answer")</th></tr>
         </thead>
         <tbody>
         @for(s <- clReq) {
