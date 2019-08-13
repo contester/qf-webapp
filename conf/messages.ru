@@ -10,3 +10,7 @@ label.answer=Ответ
 heading.adminLogin=Вход в комментаторскую
 status=Статус
 scoreboard=Монитор
+heading.login=Пожалуйста, авторизуйтесь
+label.username=Имя пользователя
+label.password=Пароль
+label.login=Авторизоваться

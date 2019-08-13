@@ -11,3 +11,7 @@ label.answer=Answer
 heading.adminLogin=Admin login
 status=Status
 scoreboard=Scoreboard
+heading.login=Please sign in
+label.username=User name
+label.password=Password
+label.login=Log in
