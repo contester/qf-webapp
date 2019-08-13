@@ -14,3 +14,7 @@ heading.login=Пожалуйста, авторизуйтесь
 label.username=Имя пользователя
 label.password=Пароль
 label.login=Авторизоваться
+attempts=Попытки
+submit=Отправить
+print=Печать
+customtest=Запуск

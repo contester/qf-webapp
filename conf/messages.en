@@ -15,3 +15,7 @@ heading.login=Please sign in
 label.username=User name
 label.password=Password
 label.login=Log in
+attempts=Attempts
+submit=Submit
+print=Print
+customtest=Custom test
