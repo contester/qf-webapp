@@ -15,15 +15,15 @@ if(!loggedIn.contest.schoolMode) { "+" } else {""}
 <div class="panel panel-success">
     <div class="panel-body">
         @if(subs.isEmpty) {
-        <p>Попытки не обнаружены</p>
+        <p>@messages("label.noSubmits")</p>
         } else {
 
         <table class="table table-hover table-bordered table-responsive">
             <thead>
-            <tr><th>ID</th><th>Время</th><th>Задача</th><th>Попытка</th><th>Язык</th><th>Результат</th>
-                <th>@if(loggedIn.contest.schoolMode) { Баллы } else { Штраф }</th>
-                <th>Время работы, ms</th>
-            <th>Память, KB</th></tr>
+            <tr><th>ID</th><th>@messages("label.time")</th><th>@messages("label.problem")</th><th>@messages("label.attempt")</th><th>@messages("label.language")</th><th>@messages("label.verdict")</th>
+                <th>@if(loggedIn.contest.schoolMode) { @messages("label.points") } else { @messages("label.penalty") }</th>
+                <th>@messages("label.elapsedTime"), ms</th>
+            <th>@messages("label.memory"), KB</th></tr>
             </thead>
             <tbody>
             @for(s <- subs) {
