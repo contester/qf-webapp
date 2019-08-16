@@ -36,3 +36,5 @@ label.points=Баллы
 label.penalty=Штраф
 label.elapsedTime=Время работы
 label.memory=Память
+label.rank=Место
+label.team=Команда

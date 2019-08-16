@@ -37,3 +37,5 @@ label.points=Points
 label.penalty=Penalty
 label.elapsedTime=Elapsed time
 label.memory=Memory
+label.rank=Rank
+label.team=Team

@@ -1,4 +1,4 @@
-@(contest: Contest, status: models.AnyStatus, current: Int, admin: Boolean=false)
+@(contest: Contest, status: models.AnyStatus, current: Int, admin: Boolean=false)(implicit messages: Messages)
 
 @import spire.math.Rational
 
@@ -9,10 +9,10 @@
 
 <table class="table table-hover table-bordered table-responsive">
     <thead>
-    <tr><th>Место</th><th>ID</th><th>Команда</th>
+    <tr><th>@messages("label.rank")</th><th>ID</th><th>@messages("label.team")</th>
     @status match {
     case st: ACM.Status => {
-    <th>=</th><th>Штраф</th>
+    <th>=</th><th>@messages("label.penalty")</th>
         }
         case st: MonitorSchool.Status => {
     <th>=</th>
