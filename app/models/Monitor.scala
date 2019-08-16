@@ -8,6 +8,7 @@ import org.stingray.qf.actors.{ProblemStateActor, TeamStateActor}
 import org.stingray.qf.models.TeamClient
 import play.api.Configuration
 import play.api.db.slick.DatabaseConfigProvider
+import play.api.i18n.MessagesApi
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import spire.math.Rational
@@ -169,7 +170,7 @@ case class StoredContestStatus(contest: Contest, frozen: AnyStatus, exposed: Any
     ContestMonitor(contest, status(overrideFreeze))
 }
 
-class Monitor(dbConfig: DatabaseConfig[JdbcProfile], system: ActorSystem, configuration: Configuration) {
+class Monitor(dbConfig: DatabaseConfig[JdbcProfile], system: ActorSystem, configuration: Configuration, messagesApi: MessagesApi) {
   private val db = dbConfig.db
   private val teamStateActor = system.actorOf(TeamStateActor.props(db), "team-state-actor")
   val teamClient = new TeamClient(teamStateActor)
@@ -178,7 +179,7 @@ class Monitor(dbConfig: DatabaseConfig[JdbcProfile], system: ActorSystem, config
 
   private[this] val monitorActor = system.actorOf(MonitorActor.props(
     db, configuration.getOptional[String]("monitor.static_location"),
-    teamClient, problemClient), "monitor-actor")
+    teamClient, problemClient, messagesApi), "monitor-actor")
 
   private implicit val monitorTimeout: akka.util.Timeout = {
     import scala.concurrent.duration._

@@ -8,6 +8,7 @@ import akka.actor.{Actor, Props, Stash}
 import models._
 import org.apache.commons.io.FileUtils
 import org.stingray.qf.models.TeamClient
+import play.api.i18n.{Lang, Messages, MessagesApi, MessagesImpl}
 import slick.jdbc.JdbcBackend
 
 import scala.collection.mutable
@@ -16,8 +17,8 @@ import scala.util.Try
 
 object MonitorActor {
   def props(db: JdbcBackend#DatabaseDef, staticLocation: Option[String],
-            teamClient: TeamClient, problemClient: ProblemClient) =
-    Props(new MonitorActor(db, staticLocation, teamClient, problemClient))
+            teamClient: TeamClient, problemClient: ProblemClient, messagesApi: MessagesApi) =
+    Props(new MonitorActor(db, staticLocation, teamClient, problemClient, messagesApi))
 
   case class Get(contest: Int)
   case object Start
@@ -28,12 +29,15 @@ object MonitorActor {
 class MonitorActor(db: JdbcBackend#DatabaseDef,
                    staticLocation: Option[String],
                    teamClient: TeamClient,
-                   problemClient: ProblemClient) extends Actor with Stash {
+                   problemClient: ProblemClient,
+                   messagesApi: MessagesApi) extends Actor with Stash {
   import MonitorActor._
   import context.dispatcher
 
   import scala.concurrent.duration._
   import scala.language.postfixOps
+
+  private implicit val messages = MessagesImpl(Lang("en"), messagesApi)
 
   private val staticLocationFile = staticLocation.map(x => new File(x))
 
