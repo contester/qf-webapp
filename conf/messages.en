@@ -45,3 +45,5 @@ label.fileToPrint=File to print
 label.printJobs=Print jobs
 label.fileName=Filename
 label.result=Result
+heading.submitSolution=Send solution for testing
+label.compiler=Compiler

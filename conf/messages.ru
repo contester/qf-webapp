@@ -44,3 +44,5 @@ label.fileToPrint=Файл с текстом для печати
 label.printJobs=Задания для печати
 label.fileName=Имя файла
 label.result=Результат
+heading.submitSolution=Отправить решение на проверку
+label.compiler=Компилятор
