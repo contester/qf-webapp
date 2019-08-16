@@ -25,3 +25,6 @@ msg.contestFinishesIn=До окончания соревнования
 msg.contestStartsIn=До начала соревнования
 label.workstation=Компьютер
 label.inArea=в аудитории
+label.sourceCode=Исходный текст
+label.input=Входные данные
+label.output=Вывод

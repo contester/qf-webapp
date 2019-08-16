@@ -26,3 +26,6 @@ msg.contestFinishesIn=Contest finishes in
 msg.contestStartsIn=Contest starts in
 label.workstation=Workstation
 label.inArea=in area
+label.sourceCode=Source code
+label.input=Input
+label.output=Output
