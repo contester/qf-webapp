@@ -37,7 +37,7 @@
 
         @b3.select(form("problem"), options = problems, '_label -> messages("label.problem"))
         @b3.textarea(form("text"), '_label -> messages("label.questionText"))
-        @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Отправить}
+        @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> @messages("send")}
         }
     </div>
 </div>

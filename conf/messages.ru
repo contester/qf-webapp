@@ -18,3 +18,4 @@ attempts=Попытки
 submit=Отправить
 print=Печать
 customtest=Запуск
+send=Отправить
