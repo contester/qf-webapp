@@ -1,4 +1,4 @@
-@(loggedIn: LoggedInTeam, content: Option[Extrainfo])(implicit request: RequestHeader)
+@(loggedIn: LoggedInTeam, content: Option[Extrainfo])(implicit request: RequestHeader, messages: Messages)
 
 @main(loggedIn, tab = content.map(x => s"extrainfo${x.num}").getOrElse("")) {
 @for(c <- content) {

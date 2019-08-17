@@ -1,9 +1,9 @@
-@(contest: Contest)
+@(contest: Contest)(implicit messages: Messages)
 
-<p id="contest-frozen" class="text-warning" @if(!contest.frozen) { hidden }>Монитор заморожен</p>
-<p id="contest-ended" class="text-info" @if(!contest.finished){ hidden }>Соревнование закончено</p>
+<p id="contest-frozen" class="text-warning" @if(!contest.frozen) { hidden }>@messages("msg.scoreboardFrozen")</p>
+<p id="contest-ended" class="text-info" @if(!contest.finished){ hidden }>@messages("msg.contestIsOver")</p>
 <p id="contest-timer" @if(contest.finished){ hidden }>
-    <span id="contest-ending-in" @if(!contest.started) { hidden }>До окончания соревнования:</span>
-    <span id="contest-starting-in" @if(contest.started) { hidden }>До начала соревнования:</span>
+    <span id="contest-ending-in" @if(!contest.started) { hidden }>@messages("msg.contestFinishesIn"):</span>
+    <span id="contest-starting-in" @if(contest.started) { hidden }>@messages("msg.contestStartsIn"):</span>
     <span id="contest-timer-counter">@contest.timevalHMS</span>
 </p>

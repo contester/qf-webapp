@@ -32,13 +32,14 @@
 @contestteaminfo(loggedIn)
 
 <div class="panel panel-success">
-    <div class="panel-heading"><h3 class="panel-title">Отправить решение на проверку</h3></div>
+    <div class="panel-heading"><h3 class="panel-title">@messages("heading.submitSolution")</h3></div>
     <div class="panel-body">
-        @b3.form(controllers.routes.Application.submitPost, 'enctype -> "multipart/form-data", 'id -> "submitform") {
+        @b3.horizontal.formCSRF(controllers.routes.Application.submitPost,
+        "col-md-2", "col-md-10", 'enctype -> "multipart/form-data", 'id -> "submitform") { implicit fc =>
         @form.globalError.map { error =>
         <div class="alert alert-danger" role="alert">
             <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
-            <span class="sr-only">Error:</span>
+            <span class="sr-only">@messages("error"):</span>
             @error.message
         </div>
         }
@@ -49,11 +50,11 @@
         </div>
         }
 
-        @b3.select(form("problem"), options = problems, '_label -> "Задача")
-        @b3.select(form("compiler"), options = languages, '_label -> "Компилятор")
+        @b3.select(form("problem"), options = problems, '_label -> messages("label.problem"))
+        @b3.select(form("compiler"), options = languages, '_label -> messages("label.compiler"))
         @b3.textarea(form("inline"), '_label -> "Решение", 'rows -> 15, 'style -> "font-family:monospace;")
         @filex(form("file"), '_label -> "Файл с решением")
-        @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Отправить}
+        @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> @messages("submit")}
         }
     </div>
 </div>

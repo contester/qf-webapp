@@ -4,17 +4,19 @@ import akka.actor.ActorRef
 import com.github.nscala_time.time.Imports._
 import org.stingray.qf.actors.ProblemStateActor
 import play.api.libs.EventSource.{EventDataExtractor, EventIdExtractor, EventNameExtractor}
-import play.api.libs.json.Json.JsValueWrapper
 import play.api.libs.json.{JsValue, Json, Writes}
 import slick.jdbc.GetResult
+import utils.Selectable
 
 import scala.concurrent.Future
 
-case class Contest(id: Int, name: String, schoolMode: Boolean, startTime: DateTime, endTime: DateTime,
-                   freezeTime: DateTime, exposeTime: DateTime) {
+case class Contest(id: Int, name: String, schoolMode: Boolean, startTime: DateTime, freezeTime: DateTime,
+                   endTime: DateTime, exposeTime: DateTime, printTickets: Boolean, paused: Boolean,
+                   polygonID: String, language: String) {
   def frozen = (DateTime.now >= freezeTime) && (DateTime.now < exposeTime)
   def finished = DateTime.now >= endTime
   def started = DateTime.now >= startTime
+  def running = started && !finished
 
   def timevalHMS =
     Contests.formatHMS(if (started) {
@@ -30,9 +32,9 @@ case class Contest(id: Int, name: String, schoolMode: Boolean, startTime: DateTi
 }
 
 object Contest {
+  def tupled = (Contest.apply _).tupled
   implicit val writes = new Writes[Contest] {
-    def writes(c: Contest) = {
-      import com.github.nscala_time.time.Imports._
+    override def writes(c: Contest): JsValue = {
       val now = DateTime.now
 
       def ntm(x: DateTime) =
@@ -40,6 +42,8 @@ object Contest {
           (now to x).toDurationMillis
         else
           -((x to now).toDurationMillis)
+
+      import play.api.libs.json.JodaWrites._
 
       Json.obj(
         "id" -> c.id,
@@ -74,15 +78,16 @@ class ProblemClient(problemStateActor: ActorRef) {
     (problemStateActor ? ProblemStateActor.GetProblems(contest)).mapTo[Seq[Problem]]
 }
 
-case class Compiler(id: Int, name: String, ext: String)
-
 object Compilers {
   def toSelect(compilers: Seq[Compiler]) =
-    Seq(("", "Выберите компилятор")) ++ compilers.sortBy(_.name).map(x => x.id.toString -> x.name)
+    compilers.sortBy(_.name).map(x => x.id.toString -> x.name)
+
+  def forForm(compilers: Seq[Compiler]) =
+    Selectable.forSelect(toSelect(compilers), "Выберите компилятор")
 }
 
 object Contests {
-  import slick.driver.MySQLDriver.api._
+  import slick.jdbc.MySQLProfile.api._
 
   def formatHMS(ms: Long) = {
     val s = ms / 1000
@@ -94,26 +99,21 @@ object Contests {
     f"$hours%02d:$minutes%02d:$seconds%02d"
   }
 
-  implicit val convertContests = GetResult(r => Contest(r.nextInt(), r.nextString(), r.nextBoolean(),
-    new DateTime(r.nextTimestamp()), new DateTime(r.nextTimestamp()), new DateTime(r.nextTimestamp()),
-    new DateTime(r.nextTimestamp())))
-
   val getContests =
-    sql"""select ID, Name, SchoolMode, Start, End, Finish, Expose from Contests""".as[Contest]
+    SlickModel.contests.result
 
   def getContest(contestId: Int) =
-    sql"""select ID, Name, SchoolMode, Start, End, Finish, Expose from Contests where ID = $contestId""".as[Contest]
-
-  implicit private val getCompiler = GetResult(
-    r => Compiler(r.nextInt(), r.nextString(), r.nextString())
-  )
+    SlickModel.contests.filter(_.id === contestId)
 
   def getCompilers(contest: Int) =
-    sql"""select ID, Name, Ext from Languages where Contest = $contest order by ID""".as[Compiler]
+    SlickModel.compilers.filter(_.contest === contest).sortBy(_.id)
 }
 
 object Problems {
   def toSelect(problems: Seq[Problem]) =
     problems.map(x => x.id -> s"${x.id}. ${x.name}")
+
+  def forForm(problems: Seq[Problem]) =
+    Selectable.forSelect(toSelect(problems), "Выберите задачу")
 }
 

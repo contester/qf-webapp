@@ -1,7 +1,14 @@
 package models
 
-import controllers.routes
-import slick.jdbc.{GetResult, JdbcBackend}
+import com.mohiva.play.silhouette.api.{Authorization, Identity, LoginInfo, Provider}
+import com.mohiva.play.silhouette.api.services.IdentityService
+import com.mohiva.play.silhouette.api.util.Credentials
+import com.mohiva.play.silhouette.impl.authenticators.SessionAuthenticator
+import com.mohiva.play.silhouette.impl.exceptions.InvalidPasswordException
+import controllers.{Hasher, routes}
+import play.api.mvc.Request
+import slick.basic.DatabaseConfig
+import slick.jdbc.{GetResult, JdbcBackend, JdbcProfile}
 import slick.lifted.ProvenShape
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -17,7 +24,7 @@ trait WaiterPermissions {
 }
 
 case class Admin(username: String, passwordHash: String, spectator: Set[Int], administrator: Set[Int],
-                 locations: Set[String], unrestricted: Set[Int]) extends WaiterPermissions {
+                 locations: Set[String], unrestricted: Set[Int]) extends Identity with WaiterPermissions {
   override def toString = s"$username:$passwordHash"
 
   def toId = AdminId(username, passwordHash)
@@ -31,7 +38,10 @@ case class Admin(username: String, passwordHash: String, spectator: Set[Int], ad
   def canModify(contestId: Int) =
     administrator.contains(contestId) || administrator.contains(-1)
 
-  lazy val defaultContest = spectator.union(administrator).min
+  lazy val defaultContest = {
+    val t = spectator.union(administrator).min
+    if (t == -1) 1 else t
+  }
 
   val canCreateTasks =
     locations.contains("*")
@@ -59,7 +69,7 @@ object Admin {
     else Try(s.toInt).toOption
 
   private def parseAcl(s: String): Set[Int] =
-    s.split(',').map(parseSingleAcl).flatten.toSet
+    s.split(',').flatMap(parseSingleAcl).toSet
 
   private def parseStringAcl(s: String): Set[String] =
     s.split(',').toSet
@@ -95,15 +105,23 @@ object AdminModel {
 }
 
 object AdminPermissions {
-  def canModify(contestId: Int)(account: Admin): Future[Boolean] =
-    Future.successful(account.canModify(contestId))
+  case class withModify(contestId: Int) extends Authorization[Admin, SessionAuthenticator] {
+    override def isAuthorized[B](identity: Admin, authenticator: SessionAuthenticator)(implicit request: Request[B]): Future[Boolean] =
+      Future.successful(identity.canModify(contestId))
+  }
 
-  def canSpectate(contestId: Int)(account: Admin): Future[Boolean] =
-    Future.successful(account.canSpectate(contestId))
+  case class withSpectate(contestId: Int) extends Authorization[Admin, SessionAuthenticator] {
+    override def isAuthorized[B](identity: Admin, authenticator: SessionAuthenticator)(implicit request: Request[B]): Future[Boolean] =
+      Future.successful(identity.canSpectate(contestId))
+  }
 
-  def canCreateTasks(account: Admin): Future[Boolean] =
-    Future.successful(account.canCreateTasks)
+  case object withCreateTasks extends Authorization[Admin, SessionAuthenticator] {
+    override def isAuthorized[B](identity: Admin, authenticator: SessionAuthenticator)(implicit request: Request[B]): Future[Boolean] =
+      Future.successful(identity.canCreateTasks)
+  }
 }
+
+
 
 object AdminNavlinkMatch {
   def apply(tab: String): Function[Int, play.api.mvc.Call] =
@@ -113,6 +131,28 @@ object AdminNavlinkMatch {
       case "qanda" => routes.AdminApplication.showQandA(_)
       case "rejudge" => routes.AdminApplication.rejudgePage(_)
       case "tasks" => routes.AdminApplication.tasks(_)
+      case "print" => routes.AdminApplication.printJobs(_)
       case _ => routes.AdminApplication.submits(_)
     }
+}
+
+trait AdminsService extends IdentityService[Admin]
+
+class AdminsServiceImpl(dbConfig: DatabaseConfig[JdbcProfile])(implicit val ec: ExecutionContext) extends AdminsService {
+  override def retrieve(loginInfo: LoginInfo): Future[Option[Admin]] =
+    AdminId.fromString(loginInfo.providerKey) match {
+      case Some(adminId) => Admin.query(dbConfig.db, adminId.username, adminId.passwordHash)
+      case None => Future.successful(None)
+    }
+}
+
+class AdminsProvider(dbConfig: DatabaseConfig[JdbcProfile]) extends OneUserProvider {
+  override def id: String = "admin"
+  def authenticate(credentials: Credentials)(implicit ec: ExecutionContext): Future[Option[LoginInfo]] = {
+    val pw = Hasher.getSha1(credentials.password)
+    Admin.query(dbConfig.db, credentials.identifier, pw).map {
+      case Some(v) => Some(LoginInfo(id, AdminId(v.username, pw).toString))
+      case None => None
+    }
+  }
 }

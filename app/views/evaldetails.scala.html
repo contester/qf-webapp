@@ -4,19 +4,19 @@
 @contestteaminfo(loggedIn)
 
 <div class="panel panel-success">
-    <div class="panel-heading"><h3 class="panel-title">Исходный текст</h3></div>
+    <div class="panel-heading"><h3 class="panel-title">@messages("label.sourceCode")</h3></div>
     <div class="panel-body">
         <pre>@ev.sourceStr</pre>
     </div>
 </div>
 <div class="panel panel-success">
-    <div class="panel-heading"><h3 class="panel-title">Входные данные</h3></div>
+    <div class="panel-heading"><h3 class="panel-title">@messages("label.input")</h3></div>
     <div class="panel-body">
         <pre>@ev.inputStr</pre>
     </div>
 </div>
 <div class="panel panel-success">
-    <div class="panel-heading"><h3 class="panel-title">Выходные данные</h3></div>
+    <div class="panel-heading"><h3 class="panel-title">@messages("label.output")</h3></div>
     <div class="panel-body">
         <pre>@ev.outputStr</pre>
     </div>

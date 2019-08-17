@@ -1,6 +1,13 @@
 package models
 
+import com.mohiva.play.silhouette.api.{Identity, LoginInfo, Provider}
+import com.mohiva.play.silhouette.api.services.IdentityService
+import com.mohiva.play.silhouette.api.util.Credentials
+import com.mohiva.play.silhouette.impl.exceptions.InvalidPasswordException
 import org.joda.time.DateTime
+import play.api.Logger
+import slick.basic.DatabaseConfig
+import slick.jdbc.JdbcProfile
 import slick.jdbc.{GetResult, JdbcBackend}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -20,39 +27,40 @@ trait Team {
   }
 }
 
-case class LocalTeam(localId: Int, schoolName: String, teamNum: Option[Int], teamName: String,
+case class LocalTeam(teamId: Int, contest: Int, localId: Int, schoolName: String, teamNum: Option[Int], teamName: String,
                      notRated: Boolean, noPrint: Boolean, disabled: Boolean) extends Team {
   override def id: Int = localId
 }
 
-case class LoggedInTeam(username: String, contest: Contest, team: LocalTeam, einfo: Seq[Extrainfo]) {
+trait TeamsService extends IdentityService[LoggedInTeam]
+
+class TeamsServiceImpl(dbConfig: DatabaseConfig[JdbcProfile])(implicit val ec: ExecutionContext) extends TeamsService {
+  override def retrieve(loginInfo: LoginInfo): Future[Option[LoggedInTeam]] =
+    Users.resolve(dbConfig.db, loginInfo.providerKey)
+}
+
+case class LoggedInTeam(username: String, contest: Contest, team: LocalTeam, einfo: Seq[Extrainfo]) extends Identity {
   def matching(ctid: ContestTeamIds) =
     ctid.contestId == contest.id && ctid.teamId == team.localId
 }
 
 case class Extrainfo(contest: Int, num: Int, heading: String, data: String)
 
-object Extrainfo {
-  import slick.jdbc.GetResult
+trait OneUserProvider extends Provider {
+  def authenticate(credentials: Credentials)(implicit ec: ExecutionContext): Future[Option[LoginInfo]]
+}
 
-  implicit val getResult = GetResult(r =>
-    Extrainfo(r.nextInt(), r.nextInt(), r.nextString(), r.nextString())
-  )
+class TeamsProvider(dbConfig: DatabaseConfig[JdbcProfile]) extends OneUserProvider {
+  override def id: String = "team"
+  def authenticate(credentials: Credentials)(implicit ec: ExecutionContext): Future[Option[LoginInfo]] = {
+    Users.authenticate(dbConfig.db, credentials.identifier, credentials.password).map(_.map(v => LoginInfo(id, v.username)))
+  }
 }
 
 object Users {
-  import slick.driver.MySQLDriver.api._
-  import slick.jdbc.GetResult
+  import slick.jdbc.MySQLProfile.api._
 
-  implicit val getLoggedInTeam = GetResult(r => LoggedInTeam(
-    r.nextString(),
-    Contest(r.nextInt(), r.nextString(), r.nextBoolean(),
-      new DateTime(r.nextTimestamp()), new DateTime(r.nextTimestamp()), new DateTime(r.nextTimestamp()),
-      new DateTime(r.nextTimestamp())),
-    LocalTeam(r.nextInt(), r.nextString(), r.nextIntOption(), r.nextString(), r.nextBoolean(),
-    r.nextBoolean(), r.nextBoolean()), Seq()))
-
-
+/*
   def authQuery(username: String, password: String) =
     sql"""select Assignments.Username,
           Assignments.Contest as ContestID,
@@ -98,10 +106,27 @@ object Users {
 
   def extraInfoQuery(contest: Int) =
     sql"""select Contest, Num, Heading, Data from Extrainfo where Contest = $contest order by Num""".as[Extrainfo]
+*/
+
+
+  private def extraInfoQuery(contest: Int) =
+    SlickModel.extraInfos.filter(_.contest === contest).result
+
+  def resolveQuery(username: String) =
+    SlickModel.joinedLoginQuery.filter(_.username === username).result
+
+  def toLoginInfo(x: SlickModel.LoggedInTeam0): LoggedInTeam =
+    LoggedInTeam(x.username, x.contest, x.team, Seq())
+
+  def authQuery(username: String, password: String) =
+    SlickModel.joinedLoginQuery.filter(a => (a.username === username) && (a.password === password)).result
+
+  def authenticate(db: JdbcBackend#DatabaseDef, username: String, password: String)(implicit ec: ExecutionContext): Future[Option[LoggedInTeam]] =
+    db.run(authQuery(username, password)).map(_.headOption.map(toLoginInfo))
 
   def resolve(db: JdbcBackend#DatabaseDef, username: String)(implicit ec: ExecutionContext): Future[Option[LoggedInTeam]] =
     db.run(resolveQuery(username)).map(_.headOption).flatMap { opt =>
-      opt.map { lt =>
+      opt.map(toLoginInfo).map { lt =>
         db.run(extraInfoQuery(lt.contest.id)).map { einfo =>
           Some(LoggedInTeam(lt.username, lt.contest, lt.team, einfo))
         }
@@ -115,29 +140,4 @@ object ContestTeamIds {
   implicit val getResult = GetResult(r =>
     ContestTeamIds(r.nextInt(), r.nextInt())
   )
-}
-
-class UserPermissions(db: JdbcBackend#DatabaseDef) {
-  import UserPermissions._
-  import slick.driver.MySQLDriver.api._
-
-  def submit(submitId: Int)(account: LoggedInTeam): Future[Boolean] =
-    matching {
-      db.run(sql"select Contest, Team from NewSubmits where ID = $submitId".as[ContestTeamIds])
-    }(account)
-
-}
-
-object UserPermissions {
-  def any(account: LoggedInTeam): Future[Boolean] = Future.successful(true)
-
-  def matching(f: => Future[Seq[ContestTeamIds]])(account: LoggedInTeam) = {
-    import play.api.libs.concurrent.Execution.Implicits.defaultContext
-
-    f.map(_.exists(account.matching))
-  }
-}
-
-object Permissions {
-  def any[T](account: T): Future[Boolean] = Future.successful(true)
 }

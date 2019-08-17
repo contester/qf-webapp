@@ -1,4 +1,4 @@
-@(sub: SubmitDetails, contest: SelectedContest, outputs: Map[Int, ResultAssets])(implicit request: RequestHeader)
+@(sub: SubmitDetails, contest: SelectedContest, outputs: Map[Int, ResultAssets])(implicit request: RequestHeader, messages: Messages)
 
 @panel(name: String, style: String = "default", style2: String = "")(content: Html) = {
 <div class="panel panel-@style">
@@ -40,6 +40,7 @@
             <p>По часам: @{arrived.timestamp}, по контесту: @arrived.asString,
                 @if(arrived.afterFreeze){после}else{до} заморозки</p>
         }
+    <a href="@routes.AdminApplication.downloadArchiveSubmit(subId.contestId, subId.id)">Download</a>
     }
 }
 
@@ -59,8 +60,8 @@
         @panel(s"Тест ${s.test}", "primary") {
             @details(s, "чекера")
             @for(out <- outputs.get(s.test)) {
-                @fscontent("Ввод", out.input)
-                @fscontent("Вывод", out.output)
+                @fscontent(messages("label.input"), out.input)
+                @fscontent(messages("label.output"), out.output)
                 @fscontent("Ответ жюри", out.answer)
             }
             @stdpanel("Комментарий чекера", s.testerOutput)

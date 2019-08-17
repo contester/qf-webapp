@@ -1,4 +1,4 @@
-@(tab: String = "", styles: Html = Html(""), scripts: Html = Html(""), contest: SelectedContest)(content: Html)(implicit request: RequestHeader)
+@(tab: String = "", styles: Html = Html(""), scripts: Html = Html(""), contest: SelectedContest)(content: Html)(implicit request: RequestHeader, messages: Messages)
 
 @navlink(myid: String, mytext: Html) = {
 @if(myid == tab) {
@@ -9,11 +9,12 @@
 }
 
 @adminNavlinks = {
-@navlink("status", Html("Статус"))
-@navlink("monitor", Html("Монитор"))
-@navlink("qanda", Html("Вопросы <span id='clrPending' class='badge'>-</span>"))
-@navlink("tasks", Html("Задания <span id='tasksPending' class='badge'>-</span>"))
+@navlink("status", Html(messages("status")))
+@navlink("monitor", Html(messages("scoreboard")))
+@navlink("qanda", Html(messages("heading.clarifications")+" <span id='clrPending' class='badge'>-</span>"))
+@navlink("tasks", Html(messages("label.tasks")+" <span id='tasksPending' class='badge'>-</span>"))
 @navlink("rejudge", Html("Rejudge"))
+@navlink("print", Html("Print"))
 <li class="dropdown">
     <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">
         @contest.contest.id
@@ -31,23 +32,7 @@
 
 @myStyles = {
 @styles
-<style>
-    body {
-    padding-top: 80px; /* 60px to make the container go all the way to the bottom of the topbar */
-    }
-    .table-vcenter td {
-    vertical-align: middle!important;
-    }
-
-    .btn-nomargin {
-    margin: 0px 0px;
-    }
-
-    .nopadding {
-    padding: 1px 1px 1px 1px;
-    margin: 1px 1px;
-    }
-</style>
+<link href="@routes.Assets.versioned("css/topbar.css")" rel="stylesheet">
 }
 
 @myScripts = {

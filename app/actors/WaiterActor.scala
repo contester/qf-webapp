@@ -4,7 +4,7 @@ import akka.actor.{Actor, Props, Stash}
 import akka.stream.scaladsl.{Merge, Source}
 import com.github.nscala_time.time.Imports.DateTime
 import models._
-import play.api.Logger
+import play.api.{Logger, Logging}
 import play.api.libs.EventSource
 import play.api.libs.EventSource.{Event, EventDataExtractor, EventNameExtractor}
 import play.api.libs.json.Json
@@ -92,7 +92,7 @@ object WaiterTaskHeader {
   }
 }
 
-class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
+class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Logging {
   val tasks = mutable.Map[Long, StoredWaiterTask]()
 
   import WaiterActor._
@@ -120,12 +120,9 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     case Load => {
       val f = WaiterModel.load(db)
 
-      f.onSuccess {
-        case loaded => self ! Loaded(loaded)
-      }
-      f.onFailure {
-        case x =>
-          Logger.error("failed to load", x)
+      f.foreach { loaded => self ! Loaded(loaded) }
+      f.failed.foreach { x =>
+          logger.error(s"failed to load waiter model, reloading: $x")
           // reload in 5 seconds
           import scala.concurrent.duration._
           import scala.language.postfixOps
@@ -137,8 +134,11 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
       newtasks.foreach { task =>
         tasks.put(task.id, task)
       }
+      unstashAll()
       context.become(initialized)
     }
+
+    case _ => stash()
   }
 
   def initialized: Receive = {
@@ -163,13 +163,13 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     }
 
     case AckTask(id, room) =>
-      WaiterModel.markDone(db, id, room).onSuccess {
-        case (when) => self ! TaskAcked(id, when, room)
+      WaiterModel.markDone(db, id, room).foreach { when =>
+        self ! TaskAcked(id, when, room)
       }
 
     case TaskAcked(id, when, room) => {
       tasks.get(id).foreach { stored =>
-        val newMsg = StoredWaiterTask(stored.id, stored.when, stored.message, stored.rooms, stored.acked.updated(room, when))
+        val newMsg = stored.copy(acked = stored.acked.updated(room, when))
         tasks.put(id, newMsg)
         waiterChannel.offer(WaiterTaskUpdated(newMsg))
         headerChannel.offer(getActual)
@@ -177,15 +177,14 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     }
 
     case UnackTask(id, room) => {
-      WaiterModel.unmarkDone(db, id, room).onSuccess {
-        case _ =>
-          self ! TaskUnacked(id, room)
+      WaiterModel.unmarkDone(db, id, room).foreach { _ =>
+        self ! TaskUnacked(id, room)
       }
     }
 
     case TaskUnacked(id, room) => {
       tasks.get(id).foreach { stored =>
-        val newMsg = StoredWaiterTask(stored.id, stored.when, stored.message, stored.rooms, stored.acked - room)
+        val newMsg = stored.copy(acked = stored.acked - room)
         tasks.put(id, newMsg)
         waiterChannel.offer(WaiterTaskUpdated(newMsg))
         headerChannel.offer(getActual)
@@ -200,9 +199,7 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash {
     }
 
     case DeleteTask(id) => {
-      WaiterModel.delete(db, id).onComplete {
-        case _ => self ! TaskDeleted(id)
-      }
+      WaiterModel.delete(db, id).onComplete(_ => self ! TaskDeleted(id))
     }
 
     case TaskDeleted(id) => {

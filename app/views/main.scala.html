@@ -1,4 +1,4 @@
-@(loggedIn: LoggedInTeam, tab: String = "", styles: Html = Html(""), scripts: Html = Html(""))(content: Html)(implicit request: RequestHeader)
+@(loggedIn: LoggedInTeam, tab: String = "", styles: Html = Html(""), scripts: Html = Html(""))(content: Html)(implicit request: RequestHeader, messages: Messages)
 
 @navlink(myid: String, myhref: play.api.mvc.Call, mytext: Html) = {
     @if(myid == tab) {
@@ -9,12 +9,12 @@
 }
 
 @teamNavlinks = {
-@navlink("index", routes.Application.index, Html("Попытки"))
-@navlink("submit", routes.Application.submit, Html("Отправить"))
-@navlink("monitor", routes.Application.monitorDefault, Html("Монитор"))
-@navlink("clarifications", routes.QandA.index, Html("Сообщения жюри <span id='clrPending' class='badge'>!</span>"))
-@navlink("print", routes.Printing.index, Html("Печать"))
-@navlink("sendwithinput", routes.ServerSideEval.index, Html("Запуск"))
+@navlink("index", routes.Application.index, Html(messages("attempts")))
+@navlink("submit", routes.Application.submit, Html(messages("submit")))
+@navlink("monitor", routes.Application.monitorDefault, Html(messages("scoreboard")))
+@navlink("clarifications", routes.QandA.index, Html(messages("heading.clarifications") + " <span id='clrPending' class='badge'>!</span>"))
+@navlink("print", routes.Printing.index, Html(messages("print")))
+@navlink("sendwithinput", routes.ServerSideEval.index, Html(messages("customtest")))
 @for(c <- loggedIn.einfo) {
     @navlink(s"extrainfo${c.num}", routes.Application.showExtraInfo(c.num), Html(c.heading))
 }
@@ -22,18 +22,7 @@
 
 @myStyles = {
 @styles
-<style>
-    body {
-    padding-top: 80px; /* 60px to make the container go all the way to the bottom of the topbar */
-    }
-    .table-vcenter td {
-    vertical-align: middle!important;
-    }
-
-    .btn-nomargin {
-    margin: 0px 0px;
-    }
-</style>
+<link href="@routes.Assets.versioned("css/topbar.css")" rel="stylesheet">
 }
 
 @myScripts = {

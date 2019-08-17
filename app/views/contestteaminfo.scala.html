@@ -1,10 +1,10 @@
-@(loggedIn: LoggedInTeam, optLocation: Option[Location]=None)
+@(loggedIn: LoggedInTeam, optLocation: Option[Location]=None)(implicit messages: Messages)
 
 <div class="jumbotron">
     <h2>@loggedIn.contest.name</h2>
     <h3>@loggedIn.team.teamFullName</h3>
     @contestinfoshort(loggedIn.contest)
     @for(l <- optLocation) {
-        <p>Компьютер: <i>@l.name</i> в аудитории <i>@l.area.name</i>.</p>
+        <p>@messages("label.workstation"): <i>@l.name</i> @messages("label.inArea") <i>@l.area.name</i>.</p>
     }
 </div>

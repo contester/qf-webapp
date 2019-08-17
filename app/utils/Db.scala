@@ -5,6 +5,7 @@ import java.sql.Timestamp
 import actors.WaiterActor
 import akka.actor.ActorRef
 import com.github.nscala_time.time.Imports
+import play.api.libs.json.{JsValue, Json}
 import slick.jdbc.{PositionedParameters, SetParameter}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -28,6 +29,11 @@ object Db {
     x => new DateTime(x)
   )
 
+  implicit val jsValueColumnType = MappedColumnType.base[JsValue, String](
+    x => Json.stringify(x),
+    x => Json.parse(x)
+  )
+
   // TODO: implement fsequence (future sequence)
   // TODO: new fork-join-executor for database access?
 }
@@ -43,4 +49,9 @@ object Ask {
 
   def respond[T](ref: ActorRef, v: Try[T]) =
     ref ! v
+}
+
+object Selectable {
+  def forSelect(x: Seq[(String, String)], top: String) =
+    Seq(("", top)) ++ x
 }

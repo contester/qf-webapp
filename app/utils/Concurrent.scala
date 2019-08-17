@@ -25,7 +25,7 @@ object FormUtil {
     if (!inline.isEmpty) {
       Some(inline.getBytes(StandardCharsets.UTF_8))
     } else fileOpt.map { f =>
-      FileUtils.readFileToByteArray(f.ref.file)
+      FileUtils.readFileToByteArray(f.ref.path.toFile)
     }
 
   val emptyBytes = new Array[Byte](0)

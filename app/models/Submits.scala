@@ -1,7 +1,7 @@
 package models
 
 import org.joda.time.DateTime
-import play.api.Logger
+import play.api.{Logger, Logging}
 import slick.jdbc.{GetResult, JdbcBackend}
 import spire.math.Rational
 import spire.math.extras.{FixedPoint, FixedScale}
@@ -68,7 +68,7 @@ object SchoolCell {
     }
   }
 
-  def empty = SchoolCell(0, 0, false)
+  def empty = SchoolCell(0, 0, fullSolution = false)
 }
 
 object RationalToScoreStr {
@@ -79,11 +79,11 @@ object RationalToScoreStr {
     else FixedPoint(r).toString(scale)
 }
 
-object SchoolScorer extends SubmitScorer[SchoolCell] {
+object SchoolScorer extends SubmitScorer[SchoolCell] with Logging {
   def apply(cell: SchoolCell, submit: Submit) =
     if (!submit.compiled || !submit.finished || submit.taken == 0 || submit.failedOnFirst) {
       if (submit.compiled && submit.taken == 0) {
-        Logger.info(s"Compiled but taken = 0: $submit")
+        logger.info(s"Compiled but taken = 0: $submit")
       }
       (cell, None)
     } else {
@@ -111,7 +111,7 @@ case class SchoolCell(attempt: Int, score: Rational, fullSolution: Boolean) exte
 }
 
 object ACMCell {
-  def empty = ACMCell(0, 0, false)
+  def empty = ACMCell(0, 0, fullSolution = false)
 }
 
 object SecondsToTimeStr {
@@ -141,7 +141,7 @@ case class ACMCell(attempt: Int, arrivedSeconds: Int, fullSolution: Boolean) ext
     else s"-$attempt"
 }
 
-case class Memory(val underlying: Long) extends AnyVal {
+case class Memory(underlying: Long) extends AnyVal {
   override def toString: String = s"${underlying / 1024}"
 }
 
@@ -283,7 +283,7 @@ object Submits {
 
   def getTestingStats(details: Seq[ResultEntry]) =
     trOption(details.filter(_.test != 0)).map { detlist =>
-      SubmitStats(detlist.map(_.time).max, detlist.map(_.memory).max, detlist.find(_.timeLimitExceeded).isDefined)
+      SubmitStats(detlist.map(_.time).max, detlist.map(_.memory).max, detlist.exists(_.timeLimitExceeded))
     }.getOrElse(SubmitStats(TimeMs(0), Memory(0)))
 
   def getTestingLastResult(details: Seq[ResultEntry]) =
@@ -338,7 +338,8 @@ object Submits {
     }.map(_.flatten)
   }
 
-  def loadSubmitByID(db: JdbcBackend#DatabaseDef, submitId: Int)(implicit ec: ExecutionContext) = {
+  // Why do I have this method here?
+  private def loadSubmitByID(db: JdbcBackend#DatabaseDef, submitId: Int)(implicit ec: ExecutionContext) = {
     db.run(sql"""select NewSubmits.ID,
           NewSubmits.Arrived,
           unix_timestamp(NewSubmits.Arrived) - unix_timestamp(Contests.Start) as ArrivedSeconds,
@@ -362,7 +363,7 @@ object Submits {
 
   def dbsub2sub(s: DatabaseSubmitRow): Submit = {
     Submit(SubmitId(s.submit.id.toInt, s.submit.arrived, s.submit.team.id.toInt, s.submit.contest.toInt, RatedProblem(s.submit.problem.id, s.submit.problem.rating), s.submit.ext),
-      s.testingData.map(_.finished).getOrElse(false), s.testingData.map(_.compiled).getOrElse(false),
+      s.testingData.exists(_.finished), s.testingData.exists(_.compiled),
       s.testingData.map(_.passed).getOrElse(0), s.testingData.map(_.taken).getOrElse(0),
       s.testingData.map(_.testingId.toInt))
   }

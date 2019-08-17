@@ -1,7 +1,6 @@
 package models
 
 import javax.inject.{Inject, Singleton}
-
 import actors.MonitorActor
 import akka.actor.ActorSystem
 import models.Foo.RankedRow
@@ -9,6 +8,8 @@ import org.stingray.qf.actors.{ProblemStateActor, TeamStateActor}
 import org.stingray.qf.models.TeamClient
 import play.api.Configuration
 import play.api.db.slick.DatabaseConfigProvider
+import play.api.i18n.MessagesApi
+import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import spire.math.Rational
 import utils.Ask
@@ -102,7 +103,7 @@ object Foo {
 
 }
 
-object School {
+object MonitorSchool {
   case class Status(problems: Seq[String], rows: Seq[RankedRow[Rational, SchoolCell]]) extends AnyStatus {
     override def anyRows: Seq[AnyRankedRow] = rows
   }
@@ -126,7 +127,7 @@ object School {
 }
 
 object ACM {
-  case class Status(val problems: Seq[String], val rows: Seq[RankedRow[Score, ACMCell]]) extends AnyStatus {
+  case class Status(problems: Seq[String], rows: Seq[RankedRow[Score, ACMCell]]) extends AnyStatus {
     override def anyRows: Seq[AnyRankedRow] = rows
   }
 
@@ -155,7 +156,7 @@ object ACM {
     cells.foldLeft(Score(0, 0, 0))(cellFold)
 
   def calculateStatus(problems: Seq[Problem], teams: Seq[Team], submits: Seq[Submit]) =
-    Status(problems.map(_.id), Foo.groupAndRank(teams, submits, getCell(_), getScore(_)))
+    Status(problems.map(_.id), Foo.groupAndRank(teams, submits, getCell, getScore))
 }
 
 case class StoredContestStatus(contest: Contest, frozen: AnyStatus, exposed: AnyStatus) {
@@ -169,17 +170,16 @@ case class StoredContestStatus(contest: Contest, frozen: AnyStatus, exposed: Any
     ContestMonitor(contest, status(overrideFreeze))
 }
 
-@Singleton
-class Monitor @Inject() (dbConfigProvider: DatabaseConfigProvider, system: ActorSystem, configuration: Configuration) {
-  private val db = dbConfigProvider.get[JdbcProfile].db
+class Monitor(dbConfig: DatabaseConfig[JdbcProfile], system: ActorSystem, configuration: Configuration, messagesApi: MessagesApi) {
+  private val db = dbConfig.db
   private val teamStateActor = system.actorOf(TeamStateActor.props(db), "team-state-actor")
   val teamClient = new TeamClient(teamStateActor)
   private val problemStateActor = system.actorOf(ProblemStateActor.props(db), "problem-state-actor")
   val problemClient = new ProblemClient(problemStateActor)
 
   private[this] val monitorActor = system.actorOf(MonitorActor.props(
-    db, configuration.getString("monitor.static_location"),
-    teamClient, problemClient), "monitor-actor")
+    db, configuration.getOptional[String]("monitor.static_location"),
+    teamClient, problemClient, messagesApi), "monitor-actor")
 
   private implicit val monitorTimeout: akka.util.Timeout = {
     import scala.concurrent.duration._

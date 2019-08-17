@@ -1,2 +1,2 @@
-@(form: Form[AuthData])(implicit flash: Flash, messages: Messages)
-@loginform("Пожалуйста, авторизуйтесь", controllers.routes.AuthForms.authenticate, form)
+@(form: Form[AuthData])(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@loginform(messages("heading.login"), controllers.routes.AuthForms.authenticate, form)

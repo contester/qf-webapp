@@ -1,2 +1,2 @@
-@(form: Form[AuthData])(implicit flash: Flash, messages: Messages)
-@loginform("Вход в комментаторскую", controllers.routes.AdminAuthForms.authenticate, form)
+@(form: Form[AuthData])(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@loginform(messages("heading.adminLogin"), controllers.routes.AdminAuthForms.authenticate, form)

@@ -12,7 +12,7 @@ import scala.concurrent.{ExecutionContext, Future}
 case class StoredWaiterTask(id: Long, when: DateTime, message: String, rooms: Set[String],
                             acked: Map[String, DateTime]) {
   def matches(perm: WaiterPermissions): Boolean =
-    perm.canCreateTasks || rooms.find(perm.filter).isDefined
+    perm.canCreateTasks || rooms.exists(perm.filter)
 
   def adapt(perm: WaiterPermissions): AdaptedWaiterTask = {
     val odmin = perm.canCreateTasks

@@ -2,7 +2,7 @@ package models
 
 import models.ContesterResults.FinishedTesting
 import models.Submits.{indexGrouped, scoreGrouped}
-import play.api.Logger
+import play.api.{Logger, Logging}
 import play.api.i18n.Messages
 import play.api.libs.EventSource.{EventDataExtractor, EventNameExtractor}
 import play.api.libs.json.{JsValue, Json, Writes}
@@ -17,7 +17,7 @@ trait SubmitResult {
   def message: String
 }
 
-case class TimeMs(val underlying: Int) extends AnyVal {
+case class TimeMs(underlying: Int) extends AnyVal {
   override def toString: String = s"${underlying}"
 }
 
@@ -30,17 +30,17 @@ case class SubmitStats(timeMs: TimeMs, memory: Memory, timeLimitExceeded: Boolea
 case object SubmitWaiting extends SubmitResult {
   override val success: Boolean = false
 
-  override val message: String = "Выполняется"
+  override val message: String = "Running..."
 }
 
 case object SubmitAccepted extends SubmitResult {
   override val success = true
-  override val message = "Полное решение"
+  override val message = "ACCEPTED"
 }
 
 case object SubmitCompileError extends SubmitResult {
   override val success = false
-  override val message = "Ошибка компиляции"
+  override val message = "Compilation error"
 }
 
 case class SubmitPartialResult(passed: Int, taken: Int) extends SubmitResult {
@@ -54,10 +54,10 @@ case class SubmitACMPartialResult(text: String, test: Option[Int]) extends Submi
   override val success = false
 
   override def message =
-    s"${text}${test.map(x => s" на тесте $x").getOrElse("")}"
+    s"${text}${test.map(x => s" on test $x").getOrElse("")}"
 }
 
-object SubmitResult {
+object SubmitResult extends Logging {
   implicit val submitResultWrites = new Writes[SubmitResult] {
     override def writes(o: SubmitResult): JsValue = Json.obj(
       "success" -> o.success,
@@ -91,18 +91,18 @@ object SubmitResult {
 
   def annotateFinished(db: JdbcBackend#DatabaseDef, finished: FinishedTesting)(implicit ec: ExecutionContext): Future[FullyDescribedSubmit] = {
     Submits.loadAllSubmits(db, finished.submit.contest, finished.submit.team, finished.submit.problem).map(_.map(Submits.dbsub2sub)).flatMap { submits =>
-      Logger.info(s"submits: $submits")
+      logger.info(s"submits: $submits")
       val scored = if (finished.submit.schoolMode) scoreGrouped[SchoolCell](submits, SchoolCell.empty, SchoolScorer)
       else scoreGrouped(submits, ACMCell.empty, ACMScorer)
       val indexed: Seq[((Submit, Option[Score]), Int)] = indexGrouped(scored._2)
 
-      Logger.info(s"indexed: $indexed")
+      logger.info(s"indexed: $indexed")
       val submitEntry = indexed.find(_._1._1.submitId.id == finished.submit.id).get
-      Logger.info(s"submit: $submitEntry")
+      logger.info(s"submit: $submitEntry")
       val index = submitEntry._2
       val submit = submitEntry._1._1
       annotate(db, finished.submit.schoolMode, submit).map { submitResult =>
-        Logger.debug(s"Annotated submit result: $submitResult")
+        logger.debug(s"Annotated submit result: $submitResult")
         FullyDescribedSubmit(submit, index, submitEntry._1._2, submitResult._1, submitResult._3, submitResult._2)
       }
     }
@@ -123,16 +123,16 @@ object SubmitResult {
   */
 
   val message = Map(
-    1 -> "Скомпилировалось",
-    2 -> "Ошибка компиляции",
+    1 -> "Compilation successful",
+    2 -> "Compilation error",
     10 -> "Ok",
-    11 -> "Превышен лимит времени",
-    12 -> "Ошибка выполнения",
-    13 -> "Неверный ответ",
-    14 -> "Неверный ответ",
-    15 -> "Превышен лимит памяти",
-    16 -> "Ошибка тестера",
-    21 -> "Отвергнуто"
+    11 -> "Time limit exceeded",
+    12 -> "Runtime error",
+    13 -> "Wrong answer",
+    14 -> "Wrong answer",
+    15 -> "Time limit exceeded",
+    16 -> "Tester error",
+    21 -> "Rejected"
   )
 
   def success(code: Int) =

@@ -18,20 +18,20 @@
 @contestteaminfo(loggedIn, optLocation)
 
 <div class="panel panel-success">
-    <div class="panel-heading"><h3 class="panel-title">Напечатать текст</h3></div>
+    <div class="panel-heading"><h3 class="panel-title">@messages("label.printText")</h3></div>
     <div class="panel-body">
         @if(optLocation.isEmpty) {
         <div class="alert alert-danger" role="alert">
             <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
-            <span class="sr-only">Error:</span>
-            Невозможно определить ваше местонахождение. Ничего напечатать не получится.
+            <span class="sr-only">@messages("error"):</span>
+            @messages("label.locateFailed")
         </div>
         }
-        @b3.form(controllers.routes.Printing.post, 'enctype -> "multipart/form-data", 'id -> "submitform") {
+        @b3.horizontal.formCSRF(controllers.routes.Printing.post, "col-md-2", "col-md-10", 'enctype -> "multipart/form-data", 'id -> "submitform") { implicit fc =>
         @form.globalError.map { error =>
         <div class="alert alert-danger" role="alert">
             <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
-            <span class="sr-only">Error:</span>
+            <span class="sr-only">@messages("error"):</span>
             @error.message
         </div>
         }
@@ -42,17 +42,17 @@
         </div>
         }
 
-        @filex(form("file"), '_label -> "Файл с текстом для печати")
-        @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Отправить}
+        @filex(form("file"), '_label -> messages("label.fileToPrint"))
+        @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> @messages("send")}
         }
     </div>
 </div>
 
 <div class="panel panel-info">
-    <div class="panel-heading"><h3 class="panel-title">Задания</h3></div>
+    <div class="panel-heading"><h3 class="panel-title">@messages("label.printJobs")</h3></div>
     <table class="table table-bordered table-responsive">
         <thead>
-        <tr><th>Время</th><th>Имя файла</th><th>Результат</th></tr>
+        <tr><th>@messages("label.time")</th><th>@messages("label.fileName")</th><th>@messages("label.result")</th></tr>
         </thead>
         <tbody>
         @for(s <- jobs) {

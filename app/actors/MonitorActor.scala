@@ -1,23 +1,24 @@
 package actors
 
 import java.io.File
+import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, StandardCopyOption}
 
-import akka.actor.{Actor, ActorRef, Props, Stash}
+import akka.actor.{Actor, Props, Stash}
 import models._
-import org.apache.commons.io.{Charsets, FileUtils}
+import org.apache.commons.io.FileUtils
 import org.stingray.qf.models.TeamClient
-import play.twirl.api.HtmlFormat
+import play.api.i18n.{Lang, Messages, MessagesApi, MessagesImpl}
 import slick.jdbc.JdbcBackend
 
 import scala.collection.mutable
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
 object MonitorActor {
   def props(db: JdbcBackend#DatabaseDef, staticLocation: Option[String],
-            teamClient: TeamClient, problemClient: ProblemClient) =
-    Props(new MonitorActor(db, staticLocation, teamClient, problemClient))
+            teamClient: TeamClient, problemClient: ProblemClient, messagesApi: MessagesApi) =
+    Props(new MonitorActor(db, staticLocation, teamClient, problemClient, messagesApi))
 
   case class Get(contest: Int)
   case object Start
@@ -28,12 +29,15 @@ object MonitorActor {
 class MonitorActor(db: JdbcBackend#DatabaseDef,
                    staticLocation: Option[String],
                    teamClient: TeamClient,
-                   problemClient: ProblemClient) extends Actor with Stash {
+                   problemClient: ProblemClient,
+                   messagesApi: MessagesApi) extends Actor with Stash {
   import MonitorActor._
   import context.dispatcher
 
   import scala.concurrent.duration._
   import scala.language.postfixOps
+
+  private implicit val messages = MessagesImpl(Lang("en"), messagesApi)
 
   private val staticLocationFile = staticLocation.map(x => new File(x))
 
@@ -58,7 +62,7 @@ class MonitorActor(db: JdbcBackend#DatabaseDef,
       case ((problems, teams), submits) =>
         val calcStatus: (Seq[Submit]) => AnyStatus with Product with Serializable =
           if (contest.schoolMode)
-            School.calculateStatus(problems, teams.values.toSeq, _)
+            MonitorSchool.calculateStatus(problems, teams.values.toSeq, _)
           else
             ACM.calculateStatus(problems, teams.values.toSeq, _)
 
@@ -69,7 +73,8 @@ class MonitorActor(db: JdbcBackend#DatabaseDef,
   }
 
   private def loadMonitors()(implicit ec: ExecutionContext) = {
-    val fu = db.run(Contests.getContests).flatMap { contests =>
+    import slick.jdbc.MySQLProfile.api._
+    val fu = db.run(SlickModel.contests.result).flatMap { contests =>
       Future.sequence(contests.map(getContestMonitor))
     }
     fu.foreach(st => self ! State(st))
@@ -88,7 +93,7 @@ class MonitorActor(db: JdbcBackend#DatabaseDef,
       for (location <- staticLocationFile) {
         val tmpFile = new File(location, s"${st.contest.id}.html.new")
         FileUtils.writeStringToFile(tmpFile,
-          Compressor(views.html.staticmonitor(st.contest, st.monitor(false).status).body), Charsets.UTF_8)
+          Compressor(views.html.staticmonitor(st.contest, st.monitor(false).status).body), StandardCharsets.UTF_8)
         Files.move(tmpFile.toPath, new File(location, s"${st.contest.id}.html").toPath, StandardCopyOption.ATOMIC_MOVE)
       }
     }
@@ -107,7 +112,7 @@ class MonitorActor(db: JdbcBackend#DatabaseDef,
       unstashAll()
       context.become(initialized)
     }
-    case Get(id) =>
+    case _ =>
       stash()
   }
 }

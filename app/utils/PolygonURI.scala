@@ -1,6 +1,7 @@
 package utils
 
 import java.net.{URI, URL}
+import java.nio.charset.StandardCharsets
 
 import org.apache.commons.io.Charsets
 import org.apache.http.NameValuePair
@@ -22,7 +23,7 @@ object PolygonURL {
     else {
       import collection.JavaConversions._
       val newParams = asJavaIterable((getParams(url) ++ params).map(x => new BasicNameValuePair(x._1, x._2).asInstanceOf[NameValuePair]))
-      val newQuery = URLEncodedUtils.format(newParams, Charsets.UTF_8)
+      val newQuery = URLEncodedUtils.format(newParams, StandardCharsets.UTF_8)
       new URL(stripQuery(url), "?" + newQuery)
     }
 

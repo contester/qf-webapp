@@ -1,22 +1,24 @@
 package controllers
 
 import java.nio.charset.StandardCharsets
-import javax.inject.Inject
 
+import javax.inject.Inject
 import akka.actor.{ActorSystem, Props}
+import com.mohiva.play.silhouette.api.Silhouette
 import com.spingo.op_rabbit.{Message, RabbitControl}
-import jp.t2v.lab.play2.auth.AuthElement
 import models._
 import org.apache.commons.io.FileUtils
 import org.joda.time.DateTime
-import play.api.Logger
+import play.api.{Logger, Logging}
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
-import play.api.mvc.{Controller, RequestHeader}
+import play.api.mvc.{AbstractController, Controller, ControllerComponents, RequestHeader}
+import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import slick.jdbc.GetResult
+import utils.auth.TeamsEnv
 import views.html
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -42,11 +44,10 @@ case class SubmitData(textOnly: Boolean)
   }
 }
 
-class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
-                         val auth: AuthWrapper, rabbitMqModel: RabbitMqModel,
-                          val messagesApi: MessagesApi) extends Controller with AuthElement
-      with AuthConfigImpl with I18nSupport {
-  private val dbConfig = dbConfigProvider.get[JdbcProfile]
+class Printing (cc: ControllerComponents,
+                silhouette: Silhouette[TeamsEnv],
+                rabbitMqModel: RabbitMqModel,
+                dbConfig: DatabaseConfig[JdbcProfile]) extends AbstractController(cc) with I18nSupport with Logging {
   private val db = dbConfig.db
   import dbConfig.driver.api._
   import utils.Db._
@@ -65,10 +66,11 @@ class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
       html.printform(loggedIn,location, form, printJobs)
     }
 
-  def index = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>
-    implicit val ec = StackActionExecutionContext
+  import scala.concurrent.ExecutionContext.Implicits.global
+
+  def index = silhouette.SecuredAction.async { implicit request =>
     Locator.locate(db, request.remoteAddress).flatMap { location =>
-      getPrintForm(loggedIn, printForm, location).map(Ok(_))
+      getPrintForm(request.identity, printForm, location).map(Ok(_))
     }
   }
 
@@ -85,13 +87,10 @@ class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
     x.map(toQ)
   }
 
-  def post = AsyncStack(parse.multipartFormData, AuthorityKey -> UserPermissions.any) { implicit request =>
-    val loggedInTeam = loggedIn
-    implicit val ec = StackActionExecutionContext
-
+  def post = silhouette.SecuredAction(parse.multipartFormData).async { implicit request =>
     val parsed = printForm.bindFromRequest
     val solutionOpt = request.body.file("file").map { solution =>
-      solution.filename -> FileUtils.readFileToByteArray(solution.ref.file)
+      solution.filename -> FileUtils.readFileToByteArray(solution.ref.path.toFile)
     }.map(x => x._1 -> fixEncoding(x._2))
 
     val parsed0 = if (solutionOpt.isDefined) parsed
@@ -99,14 +98,14 @@ class Printing @Inject() (val dbConfigProvider: DatabaseConfigProvider,
 
     Locator.locate(db, request.remoteAddress).flatMap { location =>
       if (location.isEmpty) {
-        Logger.debug(s"Printing from UNKNOWN LOCATION remote addr: ${request.remoteAddress}")
+        logger.debug(s"Printing from UNKNOWN LOCATION remote addr: ${request.remoteAddress}")
       }
       parsed0.fold(
-        formWithErrors => getPrintForm(loggedIn, formWithErrors, location).map(BadRequest(_)),
+        formWithErrors => getPrintForm(request.identity, formWithErrors, location).map(BadRequest(_)),
         submitData => {
           db.run(
             (sqlu"""insert into PrintJobs (Contest, Team, Filename, DATA, Computer, Arrived) values
-                    (${loggedInTeam.contest.id}, ${loggedInTeam.team.localId}, ${solutionOpt.get._1},
+                    (${request.identity.contest.id}, ${request.identity.team.localId}, ${solutionOpt.get._1},
             ${solutionOpt.get._2}, INET_ATON(${request.remoteAddress}), CURRENT_TIMESTAMP())
                   """.andThen(sql"select last_insert_id()".as[Int])).withPinnedSession
           ).map { printJobIds =>

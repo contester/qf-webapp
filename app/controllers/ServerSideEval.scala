@@ -1,11 +1,12 @@
 package controllers
 
 import java.nio.charset.StandardCharsets
-import javax.inject.Inject
 
+import javax.inject.Inject
 import akka.actor.{ActorSystem, Props}
+import com.mohiva.play.silhouette.api.{Authorization, Silhouette}
+import com.mohiva.play.silhouette.impl.authenticators.SessionAuthenticator
 import com.spingo.op_rabbit.{Message, RabbitControl}
-import jp.t2v.lab.play2.auth.AuthElement
 import models._
 import org.apache.commons.io.FileUtils
 import play.api.data.Form
@@ -13,10 +14,12 @@ import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.{I18nSupport, MessagesApi}
 import play.api.libs.json.Json
-import play.api.mvc.{Controller, RequestHeader}
+import play.api.mvc._
+import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import slick.jdbc.GetResult
 import utils.FormUtil
+import utils.auth.{AdminEnv, TeamsEnv}
 import views.html
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -34,17 +37,18 @@ object ServerSideEvalID {
   implicit val format = Json.format[ServerSideEvalID]
 }
 
-class ServerSideEval @Inject() (val dbConfigProvider: DatabaseConfigProvider,
-                               val auth: AuthWrapper, rabbitMqModel: RabbitMqModel,
-                             val messagesApi: MessagesApi) extends Controller with AuthElement with AuthConfigImpl with I18nSupport {
-  private val dbConfig = dbConfigProvider.get[JdbcProfile]
+class ServerSideEval (cc: ControllerComponents,
+                      silhouette: Silhouette[TeamsEnv],
+                      dbConfig: DatabaseConfig[JdbcProfile], rabbitMqModel: RabbitMqModel
+                             ) extends AbstractController(cc) with I18nSupport {
   private val db = dbConfig.db
   import utils.Db._
-  import dbConfig.driver.api._
+  import dbConfig.profile.api._
   import controllers.serversideeval.ServerSideData
 
   val rabbitMq = rabbitMqModel.rabbitMq
   import com.spingo.op_rabbit.PlayJsonSupport._
+
 
   private val serverSideForm = Form {
     mapping("compiler" -> number, "inlinesolution" -> text, "inlinedata" -> text)(ServerSideData.apply)(ServerSideData.unapply)
@@ -62,64 +66,57 @@ class ServerSideEval @Inject() (val dbConfigProvider: DatabaseConfigProvider,
     db.run(sql"""SELECT ID, Touched, Ext, Source, Input, Output, Timex, Memory, Info, Result, Contest, Team, Processed, Arrived
     FROM Eval WHERE ID = $id ORDER BY Arrived DESC""".as[EvalEntry]).map(_.headOption)
 
-  private def canSeeEval(id: Int)(account: LoggedInTeam): Future[Boolean] = {
-    import play.api.libs.concurrent.Execution.Implicits.defaultContext
-
-    getEvalById(id).map { cids =>
-      cids.exists(cid => account.matching(ContestTeamIds(cid.contest, cid.team)))
-    }
-  }
-
+  private def insertEval(contest:Int, team:Int, ext:String, solution: Array[Byte], data: Array[Byte]) =
+    db.run(
+      (sqlu"""insert into Eval (Contest, Team, Ext, Source, Input, Arrived) values
+                    ($contest, $team, $ext, $solution,
+                $data, CURRENT_TIMESTAMP())
+                  """.andThen(sql"select last_insert_id()".as[Int].head)).withPinnedSession
+    )
 
   private def getEvalForm(loggedInTeam: LoggedInTeam, compilers:Seq[Compiler],
                           form: Form[ServerSideData])(implicit request: RequestHeader, ec: ExecutionContext) =
     getEvals(loggedInTeam.contest.id, loggedInTeam.team.localId).map { evals =>
-        html.sendwithinput(loggedInTeam, form, Compilers.toSelect(compilers), evals)
+      html.sendwithinput(loggedInTeam, form, Compilers.forForm(compilers), evals)
     }
 
-  def index = AsyncStack(AuthorityKey -> UserPermissions.any) { implicit request =>
-    val loggedInTeam = loggedIn
-    implicit val ec = StackActionExecutionContext
+  case class canSeeEval(id: Int)(implicit ec: ExecutionContext) extends Authorization[LoggedInTeam, SessionAuthenticator] {
+    override def isAuthorized[B](identity: LoggedInTeam, authenticator: SessionAuthenticator)(implicit request: Request[B]): Future[Boolean] =
+      getEvalById(id).map { cids =>
+        cids.exists(cid => identity.matching(ContestTeamIds(cid.contest, cid.team)))
+      }
+  }
 
-    db.run(loggedInTeam.contest.getCompilers).flatMap { compilers =>
-      getEvalForm(loggedIn, compilers, serverSideForm).map(Ok(_))
+
+  import scala.concurrent.ExecutionContext.Implicits.global
+
+
+  def index = silhouette.SecuredAction.async { implicit request =>
+    db.run(request.identity.contest.getCompilers.result).flatMap { compilers =>
+      getEvalForm(request.identity, compilers, serverSideForm).map(Ok(_))
     }
   }
 
-  def details(id: Int) = AsyncStack(AuthorityKey -> canSeeEval(id)) { implicit request =>
-    val loggedInTeam = loggedIn
-    implicit val ec = StackActionExecutionContext
-
+  def details(id: Int) = silhouette.SecuredAction(canSeeEval(id)).async { implicit request =>
     getEvalById(id).map { opt =>
       opt.map { ev =>
-        Ok(html.evaldetails(loggedInTeam, ev))
+        Ok(html.evaldetails(request.identity, ev))
       }.getOrElse(Redirect(routes.ServerSideEval.index))
     }
   }
 
-  def post = AsyncStack(parse.multipartFormData, AuthorityKey -> UserPermissions.any) { implicit request =>
-    val loggedInTeam = loggedIn
-    implicit val ec = StackActionExecutionContext
-
-    db.run(loggedInTeam.contest.getCompilers).flatMap { compilers =>
+  def post = silhouette.SecuredAction(parse.multipartFormData).async { implicit request =>
+    db.run(request.identity.contest.getCompilers.result).flatMap { compilers =>
         val parsed = serverSideForm.bindFromRequest
 
         parsed.fold(
-          formWithErrors => getEvalForm(loggedInTeam, compilers, formWithErrors).map(BadRequest(_)),
+          formWithErrors => getEvalForm(request.identity, compilers, formWithErrors).map(BadRequest(_)),
           submitData => {
             val cext = compilers.map(x => x.id -> x).toMap.apply(submitData.compiler).ext
             val solutionBytes = FormUtil.inlineOrFile(submitData.inlinesolution, request.body.file("file")).getOrElse(FormUtil.emptyBytes)
             val dataBytes = FormUtil.inlineOrFile(submitData.inlinedata, request.body.file("inputfile")).getOrElse(FormUtil.emptyBytes)
-            db.run(
-              (sqlu"""insert into Eval (Contest, Team, Ext, Source, Input, Arrived) values
-                    (${loggedInTeam.contest.id}, ${loggedInTeam.team.localId}, ${cext}, ${solutionBytes},
-                ${dataBytes}, CURRENT_TIMESTAMP())
-                  """.andThen(sql"select last_insert_id()".as[Int])).withPinnedSession
-            ).map { wat =>
-              wat.foreach { wid =>
-                rabbitMq ! Message.queue(ServerSideEvalID(wid), queue = "contester.evalrequests")
-              }
-
+            insertEval(request.identity.contest.id, request.identity.team.localId, cext, solutionBytes, dataBytes).map {  wid =>
+              rabbitMq ! Message.queue(ServerSideEvalID(wid), queue = "contester.evalrequests")
               Redirect(routes.ServerSideEval.index)
             }
           }

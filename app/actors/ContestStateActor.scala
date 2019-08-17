@@ -2,7 +2,7 @@ package org.stingray.qf.actors
 
 import akka.actor.Props
 import com.github.nscala_time.time.Imports.DateTime
-import models.Contest
+import models.{Contest, SlickModel}
 import slick.jdbc.{GetResult, JdbcBackend}
 
 import scala.concurrent.Future
@@ -22,15 +22,9 @@ class ContestStateActor(db: JdbcBackend#DatabaseDef) extends AnyStateActor[Conte
 
   import slick.jdbc.MySQLProfile.api._
 
-  implicit val convertContests = GetResult(r => Contest(r.nextInt(), r.nextString(), r.nextBoolean(),
-    new DateTime(r.nextTimestamp()), new DateTime(r.nextTimestamp()), new DateTime(r.nextTimestamp()),
-    new DateTime(r.nextTimestamp())))
-
-  private val getContests =
-    sql"""select ID, Name, SchoolMode, Start, End, Finish, Expose from Contests""".as[Contest]
 
   override def loadStart(): Future[ContestState] =
-    db.run(getContests).map { rows =>
+    db.run(SlickModel.contests.result).map { rows =>
       rows.map(x => x.id -> x).toMap
     }
 

@@ -1,4 +1,4 @@
-@(contest: Contest, status: models.AnyStatus, loggedIn: LoggedInTeam)(implicit request: RequestHeader)
+@(contest: Contest, status: models.AnyStatus, loggedIn: LoggedInTeam)(implicit request: RequestHeader, messages: Messages)
 
 
 @main(loggedIn, tab = "monitor") {
