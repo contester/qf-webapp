@@ -53,3 +53,4 @@ label.inputFile=Файл с входными данными
 label.returnCode=Код возврата
 heading.testingResult=Результат тестирования
 label.test=Тест
+label.tasks=Задания

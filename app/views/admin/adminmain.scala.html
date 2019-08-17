@@ -11,8 +11,8 @@
 @adminNavlinks = {
 @navlink("status", Html(messages("status")))
 @navlink("monitor", Html(messages("scoreboard")))
-@navlink("qanda", Html("Вопросы <span id='clrPending' class='badge'>-</span>"))
-@navlink("tasks", Html("Задания <span id='tasksPending' class='badge'>-</span>"))
+@navlink("qanda", Html(messages("heading.clarifications")+" <span id='clrPending' class='badge'>-</span>"))
+@navlink("tasks", Html(messages("label.tasks")+" <span id='tasksPending' class='badge'>-</span>"))
 @navlink("rejudge", Html("Rejudge"))
 @navlink("print", Html("Print"))
 <li class="dropdown">
