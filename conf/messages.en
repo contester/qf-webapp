@@ -56,3 +56,4 @@ heading.testingResult=Testing result
 label.test=Test
 label.tasks=Tasks
 label.response=Response
+label.hidden=Hidden
