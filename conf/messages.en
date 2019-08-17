@@ -52,3 +52,5 @@ label.solutionSource=Source code
 label.solutionFile=File with source code
 label.inputFile=Input file
 label.returnCode=Return code
+heading.testingResult=Testing result
+label.test=Test
