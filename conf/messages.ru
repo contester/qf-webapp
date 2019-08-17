@@ -54,3 +54,4 @@ label.returnCode=Код возврата
 heading.testingResult=Результат тестирования
 label.test=Тест
 label.tasks=Задания
+label.response=Ответ

@@ -54,4 +54,5 @@ label.inputFile=Input file
 label.returnCode=Return code
 heading.testingResult=Testing result
 label.test=Test
-label.tasks=Задания
+label.tasks=Tasks
+label.response=Response

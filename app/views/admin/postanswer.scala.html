@@ -15,7 +15,7 @@
         @form.globalError.map { error =>
         <div class="alert alert-danger" role="alert">
             <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
-            <span class="sr-only">Error:</span>
+            <span class="sr-only">@messages("error"):</span>
             @error.message
         </div>
         }
@@ -26,7 +26,7 @@
         @b3.static("Problem"){ @clr.problem }
         @b3.static("Question"){ @clr.request }
         @b3.static("Timestamp"){ @clr.arrived }
-        @b3.text(form("answer"), '_label -> "Ответ")
+        @b3.text(form("answer"), '_label -> messages("label.response"))
         @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Update}
         }
     </div>
