@@ -60,8 +60,8 @@
         @panel(s"Тест ${s.test}", "primary") {
             @details(s, "чекера")
             @for(out <- outputs.get(s.test)) {
-                @fscontent("Ввод", out.input)
-                @fscontent("Вывод", out.output)
+                @fscontent(messages("label.input"), out.input)
+                @fscontent(messages("label.output"), out.output)
                 @fscontent("Ответ жюри", out.answer)
             }
             @stdpanel("Комментарий чекера", s.testerOutput)
