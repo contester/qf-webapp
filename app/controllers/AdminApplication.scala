@@ -86,7 +86,6 @@ class AdminApplication (cc: ControllerComponents,
       range.split(',').map(parseItem).foreach(builder.add)
       builder.build()
     }
-    //sql"""select ID, Contest from NewSubmits order by ID""".as[(Int, Int)]
     db.run(SlickModel.newSubmits.map(x => (x.id, x.contest)).sortBy(_._1).result).map { submits =>
       val filtered = submits.filter { id =>
         checks.contains(id._1) && account.canModify(id._2)
