@@ -79,9 +79,6 @@ object WaiterModel {
     db.run(DBIO.seq(waiterTaskRecords.filter(_.id === id).delete, sqlu"""delete from WaiterTasks where ID = $id"""))
   }
 
-/*  def update(db: JdbcBackend#DatabaseDef, id: Long, message: String, rooms: Set[String], reset: Boolean)(implicit ec: ExecutionContext) =
-    maybeMakeRooms(db, rooms)*/
-
   private def getAllRecords(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[Map[Long, Map[String, DateTime]]] =
     db.run(waiterTaskRecords.result).map { records =>
       records.toList.groupBy(_.id).mapValues(x => x.map(y => y.room -> y.ts).toMap)
