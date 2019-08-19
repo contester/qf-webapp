@@ -9,9 +9,9 @@ import org.apache.http.client.utils.URLEncodedUtils
 import org.apache.http.message.BasicNameValuePair
 
 object PolygonURL {
-  def getParams(url: URL) = {
-    import collection.JavaConversions._
-    URLEncodedUtils.parse(url.toURI, "UTF-8").map(x => x.getName -> x.getValue).toMap
+  def getParams(url: URL): Map[String, String] = {
+    import collection.JavaConverters._
+    URLEncodedUtils.parse(url.toURI, StandardCharsets.UTF_8).asScala.map(x => x.getName -> x.getValue).toMap
   }
 
   def stripQuery(url: URL) =
@@ -21,7 +21,7 @@ object PolygonURL {
     if (params.isEmpty)
       url
     else {
-      import collection.JavaConversions._
+      import collection.JavaConverters._
       val newParams = asJavaIterable((getParams(url) ++ params).map(x => new BasicNameValuePair(x._1, x._2).asInstanceOf[NameValuePair]))
       val newQuery = URLEncodedUtils.format(newParams, StandardCharsets.UTF_8)
       new URL(stripQuery(url), "?" + newQuery)
