@@ -18,16 +18,16 @@ object Db {
 
   import com.github.nscala_time.time.Imports._
 
-  implicit object SetJodaDateTime extends SetParameter[DateTime] {
-    override def apply(v1: Imports.DateTime, v2: PositionedParameters): Unit = v2.setTimestamp(new Timestamp(v1.getMillis))
-  }
+//  implicit object SetJodaDateTime extends SetParameter[DateTime] {
+//    override def apply(v1: Imports.DateTime, v2: PositionedParameters): Unit = v2.setTimestamp(new Timestamp(v1.getMillis))
+//  }
 
   import slick.jdbc.MySQLProfile.api._
 
-  implicit val datetimeColumnType = MappedColumnType.base[DateTime, Timestamp](
-    x => new Timestamp(x.getMillis),
-    x => new DateTime(x)
-  )
+//  implicit val datetimeColumnType = MappedColumnType.base[DateTime, Timestamp](
+//    x => new Timestamp(x.getMillis),
+//    x => new DateTime(x)
+//  )
 
   implicit val jsValueColumnType = MappedColumnType.base[JsValue, String](
     x => Json.stringify(x),

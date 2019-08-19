@@ -217,8 +217,7 @@ class AdminApplication (cc: ControllerComponents,
   }
 
   private def getTestingByID(testingID: Int) =
-    db.run(sql"select ID, Submit, Start, Finish, ProblemID from Testings where ID = $testingID".as[Testing])
-      .map(_.headOption)
+    db.run(SlickModel.testings.filter(_.id === testingID).result.headOption)
 
   private def getSubmitAndTesting(submitId: Int) =
     Submits.getSubmitById(db, submitId).flatMap {

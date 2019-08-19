@@ -240,7 +240,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
 
     case AckAllClarifications(contest, team) => {
       import com.github.nscala_time.time.Imports._
-      import utils.Db._
+      import com.github.tototoshi.slick.MySQLJodaSupport._
       clarifications.get(contest).map { cmap =>
         cmap.values.map(_.arrived).max
       }.foreach { now =>

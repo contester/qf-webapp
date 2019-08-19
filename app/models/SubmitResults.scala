@@ -147,12 +147,3 @@ object AnnoSubmit {
     Json.stringify(Json.toJson(c))
   }
 }
-
-import com.github.nscala_time.time.Imports._
-case class Testing(id: Int, submit: Int, start: DateTime, finish: Option[DateTime], problemId: Option[String])
-object Testing {
-  implicit val getResult = GetResult(r =>
-    Testing(r.nextInt(), r.nextInt(), new DateTime(r.nextTimestamp()),
-      r.nextTimestampOption().map(x => new DateTime(x)), r.nextStringOption())
-  )
-}

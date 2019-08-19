@@ -26,6 +26,7 @@ val silhouetteVersion = "6.1.0"
 
 libraryDependencies ++= Seq(
   "com.typesafe.play" %% "play-slick" % "4.0.2",
+  "com.github.tototoshi" %% "slick-joda-mapper" % "2.3.0",
   "com.softwaremill.macwire" %% "macros" % "2.3.1" % "provided",
   "javax.xml.bind" % "jaxb-api" % "2.3.0",
   "com.adrianhurt" %% "play-bootstrap" % "1.4-P26-B3-SNAPSHOT",

@@ -31,8 +31,9 @@ case class AdaptedWaiterTask(id: Long, when: DateTime, message: String, unacked:
 
 object WaiterModel {
   import slick.jdbc.MySQLProfile.api._
-  import utils.Db._
+  import com.github.tototoshi.slick.MySQLJodaSupport._
 
+  // TODO: move to SlickModel
   case class WaiterTaskRecord(id: Long, room: String, ts: DateTime)
 
   class WaiterTaskRecords(tag: Tag) extends Table[WaiterTaskRecord](tag, "WaiterTasksRecord") {

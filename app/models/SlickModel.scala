@@ -27,6 +27,7 @@ case class Message2(id: Option[Int], contest: Int, team: Int, kind: String, data
 object SlickModel {
   import slick.jdbc.MySQLProfile.api._
   import utils.Db._
+  import com.github.tototoshi.slick.MySQLJodaSupport._
 
   case class Team(id: Int, school: Int, num: Option[Int], name: String)
 
@@ -231,6 +232,20 @@ object SlickModel {
   }
 
   val newSubmits = TableQuery[NewSubmits]
+
+  case class Testing(id: Int, submit: Int, start: DateTime, finish: Option[DateTime], problemId: Option[String])
+
+  case class Testings(tag: Tag) extends Table[Testing](tag, "Testings") {
+    def id = column[Int]("ID", O.AutoInc)
+    def submit = column[Int]("Submit")
+    def start = column[DateTime]("Start")
+    def finish = column[Option[DateTime]]("Finish")
+    def problemId = column[Option[String]]("ProblemID")
+
+    override def * = (id, submit, start, finish, problemId) <> (Testing.tupled, Testing.unapply)
+  }
+
+  val testings = TableQuery[Testings]
 }
 
 object ClarificationModel extends Logging {
