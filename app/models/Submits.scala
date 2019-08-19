@@ -322,14 +322,14 @@ object Submits {
   }
 
   def getSubmitById(db: JdbcBackend#DatabaseDef, submitId: Int)(implicit ec: ExecutionContext): Future[Option[SubmitDetails]] = {
-    db.run(sql"""select Contest, Team, Problem, Source from NewSubmits where ID = $submitId""".as[SubmitSourceShort])
-      .map(_.headOption).flatMap { maybeSubmit =>
+    db.run(SlickModel.newSubmits.filter(_.id === submitId).result.headOption)
+      .flatMap { maybeSubmit =>
       maybeSubmit map { short =>
-        db.run(sql"select SchoolMode from Contests where ID = ${short.contest}".as[Boolean]).map(_.headOption).flatMap { maybeSchoolMode =>
+        db.run(SlickModel.contests.filter(_.id === short.contest).result.headOption).flatMap { maybeSchoolMode =>
           maybeSchoolMode map({ schoolMode =>
             db.run(getContestTeamProblemSubmits(short.contest, short.team, short.problem))
               .flatMap(submits =>
-              groupAndAnnotate(db, schoolMode, submits)).map { submits =>
+              groupAndAnnotate(db, schoolMode.schoolMode, submits)).map { submits =>
               submits.find(_.submit.submitId.id == submitId).map(SubmitDetails(_, short.source))
             }
           })
