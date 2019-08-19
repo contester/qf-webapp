@@ -74,8 +74,11 @@ class AdminApplication (cc: ControllerComponents,
 
   import slick.jdbc.MySQLProfile.api._
 
+  private def getSubmitCidQuery(submitId: Int) =
+    SlickModel.newSubmits.filter(_.id === submitId).take(1).map(_.contest).result.headOption
+
   private def getSubmitCid(submitId: Int)(implicit ec: ExecutionContext): Future[Option[Int]] =
-    db.run(sql"""select Contest from NewSubmits where ID = $submitId limit 1""".as[Int]).map(_.headOption)
+    db.run(getSubmitCidQuery(submitId))
 
   private def rejudgeRangeEx(range: String, account: Admin)(implicit ec: ExecutionContext): Future[Seq[Int]] = {
     val checks = {
@@ -205,10 +208,10 @@ class AdminApplication (cc: ControllerComponents,
       }
     )
   }
-  // sql"select Contest from NewSubmits where ID = $submitId".as[Int]
+
   def rejudgeSubmit(submitId: Int) = silhouette.SecuredAction(canRejudgeSubmit(submitId)).async { implicit request =>
     rabbitMq ! Message.queue(SubmitMessage(submitId), queue = "contester.submitrequests")
-    db.run(SlickModel.newSubmits.filter(_.id === submitId).map(_.contest).result.headOption).map { cids =>
+    getSubmitCid(submitId).map { cids =>
       cids match {
         case Some(contestId) => Redirect(routes.AdminApplication.submits(contestId))
         case None => Redirect(routes.AdminApplication.index)
