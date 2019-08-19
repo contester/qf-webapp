@@ -338,24 +338,6 @@ object Submits {
     }.map(_.flatten)
   }
 
-  // Why do I have this method here?
-  private def loadSubmitByID(db: JdbcBackend#DatabaseDef, submitId: Int)(implicit ec: ExecutionContext) = {
-    db.run(sql"""select NewSubmits.ID,
-          NewSubmits.Arrived,
-          unix_timestamp(NewSubmits.Arrived) - unix_timestamp(Contests.Start) as ArrivedSeconds,
-          NewSubmits.Arrived > Contests.Finish as AfterFreeze,
-          NewSubmits.Team, NewSubmits.Contest,
-          NewSubmits.Problem, Problems.Rating,
-          Languages.Ext, Submits.Finished, Submits.Compiled,
-          Submits.Passed, Submits.Taken,
-          Submits.TestingID
-          from Contests, Problems, Languages, NewSubmits LEFT join Submits on NewSubmits.ID = Submits.ID where
-          NewSubmits.ID = $submitId and NewSubmits.Arrived < Contests.End and NewSubmits.Arrived >= Contests.Start and
-          Contests.ID = NewSubmits.Contest and Problems.Contest = Contests.ID and
-          Languages.ID = NewSubmits.SrcLang and Languages.Contest = Contests.ID and
-          Problems.ID = NewSubmits.Problem order by ArrivedSeconds""".as[Submit]).map(_.headOption)
-  }
-
   def loadSubmitDetails(db: JdbcBackend#DatabaseDef, testingId: Int)(implicit ec: ExecutionContext) =
     db.run(
       sql"""select Test, Result, Timex, Memory, Info, TesterExitCode, TesterOutput, TesterError
