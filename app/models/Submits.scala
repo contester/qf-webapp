@@ -322,20 +322,20 @@ object Submits {
   }
 
   def getSubmitById(db: JdbcBackend#DatabaseDef, submitId: Int)(implicit ec: ExecutionContext): Future[Option[SubmitDetails]] = {
-    db.run(SlickModel.newSubmits.filter(_.id === submitId).result.headOption)
+    val pjq = for {
+      (submit, contest) <- SlickModel.newSubmits.filter(_.id === submitId) join SlickModel.contests on (_.contest === _.id)
+    } yield (submit, contest.schoolMode)
+
+    db.run(pjq.result.headOption)
       .flatMap { maybeSubmit =>
       maybeSubmit map { short =>
-        db.run(SlickModel.contests.filter(_.id === short.contest).result.headOption).flatMap { maybeSchoolMode =>
-          maybeSchoolMode map({ schoolMode =>
-            db.run(getContestTeamProblemSubmits(short.contest, short.team, short.problem))
+            db.run(getContestTeamProblemSubmits(short._1.contest, short._1.team, short._1.problem))
               .flatMap(submits =>
-              groupAndAnnotate(db, schoolMode.schoolMode, submits)).map { submits =>
-              submits.find(_.submit.submitId.id == submitId).map(SubmitDetails(_, short.source))
+              groupAndAnnotate(db, short._2, submits)).map { submits =>
+              submits.find(_.submit.submitId.id == submitId).map(SubmitDetails(_, short._1.source))
             }
-          })
-        }.map(_.flatten)
-      }
-    }.map(_.flatten)
+          }
+      }.map(_.flatten)
   }
 
   def loadSubmitDetails(db: JdbcBackend#DatabaseDef, testingId: Int)(implicit ec: ExecutionContext) =
