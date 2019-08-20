@@ -411,7 +411,7 @@ class AdminApplication (cc: ControllerComponents,
             BadRequest(html.admin.postanswer(formWithErrors, clr, answerList.toSeq, contest))
           },
           data => {
-            db.run(sqlu"""update ClarificationRequests set Answer = ${data.answer}, Status = 1 where ID = $clrId""").map { _ =>
+            db.run(SlickModel.clarificationRequests.filter(_.id === clrId).map(x => (x.answer, x.answered)).update((Some(data.answer),true))).map { _ =>
               statusActorModel.statusActor ! ClarificationAnswered(clr.contest, clrId, clr.team, clr.problem, data.answer)
               Redirect(routes.AdminApplication.showQandA(clr.contest))
             }
