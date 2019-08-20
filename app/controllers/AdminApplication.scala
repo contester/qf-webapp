@@ -36,8 +36,6 @@ case class ClarificationResponse(answer: String)
 
 case class PostWaiterTask(message: String, rooms: String)
 
-case class AdminDBPrintJob(id: Int, contestID: Int, teamID: Int, filename: String, arrived: DateTime, printed: Boolean, computerName: String)
-
 case class AdminPrintJob(id: Int, contestID: Int, team: Team, filename: String, arrived: DateTime, printed: Boolean, computerName: String)
 
 case class SubmitIdLite(id: Int)
@@ -461,23 +459,22 @@ class AdminApplication (cc: ControllerComponents,
     Future.successful(Ok("ok"))
   }
 
-  implicit val getAdminPrintJob = GetResult(r =>
-    AdminDBPrintJob(r.nextInt(), r.nextInt(), r.nextInt(), r.nextString(), new DateTime(r.nextTimestamp()), r.nextIntOption().getOrElse(0) == 255, r.nextString())
-  )
+  private def getPrintJobs(contestID: Int) = {
+    import com.github.tototoshi.slick.MySQLJodaSupport._
 
-  private def getPrintJobs(contestID: Int) =
     db.run(
-      sql"""select PrintJobs.ID, Contest, Team, Filename, Arrived, Printed, CompLocations.Name from PrintJobs, CompLocations
-           where PrintJobs.Computer = CompLocations.ID and Contest = $contestID
-           order by Arrived desc""".as[AdminDBPrintJob])
+      (for {
+        (j, l) <- SlickModel.printJobs.filter(_.contest === contestID) join SlickModel.compLocations on (_.computer === _.id)
+      } yield (j, l)).sortBy(_._1.arrived).result)
     .zip(monitorModel.teamClient.getTeams(contestID)).map {
       case (jobs, teams) =>
         jobs.flatMap { src =>
-          teams.get(src.teamID).map { team =>
-            AdminPrintJob(src.id, src.contestID, team, src.filename, src.arrived, src.printed, src.computerName)
+          teams.get(src._1.team).map { team =>
+            AdminPrintJob(src._1.id.get.toInt, src._1.contest, team, src._1.filename, src._1.arrived, src._1.printed.getOrElse(0) == 255, src._2.name)
           }
         }
     }
+  }
 
   def printJobs(contestID: Int)= silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
     getSelectedContests(contestID, request.identity)

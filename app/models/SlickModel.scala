@@ -246,6 +246,35 @@ object SlickModel {
   }
 
   val testings = TableQuery[Testings]
+
+  case class PrintJob(id: Option[Long], contest: Int, team: Int, filename: String, data: Array[Byte], computer: Long, arrived: DateTime, printed: Option[Int])
+
+  case class PrintJobs(tag: Tag) extends Table[PrintJob](tag, "PrintJobs") {
+    def id = column[Long]("ID", O.AutoInc)
+    def contest = column[Int]("Contest")
+    def team = column[Int]("Team")
+    def filename = column[String]("Filename")
+    def data = column[Array[Byte]]("DATA")
+    def computer = column[Long]("Computer")
+    def arrived = column[DateTime]("Arrived")
+    def printed = column[Option[Int]]("Printed")
+
+    override def * = (id.?, contest, team, filename, data, computer, arrived, printed) <> (PrintJob.tupled, PrintJob.unapply)
+  }
+
+  val printJobs = TableQuery[PrintJobs]
+
+  case class CompLocation(id: Long, location: Int, name: String)
+
+  case class CompLocations(tag: Tag) extends Table[CompLocation](tag, "CompLocations") {
+    def id = column[Long]("ID", O.PrimaryKey)
+    def location = column[Int]("Location")
+    def name = column[String]("Name")
+
+    override def * = (id, location, name) <> (CompLocation.tupled, CompLocation.unapply)
+  }
+
+  val compLocations = TableQuery[CompLocations]
 }
 
 object ClarificationModel extends Logging {
