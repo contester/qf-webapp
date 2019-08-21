@@ -36,6 +36,8 @@ case class ClarificationResponse(answer: String)
 
 case class PostWaiterTask(message: String, rooms: String)
 
+
+
 case class AdminPrintJob(id: Int, contestID: Int, team: Team, filename: String, arrived: DateTime, printed: Boolean, computerName: String)
 
 case class SubmitIdLite(id: Int)
