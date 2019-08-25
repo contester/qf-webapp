@@ -22,7 +22,9 @@ import play.api.libs.json.Json
 import play.api.libs.ws.WSClient
 import play.api.mvc._
 import slick.basic.DatabaseConfig
+import slick.dbio.Effect
 import slick.jdbc.{GetResult, JdbcProfile}
+import slick.sql.FixedSqlAction
 import utils.auth.{AdminEnv, TeamsEnv}
 import utils.{Ask, PolygonURL}
 import views.html
@@ -502,6 +504,10 @@ class AdminApplication (cc: ControllerComponents,
     )(EditTeam.apply)(EditTeam.unapply)
   }
 
+  private def displayEditTeam(form: Option[Form[EditTeam]], team: SlickModel.Team, school: School, contest: SelectedContest)(implicit request: RequestHeader, ec: ExecutionContext) = {
+    Ok(html.admin.editteam(form.getOrElse(editTeamForm.fill(EditTeam(school.name, team.name, team.num))), TeamDescription(team.id, school), contest))
+  }
+
   def editTeam(contestID: Int, teamID: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
     getSelectedContests(contestID, request.identity)
       .zip(db.run((for {
@@ -510,9 +516,7 @@ class AdminApplication (cc: ControllerComponents,
       case (contest, vOpt) =>
       vOpt match {
         case Some((team, school)) =>
-          val tDesc = TeamDescription(team.id, school)
-          val tVal = EditTeam(school.name, team.name, team.num)
-          Ok(html.admin.editteam(editTeamForm.fill(tVal), tDesc, contest))
+          displayEditTeam(None, team, school, contest)
         case None =>
           NotFound
       }
@@ -523,15 +527,32 @@ class AdminApplication (cc: ControllerComponents,
     getSelectedContests(contestID, request.identity)
       .zip(db.run((for {
         (t, s) <- SlickModel.teams.filter(_.id === teamID) join SlickModel.schools on (_.school === _.id)
-      } yield (t, s)).result.headOption)).map {
+      } yield (t, s)).result.headOption)).flatMap {
       case (contest, vOpt) =>
         vOpt match {
           case Some((team, school)) =>
-            val tDesc = TeamDescription(team.id, school)
-            val tVal = EditTeam(school.name, team.name, team.num)
-            Ok(html.admin.editteam(editTeamForm.fill(tVal), tDesc, contest))
+            editTeamForm.bindFromRequest.fold(
+              formWithErrors => {
+                Future.successful(displayEditTeam(Some(formWithErrors), team, school, contest))
+              },
+              data => {
+                val updateSchool = if (data.schoolName != school.name) {
+                  Some(SlickModel.schools.filter(_.id === school.id).map(_.name).update(data.schoolName))
+                } else None
+                val updateTeam = if (data.teamName != team.name) {
+                  Some(SlickModel.teams.filter(_.id === team.id).map(_.name).update(data.teamName))
+                } else None
+
+                val vec = updateSchool.toVector ++ updateTeam.toVector
+                val vseq = DBIO.sequence(vec)
+
+                db.run(vseq).map { v =>
+                  Redirect(routes.AdminApplication.editTeam(contestID, teamID))
+                }
+              },
+            )
           case None =>
-            NotFound
+            Future.successful(NotFound)
         }
     }
   }
