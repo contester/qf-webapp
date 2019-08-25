@@ -36,7 +36,9 @@ case class ClarificationResponse(answer: String)
 
 case class PostWaiterTask(message: String, rooms: String)
 
+case class TeamDescription(id: Int, school: School)
 
+case class EditTeam(schoolName: String, teamName: String, teamNum: Option[Int])
 
 case class AdminPrintJob(id: Int, contestID: Int, team: Team, filename: String, arrived: DateTime, printed: Boolean, computerName: String)
 
@@ -491,6 +493,47 @@ class AdminApplication (cc: ControllerComponents,
   def reprintJob(printJobID: Int) = silhouette.SecuredAction.async { implicit request =>
     rabbitMq ! Message.queue(printing.PrintJobID(printJobID), queue = "contester.printrequests")
     Future.successful(Ok("ok"))
+  }
+
+  private val editTeamForm = Form {
+    mapping("schoolName" -> text,
+    "teamName" -> text,
+    "teamNum" -> optional(number)
+    )(EditTeam.apply)(EditTeam.unapply)
+  }
+
+  def editTeam(contestID: Int, teamID: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
+    getSelectedContests(contestID, request.identity)
+      .zip(db.run((for {
+      (t, s) <- SlickModel.teams.filter(_.id === teamID) join SlickModel.schools on (_.school === _.id)
+    } yield (t, s)).result.headOption)).map {
+      case (contest, vOpt) =>
+      vOpt match {
+        case Some((team, school)) =>
+          val tDesc = TeamDescription(team.id, school)
+          val tVal = EditTeam(school.name, team.name, team.num)
+          Ok(html.admin.editteam(editTeamForm.fill(tVal), tDesc, contest))
+        case None =>
+          NotFound
+      }
+    }
+  }
+
+  def postEditTeam(contestID: Int, teamID: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
+    getSelectedContests(contestID, request.identity)
+      .zip(db.run((for {
+        (t, s) <- SlickModel.teams.filter(_.id === teamID) join SlickModel.schools on (_.school === _.id)
+      } yield (t, s)).result.headOption)).map {
+      case (contest, vOpt) =>
+        vOpt match {
+          case Some((team, school)) =>
+            val tDesc = TeamDescription(team.id, school)
+            val tVal = EditTeam(school.name, team.name, team.num)
+            Ok(html.admin.editteam(editTeamForm.fill(tVal), tDesc, contest))
+          case None =>
+            NotFound
+        }
+    }
   }
 
 }

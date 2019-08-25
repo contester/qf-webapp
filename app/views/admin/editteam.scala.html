@@ -1,4 +1,4 @@
-@(form: Form[ClarificationResponse], teamID: Int, contest: SelectedContest)(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@(form: Form[EditTeam], teamDescription: TeamDescription, contest: SelectedContest)(implicit flash: Flash, messages: Messages, request: RequestHeader)
 @import helper.Implicits._
 @import b3.vertical.fieldConstructor
 @adminmain(tab = "qanda", contest=contest) {
@@ -8,9 +8,9 @@
 </div>
 }
 <div class="panel panel-success">
-    <div class="panel-heading"><h3 class="panel-title">Answer</h3></div>
+    <div class="panel-heading"><h3 class="panel-title">@messages("heading.editTeam")</h3></div>
     <div class="panel-body">
-        @b3.horizontal.formCSRF(controllers.routes.AdminApplication.postAnswer(clr.id),
+        @b3.horizontal.formCSRF(controllers.routes.AdminApplication.postEditTeam(contest.contest.id, teamDescription.id),
         "col-md-2", "col-md-10", 'enctype -> "multipart/form-data") { implicit fc =>
         @form.globalError.map { error =>
         <div class="alert alert-danger" role="alert">
@@ -20,13 +20,10 @@
         </div>
         }
 
-        @b3.static("ID"){ @clr.id }
-        @b3.static("Contest"){ @clr.contest }
-        @b3.static("Team"){ @clr.team }
-        @b3.static("Problem"){ @clr.problem }
-        @b3.static("Question"){ @clr.request }
-        @b3.static("Timestamp"){ @clr.arrived }
-        @b3.text(form("answer"), '_label -> messages("label.response"))
+        @b3.static("ID"){ @teamDescription.id }
+        @b3.text(form("schoolName"), '_label -> messages("label.schoolName"))
+        @b3.text(form("teamName"), '_label -> messages("label.teamName"))
+        @b3.text(form("teamNum"), '_label -> messages("label.teamNum"))
         @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Update}
         }
     </div>

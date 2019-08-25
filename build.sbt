@@ -29,7 +29,7 @@ libraryDependencies ++= Seq(
   "com.github.tototoshi" %% "slick-joda-mapper" % "2.3.0",
   "com.softwaremill.macwire" %% "macros" % "2.3.1" % "provided",
   "javax.xml.bind" % "jaxb-api" % "2.3.0",
-  "com.adrianhurt" %% "play-bootstrap" % "1.4-P26-B3-SNAPSHOT",
+  "com.adrianhurt" %% "play-bootstrap" % "1.5.1-P27-B3",
   cacheApi,
   ws,
   "org.webjars" %% "webjars-play" % "2.7.3",

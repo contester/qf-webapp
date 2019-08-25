@@ -80,5 +80,10 @@ POST /admin/deleteWaiterTask/:id controllers.AdminApplication.deleteWaiterTask(i
 + nocsrf
 POST /admin/reprintPrintJob/:id controllers.AdminApplication.reprintJob(id: Int)
 
+GET /admin/:contestID/editTeam/:teamID controllers.AdminApplication.editTeam(contestID: Int, teamID: Int)
+
++ nocsrf
+POST /admin/:contestID/editTeam/:teamID controllers.AdminApplication.postEditTeam(contestID: Int, teamID: Int)
+
 GET     /assets/*file               controllers.Assets.versioned(path="/public", file: Asset)
 
