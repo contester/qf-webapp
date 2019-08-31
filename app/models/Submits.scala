@@ -314,13 +314,6 @@ object Submits {
   implicit def o2f[A](o: Option[Future[A]])(implicit ec: ExecutionContext): Future[Option[A]] =
     o.map(_.map(Some(_))).getOrElse(Future.successful(None))
 
-  case class SubmitSourceShort(contest: Int, team: Int, problem: String, source: Array[Byte])
-  object SubmitSourceShort {
-    implicit val getResult = GetResult(r =>
-      SubmitSourceShort(r.nextInt(), r.nextInt(), r.nextString(), r.nextBytes())
-    )
-  }
-
   def getSubmitById(db: JdbcBackend#DatabaseDef, submitId: Int)(implicit ec: ExecutionContext): Future[Option[SubmitDetails]] = {
     val pjq = for {
       (submit, contest) <- SlickModel.newSubmits.filter(_.id === submitId) join SlickModel.contests on (_.contest === _.id)
