@@ -1,8 +1,7 @@
 package controllers
 
-import javax.inject.{Inject, Singleton}
-import actors.{StatusActor, WaiterActor}
 import actors.StatusActor.ClarificationAnswered
+import actors.{StatusActor, WaiterActor}
 import akka.NotUsed
 import akka.stream.scaladsl.{Merge, Source}
 import com.github.nscala_time.time.Imports._
@@ -11,25 +10,21 @@ import com.mohiva.play.silhouette.api.{Authorization, Silhouette}
 import com.mohiva.play.silhouette.impl.authenticators.SessionAuthenticator
 import com.spingo.op_rabbit.Message
 import models._
-import play.api.{Configuration, Logger, Logging}
 import play.api.data.Form
 import play.api.data.Forms._
-import play.api.db.slick.DatabaseConfigProvider
 import play.api.http.ContentTypes
-import play.api.i18n.{I18nSupport, MessagesApi}
+import play.api.i18n.I18nSupport
 import play.api.libs.EventSource.Event
 import play.api.libs.json.Json
 import play.api.libs.ws.WSClient
 import play.api.mvc._
+import play.api.{Configuration, Logging}
 import slick.basic.DatabaseConfig
-import slick.dbio.Effect
-import slick.jdbc.{GetResult, JdbcProfile}
-import slick.sql.FixedSqlAction
-import utils.auth.{AdminEnv, TeamsEnv}
+import slick.jdbc.JdbcProfile
+import utils.auth.AdminEnv
 import utils.{Ask, PolygonURL}
 import views.html
 
-import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{ExecutionContext, Future}
 
 case class RejudgeSubmitRange(range: String)
@@ -56,7 +51,6 @@ object SubmitTicketLite {
   implicit val format = Json.format[SubmitTicketLite]
 }
 
-@Singleton
 class AdminApplication (cc: ControllerComponents,
                         silhouette: Silhouette[AdminEnv],
                         dbConfig: DatabaseConfig[JdbcProfile],
@@ -370,7 +364,7 @@ class AdminApplication (cc: ControllerComponents,
 
   // TODO: check permissions
   def postClarification(contestId: Int, clarificationId: Option[Int]) = silhouette.SecuredAction.async { implicit request =>
-    import utils.Db._
+
     postClarificationForm.bindFromRequest.fold(
       formWithErrors => getSelectedContests(1, request.identity).flatMap { contest =>
         monitorModel.problemClient.getProblems(contest.contest.id).map { problems =>
