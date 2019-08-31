@@ -1,9 +1,11 @@
 package models
 
-trait SubmitLike
+sealed trait TestingResultLike
 
-trait SubmitStore {
-  def byID(id: Int): Option[FullyDescribedSubmit]
-  def forContest(contestId: Int): Seq[FullyDescribedSubmit]
-  def forTeam(contestId: Int, teamLocalId: Int): Seq[FullyDescribedSubmit]
+sealed trait ContestTimestampLike
+
+trait IncomingSubmitLike {
+  def arrived: ContestTimestampLike
+  def problemID: String
+  def testingResult: Option[TestingResultLike]
 }

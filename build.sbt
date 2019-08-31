@@ -1,6 +1,6 @@
 name := "qf"
 
-scalaVersion := "2.12.8"
+scalaVersion := "2.12.9"
 
 organization := "org.stingray.contester"
 
