@@ -3,17 +3,13 @@ package models
 import play.api.Logging
 import play.api.libs.ws.WSClient
 import protos.Assets.{Asset, TestingRecord}
-import utils.{GridfsContent, PolygonProblemHandle}
+import utils.PolygonProblemHandle
 
 import scala.concurrent.ExecutionContext
 
-case class ResultAssets(test: Int, input: Option[GridfsContent], output: Option[GridfsContent], answer: Option[GridfsContent])
+case class ResultAssets(test: Int, input: Option[Asset], output: Option[Asset], answer: Option[Asset])
 
 object Outputs extends Logging {
-  private def assetToGc(a: Asset): GridfsContent = {
-    GridfsContent(a.data.toStringUtf8, a.truncated, Some(a.originalSize))
-  }
-
   def getAllAssets2(ws: WSClient, prefix: String, shortName: String, submitId: Int, testingId: Int, tests: Seq[Int], handle: PolygonProblemHandle)(implicit ec: ExecutionContext) = {
     import scala.concurrent.duration._
     ws.url(s"${prefix}protopackage/")
@@ -34,7 +30,7 @@ object Outputs extends Logging {
     }.map { optRecord =>
       optRecord.map { tr =>
         tr.test.map { otr =>
-          ResultAssets(otr.testId.toInt, otr.input.map(assetToGc(_)), otr.output.map(assetToGc(_)), otr.answer.map(assetToGc(_)))
+          ResultAssets(otr.testId.toInt, otr.input, otr.output, otr.answer)
         }
       }.getOrElse(Seq()).map(r => r.test -> r).toMap
     }

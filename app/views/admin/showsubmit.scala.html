@@ -14,15 +14,14 @@
     }
 }
 
-@import _root_.utils.GridfsContent
+@import protos.Assets.Asset
 
-@fscontent1(name: String, c: GridfsContent) = {
-    @panel(s"$name ${c.sizeStr} ${c.truncStr}", "default", "nopadding") { <pre class="nopadding">@c.content</pre> }
-}
-
-@fscontent(name: String, c: Option[GridfsContent]) = {
-    @for(cs <- c) {
-        @fscontent1(name, cs)
+@fscontent(name: String, co: Option[Asset]) = {
+    @for(c <- co) {
+        <div class="panel panel-default">
+            <div class="panel-heading"><h3 class="panel-title">@c.name (@{c.originalSize}b)@if(c.truncated) { [truncated] }</h3></div>
+            <div class="panel-body nopadding"><pre class="nopadding">@c.data.toStringUtf8</pre></div>
+        </div>
     }
 }
 
