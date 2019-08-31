@@ -66,6 +66,8 @@ class AdminApplication (cc: ControllerComponents,
                                   configuration: Configuration,
                                   ws: WSClient) extends AbstractController(cc)  with I18nSupport with Logging {
 
+  implicit val ec = defaultExecutionContext
+
   private val db = dbConfig.db
   import com.spingo.op_rabbit.PlayJsonSupport._
 
@@ -131,9 +133,6 @@ class AdminApplication (cc: ControllerComponents,
 
   private def getAllWaiterTasks(perm: WaiterPermissions)(implicit ec: ExecutionContext) =
     Ask[WaiterActor.Snapshot](statusActorModel.waiterActor, WaiterActor.GetSnapshot(perm)).map(_.tasks)
-
-
-  import scala.concurrent.ExecutionContext.Implicits.global
 
   def monitor(id: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(id)).async { implicit request =>
     getSelectedContests(id, request.identity).zip(monitorModel.getMonitor(id, request.identity.canSeeAll(id))).map {
@@ -525,7 +524,7 @@ class AdminApplication (cc: ControllerComponents,
     Ok(html.admin.editteam(form.getOrElse(editTeamForm.fill(EditTeam(school.name, team.name, team.num))), TeamDescription(team.id, school), contest))
   }
 
-  def editTeam(contestID: Int, teamID: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
+  def editTeam(contestID: Int, teamID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
     getSelectedContests(contestID, request.identity)
       .zip(db.run((for {
       (t, s) <- SlickModel.teams.filter(_.id === teamID) join SlickModel.schools on (_.school === _.id)
@@ -540,7 +539,7 @@ class AdminApplication (cc: ControllerComponents,
     }
   }
 
-  def postEditTeam(contestID: Int, teamID: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
+  def postEditTeam(contestID: Int, teamID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
     getSelectedContests(contestID, request.identity)
       .zip(db.run((for {
         (t, s) <- SlickModel.teams.filter(_.id === teamID) join SlickModel.schools on (_.school === _.id)
