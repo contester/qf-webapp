@@ -30,3 +30,15 @@ case class ImmutableMonitor(data: Map[Int, TeamSubmits]) {
   def update(s: Submit): ImmutableMonitor =
     copy(data = data.updated(s.submitId.teamId, data.getOrElse(s.submitId.teamId, TeamSubmits.empty).update(s)))
 }
+
+object ImmutableMonitor {
+  def fromSubmits(submits: Iterable[Submit]): Map[Int, ImmutableMonitor] = {
+    submits.groupBy(_.submitId.contestId).mapValues { forContest =>
+      ImmutableMonitor(forContest.groupBy(_.submitId.teamId).mapValues { forTeam =>
+        TeamSubmits(forTeam.groupBy(_.submitId.problem.id).mapValues { forProblem =>
+          ProblemSubmits(forProblem.map(x => x.submitId.id -> x).toMap)
+        })
+      })
+    }
+  }
+}

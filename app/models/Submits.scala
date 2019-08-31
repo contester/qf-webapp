@@ -3,21 +3,12 @@ package models
 import java.nio.charset.StandardCharsets
 
 import org.joda.time.DateTime
-import play.api.{Logger, Logging}
+import play.api.Logging
 import slick.jdbc.{GetResult, JdbcBackend}
 import spire.math.Rational
 import spire.math.extras.{FixedPoint, FixedScale}
 
 import scala.concurrent.{ExecutionContext, Future}
-
-/*
-
-Submit access patterns:
-
-1. All submits one contest (admin status) -
-
- */
-
 
 case class Arrived(timestamp: DateTime, seconds: Int, afterFreeze: Boolean) {
   def asString = SecondsToTimeStr(seconds)
