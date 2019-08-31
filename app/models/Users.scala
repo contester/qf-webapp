@@ -60,55 +60,6 @@ class TeamsProvider(dbConfig: DatabaseConfig[JdbcProfile]) extends OneUserProvid
 object Users {
   import slick.jdbc.MySQLProfile.api._
 
-/*
-  def authQuery(username: String, password: String) =
-    sql"""select Assignments.Username,
-          Assignments.Contest as ContestID,
-          Contests.Name as ContestName,
-          Contests.SchoolMode as SchoolMode,
-          Contests.Start, Contests.End, Contests.Finish, Contests.Expose,
-          Assignments.LocalID as LocalID,
-          Schools.Name as SchoolName,
-          Teams.Num as TeamNum,
-          Teams.Name as TeamName,
-          Participants.NotRated,
-          Participants.NoPrint,
-          Participants.Disabled
-          from Assignments, Participants, Contests, Teams, Schools
-         where Assignments.Username = $username and Assignments.Password = $password
-         and Assignments.Contest = Contests.ID and Participants.Contest = Contests.ID and
-         Participants.LocalID = Assignments.LocalID and Participants.Team = Teams.ID and
-         Teams.School = Schools.ID
-       """.as[LoggedInTeam]
-
-  def authenticate(db: JdbcBackend#DatabaseDef, username: String, password: String)(implicit ec: ExecutionContext): Future[Option[LoggedInTeam]] =
-    db.run(authQuery(username, password)).map(_.headOption)
-
-  def resolveQuery(username: String) =
-    sql"""select Assignments.Username,
-          Assignments.Contest as ContestID,
-          Contests.Name as ContestName,
-          Contests.SchoolMode as SchoolMode,
-          Contests.Start, Contests.End, Contests.Finish, Contests.Expose,
-          Assignments.LocalID as LocalID,
-          Schools.Name as SchoolName,
-          Teams.Num as TeamNum,
-          Teams.Name as TeamName,
-          Participants.NotRated,
-          Participants.NoPrint,
-          Participants.Disabled
-          from Assignments, Participants, Contests, Teams, Schools
-         where Assignments.Username = $username
-         and Assignments.Contest = Contests.ID and Participants.Contest = Contests.ID and
-         Participants.LocalID = Assignments.LocalID and Participants.Team = Teams.ID and
-         Teams.School = Schools.ID
-       """.as[LoggedInTeam]
-
-  def extraInfoQuery(contest: Int) =
-    sql"""select Contest, Num, Heading, Data from Extrainfo where Contest = $contest order by Num""".as[Extrainfo]
-*/
-
-
   private def extraInfoQuery(contest: Int) =
     SlickModel.extraInfos.filter(_.contest === contest).result
 

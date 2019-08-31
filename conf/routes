@@ -82,6 +82,8 @@ POST /admin/reprintPrintJob/:id controllers.AdminApplication.reprintJob(id: Int)
 
 GET /admin/:contestID/editTeam/:teamID controllers.AdminApplication.editTeam(contestID: Int, teamID: Int)
 
+GET /admin/:contestID/teams/ controllers.AdminApplication.listTeams(contestID: Int)
+
 + nocsrf
 POST /admin/:contestID/editTeam/:teamID controllers.AdminApplication.postEditTeam(contestID: Int, teamID: Int)
 

@@ -132,6 +132,7 @@ object AdminNavlinkMatch {
       case "rejudge" => routes.AdminApplication.rejudgePage(_)
       case "tasks" => routes.AdminApplication.tasks(_)
       case "print" => routes.AdminApplication.printJobs(_)
+      case "teams" => routes.AdminApplication.listTeams(_)
       case _ => routes.AdminApplication.submits(_)
     }
 }

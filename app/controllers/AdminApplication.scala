@@ -42,6 +42,8 @@ case class TeamDescription(id: Int, school: School)
 
 case class EditTeam(schoolName: String, teamName: String, teamNum: Option[Int])
 
+case class DisplayTeam(team: SlickModel.Team, school: School)
+
 case class AdminPrintJob(id: Int, contestID: Int, team: Team, filename: String, arrived: DateTime, printed: Boolean, computerName: String)
 
 case class SubmitIdLite(id: Int)
@@ -135,7 +137,8 @@ class AdminApplication (cc: ControllerComponents,
 
   def monitor(id: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(id)).async { implicit request =>
     getSelectedContests(id, request.identity).zip(monitorModel.getMonitor(id, request.identity.canSeeAll(id))).map {
-      case (contest, status) => Ok(html.admin.monitor(contest, status.get.status))
+      case (contest, status) =>
+        Ok(html.admin.monitor(contest, status.get.status))
     }
   }
 
@@ -497,6 +500,20 @@ class AdminApplication (cc: ControllerComponents,
     Future.successful(Ok("ok"))
   }
 
+  def listTeams(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
+    getSelectedContests(contestID, request.identity).flatMap { contest =>
+      db.run((for {
+        ((p, t), s) <- SlickModel.participants.filter(_.contest === contest.contest.id) join SlickModel.teams on (_.team === _.id) join SlickModel.schools on (_._2.school === _.id)
+      } yield (p, t, s)).result).map { results =>
+        val cvt = results.map {
+          case (p, t, s) =>
+            DisplayTeam(t, s)
+        }
+        Ok(html.admin.teamlist(cvt, contest, request.identity))
+      }
+    }
+  }
+
   private val editTeamForm = Form {
     mapping("schoolName" -> text,
     "teamName" -> text,
@@ -556,5 +573,4 @@ class AdminApplication (cc: ControllerComponents,
         }
     }
   }
-
 }

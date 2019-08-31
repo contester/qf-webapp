@@ -1,0 +1,27 @@
+@(teams: Seq[DisplayTeam], contest: SelectedContest, admin: Admin)(implicit request: RequestHeader, messages: Messages)
+
+@adminmain(tab = "teams", contest=contest) {
+
+<div class="panel panel-success">
+    <div class="panel-heading"><h3 class="panel-title">Team editor</h3></div>
+    <div class="panel-body">
+
+        <table id="printjobs" class="table table-hover table-bordered table-responsive">
+            <thead>
+            <tr><th>ID</th><th>School</th><th>Num</th><th>Name</th></tr>
+            </thead>
+            <tbody>
+            @for(s <- teams) {
+            <tr id="@s.team.id">
+                <th scope="row">@s.team.id</th>
+                <td>@s.school.name</td>
+                <td>@s.team.num</td>
+                <td>@s.team.name</td>
+            </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+}

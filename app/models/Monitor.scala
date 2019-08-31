@@ -1,6 +1,5 @@
 package models
 
-import javax.inject.{Inject, Singleton}
 import actors.MonitorActor
 import akka.actor.ActorSystem
 import models.Foo.RankedRow
@@ -17,6 +16,8 @@ import utils.Ask
 import scala.concurrent.{ExecutionContext, Future}
 
 case class ContestMonitor(contest: Contest, status: AnyStatus)
+
+case class MonitorDisplayOptions(admin: Boolean, teamEditor: Boolean)
 
 trait AnyStatus {
   def problems: Seq[String]
