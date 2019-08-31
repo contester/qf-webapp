@@ -108,20 +108,6 @@ object SubmitResult extends Logging {
     }
   }
 
-/*  val message = Map(
-    1 -> "compiled",
-    2 -> "compilationFailed",
-    10 -> "accepted",
-    11 -> "timeLimitExceeded",
-    12 -> "runtimeError",
-    13 -> "wrongAnswer",
-    14 -> "wrongAnswer",
-    15 -> "memoryLimitExceeded",
-    16 -> "testerError",
-    21 -> "rejected"
-  ).mapValues(v => Messages(s"verdict.$v"))
-  */
-
   val message = Map(
     1 -> "Compilation successful",
     2 -> "Compilation error",

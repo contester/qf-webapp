@@ -275,6 +275,8 @@ object SlickModel {
   }
 
   val compLocations = TableQuery[CompLocations]
+
+
 }
 
 object ClarificationModel extends Logging {

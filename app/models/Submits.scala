@@ -1,5 +1,7 @@
 package models
 
+import java.nio.charset.StandardCharsets
+
 import org.joda.time.DateTime
 import play.api.{Logger, Logging}
 import slick.jdbc.{GetResult, JdbcBackend}
@@ -167,7 +169,7 @@ object ResultEntry {
 }
 
 case class SubmitDetails(fsub: FullyDescribedSubmit, source: Array[Byte]) {
-  def sourceStr = new String(source, "UTF-8")
+  def sourceStr = new String(source, StandardCharsets.UTF_8)
 }
 
 case class FullyDescribedSubmit(submit: Submit, index: Int, score: Option[Score], result: SubmitResult,
@@ -178,8 +180,6 @@ object Submits {
   import slick.jdbc.MySQLProfile.api._
 
   case class ScoredSubmit[Sc](submit: Submit, score: Score, index: Int)
-
-  //implicit def dateTimeOrdering: Ordering[DateTime] = Ordering.fromLessThan(_ isBefore _)
 
   def groupByTP(submits: Seq[Submit]) =
     submits.groupBy(x => (x.submitId.teamId, x.submitId.problem.id))
