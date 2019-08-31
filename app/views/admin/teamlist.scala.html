@@ -16,7 +16,7 @@
                 <th scope="row">@s.team.id</th>
                 <td>@s.school.name</td>
                 <td>@s.team.num</td>
-                <td>@s.team.name</td>
+                <td><a href="@routes.AdminApplication.editTeam(contest.contest.id, s.team.id)">@s.team.name</a></td>
             </tr>
             }
             </tbody>
