@@ -30,7 +30,8 @@ case class ProblemSubmitsScored(data: Map[Int, Submit], score: Monitor3.CellScor
 
 object ProblemSubmitsScored {
   val empty = ProblemSubmitsScored(Map.empty, CellScore(None, 0))
-  def build(data: Map[Int, Submit]): ProblemSubmitsScored = {
+  def build(submits: Iterable[Submit]): ProblemSubmitsScored = {
+    val data = submits.map(x => x.submitId.id -> x).toMap
     val (sc, _) = score(data, None)
     ProblemSubmitsScored(data, sc)
   }
@@ -58,6 +59,13 @@ object ProblemSubmitsScored {
 case class TeamSubmitsScored(data: Map[String, ProblemSubmitsScored], score: Monitor3.RowScore)
 
 object TeamSubmitsScored {
+  val empty = TeamSubmitsScored(Map.empty, Monitor3.RowScore(0, 0))
+
+  def build(submits: Iterable[Submit]): TeamSubmitsScored = {
+    val data = submits.groupBy(_.submitId.problem.id)
+    TeamSubmitsScored(data, score(data))
+  }
+
   def score(data: Map[String, ProblemSubmitsScored]): Monitor3.RowScore =
     data.values.foldLeft(Monitor3.RowScore(0, 0)) {
       case (c, next) =>
@@ -80,7 +88,6 @@ object TeamSubmitsScored {
         (TeamSubmitsScored(nd, score(nd)), sc)
     }
   }
-
 }
 
 case class ImmutableMonitor(data: Map[Int, TeamSubmits]) {
