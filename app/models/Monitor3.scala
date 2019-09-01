@@ -9,11 +9,6 @@ case class Cell3(success: Option[Duration], failedAttempts: Int)
 
 case class MonitorRow3(team: Long, rank: Option[Int], penalty: Long, cells: Map[String, Cell3])
 
-case class ProblemSubmits(data: Map[Int, Submit]) {
-  def update(s: Submit): ProblemSubmits =
-    copy(data = data.updated(s.submitId.id, s))
-}
-
 trait Scorer3 {
   def score(success: Submit, failures: Seq[Submit]): Long
 }
@@ -28,12 +23,17 @@ object Monitor3 {
   type SubmitScore = Option[Long]
 
   case class CellScore(success: SubmitScore, failedAttempts: Int)
+  case class RowScore(solved: Int, penalty: Long)
 }
 
 case class ProblemSubmitsScored(data: Map[Int, Submit], score: Monitor3.CellScore)
 
-object ProblemSubmits {
-  val empty = ProblemSubmits(Map.empty)
+object ProblemSubmitsScored {
+  val empty = ProblemSubmitsScored(Map.empty, CellScore(None, 0))
+  def build(data: Map[Int, Submit]): ProblemSubmitsScored = {
+    val (sc, _) = score(data, None)
+    ProblemSubmitsScored(data, sc)
+  }
 
   def score(data: Map[Int, Submit], submitToScore: Option[Int]): (Monitor3.CellScore, Monitor3.SubmitScore) = {
     val (failures, successes) = data.values.toSeq.sortBy(_.submitId.arrived).span(!_.success)
@@ -55,13 +55,32 @@ object ProblemSubmits {
   }
 }
 
-case class TeamSubmits(data: Map[String, ProblemSubmits]) {
-  def update(s: Submit): TeamSubmits =
-    copy(data = data.updated(s.submitId.problem.id, data.getOrElse(s.submitId.problem.id, ProblemSubmits.empty).update(s)))
-}
+case class TeamSubmitsScored(data: Map[String, ProblemSubmitsScored], score: Monitor3.RowScore)
 
-object TeamSubmits {
-  val empty = TeamSubmits(Map.empty)
+object TeamSubmitsScored {
+  def score(data: Map[String, ProblemSubmitsScored]): Monitor3.RowScore =
+    data.values.foldLeft(Monitor3.RowScore(0, 0)) {
+      case (c, next) =>
+        next.score.success match {
+          case Some(v) => Monitor3.RowScore(c.solved+1, c.penalty+v)
+          case None => c
+        }
+    }
+
+  def update(prev: TeamSubmitsScored, submit: Submit): (TeamSubmitsScored, Monitor3.SubmitScore) = {
+    // TODO:refactor
+    prev.data.get(submit.submitId.problem.id) match {
+      case Some(prevCell) =>
+        val (next, sc) = ProblemSubmitsScored.update(prevCell, submit)
+        val nd = prev.data.updated(submit.submitId.problem.id, next)
+        (TeamSubmitsScored(nd, score(nd)), sc)
+      case None =>
+        val (next, sc) = ProblemSubmitsScored.update(ProblemSubmitsScored.empty, submit)
+        val nd = prev.data.updated(submit.submitId.problem.id, next)
+        (TeamSubmitsScored(nd, score(nd)), sc)
+    }
+  }
+
 }
 
 case class ImmutableMonitor(data: Map[Int, TeamSubmits]) {
