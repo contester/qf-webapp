@@ -296,7 +296,7 @@ object SlickModel {
     def processed = column[Option[Int]]("Processed")
     def arrived = column[DateTime]("Arrived")
 
-    override def * = (id.?, touched, ext, dource, input, output, timex, memory, info, result, contest, team, processed, arrived) <> (EvalDBEntry.tupled, EvalDBEntry.unapply)
+    override def * = (id.?, touched, ext, source, input, output, timex, memory, info, result, contest, team, processed, arrived) <> (EvalDBEntry.tupled, EvalDBEntry.unapply)
   }
 
   val eval = TableQuery[Eval]

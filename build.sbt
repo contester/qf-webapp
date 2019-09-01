@@ -8,8 +8,9 @@ maintainer := "i@stingr.net"
 
 version := "2019.1"
 
+scalacOptions += "-Ypartial-unification"
+
 lazy val root = (project in file(".")).enablePlugins(PlayScala)
-//.enablePlugins(ProtocPlugin)
 
 resolvers ++= Seq(
   Resolver.jcenterRepo,
@@ -49,7 +50,8 @@ libraryDependencies ++= Seq(
   "com.googlecode.htmlcompressor" % "htmlcompressor" % "1.5.2",
   "rhino" % "js" % "1.7R2",
   "org.scala-lang.modules" %% "scala-async" % "0.10.0",
-  "org.typelevel" %% "cats" % "0.9.0",
+  "org.typelevel" %% "cats-core" % "2.0.0-RC1",
+  "com.github.fkoehler" %% "play-html-compressor" % "1.0.0",
   "com.mohiva" %% "play-silhouette" % silhouetteVersion,
   "com.mohiva" %% "play-silhouette-password-bcrypt" % silhouetteVersion,
   "com.mohiva" %% "play-silhouette-persistence" % silhouetteVersion,

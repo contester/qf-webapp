@@ -1,10 +1,5 @@
 package models
 
-import models.Monitor3.{CellScore, SubmitScore}
-import org.joda.time.Duration
-
-import scala.collection.{SortedMap, mutable}
-
 trait Scorer3 {
   def score(success: Submit, failures: Seq[Submit]): Long
 }
@@ -26,7 +21,7 @@ object Monitor3 {
 case class ProblemSubmitsScored(data: Map[Int, Submit], score: Monitor3.CellScore)
 
 object ProblemSubmitsScored {
-  val empty = ProblemSubmitsScored(Map.empty, CellScore(None, 0))
+  val empty = ProblemSubmitsScored(Map.empty, Monitor3.CellScore(None, 0))
   def build(submits: Iterable[Submit]): ProblemSubmitsScored = {
     val data = submits.map(x => x.submitId.id -> x).toMap
     val (sc, _) = score(data, None)
@@ -34,7 +29,7 @@ object ProblemSubmitsScored {
   }
 
   def score(data: Map[Int, Submit], submitToScore: Option[Int]): (Monitor3.CellScore, Monitor3.SubmitScore) = {
-    val (failures, successes) = data.values.toSeq.sortBy(_.submitId.arrived).span(!_.success)
+    val (failures, successes) = data.values.toSeq.sortBy(_.submitId.arrived.seconds).span(!_.success)
     val success = successes.headOption
 
     val successScore = success.map(ACMScorer3.score(_, failures))
@@ -43,7 +38,7 @@ object ProblemSubmitsScored {
         successScore
       } else None
     }
-    (CellScore(successScore, failures.length), ss)
+    (Monitor3.CellScore(successScore, failures.length), ss)
   }
 
   def update(prev: ProblemSubmitsScored, submit: Submit): (ProblemSubmitsScored, Monitor3.SubmitScore) = {
@@ -59,7 +54,7 @@ object TeamSubmitsScored {
   val empty = TeamSubmitsScored(Map.empty, Monitor3.RowScore(0, 0))
 
   def build(submits: Iterable[Submit]): TeamSubmitsScored = {
-    val data = submits.groupBy(_.submitId.problem.id)
+    val data = submits.groupBy(_.submitId.problem.id).mapValues(ProblemSubmitsScored.build(_))
     TeamSubmitsScored(data, score(data))
   }
 
