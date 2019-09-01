@@ -276,7 +276,30 @@ object SlickModel {
 
   val compLocations = TableQuery[CompLocations]
 
+  case class EvalDBEntry(id: Option[Long], touched: DateTime, ext: String, source: Array[Byte], input: Array[Byte],
+                         output:Option[Array[Byte]], timex: Option[Long], memory: Option[Long], info: Option[Long],
+                         result: Int, contest: Int, team: Int, processed: Option[Int], arrived: DateTime)
 
+  case class Eval(tag: Tag) extends Table[EvalDBEntry](tag, "Eval") {
+    def id = column[Long]("ID", O.AutoInc)
+    def touched = column[DateTime]("Touched")
+    def ext = column[String]("Ext")
+    def source = column[Array[Byte]]("Source")
+    def input = column[Array[Byte]]("Input")
+    def output = column[Option[Array[Byte]]]("Output")
+    def timex = column[Option[Long]]("Timex")
+    def memory = column[Option[Long]]("Memory")
+    def info = column[Option[Long]]("Info")
+    def result = column[Int]("Result")
+    def contest = column[Int]("Contest")
+    def team = column[Int]("Team")
+    def processed = column[Option[Int]]("Processed")
+    def arrived = column[DateTime]("Arrived")
+
+    override def * = (id.?, touched, ext, dource, input, output, timex, memory, info, result, contest, team, processed, arrived) <> (EvalDBEntry.tupled, EvalDBEntry.unapply)
+  }
+
+  val eval = TableQuery[Eval]
 }
 
 object ClarificationModel extends Logging {
