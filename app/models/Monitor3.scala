@@ -5,10 +5,6 @@ import org.joda.time.Duration
 
 import scala.collection.{SortedMap, mutable}
 
-case class Cell3(success: Option[Duration], failedAttempts: Int)
-
-case class MonitorRow3(team: Long, rank: Option[Int], penalty: Long, cells: Map[String, Cell3])
-
 trait Scorer3 {
   def score(success: Submit, failures: Seq[Submit]): Long
 }
@@ -24,6 +20,7 @@ object Monitor3 {
 
   case class CellScore(success: SubmitScore, failedAttempts: Int)
   case class RowScore(solved: Int, penalty: Long)
+  case class MonitorRow3(team: Int, rank: Option[Int])
 }
 
 case class ProblemSubmitsScored(data: Map[Int, Submit], score: Monitor3.CellScore)
@@ -90,19 +87,22 @@ object TeamSubmitsScored {
   }
 }
 
-case class ImmutableMonitor(data: Map[Int, TeamSubmits]) {
-  def update(s: Submit): ImmutableMonitor =
-    copy(data = data.updated(s.submitId.teamId, data.getOrElse(s.submitId.teamId, TeamSubmits.empty).update(s)))
-}
+case class MonitorPair(frozen: ImmutableMonitor, actual: ImmutableMonitor)
+
+case class ImmutableMonitor(data: Map[Int, TeamSubmitsScored], display: Seq[Monitor3.MonitorRow3])
 
 object ImmutableMonitor {
-  def fromSubmits(submits: Iterable[Submit]): Map[Int, ImmutableMonitor] = {
-    submits.groupBy(_.submitId.contestId).mapValues { forContest =>
-      ImmutableMonitor(forContest.groupBy(_.submitId.teamId).mapValues { forTeam =>
-        TeamSubmits(forTeam.groupBy(_.submitId.problem.id).mapValues { forProblem =>
-          ProblemSubmits(forProblem.map(x => x.submitId.id -> x).toMap)
-        })
-      })
-    }
+//  def build(submits: Iterable[Submit]): Map[Int, ImmutableMonitor] = {
+//    submits.groupBy(_.submitId.contestId).mapValues { forContest =>
+//      ImmutableMonitor(forContest.groupBy(_.submitId.teamId).mapValues { forTeam =>
+//        TeamSubmits(forTeam.groupBy(_.submitId.problem.id).mapValues { forProblem =>
+//          ProblemSubmits(forProblem.map(x => x.submitId.id -> x).toMap)
+//        })
+//      })
+//    }
+//  }
+
+  def update(prev: ImmutableMonitor, submit: Submit): (ImmutableMonitor, Monitor3.SubmitScore) = {
+    ???
   }
 }
