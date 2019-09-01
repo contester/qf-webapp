@@ -114,6 +114,6 @@ object Problems {
     problems.map(x => x.id -> s"${x.id}. ${x.name}")
 
   def forForm(problems: Seq[Problem]) =
-    Selectable.forSelect(toSelect(problems), "Выберите задачу")
+    Selectable.forSelect(toSelect(problems), "Select problem")
 }
 
