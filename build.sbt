@@ -8,7 +8,7 @@ maintainer := "i@stingr.net"
 
 version := "2019.1"
 
-scalacOptions += "-Ypartial-unification"
+scalacOptions ++= Seq("-Ypartial-unification","-Ywarn-dead-code", "-optimize")
 
 lazy val root = (project in file(".")).enablePlugins(PlayScala)
 
