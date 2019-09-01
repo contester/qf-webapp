@@ -108,6 +108,30 @@ object SubmitResult extends Logging {
     }
   }
 
+  private def finishedSuccess(finished: FinishedTesting) =
+    finished.compiled && finished.taken != 0 && finished.passed == finished.taken
+
+  def annotateFinished2(db: JdbcBackend#DatabaseDef, finished: FinishedTesting)(implicit ec: ExecutionContext): Future[AnnoSubmit] = {
+    import slick.jdbc.MySQLProfile.api._
+
+    val sr = if (finishedSuccess(finished))
+      Future.successful(SubmitAccepted)
+    else if (!finished.compiled)
+      Future.successful(SubmitCompileError)
+    else if (finished.submit.schoolMode)
+      Future.successful(SubmitPartialResult(finished.passed, finished.taken))
+    else {
+      val xtid = finished.testingId.toLong
+      db.run(SlickModel.results.filter(_.uid === xtid).sortBy(_.test.desc).take(1).map(x => (x.result, x.test)).result.headOption).map { lastResultOption =>
+        lastResultOption.map { lastResult =>
+          SubmitACMPartialResult(message.getOrElse(lastResult._1, "wtf"), lastResult._2)
+        }.getOrElse(SubmitACMPartialResult("unknown", None))
+      }
+    }
+
+    sr.map(AnnoSubmit(finished.submit.id, finished.submit.contest, finished.submit.team, finished.submit.problem, _))
+  }
+
   val message = Map(
     1 -> "Compilation successful",
     2 -> "Compilation error",

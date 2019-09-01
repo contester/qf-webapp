@@ -300,6 +300,27 @@ object SlickModel {
   }
 
   val eval = TableQuery[Eval]
+
+  case class DBResult(uid: Long, submit: Int, processed: DateTime, result: Int, test: Option[Int], timex: Option[Long],
+                      memory: Option[Long], info: Option[Long], testerOutput: Option[String],
+                      testerError: Option[String], testerExitCode:Option[Int])
+  case class Results(tag: Tag) extends Table[DBResult](tag, "Results") {
+    def uid = column[Long]("UID")
+    def submit = column[Int]("Submit")
+    def processed = column[DateTime]("Processed")
+    def result = column[Int]("Result")
+    def test = column[Option[Int]]("Test")
+    def timex = column[Option[Long]]("Timex")
+    def memory = column[Option[Long]]("Memory")
+    def info = column[Option[Long]]("Info")
+    def testerOutput = column[Option[String]]("TesterOutput")
+    def testerError = column[Option[String]]("TesterError")
+    def testerExitCode = column[Option[Int]]("TesterExitCode")
+
+    override def * = (uid, submit, processed, result, test, timex, memory, info, testerOutput, testerError, testerExitCode) <> (DBResult.tupled, DBResult.unapply)
+  }
+
+  val results = TableQuery[Results]
 }
 
 object ClarificationModel extends Logging {

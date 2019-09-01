@@ -103,7 +103,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
   private val pendingClarificationRequests = mutable.Map[Int, mutable.Set[Int]]().withDefaultValue(mutable.Set[Int]())
   private val (clr2Out, clr2Chan) = Concur.broadcast[ClarificationRequestState]()
   private val (clrPostOut, clrPostChannel) = Concur.broadcast[ClarificationPosted]()
-  private val (subOut, subChan) = Concur.broadcast[FullyDescribedSubmit]()
 
   private val clarifications = {
     mutable.Map[Int, mutable.Map[Int, Clarification]]()
@@ -272,7 +271,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
     case annotated: FullyDescribedSubmit => {
       logger.info(s"received annotated: $annotated")
 
-      subChan.offer(annotated)
       val a = AnnoSubmit(annotated.submit.submitId.id, annotated.submit.submitId.contestId,
         annotated.submit.submitId.teamId, annotated.submit.submitId.problem.id, annotated.result)
       sub2Chan.offer(a)
