@@ -1,6 +1,6 @@
 package models
 
-import models.Monitor3.CellScore
+import models.Monitor3.{CellScore, SubmitScore}
 import org.joda.time.Duration
 
 import scala.collection.{SortedMap, mutable}
@@ -12,6 +12,16 @@ case class MonitorRow3(team: Long, rank: Option[Int], penalty: Long, cells: Map[
 case class ProblemSubmits(data: Map[Int, Submit]) {
   def update(s: Submit): ProblemSubmits =
     copy(data = data.updated(s.submitId.id, s))
+}
+
+trait Scorer3 {
+  def score(success: Submit, failures: Seq[Submit]): Long
+}
+
+object ACMScorer3 extends Scorer3 {
+  override def score(success: Submit, failures: Seq[Submit]): Long = {
+    success.submitId.arrived.seconds / 60 + failures.length * 20
+  }
 }
 
 object Monitor3 {
@@ -28,7 +38,8 @@ object ProblemSubmits {
   def score(data: Map[Int, Submit], submitToScore: Option[Int]): (Monitor3.CellScore, Monitor3.SubmitScore) = {
     val (failures, successes) = data.values.toSeq.sortBy(_.submitId.arrived).span(!_.success)
     val success = successes.headOption
-    val successScore: Monitor3.SubmitScore = if(success.isEmpty) { None } else Some(failures.length * 20)
+
+    val successScore = success.map(ACMScorer3.score(_, failures))
     val ss = submitToScore.flatMap { sid =>
       if (success.exists(_.submitId.id == sid)) {
         successScore
