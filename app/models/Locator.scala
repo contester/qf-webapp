@@ -27,5 +27,5 @@ object Locator {
     db.run(
       sql"""select CompLocations.ID, Areas.ID, Areas.Name, Areas.Printer, CompLocations.Name
             from CompLocations, Areas where Areas.ID = CompLocations.Location and
-            CompLocations.ID = INET_ATON(${remoteAddress})""".as[Location]).map(_.headOption)
+            CompLocations.ID = INET_ATON(${remoteAddress})""".as[Location].headOption)
 }
