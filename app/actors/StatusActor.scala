@@ -250,7 +250,8 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
 
     case finished: FinishedTesting => {
       logger.info(s"received finished: $finished")
-      SubmitResult.annotateFinished(db, finished).map { annotated =>
+
+      SubmitResult.annotateFinished2(db, finished).map { annotated =>
         self ! annotated
       }
 
@@ -268,13 +269,11 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
       sender() ! Success(AllContests(contestStates.values.toSeq))
     }
 
-    case annotated: FullyDescribedSubmit => {
+    case annotated: AnnoSubmit => {
       logger.info(s"received annotated: $annotated")
 
-      val a = AnnoSubmit(annotated.submit.submitId.id, annotated.submit.submitId.contestId,
-        annotated.submit.submitId.teamId, annotated.submit.submitId.problem.id, annotated.result)
-      sub2Chan.offer(a)
-      pushPersistent(a.contest, a.team, "submit", Json.toJson(a))
+      sub2Chan.offer(annotated)
+      pushPersistent(annotated.contest, annotated.team, "submit", Json.toJson(annotated))
     }
 
     case evalDone: CustomTestResult => {

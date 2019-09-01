@@ -89,25 +89,6 @@ object SubmitResult extends Logging {
       (sr, details, st)
     }
 
-  def annotateFinished(db: JdbcBackend#DatabaseDef, finished: FinishedTesting)(implicit ec: ExecutionContext): Future[FullyDescribedSubmit] = {
-    Submits.loadAllSubmits(db, finished.submit.contest, finished.submit.team, finished.submit.problem).map(_.map(Submits.dbsub2sub)).flatMap { submits =>
-      logger.info(s"submits: $submits")
-      val scored = if (finished.submit.schoolMode) scoreGrouped[SchoolCell](submits, SchoolCell.empty, SchoolScorer)
-      else scoreGrouped(submits, ACMCell.empty, ACMScorer)
-      val indexed: Seq[((Submit, Option[Score]), Int)] = indexGrouped(scored._2)
-
-      logger.info(s"indexed: $indexed")
-      val submitEntry = indexed.find(_._1._1.submitId.id == finished.submit.id).get
-      logger.info(s"submit: $submitEntry")
-      val index = submitEntry._2
-      val submit = submitEntry._1._1
-      annotate(db, finished.submit.schoolMode, submit).map { submitResult =>
-        logger.debug(s"Annotated submit result: $submitResult")
-        FullyDescribedSubmit(submit, index, submitEntry._1._2, submitResult._1, submitResult._3, submitResult._2)
-      }
-    }
-  }
-
   private def finishedSuccess(finished: FinishedTesting) =
     finished.compiled && finished.taken != 0 && finished.passed == finished.taken
 
