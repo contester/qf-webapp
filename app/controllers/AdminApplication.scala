@@ -51,9 +51,7 @@ object SubmitTicketLite {
   implicit val format = Json.format[SubmitTicketLite]
 }
 
-class AdminApplication (cc: ControllerComponents,
-                        silhouette: Silhouette[AdminEnv],
-                        dbConfig: DatabaseConfig[JdbcProfile],
+class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEnv], dbConfig: DatabaseConfig[JdbcProfile],
                              monitorModel: Monitor,
                                  rabbitMqModel: RabbitMqModel,
                              statusActorModel: StatusActorModel,
