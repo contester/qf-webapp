@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package tickets;
+
+message PrintJob {
+    string filename = 1;
+    IdName contest = 2;
+    IdName team = 3;
+    Computer computer = 4;
+    IdName area = 5;
+    bytes data = 6;
+    uint64 timestamp_seconds = 7;
+    string printer = 8;
+    string job_id = 9;
+    string charset = 10;
+};
+
+message PrintJobReport {
+    string job_expanded_id = 1;
+    int64 num_pages = 2;
+    string error_message = 3;
+    int64 timestamp_seconds = 4;
+}
+
+message TexJob {
+    string printer = 1;
+    bytes data = 2;
+    string job_id = 3;
+}
+
+message BinaryJob {
+    string printer = 1;
+    bytes data = 2;
+    string job_id = 3;
+};
+
+message IdName {
+    uint32 id = 1;
+    string name = 2;
+};
+
+message Computer {
+    string id = 1;
+    string name = 2;
+};
+
+message Ticket {
+    message Submit {
+        message School {
+            uint32 tests_taken = 1;
+            uint32 tests_passed = 2;
+        }
+
+        message ACM {
+            string result = 1; // replace with uint32 and map
+            uint32 test_id = 2;
+        }
+
+        uint32 submit_number = 1;
+        uint64 arrived = 2;
+        bool compiled = 3;
+        School school = 4;
+        ACM acm = 5;
+    }
+
+    message Problem {
+        string id = 1;
+        string name = 2;
+    }
+
+    IdName contest = 1;
+    IdName team = 2;
+    IdName area = 3;
+    Computer computer = 4;
+    Problem problem = 5;
+
+    uint32 submit_id = 6;
+    uint64 judge_time = 7;
+
+    repeated Submit submit = 8;
+    string printer = 9; // string now, replace with id
+};

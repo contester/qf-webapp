@@ -84,6 +84,8 @@ GET /admin/:contestID/editTeam/:teamID controllers.AdminApplication.editTeam(con
 
 GET /admin/:contestID/teams/ controllers.AdminApplication.listTeams(contestID: Int)
 
+GET /admin/:contestID/contests/ controllers.AdminApplication.showContestList(contestID: Int)
+
 + nocsrf
 POST /admin/:contestID/editTeam/:teamID controllers.AdminApplication.postEditTeam(contestID: Int, teamID: Int)
 

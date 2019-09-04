@@ -1,0 +1,32 @@
+@(contests: Seq[Contest], contest: SelectedContest, admin: Admin)(implicit request: RequestHeader, messages: Messages)
+
+@adminmain(tab = "contests", contest=contest) {
+
+<div class="panel panel-success">
+    <div class="panel-heading"><h3 class="panel-title">Contest editor</h3></div>
+    <div class="panel-body">
+
+        <table id="printjobs" class="table table-hover table-bordered table-responsive">
+            <thead>
+            <tr><th>ID</th><th>Name</th><th>School mode</th><th>Start</th><th>Freeze</th><th>End</th><th>Expose</th><th>Polygon ID</th><th>Language</th></tr>
+            </thead>
+            <tbody>
+            @for(s <- contests) {
+            <tr id="@s.id">
+                <th scope="row">@s.id</th>
+                <td>@s.name</td>
+                <td>@s.schoolMode</td>
+                <td>@s.startTime</td>
+                <td>@s.freezeTime</td>
+                <td>@s.endTime</td>
+                <td>@s.exposeTime</td>
+                <td>@s.polygonID</td>
+                <td>@s.language</td>
+            </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+}

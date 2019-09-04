@@ -564,4 +564,12 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
         }
     }
   }
+
+  def showContestList(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
+    getSelectedContests(contestID, request.identity).flatMap { contest =>
+      db.run(SlickModel.contests0.sortBy(_.id).result).map { results =>
+        val cvt = results.filter(x => request.identity.canSpectate(x.id))
+        Ok(html.admin.contestlist(cvt, contest, request.identity))
+      }
+    }}
 }

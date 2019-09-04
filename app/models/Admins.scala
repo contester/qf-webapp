@@ -133,6 +133,7 @@ object AdminNavlinkMatch {
       case "tasks" => routes.AdminApplication.tasks(_)
       case "print" => routes.AdminApplication.printJobs(_)
       case "teams" => routes.AdminApplication.listTeams(_)
+      case "contests" => routes.AdminApplication.showContestList(_)
       case _ => routes.AdminApplication.submits(_)
     }
 }
