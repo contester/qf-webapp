@@ -461,10 +461,11 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
   private def getPrintJobs(contestID: Int) = {
     import com.github.tototoshi.slick.MySQLJodaSupport._
+    import models.SlickModel._
 
     db.run(
       (for {
-        (j, l) <- SlickModel.printJobs.filter(_.contest === contestID) join SlickModel.compLocations on (_.computer === _.id)
+        (j, l) <- printJobs.filter(_.contest === contestID) join compLocations on (_.computer === _.id)
       } yield (j, l)).sortBy(_._1.arrived).result)
     .zip(monitorModel.teamClient.getTeams(contestID)).map {
       case (jobs, teams) =>
@@ -476,7 +477,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }
 
-  def printJobs(contestID: Int)= silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
+  def listPrintJobs(contestID: Int)= silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
     getSelectedContests(contestID, request.identity)
       .zip(getPrintJobs(contestID))
       .map {

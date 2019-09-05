@@ -1,6 +1,8 @@
 package models
 
 import com.github.nscala_time.time.Imports._
+import com.google.common.primitives.UnsignedInts
+import inet.ipaddr.ipv4.IPv4Address
 import play.api.{Logger, Logging}
 import play.api.libs.json.JsValue
 import slick.jdbc.JdbcBackend
@@ -28,6 +30,16 @@ object SlickModel {
   import slick.jdbc.MySQLProfile.api._
   import utils.Db._
   import com.github.tototoshi.slick.MySQLJodaSupport._
+
+  implicit val ipv4ColumnType = MappedColumnType.base[IPv4Address, Long](
+    x => UnsignedInts.toLong(x.intValue()),
+    x => new IPv4Address(UnsignedInts.checkedCast(x))
+  )
+
+  val inetNtoa = SimpleFunction.unary[IPv4Address, String]("inet_ntoa")
+  val inetNtoaOpt = SimpleFunction.unary[Option[IPv4Address], String]("inet_ntoa")
+
+  val inetAton = SimpleFunction.unary[String, IPv4Address]("inet_aton")
 
   case class Team(id: Int, school: Int, num: Option[Int], name: String)
 
@@ -215,7 +227,7 @@ object SlickModel {
   } yield LiftedLoggedInTeam0(assignment.username, assignment.password, contest, team)
 
   case class NewSubmit(id: Option[Int], contest: Int, team: Int, problem: String, srcLang: Int, source: Array[Byte],
-                       arrived: DateTime, computer: Option[Long], processed: Option[Int])
+                       arrived: DateTime, computer: Option[IPv4Address], processed: Option[Int])
 
   case class NewSubmits(tag: Tag) extends Table[NewSubmit](tag, "NewSubmits") {
     def id = column[Int]("ID", O.AutoInc)
@@ -225,7 +237,7 @@ object SlickModel {
     def srcLang = column[Int]("SrcLang")
     def source = column[Array[Byte]]("Source")
     def arrived = column[DateTime]("Arrived")
-    def computer = column[Option[Long]]("Computer")
+    def computer = column[Option[IPv4Address]]("Computer")
     def processed = column[Option[Int]]("Processed")
 
     override def * = (id.?, contest, team, problem, srcLang, source, arrived, computer, processed) <> (NewSubmit.tupled, NewSubmit.unapply)
@@ -247,7 +259,7 @@ object SlickModel {
 
   val testings = TableQuery[Testings]
 
-  case class PrintJob(id: Option[Long], contest: Int, team: Int, filename: String, data: Array[Byte], computer: Long, arrived: DateTime, printed: Option[Int])
+  case class PrintJob(id: Option[Long], contest: Int, team: Int, filename: String, data: Array[Byte], computer: IPv4Address, arrived: DateTime, printed: Option[Int])
 
   case class PrintJobs(tag: Tag) extends Table[PrintJob](tag, "PrintJobs") {
     def id = column[Long]("ID", O.AutoInc)
@@ -255,7 +267,7 @@ object SlickModel {
     def team = column[Int]("Team")
     def filename = column[String]("Filename")
     def data = column[Array[Byte]]("DATA")
-    def computer = column[Long]("Computer")
+    def computer = column[IPv4Address]("Computer")
     def arrived = column[DateTime]("Arrived")
     def printed = column[Option[Int]]("Printed")
 
@@ -264,10 +276,10 @@ object SlickModel {
 
   val printJobs = TableQuery[PrintJobs]
 
-  case class CompLocation(id: Long, location: Int, name: String)
+  case class CompLocation(id: IPv4Address, location: Int, name: String)
 
   case class CompLocations(tag: Tag) extends Table[CompLocation](tag, "CompLocations") {
-    def id = column[Long]("ID", O.PrimaryKey)
+    def id = column[IPv4Address]("ID", O.PrimaryKey)
     def location = column[Int]("Location")
     def name = column[String]("Name")
 
