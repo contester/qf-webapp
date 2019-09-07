@@ -5,7 +5,7 @@ import com.google.common.primitives.UnsignedInts
 import inet.ipaddr.ipv4.IPv4Address
 import play.api.{Logger, Logging}
 import play.api.libs.json.JsValue
-import slick.jdbc.JdbcBackend
+import slick.jdbc.{GetResult, JdbcBackend}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -38,6 +38,8 @@ object SlickModel {
 
   val inetNtoa = SimpleFunction.unary[IPv4Address, String]("inet_ntoa")
   val inetNtoaOpt = SimpleFunction.unary[Option[IPv4Address], String]("inet_ntoa")
+
+  val currentTimestamp = SimpleFunction.nullary[DateTime]("current_timestamp")
 
   val inetAton = SimpleFunction.unary[String, IPv4Address]("inet_aton")
 
@@ -259,7 +261,9 @@ object SlickModel {
 
   val testings = TableQuery[Testings]
 
-  case class PrintJob(id: Option[Long], contest: Int, team: Int, filename: String, data: Array[Byte], computer: IPv4Address, arrived: DateTime, printed: Option[Int])
+  case class PrintJob(id: Option[Long], contest: Int, team: Int, filename: String, data: Array[Byte],
+                      computer: IPv4Address, arrived: DateTime, printed: Option[Int],
+                      processed: Option[DateTime], pages: Option[Int], error: Option[String])
 
   case class PrintJobs(tag: Tag) extends Table[PrintJob](tag, "PrintJobs") {
     def id = column[Long]("ID", O.AutoInc)
@@ -270,8 +274,11 @@ object SlickModel {
     def computer = column[IPv4Address]("Computer")
     def arrived = column[DateTime]("Arrived")
     def printed = column[Option[Int]]("Printed")
+    def processed = column[Option[DateTime]]("Processed")
+    def pages = column[Option[Int]]("Pages")
+    def error = column[Option[String]]("Error")
 
-    override def * = (id.?, contest, team, filename, data, computer, arrived, printed) <> (PrintJob.tupled, PrintJob.unapply)
+    override def * = (id.?, contest, team, filename, data, computer, arrived, printed, processed, pages, error) <> (PrintJob.tupled, PrintJob.unapply)
   }
 
   val printJobs = TableQuery[PrintJobs]
@@ -333,6 +340,56 @@ object SlickModel {
   }
 
   val results = TableQuery[Results]
+
+  case class Area(id: Option[Int], name: String, printer: String)
+
+  case class Areas(tag: Tag) extends Table[Area](tag, "Areas") {
+    def id = column[Int]("ID", O.AutoInc)
+    def name = column[String]("Name")
+    def printer = column[String]("Printer")
+
+    override def * = (id.?, name, printer) <> (Area.tupled, Area.unapply)
+  }
+
+  val areas = TableQuery[Areas]
+}
+
+object PrintingModel extends Logging {
+  import slick.jdbc.MySQLProfile.api._
+  import SlickModel._
+  import utils.Db._
+
+  // case class InsertablePrintJob(contest:Int, team:Int, filename: String, data: Array[Byte], computer: IPv4Address)
+
+  // val insertPrintJobQuery = printJobs.map(x => (x.contest, x.team, x.filename, x.data, x.computer, x.arrived)).returning(printJobs.map(_.id))
+
+  def insertPrintJob(db: JdbcBackend#DatabaseDef, contest:Int, team:Int, filename: String, data: Array[Byte], computerAsString: String) =
+    db.run((sqlu"""insert into PrintJobs (Contest, Team, Filename, DATA, Computer, Arrived) values
+                    (${contest}, ${team}, ${filename},
+            ${data}, INET_ATON(${computerAsString}), CURRENT_TIMESTAMP())
+                  """.andThen(sql"select last_insert_id()".as[Int].headOption)).withPinnedSession
+    )
+
+  case class ShortenedPrintJob(id: Int, filename: String, contest: Int, team: Int, computerID: String,
+                               computerName: String, areaID: Int, areaName: String, printer: String,
+                               data: Array[Byte], arrived: DateTime)
+
+  implicit val getShortenedResult = GetResult(
+    r => ShortenedPrintJob(r.nextInt(), r.nextString(), r.nextInt(), r.nextInt(), r.nextString(), r.nextString(),
+      r.nextInt(), r.nextString(), r.nextString(), r.nextBytes(), new DateTime(r.nextTimestamp()))
+  )
+
+  def printJobForPrinting(id: Int) =
+    sql"""select
+         |PrintJobs.ID as ID, Filename, PrintJobs.Contest as ContestID, PrintJobs.Team as TeamID,
+         |inet_ntoa(PrintJobs.Computer) as ComputerID,
+         |CompLocations.Name as ComputerName,
+         |Areas.ID as AreaID, Areas.Name as AreaName, Printer, Data, Arrived
+         |from PrintJobs, Areas, CompLocations
+         |where
+         |CompLocations.ID = PrintJobs.Computer and
+         |Areas.ID = CompLocations.Location and
+         |PrintJobs.ID = $id limit 1""".stripMargin.as[ShortenedPrintJob].headOption
 }
 
 object ClarificationModel extends Logging {
