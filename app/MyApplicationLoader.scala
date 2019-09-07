@@ -112,6 +112,7 @@ class MyComponents(context: ApplicationLoader.Context)
   lazy val monitorModel = wire[Monitor]
   lazy val rabbitModel = wire[RabbitMqModel]
   lazy val statusActorModel = wire[StatusActorModel]
+  lazy val printingModel = wire[PrintingModel]
 
   val subscriptionsModel = wire[SubscriptionsModel]
 

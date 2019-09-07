@@ -1,28 +1,23 @@
 package controllers
 
-import java.nio.charset.StandardCharsets
-
-import javax.inject.Inject
-import akka.actor.{ActorSystem, Props}
+import com.google.protobuf.ByteString
 import com.mohiva.play.silhouette.api.Silhouette
-import com.spingo.op_rabbit.{Message, RabbitControl}
+import com.spingo.op_rabbit.Message
 import models._
 import org.apache.commons.io.FileUtils
 import org.joda.time.DateTime
-import play.api.{Logger, Logging}
+import play.api.Logging
 import play.api.data.Form
 import play.api.data.Forms._
-import play.api.db.slick.DatabaseConfigProvider
-import play.api.i18n.{I18nSupport, MessagesApi}
-import play.api.mvc.{AbstractController, Controller, ControllerComponents, RequestHeader}
+import play.api.i18n.I18nSupport
+import play.api.mvc.{AbstractController, ControllerComponents, RequestHeader}
+import protos.Tickets.{Computer, IdName, PrintJob}
 import slick.basic.DatabaseConfig
-import slick.jdbc.JdbcProfile
-import slick.jdbc.GetResult
+import slick.jdbc.{GetResult, JdbcProfile}
 import utils.auth.TeamsEnv
 import views.html
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Try
 
 package printing {
 
@@ -36,25 +31,14 @@ case class SubmitData(textOnly: Boolean)
       r => PrintEntry(r.nextString(), new DateTime(r.nextTimestamp()), r.nextBoolean())
     )
   }
-
-  case class PrintJobID(id: Int)
-
-  object PrintJobID {
-    implicit val format = Json.format[PrintJobID]
-  }
 }
 
 class Printing (cc: ControllerComponents,
                 silhouette: Silhouette[TeamsEnv],
-                rabbitMqModel: RabbitMqModel,
                 dbConfig: DatabaseConfig[JdbcProfile],
-                statusActorModel: StatusActorModel) extends AbstractController(cc) with I18nSupport with Logging {
+                printingModel: PrintingModel) extends AbstractController(cc) with I18nSupport with Logging {
   private val db = dbConfig.db
   import dbConfig.profile.api._
-  import utils.Db._
-
-  private val rabbitMq = rabbitMqModel.rabbitMq
-  import com.spingo.op_rabbit.PlayJsonSupport._
 
   private val printForm = Form {
     mapping("textOnly" -> boolean)(printing.SubmitData.apply)(printing.SubmitData.unapply)
@@ -87,20 +71,6 @@ class Printing (cc: ControllerComponents,
   private def fixEncoding(x: Array[Byte]): Array[Byte] = {
     x.map(toQ)
   }
-  private implicit val standardTimeout: akka.util.Timeout = {
-    import scala.concurrent.duration._
-    Duration(5, SECONDS)
-  }
-
-//  private def buildProtoFromID(id: Int) =
-//    db.run(PrintingModel.printJobForPrinting(id)).flatMap( pjOpt =>
-//      pjOpt.map { pj =>
-//        statusActorModel.teamClient.getTeam(pj.contest, pj.team).zip(statusActorModel.getContest(pj.contest)).map {
-//          case (team, contestOpt) =>
-//            ???
-//        }
-//      }
-//    )
 
   def post = silhouette.SecuredAction(parse.multipartFormData).async { implicit request =>
     val parsed = printForm.bindFromRequest
@@ -118,19 +88,12 @@ class Printing (cc: ControllerComponents,
       parsed0.fold(
         formWithErrors => getPrintForm(request.identity, formWithErrors, location).map(BadRequest(_)),
         submitData => {
-//          PrintingModel.insertPrintJob(db, request.identity.contest.id, request.identity.team.localId,
-//            solutionOpt.get._1, solutionOpt.get._2, request.remoteAddress)
-
-          db.run(
-            (sqlu"""insert into PrintJobs (Contest, Team, Filename, DATA, Computer, Arrived) values
-                    (${request.identity.contest.id}, ${request.identity.team.localId}, ${solutionOpt.get._1},
-            ${solutionOpt.get._2}, INET_ATON(${request.remoteAddress}), CURRENT_TIMESTAMP())
-                  """.andThen(sql"select last_insert_id()".as[Int])).withPinnedSession
-          ).map { printJobIds =>
-            printJobIds.foreach { printJobId =>
-              rabbitMq ! Message.queue(printing.PrintJobID(printJobId), queue = "contester.printrequests")
+          printingModel.insertPrintJob(request.identity.contest.id, request.identity.team.localId,
+            solutionOpt.get._1, solutionOpt.get._2, request.remoteAddress).flatMap { printJobIds =>
+            printJobIds.map { jobId=>
+              printingModel.printJobByID(jobId)
             }
-            Redirect(routes.Printing.index)
+            Future.successful(Redirect(routes.Printing.index))
           }
         }
       )

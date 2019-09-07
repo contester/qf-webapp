@@ -55,6 +55,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
                              monitorModel: Monitor,
                                  rabbitMqModel: RabbitMqModel,
                              statusActorModel: StatusActorModel,
+                        printingModel: PrintingModel,
                                   configuration: Configuration,
                                   ws: WSClient) extends AbstractController(cc)  with I18nSupport with Logging {
 
@@ -465,7 +466,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
     db.run(
       (for {
-        (j, l) <- printJobs.filter(_.contest === contestID) join compLocations on (_.computer === _.id)
+        (j, l) <- dbPrintJobs.filter(_.contest === contestID) join compLocations on (_.computer === _.id)
       } yield (j, l)).sortBy(_._1.arrived).result)
     .zip(statusActorModel.teamClient.getTeams(contestID)).map {
       case (jobs, teams) =>
@@ -488,8 +489,9 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
   def reprintJob(printJobID: Int) = silhouette.SecuredAction.async { implicit request =>
-    rabbitMq ! Message.queue(printing.PrintJobID(printJobID), queue = "contester.printrequests")
-    Future.successful(Ok("ok"))
+    printingModel.printJobByID(printJobID).map { _ =>
+      Ok("ok")
+    }
   }
 
   def listTeams(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>

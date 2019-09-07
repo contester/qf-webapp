@@ -2,10 +2,14 @@ package models
 
 import com.github.nscala_time.time.Imports._
 import com.google.common.primitives.UnsignedInts
+import com.google.protobuf.ByteString
+import com.spingo.op_rabbit.Message
 import inet.ipaddr.ipv4.IPv4Address
 import play.api.{Logger, Logging}
 import play.api.libs.json.JsValue
-import slick.jdbc.{GetResult, JdbcBackend}
+import protos.Tickets.{Computer, IdName, PrintJob, PrintJobReport}
+import slick.basic.DatabaseConfig
+import slick.jdbc.{GetResult, JdbcBackend, JdbcProfile}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -261,11 +265,11 @@ object SlickModel {
 
   val testings = TableQuery[Testings]
 
-  case class PrintJob(id: Option[Long], contest: Int, team: Int, filename: String, data: Array[Byte],
+  case class DBPrintJob(id: Option[Long], contest: Int, team: Int, filename: String, data: Array[Byte],
                       computer: IPv4Address, arrived: DateTime, printed: Option[Int],
                       processed: Option[DateTime], pages: Option[Int], error: Option[String])
 
-  case class PrintJobs(tag: Tag) extends Table[PrintJob](tag, "PrintJobs") {
+  case class DBPrintJobs(tag: Tag) extends Table[DBPrintJob](tag, "PrintJobs") {
     def id = column[Long]("ID", O.AutoInc)
     def contest = column[Int]("Contest")
     def team = column[Int]("Team")
@@ -278,10 +282,10 @@ object SlickModel {
     def pages = column[Option[Int]]("Pages")
     def error = column[Option[String]]("Error")
 
-    override def * = (id.?, contest, team, filename, data, computer, arrived, printed, processed, pages, error) <> (PrintJob.tupled, PrintJob.unapply)
+    override def * = (id.?, contest, team, filename, data, computer, arrived, printed, processed, pages, error) <> (DBPrintJob.tupled, DBPrintJob.unapply)
   }
 
-  val printJobs = TableQuery[PrintJobs]
+  val dbPrintJobs = TableQuery[DBPrintJobs]
 
   case class CompLocation(id: IPv4Address, location: Int, name: String)
 
@@ -354,32 +358,39 @@ object SlickModel {
   val areas = TableQuery[Areas]
 }
 
-object PrintingModel extends Logging {
+case class ShortenedPrintJob(id: Int, filename: String, contest: Int, team: Int, computerID: String,
+                             computerName: String, areaID: Int, areaName: String, printer: String,
+                             data: Array[Byte], arrived: DateTime)
+
+class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: StatusActorModel, rabbitMqModel: RabbitMqModel)(implicit ec: ExecutionContext) extends Logging {
   import slick.jdbc.MySQLProfile.api._
   import SlickModel._
   import utils.Db._
+  import com.github.tototoshi.slick.MySQLJodaSupport._
+
+  private val db = dbConfig.db
 
   // case class InsertablePrintJob(contest:Int, team:Int, filename: String, data: Array[Byte], computer: IPv4Address)
 
   // val insertPrintJobQuery = printJobs.map(x => (x.contest, x.team, x.filename, x.data, x.computer, x.arrived)).returning(printJobs.map(_.id))
 
-  def insertPrintJob(db: JdbcBackend#DatabaseDef, contest:Int, team:Int, filename: String, data: Array[Byte], computerAsString: String) =
+  def insertPrintJob(contest:Int, team:Int, filename: String, data: Array[Byte], computerAsString: String) =
     db.run((sqlu"""insert into PrintJobs (Contest, Team, Filename, DATA, Computer, Arrived) values
                     (${contest}, ${team}, ${filename},
             ${data}, INET_ATON(${computerAsString}), CURRENT_TIMESTAMP())
                   """.andThen(sql"select last_insert_id()".as[Int].headOption)).withPinnedSession
     )
 
-  case class ShortenedPrintJob(id: Int, filename: String, contest: Int, team: Int, computerID: String,
-                               computerName: String, areaID: Int, areaName: String, printer: String,
-                               data: Array[Byte], arrived: DateTime)
-
   implicit val getShortenedResult = GetResult(
     r => ShortenedPrintJob(r.nextInt(), r.nextString(), r.nextInt(), r.nextInt(), r.nextString(), r.nextString(),
       r.nextInt(), r.nextString(), r.nextString(), r.nextBytes(), new DateTime(r.nextTimestamp()))
   )
+  private implicit val standardTimeout: akka.util.Timeout = {
+    import scala.concurrent.duration._
+    Duration(5, SECONDS)
+  }
 
-  def printJobForPrinting(id: Int) =
+  private def printJobForPrinting(id: Int) =
     sql"""select
          |PrintJobs.ID as ID, Filename, PrintJobs.Contest as ContestID, PrintJobs.Team as TeamID,
          |inet_ntoa(PrintJobs.Computer) as ComputerID,
@@ -390,6 +401,43 @@ object PrintingModel extends Logging {
          |CompLocations.ID = PrintJobs.Computer and
          |Areas.ID = CompLocations.Location and
          |PrintJobs.ID = $id limit 1""".stripMargin.as[ShortenedPrintJob].headOption
+
+  private def buildProtoFromID(id: Int) =
+    db.run(printJobForPrinting(id)).flatMap( pjOpt =>
+      pjOpt.map { pj =>
+        statusActorModel.teamClient.getTeam(pj.contest, pj.team).zip(statusActorModel.getContest(pj.contest)).map {
+          case (team, contestOpt) =>
+            Some(PrintJob(
+              filename=pj.filename,
+              contest=Some(IdName(pj.contest, contestOpt.get.name)),
+              team=Some(IdName(pj.team, team.get.teamFullName)),
+              computer=Some(Computer(id=pj.computerID, name=pj.computerName)),
+              area=Some(IdName(id=pj.areaID, name=pj.areaName)),
+              data = ByteString.copyFrom(pj.data),
+              timestampSeconds = pj.arrived.getMillis / 1000,
+              printer=pj.printer,
+              jobId = s"s-$id"
+            ))
+        }
+      }.getOrElse(Future.successful(None))
+    )
+
+  import utils.ProtoRabbitSupport._
+
+  def printJobByID(id: Int) =
+    buildProtoFromID(id).map{ optJob =>
+      optJob.map { job =>
+        rabbitMqModel.rabbitMq ! Message.queue(job, queue = "contester.protoprintjobs")
+      }
+    }
+
+  def processPrintJobReport(r: PrintJobReport): Future[Int] = {
+    if (r.jobExpandedId.startsWith("s-")) {
+      val jobId = r.jobExpandedId.substring(2).toLong
+      val procTime = new DateTime(r.timestampSeconds * 1000)
+      db.run(dbPrintJobs.filter(_.id === jobId).map(x => (x.processed, x.printed)).update((Some(procTime), Some(255))))
+    } else Future.successful(0)
+  }
 }
 
 object ClarificationModel extends Logging {
