@@ -100,7 +100,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
   private def showSubs(contestId: Int, limit: Option[Int], account: Admin)(implicit request: RequestHeader, ec: ExecutionContext) =
     getSelectedContests(contestId, account).zip(
-      monitorModel.teamClient.getTeams(contestId)
+      statusActorModel.teamClient.getTeams(contestId)
     ).zip(db.run(Submits.getContestSubmits(contestId))).flatMap {
       case ((contest, teamMap), submits0) =>
         val canSeeAll = account.canSeeAll(contestId)
@@ -338,7 +338,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
   def postNewClarification(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request =>
     getSelectedContests(contestId, request.identity).flatMap { contest =>
-      monitorModel.problemClient.getProblems(contest.contest.id).map { problems =>
+      statusActorModel.problemClient.getProblems(contest.contest.id).map { problems =>
         Ok(html.admin.postclarification(None, postClarificationForm, selectableProblems(problems), contest))
       }
     }
@@ -352,7 +352,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
           cl.problem, cl.text, cl.hidden
         )
         getSelectedContests(cl.contest, request.identity).flatMap { contest =>
-          monitorModel.problemClient.getProblems(contest.contest.id).map { problems =>
+          statusActorModel.problemClient.getProblems(contest.contest.id).map { problems =>
             Ok(html.admin.postclarification(cl.id, postClarificationForm.fill(clObj), selectableProblems(problems), contest))
           }
         }
@@ -365,7 +365,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
     postClarificationForm.bindFromRequest.fold(
       formWithErrors => getSelectedContests(1, request.identity).flatMap { contest =>
-        monitorModel.problemClient.getProblems(contest.contest.id).map { problems =>
+        statusActorModel.problemClient.getProblems(contest.contest.id).map { problems =>
           BadRequest(html.admin.postclarification(clarificationId, formWithErrors, selectableProblems(problems), contest))
         }
       },
@@ -467,7 +467,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
       (for {
         (j, l) <- printJobs.filter(_.contest === contestID) join compLocations on (_.computer === _.id)
       } yield (j, l)).sortBy(_._1.arrived).result)
-    .zip(monitorModel.teamClient.getTeams(contestID)).map {
+    .zip(statusActorModel.teamClient.getTeams(contestID)).map {
       case (jobs, teams) =>
         jobs.flatMap { src =>
           teams.get(src._1.team).map { team =>

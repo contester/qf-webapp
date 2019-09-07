@@ -20,7 +20,6 @@ case class ClarificationReqData(problem: String, text: String)
 class QandA (cc: ControllerComponents,
              silhouette: Silhouette[TeamsEnv],
              dbConfig: DatabaseConfig[JdbcProfile],
-                       monitorModel: Monitor,
                        statusActorModel: StatusActorModel) extends AbstractController(cc) with I18nSupport {
   private val db = dbConfig.db
   import dbConfig.profile.api._
@@ -37,7 +36,7 @@ class QandA (cc: ControllerComponents,
   import utils.Ask
 
   private def clrForm(loggedInTeam: LoggedInTeam, form: Form[ClarificationReqData])(implicit request: RequestHeader, ec: ExecutionContext) =
-    monitorModel.problemClient.getProblems(loggedInTeam.contest.id).flatMap { probs =>
+    statusActorModel.problemClient.getProblems(loggedInTeam.contest.id).flatMap { probs =>
       Ask.apply[Seq[Clarification]](statusActorModel.statusActor, StatusActor.GetVisibleClarifications(loggedInTeam.contest.id)).flatMap { clars =>
         ClarificationModel.getTeamClarificationReqs(db, loggedInTeam.contest.id, loggedInTeam.team.localId).map { clReq =>
           html.clarifications(loggedInTeam, clars, clReq, Seq[(String, String)](("", "Выберите задачу")) ++ Problems.toSelect(probs), form)

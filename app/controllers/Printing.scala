@@ -47,9 +47,10 @@ case class SubmitData(textOnly: Boolean)
 class Printing (cc: ControllerComponents,
                 silhouette: Silhouette[TeamsEnv],
                 rabbitMqModel: RabbitMqModel,
-                dbConfig: DatabaseConfig[JdbcProfile]) extends AbstractController(cc) with I18nSupport with Logging {
+                dbConfig: DatabaseConfig[JdbcProfile],
+                statusActorModel: StatusActorModel) extends AbstractController(cc) with I18nSupport with Logging {
   private val db = dbConfig.db
-  import dbConfig.driver.api._
+  import dbConfig.profile.api._
   import utils.Db._
 
   private val rabbitMq = rabbitMqModel.rabbitMq
@@ -86,6 +87,20 @@ class Printing (cc: ControllerComponents,
   private def fixEncoding(x: Array[Byte]): Array[Byte] = {
     x.map(toQ)
   }
+  private implicit val standardTimeout: akka.util.Timeout = {
+    import scala.concurrent.duration._
+    Duration(5, SECONDS)
+  }
+
+//  private def buildProtoFromID(id: Int) =
+//    db.run(PrintingModel.printJobForPrinting(id)).flatMap( pjOpt =>
+//      pjOpt.map { pj =>
+//        statusActorModel.teamClient.getTeam(pj.contest, pj.team).zip(statusActorModel.getContest(pj.contest)).map {
+//          case (team, contestOpt) =>
+//            ???
+//        }
+//      }
+//    )
 
   def post = silhouette.SecuredAction(parse.multipartFormData).async { implicit request =>
     val parsed = printForm.bindFromRequest
@@ -103,6 +118,9 @@ class Printing (cc: ControllerComponents,
       parsed0.fold(
         formWithErrors => getPrintForm(request.identity, formWithErrors, location).map(BadRequest(_)),
         submitData => {
+//          PrintingModel.insertPrintJob(db, request.identity.contest.id, request.identity.team.localId,
+//            solutionOpt.get._1, solutionOpt.get._2, request.remoteAddress)
+
           db.run(
             (sqlu"""insert into PrintJobs (Contest, Team, Filename, DATA, Computer, Arrived) values
                     (${request.identity.contest.id}, ${request.identity.team.localId}, ${solutionOpt.get._1},

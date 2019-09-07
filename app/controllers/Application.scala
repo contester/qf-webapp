@@ -48,7 +48,7 @@ class Application (cc: ControllerComponents,
   private val rabbitMq = rabbitMqModel.rabbitMq
 
   private def getProblems(contest: Int)(implicit ec: ExecutionContext) =
-    monitorModel.problemClient.getProblems(contest)
+    statusActorModel.problemClient.getProblems(contest)
 
   private def getProblemsAndCompilers(contestId: Int)(implicit ec: ExecutionContext) =
     getProblems(contestId).zip(db.run(Contests.getCompilers(contestId).result))

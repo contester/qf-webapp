@@ -32,6 +32,9 @@ object StatusActor {
   case object GetAllContests
   case class AllContests(contests: Seq[Contest])
 
+  case class GetSingleContest(id: Int)
+  case class GetSingleContestResult(c: Option[Contest])
+
   case class ClarificationRequested(contest: Int, clrId: Int)
   case class ClarificationAnswered(contest: Int, clrId: Int, teamId: Int, problem: String, text: String)
   case class ClarificationRequestsStoredState(values: Map[Int, Seq[Int]])
@@ -267,6 +270,10 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
 
     case GetAllContests => {
       sender() ! Success(AllContests(contestStates.values.toSeq))
+    }
+
+    case GetSingleContest(id) => {
+      sender() ! Success(GetSingleContestResult(contestStates.get(id)))
     }
 
     case annotated: AnnoSubmit => {
