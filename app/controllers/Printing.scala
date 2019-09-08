@@ -40,6 +40,8 @@ class Printing (cc: ControllerComponents,
   private val db = dbConfig.db
   import dbConfig.profile.api._
 
+  implicit val ec = defaultExecutionContext
+
   private val printForm = Form {
     mapping("textOnly" -> boolean)(printing.SubmitData.apply)(printing.SubmitData.unapply)
   }
@@ -50,8 +52,6 @@ class Printing (cc: ControllerComponents,
       ).map { printJobs =>
       html.printform(loggedIn,location, form, printJobs)
     }
-
-  import scala.concurrent.ExecutionContext.Implicits.global
 
   def index = silhouette.SecuredAction.async { implicit request =>
     Locator.locate(db, request.remoteAddress).flatMap { location =>
