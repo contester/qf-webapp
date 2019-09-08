@@ -362,6 +362,8 @@ case class ShortenedPrintJob(id: Int, filename: String, contest: Int, team: Int,
                              computerName: String, areaID: Int, areaName: String, printer: String,
                              data: Array[Byte], arrived: DateTime)
 
+case class PrintEntry(filename: String, arrived: DateTime, printed: Boolean)
+
 class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: StatusActorModel, rabbitMqModel: RabbitMqModel)(implicit ec: ExecutionContext) extends Logging {
   import slick.jdbc.MySQLProfile.api._
   import SlickModel._
@@ -435,9 +437,14 @@ class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: Sta
     if (r.jobExpandedId.startsWith("s-")) {
       val jobId = r.jobExpandedId.substring(2).toLong
       val procTime = new DateTime(r.timestampSeconds * 1000)
-      db.run(dbPrintJobs.filter(_.id === jobId).map(x => (x.processed, x.printed)).update((Some(procTime), Some(255))))
+      val errOpt = if (r.errorMessage.isEmpty) None else Some(r.errorMessage)
+      db.run(dbPrintJobs.filter(_.id === jobId).map(x => (x.processed, x.printed, x.error)).update((Some(procTime), Some(255), errOpt)))
     } else Future.successful(0)
   }
+
+  def printJobsForTeam(contest:Int, team: Int) =
+    db.run(dbPrintJobs.filter(x => ((x.contest === contest) && (x.team === team)))
+      .map(x => (x.filename, x.arrived, x.processed.isDefined)).sortBy(_._2.desc).result).map(_.map(PrintEntry.tupled))
 }
 
 object ClarificationModel extends Logging {

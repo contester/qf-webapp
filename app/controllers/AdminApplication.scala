@@ -39,7 +39,7 @@ case class EditTeam(schoolName: String, teamName: String, teamNum: Option[Int])
 
 case class DisplayTeam(team: SlickModel.Team, school: School)
 
-case class AdminPrintJob(id: Int, contestID: Int, team: Team, filename: String, arrived: DateTime, printed: Boolean, computerName: String)
+case class AdminPrintJob(id: Int, contestID: Int, team: Team, filename: String, arrived: DateTime, printed: Option[DateTime], computerName: String, error: Option[String])
 
 case class SubmitIdLite(id: Int)
 object SubmitIdLite {
@@ -467,12 +467,12 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     db.run(
       (for {
         (j, l) <- dbPrintJobs.filter(_.contest === contestID) join compLocations on (_.computer === _.id)
-      } yield (j, l)).sortBy(_._1.arrived).result)
+      } yield (j.id, j.contest, j.team, j.filename, j.arrived, j.processed, l.name, j.error)).sortBy(_._5.desc).result)
     .zip(statusActorModel.teamClient.getTeams(contestID)).map {
       case (jobs, teams) =>
         jobs.flatMap { src =>
-          teams.get(src._1.team).map { team =>
-            AdminPrintJob(src._1.id.get.toInt, src._1.contest, team, src._1.filename, src._1.arrived, src._1.printed.getOrElse(0) == 255, src._2.name)
+          teams.get(src._3).map { team =>
+            AdminPrintJob(src._1.toInt, src._2, team, src._4, src._5, src._6, src._7, src._8)
           }
         }
     }

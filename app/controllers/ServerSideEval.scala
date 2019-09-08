@@ -87,9 +87,7 @@ class ServerSideEval (cc: ControllerComponents,
       }
   }
 
-
-  import scala.concurrent.ExecutionContext.Implicits.global
-
+  implicit val ec = defaultExecutionContext
 
   def index = silhouette.SecuredAction.async { implicit request =>
     db.run(request.identity.contest.getCompilers.result).flatMap { compilers =>

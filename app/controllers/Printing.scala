@@ -1,8 +1,6 @@
 package controllers
 
-import com.google.protobuf.ByteString
 import com.mohiva.play.silhouette.api.Silhouette
-import com.spingo.op_rabbit.Message
 import models._
 import org.apache.commons.io.FileUtils
 import org.joda.time.DateTime
@@ -11,7 +9,6 @@ import play.api.data.Form
 import play.api.data.Forms._
 import play.api.i18n.I18nSupport
 import play.api.mvc.{AbstractController, ControllerComponents, RequestHeader}
-import protos.Tickets.{Computer, IdName, PrintJob}
 import slick.basic.DatabaseConfig
 import slick.jdbc.{GetResult, JdbcProfile}
 import utils.auth.TeamsEnv
@@ -20,17 +17,7 @@ import views.html
 import scala.concurrent.{ExecutionContext, Future}
 
 package printing {
-
-import play.api.libs.json.Json
-
 case class SubmitData(textOnly: Boolean)
-   case class PrintEntry(filename: String, arrived: DateTime, printed: Boolean)
-
-  object PrintEntry {
-    implicit val getResult = GetResult(
-      r => PrintEntry(r.nextString(), new DateTime(r.nextTimestamp()), r.nextBoolean())
-    )
-  }
 }
 
 class Printing (cc: ControllerComponents,
@@ -47,9 +34,7 @@ class Printing (cc: ControllerComponents,
   }
 
   private def getPrintForm(loggedIn: LoggedInTeam, form: Form[printing.SubmitData], location: Option[Location])(implicit request: RequestHeader, ec: ExecutionContext) =
-    db.run(sql"""select Filename, Arrived, Printed = 255 from PrintJobs
-         where Contest = ${loggedIn.contest.id} and Team = ${loggedIn.team.localId} order by Arrived desc""".as[printing.PrintEntry]
-      ).map { printJobs =>
+    printingModel.printJobsForTeam(loggedIn.contest.id, loggedIn.team.localId).map { printJobs =>
       html.printform(loggedIn,location, form, printJobs)
     }
 
