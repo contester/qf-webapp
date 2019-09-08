@@ -52,10 +52,9 @@ class SubscriptionsModel(rabbitMqModel: RabbitMqModel, statusActorModel: StatusA
   val finishedPrinting = Subscription.run(rabbitMq) {
     import Directives._
     channel(qos = 1) {
-      consume(queue("contester.printingResult")) {
+      consume(queue("contester.printingresult")) {
         body(as[PrintJobReport]) { pjob =>
           logger.info(s"Received finished printing result $pjob")
-
           val acked = printingModel.processPrintJobReport(pjob)
           ack(acked)
         }
