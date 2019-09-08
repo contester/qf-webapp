@@ -86,3 +86,4 @@ PB.targets in Compile := Seq(
   scalapb.gen() -> (sourceManaged in Compile).value
 )
 
+javacOptions in Compile ++= Seq("-source", "1.8",  "-target", "1.8")

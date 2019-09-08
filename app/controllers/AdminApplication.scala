@@ -37,7 +37,7 @@ case class TeamDescription(id: Int, school: School)
 
 case class EditTeam(schoolName: String, teamName: String, teamNum: Option[Int])
 
-case class DisplayTeam(team: SlickModel.Team, school: School)
+case class DisplayTeam(team: SlickModel.Team, school: School, login: String, password: String)
 
 case class AdminPrintJob(id: Int, contestID: Int, team: Team, filename: String, arrived: DateTime, printed: Option[DateTime], computerName: String, error: Option[String])
 
@@ -497,11 +497,14 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   def listTeams(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
     getSelectedContests(contestID, request.identity).flatMap { contest =>
       db.run((for {
-        ((p, t), s) <- SlickModel.participants.filter(_.contest === contest.contest.id) join SlickModel.teams on (_.team === _.id) join SlickModel.schools on (_._2.school === _.id)
-      } yield (p, t, s)).result).map { results =>
+        t <- SlickModel.teams
+        p <- SlickModel.participants if (t.id === p.team && p.contest === contestID)
+        s <- SlickModel.schools if (s.id === t.school)
+        a <- SlickModel.assignments if (a.localId === p.localId && a.contest === p.contest)
+      } yield (t, p, s, a)).result).map { results =>
         val cvt = results.map {
-          case (p, t, s) =>
-            DisplayTeam(t, s)
+          case (t, p, s, a) =>
+            DisplayTeam(t, s, a.username, a.password)
         }
         Ok(html.admin.teamlist(cvt, contest, request.identity))
       }

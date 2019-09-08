@@ -2,13 +2,19 @@
 
 @adminmain(tab = "teams", contest=contest) {
 
+@defining(admin.canSeeTeamPasswords(contest.contest.id)) { withPasswords =>
+
 <div class="panel panel-success">
     <div class="panel-heading"><h3 class="panel-title">Team editor</h3></div>
     <div class="panel-body">
 
         <table id="printjobs" class="table table-hover table-bordered table-responsive">
             <thead>
-            <tr><th>ID</th><th>School</th><th>Num</th><th>Name</th></tr>
+            <tr><th>ID</th><th>School</th><th>Num</th><th>Name</th>
+                @if(withPasswords) {
+                <th>Login</th><th>Password</th>
+                }
+            </tr>
             </thead>
             <tbody>
             @for(s <- teams) {
@@ -17,11 +23,17 @@
                 <td>@s.school.name</td>
                 <td>@s.team.num</td>
                 <td><a href="@routes.AdminApplication.editTeam(contest.contest.id, s.team.id)">@s.team.name</a></td>
+                @if(withPasswords) {
+                <td>@s.login</td>
+                <td>@s.password</td>
+                }
             </tr>
             }
             </tbody>
         </table>
     </div>
 </div>
+
+}
 
 }
