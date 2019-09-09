@@ -13,8 +13,8 @@
             <tbody>
             @for(s <- contests) {
             <tr id="@s.id">
-                <th scope="row">@s.id</th>
-                <td>@s.name</td>
+                <th scope="row"><a href="@routes.AdminApplication.editContest(contest.contest.id, s.id)">@s.id</a></th>
+                <td><a href="@routes.AdminApplication.editContest(contest.contest.id, s.id)">@s.name</a></td>
                 <td>@s.schoolMode</td>
                 <td>@s.startTime</td>
                 <td>@s.freezeTime</td>

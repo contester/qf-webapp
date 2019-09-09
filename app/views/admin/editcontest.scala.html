@@ -1,0 +1,36 @@
+@(form: Form[EditContest], cd: ContestDescription, contest: SelectedContest)(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@import helper.Implicits._
+@import b3.vertical.fieldConstructor
+@adminmain(tab = "contests", contest=contest) {
+@flash.get("success").map { message =>
+<div class="alert alert-success" role="alert">
+    @message
+</div>
+}
+<div class="panel panel-success">
+    <div class="panel-heading"><h3 class="panel-title">@messages("heading.editContest")</h3></div>
+    <div class="panel-body">
+        @b3.horizontal.formCSRF(controllers.routes.AdminApplication.postEditContest(contest.contest.id, cd.id),
+        "col-md-2", "col-md-10", 'enctype -> "multipart/form-data") { implicit fc =>
+        @form.globalError.map { error =>
+        <div class="alert alert-danger" role="alert">
+            <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
+            <span class="sr-only">@messages("error"):</span>
+            @error.message
+        </div>
+        }
+
+        @b3.static("ID"){ @cd.id }
+        @b3.text(form("name"), '_label -> messages("label.contestName"))
+        @b3.text(form("schoolMode"), '_label -> messages("label.schoolMode"))
+        @b3.datetimeLocal(form("startTime"), '_label -> messages("label.startTime"), 'step -> 1)
+        @b3.datetimeLocal(form("freezeTime"), '_label -> messages("label.freezeTime"), 'step -> 1)
+        @b3.datetimeLocal(form("endTime"), '_label -> messages("label.endTime"), 'step -> 1)
+        @b3.datetimeLocal(form("exposeTime"), '_label -> messages("label.exposeTime"), 'step -> 1)
+        @b3.text(form("polygonID"), '_label -> messages("label.polygonID"))
+        @b3.text(form("language"), '_label -> messages("label.language"))
+        @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Update}
+        }
+    </div>
+</div>
+}

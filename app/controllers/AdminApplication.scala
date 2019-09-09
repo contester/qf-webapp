@@ -35,6 +35,8 @@ case class PostWaiterTask(message: String, rooms: String)
 
 case class TeamDescription(id: Int, school: School)
 
+case class ContestDescription(id: Int)
+
 case class EditTeam(schoolName: String, teamName: String, teamNum: Option[Int])
 
 case class DisplayTeam(team: SlickModel.Team, school: School, login: String, password: String)
@@ -50,6 +52,9 @@ case class SubmitTicketLite(submit: SubmitIdLite)
 object SubmitTicketLite {
   implicit val format = Json.format[SubmitTicketLite]
 }
+
+case class EditContest(name: String, schoolMode: Boolean, startTime: DateTime, freezeTime: DateTime, endTime: DateTime,
+                       exposeTime: DateTime, polygonID: String, language: String)
 
 class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEnv], dbConfig: DatabaseConfig[JdbcProfile],
                              monitorModel: Monitor,
@@ -578,4 +583,54 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
         Ok(html.admin.contestlist(cvt, contest, request.identity))
       }
     }}
+
+  import utils.DateParse._
+
+  private val editContestForm = Form {
+    mapping(
+      "name" -> text,
+      "schoolMode" -> boolean,
+      "startTime" -> nscalaDateTime,
+      "freezeTime" -> nscalaDateTime,
+      "endTime" -> nscalaDateTime,
+      "exposeTime" -> nscalaDateTime,
+      "polygonID" -> text,
+      "language" -> text
+    )(EditContest.apply)(EditContest.unapply)
+  }
+
+  def editContest(contestID: Int, ceditID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
+    getSelectedContests(contestID, request.identity).zip(
+      db.run(SlickModel.contests0.filter(_.id === ceditID).take(1).result.headOption)
+    ).map {
+      case (sc, c) =>
+        c match {
+          case Some(cedit) =>
+            val ec = EditContest(cedit.name, cedit.schoolMode, cedit.startTime, cedit.freezeTime, cedit.endTime, cedit.exposeTime, cedit.polygonID, cedit.language)
+            val cd = ContestDescription(ceditID)
+            Ok(html.admin.editcontest(editContestForm.fill(ec), cd, sc))
+          case None =>
+            NotFound
+        }
+    }
+  }
+
+  def postEditContest(contestID: Int, ceditID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
+    import utils.Db._
+    import com.github.tototoshi.slick.MySQLJodaSupport._
+    getSelectedContests(contestID, request.identity).flatMap { sc =>
+            editContestForm.bindFromRequest.fold(
+              formWithErrors => {
+                Future.successful(Ok(html.admin.editcontest(formWithErrors, ContestDescription(ceditID), sc)))
+              },
+              data => {
+                val upd = SlickModel.contests.filter(_.id === ceditID).map(x => (x.name, x.schoolMode, x.startTime, x.freezeTime, x.endTime, x.exposeTime, x.polygonId, x.language))
+                    .update((data.name, data.schoolMode, data.startTime, data.freezeTime, data.endTime, data.exposeTime, data.polygonID, data.language))
+                db.run(upd).map { v =>
+                  Redirect(routes.AdminApplication.editContest(contestID, ceditID))
+                }
+              },
+            )
+    }
+  }
 }

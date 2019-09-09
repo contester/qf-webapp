@@ -1,7 +1,7 @@
 @(form: Form[EditTeam], teamDescription: TeamDescription, contest: SelectedContest)(implicit flash: Flash, messages: Messages, request: RequestHeader)
 @import helper.Implicits._
 @import b3.vertical.fieldConstructor
-@adminmain(tab = "qanda", contest=contest) {
+@adminmain(tab = "teams", contest=contest) {
 @flash.get("success").map { message =>
 <div class="alert alert-success" role="alert">
     @message

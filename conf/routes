@@ -89,5 +89,9 @@ GET /admin/:contestID/contests/ controllers.AdminApplication.showContestList(con
 + nocsrf
 POST /admin/:contestID/editTeam/:teamID controllers.AdminApplication.postEditTeam(contestID: Int, teamID: Int)
 
+GET /admin/:contestID/contests/:cid controllers.AdminApplication.editContest(contestID: Int, cid: Int)
+
+POST /admin/:contestID/contests/:cid controllers.AdminApplication.postEditContest(contestID: Int, cid: Int)
+
 GET     /assets/*file               controllers.Assets.versioned(path="/public", file: Asset)
 
