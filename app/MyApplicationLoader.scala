@@ -109,6 +109,10 @@ class MyComponents(context: ApplicationLoader.Context)
 
   lazy val dbConfig: DatabaseConfig[JdbcProfile] = slickApi.dbConfig[JdbcProfile](DbName("default"))
 
+  lazy val externalDatabases = ExternalDatabases(
+    slickApi.dbConfig[JdbcProfile](DbName("studentWeb")),
+    slickApi.dbConfig[JdbcProfile](DbName("schoolWeb")))
+
   lazy val monitorModel = wire[Monitor]
   lazy val rabbitModel = wire[RabbitMqModel]
   lazy val statusActorModel = wire[StatusActorModel]
