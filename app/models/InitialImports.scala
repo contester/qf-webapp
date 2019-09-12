@@ -37,5 +37,5 @@ object InitialImportTools {
            AND t.is_deleted='0' ORDER BY u.full_name, t.team_id""".as[(String, String, String, String, String)]).map(convertImportedTeams(_))
   }
   private def convertImportedTeams(m: Iterable[(String, String, String, String, String)]): Iterable[ImportedTeam] =
-    m.groupBy(x => (x._5, x._4)).mapValues(_.zipWithIndex.map(x => ImportedTeam(ImportedSchool(x._1._5, x._1._4), x._2, pickNames(x._1._1, x._1._2, x._1._3)))).values.flatten
+    m.groupBy(x => (x._5, x._4)).mapValues(_.zipWithIndex.map(x => ImportedTeam(ImportedSchool(x._1._5, x._1._4), x._2+1, pickNames(x._1._1, x._1._2, x._1._3)))).values.flatten
 }

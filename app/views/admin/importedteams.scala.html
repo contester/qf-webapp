@@ -1,0 +1,28 @@
+@(teams: Seq[ImportedTeam], contest: SelectedContest, admin: Admin)(implicit request: RequestHeader, messages: Messages)
+
+@adminmain(tab = "", contest=contest) {
+
+<div class="panel panel-success">
+    <div class="panel-heading"><h3 class="panel-title">Team import</h3></div>
+    <div class="panel-body">
+
+        <table id="printjobs" class="table table-hover table-bordered table-responsive">
+            <thead>
+            <tr><th>ID</th><th>School Name</th><th>Short</th><th>Index</th><th>Team name</th></tr>
+            </thead>
+            <tbody>
+            @for(s <- teams) {
+            <tr>
+                <th scope="row"></th>
+                <td>@s.school.schoolFullName</td>
+                <td>@s.school.schoolName</td>
+                <td>@s.teamID</td>
+                <td>@s.teamName</td>
+            </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+}

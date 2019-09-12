@@ -93,5 +93,7 @@ GET /admin/:contestID/contests/:cid controllers.AdminApplication.editContest(con
 
 POST /admin/:contestID/contests/:cid controllers.AdminApplication.postEditContest(contestID: Int, cid: Int)
 
+GET /admin/:contestID/importTeams controllers.AdminApplication.showImportedTeamList(contestID: Int)
+
 GET     /assets/*file               controllers.Assets.versioned(path="/public", file: Asset)
 

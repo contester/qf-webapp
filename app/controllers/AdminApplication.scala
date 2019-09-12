@@ -62,6 +62,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
                              statusActorModel: StatusActorModel,
                         printingModel: PrintingModel,
                                   configuration: Configuration,
+                        externalDatabases: ExternalDatabases,
                                   ws: WSClient) extends AbstractController(cc)  with I18nSupport with Logging {
 
   implicit val ec = defaultExecutionContext
@@ -599,7 +600,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     )(EditContest.apply)(EditContest.unapply)
   }
 
-  def editContest(contestID: Int, ceditID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
+  def editContest(contestID: Int, ceditID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(ceditID)).async { implicit request =>
     getSelectedContests(contestID, request.identity).zip(
       db.run(SlickModel.contests0.filter(_.id === ceditID).take(1).result.headOption)
     ).map {
@@ -615,7 +616,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }
 
-  def postEditContest(contestID: Int, ceditID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
+  def postEditContest(contestID: Int, ceditID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(ceditID)).async { implicit request =>
     import utils.Db._
     import com.github.tototoshi.slick.MySQLJodaSupport._
     getSelectedContests(contestID, request.identity).flatMap { sc =>
@@ -633,4 +634,11 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
             )
     }
   }
+
+  def showImportedTeamList(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
+    getSelectedContests(contestID, request.identity).flatMap { contest =>
+      InitialImportTools.getImportedTeamsEn(externalDatabases.studentWeb.db).map { results =>
+        Ok(html.admin.importedteams(results.toSeq, contest, request.identity))
+      }
+    }}
 }
