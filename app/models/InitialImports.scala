@@ -6,7 +6,7 @@ import slick.sql.SqlStreamingAction
 
 import scala.concurrent.{ExecutionContext, Future}
 
-case class ExternalDatabases(studentWeb: DatabaseConfig[JdbcProfile], schoolWeb: DatabaseConfig[JdbcProfile])
+case class ExternalDatabases(studentWeb: DatabaseConfig[JdbcProfile], schoolWeb: DatabaseConfig[JdbcProfile], netmap: DatabaseConfig[JdbcProfile])
 
 case class ImportedSchool(schoolName: String, schoolFullName: String)
 
@@ -53,7 +53,6 @@ object InitialImportTools {
       case None => await(db.run(sqlu"insert into Participants (Contest, Team, LocalID) values ($contestID, $teamID, $teamID)").map(x => ()))
     }
   }
-
 
   def populateContestsWithTeams(db: JdbcBackend#DatabaseDef, teams: Iterable[ImportedTeam], contests: Iterable[Int], passwords: Seq[String])(implicit ec: ExecutionContext): Future[Unit] = async {
     val currentSchools = await(db.run(sql"select ID, Name, FullName from Schools".as[(Int, String, String)]))
