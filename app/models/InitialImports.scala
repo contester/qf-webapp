@@ -38,4 +38,42 @@ object InitialImportTools {
   }
   private def convertImportedTeams(m: Iterable[(String, String, String, String, String)]): Iterable[ImportedTeam] =
     m.groupBy(x => (x._5, x._4)).mapValues(_.zipWithIndex.map(x => ImportedTeam(ImportedSchool(x._1._5, x._1._4), x._2+1, pickNames(x._1._1, x._1._2, x._1._3)))).values.flatten
+
+  import scala.async.Async.{async, await}
+
+  private val selLastID = sql"select LAST_INSERT_ID()".as[Int].head
+
+  private def insertSchoolQuery(s: ImportedSchool) =
+    sqlu"insert into Schools (Name, FullName) values (${s.schoolName}, ${s.schoolFullName})".andThen(selLastID).withPinnedSession
+
+  private def addParticipant(db: JdbcBackend#DatabaseDef, teamID: Int, contestID: Int)(implicit ec: ExecutionContext) = async {
+    val foundAssignment = await(db.run(sql"select LocalID from Participants where Contest = $contestID and Team = $teamID".as[Int].headOption))
+    foundAssignment match {
+      case Some(id) => ()
+      case None => await(db.run(sqlu"insert into Participants (Contest, Team, LocalID) values ($contestID, $teamID, $teamID)").map(x => ()))
+    }
+  }
+
+
+  def populateContestsWithTeams(db: JdbcBackend#DatabaseDef, teams: Iterable[ImportedTeam], contests: Iterable[Int], passwords: Seq[String])(implicit ec: ExecutionContext): Future[Unit] = async {
+    val currentSchools = await(db.run(sql"select ID, Name, FullName from Schools".as[(Int, String, String)]))
+    val schoolLookups = currentSchools.map(x => (x._2 -> x._1)).toMap
+    val importedSchools = teams.map(_.school).toSet
+    val foundSchools = importedSchools.map(x => x -> schoolLookups.get(x.schoolName)).toMap
+    val addedSchools = await(Future.sequence(foundSchools.filter(_._2.isEmpty).keySet.map { ns =>
+      db.run(insertSchoolQuery(ns)).map(x => (ns, x))
+    }))
+
+    val mergedSchools = (foundSchools.filter(_._2.isDefined).mapValues(_.get).toSeq ++ addedSchools).toMap
+
+    val teamIDs = await(Future.sequence(teams.map { team =>
+      val schoolID = mergedSchools.get(team.school)
+      db.run(sql"select ID from Teams where School = $schoolID and Num = ${team.teamID} and Name = ${team.teamName}".as[Int].headOption).flatMap { zx =>
+        zx match {
+          case Some(id) => Future.successful(id)
+          case None =>
+            db.run(sqlu"insert into Teams (School, Num, Name) values ($schoolID, ${team.teamID}, ${team.teamName})".andThen(selLastID).withPinnedSession)
+        }
+      }}))
+  }
 }
