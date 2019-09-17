@@ -7,10 +7,10 @@ import slick.sql.SqlStreamingAction
 import scala.concurrent.{ExecutionContext, Future}
 
 case class ExternalDatabases(studentWeb: DatabaseConfig[JdbcProfile], schoolWeb: DatabaseConfig[JdbcProfile], netmap: DatabaseConfig[JdbcProfile])
-
 case class ImportedSchool(schoolName: String, schoolFullName: String)
-
 case class ImportedTeam(school: ImportedSchool, teamID: Int, teamName: String)
+
+case class ImportedComputer(location: String, addr: String, name: String)
 
 object InitialImportTools {
   import slick.jdbc.MySQLProfile.api._
@@ -74,5 +74,25 @@ object InitialImportTools {
             db.run(sqlu"insert into Teams (School, Num, Name) values ($schoolID, ${team.teamID}, ${team.teamName})".andThen(selLastID).withPinnedSession)
         }
       }}))
+  }
+
+  def getNetmapComputers(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext) =
+    db.run(sql"select l.room, inet_ntoa(l.ip), h.name from contest_locations l, unetmap_host h where l.ip = h.ip".as[(String, String, String)]).map(_.map(x => ImportedComputer(x._1, x._2, x._3)))
+
+  def importNetmapComputers(db: JdbcBackend#DatabaseDef, comps: Seq[ImportedComputer])(implicit ec: ExecutionContext) = async {
+    val roomSet = comps.map(_.location).toSet
+    val existingRooms = await(db.run(sql"select Name, ID from Areas".as[(String, Int)])).toMap
+    val newRooms = roomSet -- existingRooms.keySet
+
+    val addedRooms = await(Future.sequence(newRooms.toSeq.map { room =>
+      db.run(sqlu"insert into Areas (Name) values ($room)".andThen(selLastID).withPinnedSession).map(room -> _)
+    })).toMap
+
+    val combinedRooms = addedRooms ++ existingRooms
+
+    Future.sequence(comps.map { comp =>
+      val roomID = combinedRooms.get(comp.location).get
+      db.run(sqlu"replace CompLocations (ID, Location, Name) values (inet_aton(${comp.addr}), $roomID, ${comp.name})")
+    })
   }
 }

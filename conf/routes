@@ -95,5 +95,7 @@ POST /admin/:contestID/contests/:cid controllers.AdminApplication.postEditContes
 
 GET /admin/:contestID/importTeams controllers.AdminApplication.showImportedTeamList(contestID: Int)
 
+POST /admin/mega/importComputers controllers.AdminApplication.importNetmapComputers
+
 GET     /assets/*file               controllers.Assets.versioned(path="/public", file: Asset)
 

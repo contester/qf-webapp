@@ -641,4 +641,18 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
         Ok(html.admin.importedteams(results.toSeq, contest, request.identity))
       }
     }}
+
+  def importNetmapComputers = silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>
+    InitialImportTools.getNetmapComputers(externalDatabases.netmap.db).flatMap { comps =>
+      InitialImportTools.importNetmapComputers(db, comps).map { _ =>
+        Redirect(routes.AdminApplication.index)
+      }
+    }
+  }
+
+  def miscForms(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>
+    getSelectedContests(contestID, request.identity).map { contest =>
+      Ok(html.admin.misc(contest, request.identity))
+    }
+  }
 }
