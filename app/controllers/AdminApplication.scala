@@ -651,8 +651,10 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
   def miscForms(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>
-    getSelectedContests(contestID, request.identity).map { contest =>
-      Ok(html.admin.misc(contest, request.identity))
+    getSelectedContests(contestID, request.identity).flatMap { contest =>
+      InitialImportTools.getNetmapComputers(externalDatabases.netmap.db).map { comps =>
+        Ok(html.admin.misc(comps, contest, request.identity))
+      }
     }
   }
 }
