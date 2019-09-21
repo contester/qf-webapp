@@ -56,6 +56,8 @@ object SubmitTicketLite {
 case class EditContest(name: String, schoolMode: Boolean, startTime: DateTime, freezeTime: DateTime, endTime: DateTime,
                        exposeTime: DateTime, polygonID: String, language: String)
 
+case class ImportTeamsProps(contests: Seq[Int])
+
 class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEnv], dbConfig: DatabaseConfig[JdbcProfile],
                              monitorModel: Monitor,
                                  rabbitMqModel: RabbitMqModel,
@@ -641,6 +643,14 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
         Ok(html.admin.importedteams(results.toSeq, contest, request.identity))
       }
     }}
+
+  def importTeams(contestID: Int)= silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>
+    getSelectedContests(contestID, request.identity).flatMap { contest =>
+      InitialImportTools.getImportedTeamsEn(externalDatabases.studentWeb.db).map { results =>
+        Redirect(routes.AdminApplication.index)
+      }
+    }
+  }
 
   def importNetmapComputers = silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>
     InitialImportTools.getNetmapComputers(externalDatabases.netmap.db).flatMap { comps =>

@@ -67,13 +67,47 @@ object InitialImportTools {
 
     val teamIDs = await(Future.sequence(teams.map { team =>
       val schoolID = mergedSchools.get(team.school)
-      db.run(sql"select ID from Teams where School = $schoolID and Num = ${team.teamID} and Name = ${team.teamName}".as[Int].headOption).flatMap { zx =>
+      db.run(sql"select ID, Name from Teams where School = $schoolID and Num = ${team.teamID}".as[(Int, String)].headOption).flatMap { zx =>
         zx match {
-          case Some(id) => Future.successful(id)
+          case Some(x) =>
+            if (x._2 == team.teamName) {
+              Future.successful(x._1)
+            } else {
+              db.run(sqlu"update Teams set Name = ${team.teamName} where ID = ${x._1}").map(_ => x._1)
+            }
           case None =>
             db.run(sqlu"insert into Teams (School, Num, Name) values ($schoolID, ${team.teamID}, ${team.teamName})".andThen(selLastID).withPinnedSession)
         }
       }}))
+
+    val participantsToUpdate = for {
+      c <- contests
+      t <- teamIDs
+    } yield (c, t, t)
+
+    val assignmentsToUpdate = for {
+      c <- contests
+      t <- teamIDs
+    } yield (c, t, s"team${c}_${t}")
+
+    val assignmentsWithPassword = assignmentsToUpdate.zip(passwords).map(x => (x._1._1, x._1._2, x._1._3, x._2))
+
+    await(Future.sequence(participantsToUpdate.map { p =>
+      db.run(sqlu"replace Participants (Contest, Team, LocalID) values (${p._1}, ${p._2}, ${p._3})")
+    }))
+
+    await(Future.sequence(assignmentsWithPassword.map { a =>
+      db.run(sql"select Password from Assignments where Contest = ${a._1} and LocalID = ${a._2}".as[String].headOption).flatMap { xp =>
+        xp match {
+          case Some(pwd) =>
+            if (pwd == "") {
+              db.run(sqlu"replace into Assignments (Contest, LocalID, Username, Password) values (${a._1}, ${a._2}, ${a._3}, ${a._4})")
+            } else Future.successful(1)
+          case None =>
+            db.run(sqlu"replace into Assignments (Contest, LocalID, Username, Password) values (${a._1}, ${a._2}, ${a._3}, ${a._4})")
+        }
+      }
+    }))
   }
 
   def getNetmapComputers(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext) =
