@@ -83,7 +83,7 @@ object InitialImportTools {
     val participantsToUpdate = for {
       c <- contests
       t <- teamIDs
-    } yield (c, t, t)
+    } yield (c, t)
 
     val assignmentsToUpdate = for {
       c <- contests
@@ -93,7 +93,7 @@ object InitialImportTools {
     val assignmentsWithPassword = assignmentsToUpdate.zip(passwords).map(x => (x._1._1, x._1._2, x._1._3, x._2))
 
     await(Future.sequence(participantsToUpdate.map { p =>
-      db.run(sqlu"replace Participants (Contest, Team, LocalID) values (${p._1}, ${p._2}, ${p._3})")
+      addParticipant(db, p._2, p._1)
     }))
 
     await(Future.sequence(assignmentsWithPassword.map { a =>
