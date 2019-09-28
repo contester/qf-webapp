@@ -6,7 +6,7 @@ import slick.sql.SqlStreamingAction
 
 import scala.concurrent.{ExecutionContext, Future}
 
-case class ExternalDatabases(studentWeb: DatabaseConfig[JdbcProfile], schoolWeb: DatabaseConfig[JdbcProfile], netmap: DatabaseConfig[JdbcProfile])
+case class ExternalDatabases(studentWeb: DatabaseConfig[JdbcProfile], schoolWeb: DatabaseConfig[JdbcProfile], netmap: DatabaseConfig[JdbcProfile], pwlist: Seq[String])
 case class ImportedSchool(schoolName: String, schoolFullName: String)
 case class ImportedTeam(school: ImportedSchool, teamID: Int, teamName: String)
 

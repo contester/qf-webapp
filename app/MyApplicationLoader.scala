@@ -19,6 +19,7 @@ import slick.jdbc.JdbcProfile
 import utils.auth.{AdminEnv, BaseEnv, TeamsEnv}
 
 import scala.concurrent.ExecutionContext
+import scala.io.Source
 
 class MyApplicationLoader extends ApplicationLoader {
   private var components: MyComponents = _
@@ -109,10 +110,13 @@ class MyComponents(context: ApplicationLoader.Context)
 
   lazy val dbConfig: DatabaseConfig[JdbcProfile] = slickApi.dbConfig[JdbcProfile](DbName("default"))
 
+  val pwList = Source.fromFile(configuration.get[String]("passwordlist")).getLines().toSeq
+
   lazy val externalDatabases = ExternalDatabases(
     slickApi.dbConfig[JdbcProfile](DbName("studentWeb")),
     slickApi.dbConfig[JdbcProfile](DbName("schoolWeb")),
-    slickApi.dbConfig[JdbcProfile](DbName("netmap")))
+    slickApi.dbConfig[JdbcProfile](DbName("netmap")),
+    pwList)
 
   lazy val monitorModel = wire[Monitor]
   lazy val rabbitModel = wire[RabbitMqModel]
