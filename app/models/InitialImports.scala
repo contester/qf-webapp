@@ -111,7 +111,7 @@ object InitialImportTools {
   }
 
   def getNetmapComputers(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext) =
-    db.run(sql"select l.room, inet_ntoa(l.ip), h.name from contest_locations l, unetmap_host h where l.ip = h.ip".as[(String, String, String)]).map(_.map(x => ImportedComputer(x._1, x._2, x._3)))
+    db.run(sql"select l.room, inet_ntoa(l.ip), h.name from contest_locations l, unetmap_host h where l.ip = h.ip order by l.room, h.name".as[(String, String, String)]).map(_.map(x => ImportedComputer(x._1, x._2, x._3)))
 
   def importNetmapComputers(db: JdbcBackend#DatabaseDef, comps: Seq[ImportedComputer])(implicit ec: ExecutionContext) = async {
     val roomSet = comps.map(_.location).toSet
