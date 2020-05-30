@@ -1,6 +1,6 @@
 name := "qf"
 
-scalaVersion := "2.12.9"
+scalaVersion := "2.12.11"
 
 organization := "org.stingray.contester"
 
@@ -8,27 +8,37 @@ maintainer := "i@stingr.net"
 
 version := "2019.1"
 
-scalacOptions ++= Seq("-Ypartial-unification","-Ywarn-dead-code", "-optimize")
+scalacOptions ++= Seq(
+  "-Xfatal-warnings",  // New lines for each options
+  "-deprecation",
+  "-unchecked",
+  "-language:implicitConversions",
+  "-language:higherKinds",
+  "-language:existentials",
+  "-language:postfixOps",
+  "-opt:l:method",
+  "-opt:l:inline",
+  "-opt-inline-from:<sources>"
+)
 
 lazy val root = (project in file(".")).enablePlugins(PlayScala)
 
 resolvers ++= Seq(
   Resolver.jcenterRepo,
-  "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/",
-  "Atlassian Releases" at "https://maven.atlassian.com/public/",
-  "SpinGo OSS" at "http://spingo-oss.s3.amazonaws.com/repositories/releases"
+  Resolver.sonatypeRepo("snapshots"),
+  "Atlassian Releases" at "https://maven.atlassian.com/public/"
 )
 
 updateOptions := updateOptions.value.withCachedResolution(true)
 
 val spireVersion = "0.13.0"
 
-val silhouetteVersion = "6.1.0"
+val silhouetteVersion = "6.1.1"
 
 libraryDependencies ++= Seq(
   "com.typesafe.play" %% "play-slick" % "4.0.2",
-  "com.github.tototoshi" %% "slick-joda-mapper" % "2.3.0",
-  "com.softwaremill.macwire" %% "macros" % "2.3.1" % "provided",
+  "com.github.tototoshi" %% "slick-joda-mapper" % "2.4.2",
+  "com.softwaremill.macwire" %% "macros" % "2.3.5" % "provided",
   "javax.xml.bind" % "jaxb-api" % "2.3.0",
   "com.adrianhurt" %% "play-bootstrap" % "1.5.1-P27-B3",
   cacheApi,
@@ -42,21 +52,21 @@ libraryDependencies ++= Seq(
   "org.webjars" % "bootstrap-material-design" % "0.5.10",
   "org.webjars" % "jquery-validation" % "1.19.0",
   "org.webjars.bower" % "roboto-fontface" % "0.7.0",
-  "org.apache.httpcomponents" % "httpclient" % "4.5.9",
-  "org.apache.httpcomponents" % "httpcore" % "4.4.11",
-  "org.mariadb.jdbc" % "mariadb-java-client" % "2.4.2",
-  "commons-io" % "commons-io" % "2.6",
-  "com.github.nscala-time" %% "nscala-time" % "2.22.0",
+  "org.apache.httpcomponents" % "httpclient" % "4.5.12",
+  "org.apache.httpcomponents" % "httpcore" % "4.4.13",
+  "org.mariadb.jdbc" % "mariadb-java-client" % "2.6.0",
+  "commons-io" % "commons-io" % "2.7",
+  "com.github.nscala-time" %% "nscala-time" % "2.24.0",
   "com.googlecode.htmlcompressor" % "htmlcompressor" % "1.5.2",
   "rhino" % "js" % "1.7R2",
   "org.scala-lang.modules" %% "scala-async" % "0.10.0",
-  "org.typelevel" %% "cats-core" % "2.0.0-RC1",
-  "com.github.fkoehler" %% "play-html-compressor" % "1.0.0",
+  "org.typelevel" %% "cats-core" % "2.1.1",
+  "com.github.fkoehler" %% "play-html-compressor" % "2.8.0",
   "com.mohiva" %% "play-silhouette" % silhouetteVersion,
   "com.mohiva" %% "play-silhouette-password-bcrypt" % silhouetteVersion,
   "com.mohiva" %% "play-silhouette-persistence" % silhouetteVersion,
   "com.mohiva" %% "play-silhouette-crypto-jca" % silhouetteVersion,
-  "com.github.seancfoley" % "ipaddress" % "4.2.0",
+  "com.github.seancfoley" % "ipaddress" % "5.3.1",
   "org.spire-math" %% "spire" % spireVersion,
   "org.spire-math" %% "spire-extras" % spireVersion,
   "info.faljse" % "SDNotify" % "1.3",
