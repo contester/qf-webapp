@@ -143,7 +143,7 @@ function setConnectedBadge(state) {
         conn.text("+");
     } else {
         conn.addClass("badge-error");
-        conn.text("Нет связи");
+        conn.text("No connection");
     }
 }
 
@@ -219,7 +219,7 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
                         if (obj.result.success) {
                             icon = iconbase + 'baloons/baloon-' + obj.problem.toLowerCase() + '.png';
                         }
-                        notifyMe("Задача " + obj.problem, icon, obj.result.message);
+                        notifyMe("Problem " + obj.problem, icon, obj.result.message);
                         sessionStorage.setItem(obj.msgid, "true");
                     }
                     $.post(ackMessagePath, {'msgid': obj.msgid});
@@ -234,7 +234,7 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
                     setTimeout(function() {
                         var exists = sessionStorage.getItem(obj.msgid);
                         if (!exists) {
-                          notifyMe("На вопрос по задаче " + obj.problem + " получен ответ", iconbase + 'icpc_logo.png', obj.text);
+                          notifyMe("Your question about problem " + obj.problem + " was answered", iconbase + 'icpc_logo.png', obj.text);
                           sessionStorage.setItem(obj.msgid, "true");
                         }
                         $.post(ackMessagePath, {'msgid': obj.msgid});
@@ -259,9 +259,9 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
                     var clrp = $("#clrPending");
                     clrp.text("!");
                     clrp.show();
-                    var msg = "Сообщение жюри";
+                    var msg = "Clarification posted";
                     if (obj.problem) {
-                      msg += " по задаче " + obj.problem;
+                      msg += " for problem " + obj.problem;
                     }
                     notifyMe(msg, iconbase + 'icpc_logo.png', obj.text);
                     sessionStorage.setItem(obj.text, "true");

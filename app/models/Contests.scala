@@ -83,7 +83,7 @@ object Compilers {
     compilers.sortBy(_.name).map(x => x.id.toString -> x.name)
 
   def forForm(compilers: Seq[Compiler]) =
-    Selectable.forSelect(toSelect(compilers), "Выберите компилятор")
+    Selectable.forSelect(toSelect(compilers), "Select compiler")
 }
 
 object Contests {

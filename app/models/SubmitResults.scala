@@ -121,7 +121,7 @@ object SubmitResult extends Logging {
     12 -> "Runtime error",
     13 -> "Wrong answer",
     14 -> "Wrong answer",
-    15 -> "Time limit exceeded",
+    15 -> "Memory limit exceeded",
     16 -> "Tester error",
     21 -> "Rejected"
   )

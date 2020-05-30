@@ -90,11 +90,13 @@ class MonitorActor(db: JdbcBackend#DatabaseDef,
     state.map(_.contest.id).foreach(monitors.remove)
     state.foreach { st =>
       monitors.put(st.contest.id, st)
-      for (location <- staticLocationFile) {
-        val tmpFile = new File(location, s"${st.contest.id}.html.new")
-        FileUtils.writeStringToFile(tmpFile,
-          Compressor(views.html.staticmonitor(st.contest, st.monitor(false).status).body), StandardCharsets.UTF_8)
-        Files.move(tmpFile.toPath, new File(location, s"${st.contest.id}.html").toPath, StandardCopyOption.ATOMIC_MOVE)
+      if (st.contest.id <11) {
+        for (location <- staticLocationFile) {
+          val tmpFile = new File(location, s"${st.contest.id}.html.new")
+          FileUtils.writeStringToFile(tmpFile,
+            Compressor(views.html.staticmonitor(st.contest, st.monitor(false).status).body), StandardCharsets.UTF_8)
+          Files.move(tmpFile.toPath, new File(location, s"${st.contest.id}.html").toPath, StandardCopyOption.ATOMIC_MOVE)
+        }
       }
     }
   }
