@@ -35,6 +35,8 @@ val spireVersion = "0.13.0"
 
 val silhouetteVersion = "6.1.1"
 
+val slickPG = "0.19.0"
+
 libraryDependencies ++= Seq(
   "com.typesafe.play" %% "play-slick" % "4.0.2",
   "com.github.tototoshi" %% "slick-joda-mapper" % "2.4.2",
@@ -55,6 +57,7 @@ libraryDependencies ++= Seq(
   "org.apache.httpcomponents" % "httpclient" % "4.5.12",
   "org.apache.httpcomponents" % "httpcore" % "4.4.13",
   "org.mariadb.jdbc" % "mariadb-java-client" % "2.6.0",
+  "org.postgresql" % "postgresql" % "42.2.12",
   "commons-io" % "commons-io" % "2.7",
   "com.github.nscala-time" %% "nscala-time" % "2.24.0",
   "com.googlecode.htmlcompressor" % "htmlcompressor" % "1.5.2",
@@ -70,7 +73,10 @@ libraryDependencies ++= Seq(
   "org.spire-math" %% "spire" % spireVersion,
   "org.spire-math" %% "spire-extras" % spireVersion,
   "info.faljse" % "SDNotify" % "1.3",
-  "com.google.guava" % "guava" % "23.0"
+  "com.google.guava" % "guava" % "23.0",
+  "com.github.tminglei" %% "slick-pg" % slickPG,
+  "com.github.tminglei" %% "slick-pg_joda-time" % slickPG,
+  "com.github.tminglei" %% "slick-pg_play-json" % slickPG
 ).map(_.exclude("com.zaxxer", "HikariCP-java6"))
 
 val opRabbitVersion = "2.1.0"
