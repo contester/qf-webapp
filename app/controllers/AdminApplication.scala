@@ -81,21 +81,18 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
   logger.info(s"fileserverBase: $fileserverBase")
 
-  import slick.jdbc.MySQLProfile.api._
+  import utils.MyPostgresProfile.api._
 
-  private def getSubmitCidQuery(submitId: Int) =
-    SlickModel.newSubmits.filter(_.id === submitId).take(1).map(_.contest).result.headOption
+  private[this] def getSubmitCid(submitId: Long)(implicit ec: ExecutionContext): Future[Option[Long]] =
+    db.run(SlickModel.submits.filter(_.id === submitId).take(1).map(_.contest).result.headOption)
 
-  private def getSubmitCid(submitId: Int)(implicit ec: ExecutionContext): Future[Option[Int]] =
-    db.run(getSubmitCidQuery(submitId))
-
-  private def rejudgeRangeEx(range: String, account: Admin)(implicit ec: ExecutionContext): Future[Seq[Int]] = {
+  private[this] def rejudgeRangeEx(range: String, account: Admin)(implicit ec: ExecutionContext): Future[Seq[Long]] = {
     val checks = {
-      val builder = ImmutableRangeSet.builder[Integer]()
+      val builder = ImmutableRangeSet.builder[java.lang.Long]()
       range.split(',').map(parseItem).foreach(builder.add)
       builder.build()
     }
-    db.run(SlickModel.newSubmits.map(x => (x.id, x.contest)).sortBy(_._1).result).map { submits =>
+    db.run(SlickModel.submits.map(x => (x.id, x.contest)).sortBy(_._1).result).map { submits =>
       val filtered = submits.filter { id =>
         checks.contains(id._1) && account.canModify(id._2)
       }
@@ -107,7 +104,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }
 
-  private def showSubs(contestId: Int, limit: Option[Int], account: Admin)(implicit request: RequestHeader, ec: ExecutionContext) =
+  private def showSubs(contestId: Long, limit: Option[Int], account: Admin)(implicit request: RequestHeader, ec: ExecutionContext) =
     getSelectedContests(contestId, account).zip(
       statusActorModel.teamClient.getTeams(contestId)
     ).zip(db.run(Submits.getContestSubmits(contestId))).flatMap {
@@ -116,7 +113,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
         def canSeeSubmit(s: Submit) =
           if (canSeeAll) true else !s.afterFreeze
         val submits = submits0.filter(canSeeSubmit)
-        Submits.groupAndAnnotate(db, contest.contest.schoolMode, limit.map(submits.takeRight(_)).getOrElse(submits)).map { fullyDescribedSubmits =>
+        Submits.groupAndAnnotate(db, false, limit.map(submits.takeRight(_)).getOrElse(submits)).map { fullyDescribedSubmits =>
           Ok(html.admin.submits(fullyDescribedSubmits, teamMap, contest, account))
         }
       case _ =>
@@ -161,30 +158,30 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     Future.successful(Redirect(routes.AdminApplication.submits(request.identity.defaultContest)))
   }
 
-  private val rangeRe = "(\\d*)\\.\\.(\\d*)".r
+  private[this] val rangeRe = "(\\d*)\\.\\.(\\d*)".r
 
-  private def parseItem(item: String): com.google.common.collect.Range[Integer] =
+  private[this] def parseItem(item: String): com.google.common.collect.Range[java.lang.Long] =
     if (item.contains("..")) {
       item match {
         case rangeRe(left, right) =>
           if (left.isEmpty) {
             if (right.isEmpty) {
-              com.google.common.collect.Range.all[Integer]()
+              com.google.common.collect.Range.all[java.lang.Long]()
             } else {
-              com.google.common.collect.Range.atMost[Integer](right.toInt)
+              com.google.common.collect.Range.atMost[java.lang.Long](right.toLong)
             }
           } else {
             if (right.isEmpty) {
-              com.google.common.collect.Range.atLeast[Integer](left.toInt)
+              com.google.common.collect.Range.atLeast[java.lang.Long](left.toLong)
             } else {
-              com.google.common.collect.Range.closed[Integer](left.toInt, right.toInt)
+              com.google.common.collect.Range.closed[java.lang.Long](left.toLong, right.toLong)
             }
           }
       }
-    } else com.google.common.collect.Range.singleton[Integer](item.toInt)
+    } else com.google.common.collect.Range.singleton[java.lang.Long](item.toLong)
 
 
-  def submits(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
+  def submits(contestId: Long) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
     val lim = if (request.identity.canModify(contestId))
       None
     else

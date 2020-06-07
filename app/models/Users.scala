@@ -14,12 +14,16 @@ import scala.concurrent.{ExecutionContext, Future}
 
 trait Team {
   def schoolName: String
-  def teamNum: Option[Int]
+  def teamNum: Int
   def teamName: String
   def notRated: Boolean
   def id: Int
 
-  def schoolNameWithNum: String = s"$schoolName" + teamNum.map(x => s" #$x").getOrElse("")
+  private[this] def teamSuffix = if (teamNum != 0) {
+    s" #$teamNum"
+  } else ""
+
+  private[this] def schoolNameWithNum: String = s"$schoolName$teamSuffix"
   def teamFullName: String = {
     schoolNameWithNum +
       (if (!teamName.isEmpty) s": $teamName"
@@ -27,10 +31,8 @@ trait Team {
   }
 }
 
-case class LocalTeam(teamId: Int, contest: Int, localId: Int, schoolName: String, teamNum: Option[Int], teamName: String,
-                     notRated: Boolean, noPrint: Boolean, disabled: Boolean) extends Team {
-  override def id: Int = localId
-}
+case class LocalTeam(id: Int, contest: Int, schoolName: String, teamNum: Int, teamName: String,
+                     notRated: Boolean, noPrint: Boolean, disabled: Boolean) extends Team
 
 trait TeamsService extends IdentityService[LoggedInTeam]
 
@@ -41,7 +43,7 @@ class TeamsServiceImpl(dbConfig: DatabaseConfig[JdbcProfile])(implicit val ec: E
 
 case class LoggedInTeam(username: String, contest: Contest, team: LocalTeam, einfo: Seq[Extrainfo]) extends Identity {
   def matching(ctid: ContestTeamIds) =
-    ctid.contestId == contest.id && ctid.teamId == team.localId
+    ctid.contestId == contest.id && ctid.teamId == team.id
 }
 
 case class Extrainfo(contest: Int, num: Int, heading: String, data: String)

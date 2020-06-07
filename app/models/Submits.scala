@@ -2,6 +2,7 @@ package models
 
 import java.nio.charset.StandardCharsets
 
+import models.SlickModel.UpliftedSubmit
 import org.joda.time.DateTime
 import play.api.Logging
 import slick.jdbc.{GetResult, JdbcBackend}
@@ -210,60 +211,23 @@ object Submits {
       r.nextInt(), r.nextInt(), r.nextIntOption()
   ))
 
-  def getContestSubmits(contest: Int) = {
-    sql"""select NewSubmits.ID,
-          NewSubmits.Arrived,
-          unix_timestamp(NewSubmits.Arrived) - unix_timestamp(Contests.Start) as ArrivedSeconds,
-          NewSubmits.Arrived > Contests.Finish as AfterFreeze,
-          NewSubmits.Team, NewSubmits.Contest,
-          NewSubmits.Problem, Problems.Rating,
-          Languages.Ext, Submits.Finished, Submits.Compiled,
-          Submits.Passed, Submits.Taken,
+  def upliftSub(s: UpliftedSubmit): Submit =
+    Submit(
+      SubmitId(s.id.toInt, Arrived(s.arrived, s.arrivedSeconds.toInt, s.afterFreeze),
+        s.teamID, s.contestID, RatedProblem(s.problemID, 30), s.ext), s.finished,
+      s.compiled, s.passed, s.taken,
+      if(s.testingID == 0) None else Some(s.testingID.toInt))
 
-          Submits.TestingID
-          from Contests, Problems, Languages, NewSubmits, Submits where NewSubmits.ID = Submits.ID and
-          Contests.ID = $contest and NewSubmits.Arrived < Contests.End and NewSubmits.Arrived >= Contests.Start and
-          Contests.ID = NewSubmits.Contest and Problems.Contest = Contests.ID and
-          Languages.ID = NewSubmits.SrcLang and Languages.Contest = Contests.ID and
-          Problems.ID = NewSubmits.Problem order by ArrivedSeconds""".as[Submit]
+  def getContestSubmits(contest: Long) = {
+    SlickModel.submits0.filter(_.contestID === contest.toInt).result
   }
 
   def getContestTeamSubmits(contest: Int, team: Int) = {
-    sql"""select NewSubmits.ID,
-          NewSubmits.Arrived,
-          unix_timestamp(NewSubmits.Arrived) - unix_timestamp(Contests.Start) as ArrivedSeconds,
-          NewSubmits.Arrived > Contests.Finish as AfterFreeze,
-          NewSubmits.Team, NewSubmits.Contest,
-          NewSubmits.Problem, Problems.Rating,
-          Languages.Ext, Submits.Finished, Submits.Compiled,
-          Submits.Passed, Submits.Taken,
-
-          Submits.TestingID
-          from Contests, Problems, Languages, NewSubmits LEFT join Submits on NewSubmits.ID = Submits.ID where
-          NewSubmits.Team = $team and
-          Contests.ID = $contest and NewSubmits.Arrived < Contests.End and NewSubmits.Arrived >= Contests.Start and
-          Contests.ID = NewSubmits.Contest and Problems.Contest = Contests.ID and
-          Languages.ID = NewSubmits.SrcLang and Languages.Contest = Contests.ID and
-          Problems.ID = NewSubmits.Problem order by ArrivedSeconds""".as[Submit]
+    SlickModel.submits0.filter(x => (x.contestID === contest && x.teamID === team)).result
   }
 
   def getContestTeamProblemSubmits(contest: Int, team: Int, problem: String) = {
-    sql"""select NewSubmits.ID,
-          NewSubmits.Arrived,
-          unix_timestamp(NewSubmits.Arrived) - unix_timestamp(Contests.Start) as ArrivedSeconds,
-          NewSubmits.Arrived > Contests.Finish as AfterFreeze,
-          NewSubmits.Team, NewSubmits.Contest,
-          NewSubmits.Problem, Problems.Rating,
-          Languages.Ext, Submits.Finished, Submits.Compiled,
-          Submits.Passed, Submits.Taken,
-
-          Submits.TestingID
-          from Contests, Problems, Languages, NewSubmits LEFT join Submits on NewSubmits.ID = Submits.ID where
-          NewSubmits.Team = $team and NewSubmits.Problem = $problem and
-          Contests.ID = $contest and NewSubmits.Arrived < Contests.End and NewSubmits.Arrived >= Contests.Start and
-          Contests.ID = NewSubmits.Contest and Problems.Contest = Contests.ID and
-          Languages.ID = NewSubmits.SrcLang and Languages.Contest = Contests.ID and
-          Problems.ID = NewSubmits.Problem order by ArrivedSeconds""".as[Submit]
+    SlickModel.submits0.filter(x => (x.contestID === contest && x.teamID === team && x.problemID === problem)).result
   }
 
   private def trOption(items: Seq[ResultEntry]): Option[Seq[ResultEntry]] =
@@ -306,17 +270,14 @@ object Submits {
     o.map(_.map(Some(_))).getOrElse(Future.successful(None))
 
   def getSubmitById(db: JdbcBackend#DatabaseDef, submitId: Int)(implicit ec: ExecutionContext): Future[Option[SubmitDetails]] = {
-    val pjq = for {
-      (submit, contest) <- SlickModel.newSubmits.filter(_.id === submitId) join SlickModel.contests on (_.contest === _.id)
-    } yield (submit, contest.schoolMode)
-
-    db.run(pjq.result.headOption)
+    val pq = SlickModel.submits.filter(_.id === submitId.toLong).map(x => (x.contest, x.team, x.problem, x.source)).take(1).result.headOption
+    db.run(pq)
       .flatMap { maybeSubmit =>
       maybeSubmit map { short =>
-            db.run(getContestTeamProblemSubmits(short._1.contest, short._1.team, short._1.problem))
+            db.run(getContestTeamProblemSubmits(short._1, short._2, short._3))
               .flatMap(submits =>
-              groupAndAnnotate(db, short._2, submits)).map { submits =>
-              submits.find(_.submit.submitId.id == submitId).map(SubmitDetails(_, short._1.source))
+              groupAndAnnotate(db, false, submits.map(upliftSub(_)))).map { submits =>
+              submits.find(_.submit.submitId.id == submitId).map(SubmitDetails(_, short._4))
             }
           }
       }.map(_.flatten)

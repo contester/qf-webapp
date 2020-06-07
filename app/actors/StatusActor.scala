@@ -10,7 +10,9 @@ import play.api.{Logger, Logging}
 import play.api.libs.EventSource
 import play.api.libs.EventSource.{Event, EventDataExtractor, EventNameExtractor}
 import play.api.libs.json._
+import slick.dbio.Effect
 import slick.jdbc.{GetResult, JdbcBackend}
+import slick.sql.FixedSqlAction
 import utils.{Ask, Concur}
 
 import scala.collection.mutable
@@ -66,7 +68,7 @@ object StatusActor {
   private val userPing = Event("", None, Some("ping"))
 
   case class StatusActorInitialState(msgs: Iterable[Message2],
-                                     storedClarificationRequests: Map[Int, Seq[Int]],
+                                     storedClarificationRequests: Map[Long, Seq[Long]],
                                      clarifications: ClarificationsInitialState)
 }
 
@@ -103,7 +105,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
   private val (msg2Out, msg2Channel) = Concur.broadcast[Message2]()
   private val unacked = mutable.Map[(Int, Int), mutable.Map[Int, Message2]]()
   private val (sub2Out, sub2Chan) = Concur.broadcast[AnnoSubmit]()
-  private val pendingClarificationRequests = mutable.Map[Int, mutable.Set[Int]]().withDefaultValue(mutable.Set[Int]())
+  private[this] val pendingClarificationRequests = mutable.Map[Long, mutable.Set[Long]]().withDefaultValue(mutable.Set[Long]())
   private val (clr2Out, clr2Chan) = Concur.broadcast[ClarificationRequestState]()
   private val (clrPostOut, clrPostChannel) = Concur.broadcast[ClarificationPosted]()
 
@@ -118,7 +120,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
   private def getUnacked(contest: Int, team: Int) =
     unacked.getOrElseUpdate((contest, team), mutable.Map[Int, Message2]())
 
-  import slick.jdbc.MySQLProfile.api._
+  import utils.MyPostgresProfile.api._
 
   private def pushPersistent(contest: Int, team: Int, kind: String, data: JsValue) =
     db.run(
@@ -174,7 +176,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
     case StatusActorInitialState(msgs, clrs, cls) => {
       clrs.foreach {
         case (contest, pending) => {
-          val pendingSet = mutable.Set[Int](pending:_*)
+          val pendingSet = mutable.Set[Long](pending:_*)
           pendingClarificationRequests.put(contest, pendingSet).foreach { old =>
             if (old != pendingSet) {
               clr2Chan.offer(ClarificationRequestState(contest, pending.length, newRequest = false))
@@ -242,12 +244,13 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
 
     case AckAllClarifications(contest, team) => {
       import com.github.nscala_time.time.Imports._
-      import com.github.tototoshi.slick.MySQLJodaSupport._
+      import com.github.tototoshi.slick.PostgresJodaSupport._
+
       clarifications.get(contest).map { cmap =>
         cmap.values.map(_.arrived).max
       }.foreach { now =>
         clarificationsSeen.put((contest, team), now)
-        db.run(sqlu"""replace ClrSeen2 (Contest, Team, MaxSeen) values ($contest, $team, ${now})""")
+        db.run(SlickModel.clrSeen2.insertOrUpdate(MaxSeen(contest, team, now)))
       }
     }
 
@@ -262,7 +265,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
     }
 
     case Ack(loggedInTeam, msgid) => {
-      getUnacked(loggedInTeam.contest.id, loggedInTeam.team.localId) -= msgid
+      getUnacked(loggedInTeam.contest.id, loggedInTeam.team.id) -= msgid
       val loc = for {c <- SlickModel.messages2 if c.id === msgid } yield c.seen
       val upd = loc.update(true)
       db.run(upd)

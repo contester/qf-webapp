@@ -56,7 +56,6 @@ libraryDependencies ++= Seq(
   "org.webjars.bower" % "roboto-fontface" % "0.7.0",
   "org.apache.httpcomponents" % "httpclient" % "4.5.12",
   "org.apache.httpcomponents" % "httpcore" % "4.4.13",
-  "org.mariadb.jdbc" % "mariadb-java-client" % "2.6.0",
   "org.postgresql" % "postgresql" % "42.2.12",
   "commons-io" % "commons-io" % "2.7",
   "com.github.nscala-time" %% "nscala-time" % "2.24.0",

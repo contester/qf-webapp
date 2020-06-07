@@ -3,18 +3,17 @@ package controllers
 import com.mohiva.play.silhouette.api.Silhouette
 import models._
 import org.apache.commons.io.FileUtils
-import org.joda.time.DateTime
 import play.api.Logging
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.i18n.I18nSupport
 import play.api.mvc.{AbstractController, ControllerComponents, RequestHeader}
 import slick.basic.DatabaseConfig
-import slick.jdbc.{GetResult, JdbcProfile}
+import slick.jdbc.JdbcProfile
 import utils.auth.TeamsEnv
 import views.html
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 
 package printing {
 case class SubmitData(textOnly: Boolean)
@@ -25,7 +24,6 @@ class Printing (cc: ControllerComponents,
                 dbConfig: DatabaseConfig[JdbcProfile],
                 printingModel: PrintingModel) extends AbstractController(cc) with I18nSupport with Logging {
   private val db = dbConfig.db
-  import dbConfig.profile.api._
 
   implicit val ec = defaultExecutionContext
 
@@ -34,7 +32,7 @@ class Printing (cc: ControllerComponents,
   }
 
   private def getPrintForm(loggedIn: LoggedInTeam, form: Form[printing.SubmitData], location: Option[Location])(implicit request: RequestHeader, ec: ExecutionContext) =
-    printingModel.printJobsForTeam(loggedIn.contest.id, loggedIn.team.localId).map { printJobs =>
+    printingModel.printJobsForTeam(loggedIn.contest.id, loggedIn.team.id).map { printJobs =>
       html.printform(loggedIn,location, form, printJobs)
     }
 
@@ -73,13 +71,10 @@ class Printing (cc: ControllerComponents,
       parsed0.fold(
         formWithErrors => getPrintForm(request.identity, formWithErrors, location).map(BadRequest(_)),
         submitData => {
-          printingModel.insertPrintJob(request.identity.contest.id, request.identity.team.localId,
-            solutionOpt.get._1, solutionOpt.get._2, request.remoteAddress).flatMap { printJobIds =>
-            printJobIds.map { jobId=>
-              printingModel.printJobByID(jobId)
+          printingModel.insertAndPrintJob(request.identity.contest.id, request.identity.team.id,
+            solutionOpt.get._1, solutionOpt.get._2, request.remoteAddress).map { _ =>
+              Redirect(routes.Printing.index)
             }
-            Future.successful(Redirect(routes.Printing.index))
-          }
         }
       )
 

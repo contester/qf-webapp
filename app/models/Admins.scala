@@ -23,22 +23,22 @@ trait WaiterPermissions {
   def filter(room: String): Boolean
 }
 
-case class Admin(username: String, passwordHash: String, spectator: Set[Int], administrator: Set[Int],
-                 locations: Set[String], unrestricted: Set[Int]) extends Identity with WaiterPermissions {
+case class Admin(username: String, passwordHash: String, spectator: Set[Long], administrator: Set[Long],
+                 locations: Set[String], unrestricted: Set[Long]) extends Identity with WaiterPermissions {
   override def toString = s"$username:$passwordHash"
 
   def toId = AdminId(username, passwordHash)
 
-  def canSpectate(contestId: Int) =
+  def canSpectate(contestId: Long) =
     spectator.contains(contestId) || spectator.contains(-1) || canModify(contestId)
 
-  def canSeeAll(contestId: Int) =
+  def canSeeAll(contestId: Long) =
     unrestricted.contains(contestId) || unrestricted.contains(-1) || canModify(contestId)
 
-  def canModify(contestId: Int) =
+  def canModify(contestId: Long) =
     administrator.contains(contestId) || administrator.contains(-1)
 
-  def canSeeTeamPasswords(contestId: Int) =
+  def canSeeTeamPasswords(contestId: Long) =
     canModify(contestId)
 
   lazy val defaultContest = {
@@ -64,14 +64,14 @@ object AdminId {
 }
 
 object Admin {
-  import slick.jdbc.MySQLProfile.api._
+  import utils.MyPostgresProfile.api._
 
-  private def parseSingleAcl(s: String): Option[Int] =
+  private def parseSingleAcl(s: String): Option[Long] =
     if (s == "*")
       Some(-1)
-    else Try(s.toInt).toOption
+    else Try(s.toLong).toOption
 
-  private def parseAcl(s: String): Set[Int] =
+  private def parseAcl(s: String): Set[Long] =
     s.split(',').flatMap(parseSingleAcl).toSet
 
   private def parseStringAcl(s: String): Set[String] =
@@ -87,19 +87,19 @@ object Admin {
 }
 
 object AdminModel {
-  import slick.jdbc.MySQLProfile.api._
-  import utils.Db._
+  import com.github.tototoshi.slick.PostgresJodaSupport._
+  import slick.jdbc.PostgresProfile.api._
 
   case class AdminEntry(username: String, password: String, spectator: String, administrator: String,
                         locations: String, unrestricted: String)
 
   case class Admins(tag: Tag) extends Table[AdminEntry](tag, "admins") {
-    def username = column[String]("Username", O.PrimaryKey)
-    def password = column[String]("Password")
-    def spectator = column[String]("Spectator")
-    def administrator = column[String]("Administrator")
-    def locations = column[String]("Locations")
-    def unrestricted = column[String]("UnrestrictedView")
+    def username = column[String]("username", O.PrimaryKey)
+    def password = column[String]("password")
+    def spectator = column[String]("spectator")
+    def administrator = column[String]("administrator")
+    def locations = column[String]("locations")
+    def unrestricted = column[String]("unrestricted_view")
 
     override def * = (username, password, spectator, administrator, locations, unrestricted) <> (AdminEntry.tupled, AdminEntry.unapply)
   }
@@ -113,7 +113,7 @@ object AdminPermissions {
       Future.successful(identity.canModify(contestId))
   }
 
-  case class withSpectate(contestId: Int) extends Authorization[Admin, SessionAuthenticator] {
+  case class withSpectate(contestId: Long) extends Authorization[Admin, SessionAuthenticator] {
     override def isAuthorized[B](identity: Admin, authenticator: SessionAuthenticator)(implicit request: Request[B]): Future[Boolean] =
       Future.successful(identity.canSpectate(contestId))
   }

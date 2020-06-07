@@ -61,9 +61,6 @@ class MonitorActor(db: JdbcBackend#DatabaseDef,
       .map {
       case ((problems, teams), submits) =>
         val calcStatus: (Seq[Submit]) => AnyStatus with Product with Serializable =
-          if (contest.schoolMode)
-            MonitorSchool.calculateStatus(problems, teams.values.toSeq, _)
-          else
             ACM.calculateStatus(problems, teams.values.toSeq, _)
 
         val subs0 = submits.filter(_.finished)

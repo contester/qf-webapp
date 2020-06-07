@@ -2,8 +2,7 @@ package models
 
 
 import com.github.nscala_time.time.Imports.DateTime
-import play.api.Logger
-import slick.jdbc.{GetResult, JdbcBackend}
+import slick.jdbc.JdbcBackend
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -30,22 +29,10 @@ case class AdaptedWaiterTask(id: Long, when: DateTime, message: String, unacked:
                              acked: Seq[RoomWithPermission], canDelete: Boolean)
 
 object WaiterModel {
-  import slick.jdbc.MySQLProfile.api._
-  import com.github.tototoshi.slick.MySQLJodaSupport._
+  import SlickModel._
+  import utils.MyPostgresProfile.api._
 
   // TODO: move to SlickModel
-  case class WaiterTaskRecord(id: Long, room: String, ts: DateTime)
-
-  class WaiterTaskRecords(tag: Tag) extends Table[WaiterTaskRecord](tag, "WaiterTasksRecord") {
-    def id = column[Long]("ID")
-    def room = column[String]("Room")
-    def ts = column[DateTime]("TS")
-
-    override def * = (id, room, ts) <> (WaiterTaskRecord.tupled, WaiterTaskRecord.unapply)
-  }
-
-  val waiterTaskRecords = TableQuery[WaiterTaskRecords]
-
   private def maybeMakeRooms(db: JdbcBackend#DatabaseDef, roomsActive: Iterable[String])(implicit ec: ExecutionContext): Future[Iterable[String]] = {
     if (roomsActive.isEmpty) {
       makeRooms(db)
@@ -53,22 +40,24 @@ object WaiterModel {
   }
 
   private def makeRooms(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[Iterable[String]] = {
-    db.run(sql"""select Name from Areas""".as[String]).map(_.toList)
+    db.run(areas.map(_.name).result)
   }
 
   def addNewTask(db: JdbcBackend#DatabaseDef, message: String, roomsActive: Iterable[String])(implicit ec: ExecutionContext): Future[StoredWaiterTask] =
   maybeMakeRooms(db, roomsActive).flatMap { newRa =>
     val ra = newRa.mkString(",")
     val now = DateTime.now
-    db.run(sqlu"""insert into WaiterTasks (TS, Message, Rooms) values ($now, $message, $ra)
-                  """.andThen(sql"select last_insert_id()".as[Int]).withPinnedSession).map(_.headOption.get).map { lastInsertId =>
+
+    val q = (waiterTasks.map(x => (x.message, x.rooms)) returning(waiterTasks.map(x => (x.id)))) += (message, ra)
+
+    db.run(q).map { lastInsertId =>
       StoredWaiterTask(lastInsertId, now, message, newRa.toSet, Map.empty)
     }
   }
 
   def markDone(db: JdbcBackend#DatabaseDef, id: Long, room: String)(implicit ec: ExecutionContext): Future[DateTime] = {
     val now = DateTime.now
-    db.run(waiterTaskRecords += WaiterTaskRecord(id, room, now)).map(_ => now)
+    db.run(waiterTaskRecords += (id, room, now)).map(_ => now)
   }
 
   def unmarkDone(db: JdbcBackend#DatabaseDef, id: Long, room: String)(implicit ec: ExecutionContext): Future[Unit] = {
@@ -81,15 +70,11 @@ object WaiterModel {
 
   private def getAllRecords(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[Map[Long, Map[String, DateTime]]] =
     db.run(waiterTaskRecords.result).map { records =>
-      records.toList.groupBy(_.id).mapValues(x => x.map(y => y.room -> y.ts).toMap)
+       records.toList.groupBy(_._1).mapValues(x => x.map(y => y._2 -> y._3).toMap)
     }
 
-  implicit private val getStoredTask = GetResult(r =>
-    StoredWaiterTask(r.nextLong(), new DateTime(r.nextTimestamp()), r.nextString(), r.nextString().split(",").toSet, Map.empty)
-  )
-
-  private def getAllTasks(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[List[StoredWaiterTask]] = {
-    db.run(sql"""select ID, TS, Message, Rooms from WaiterTasks""".as[StoredWaiterTask]).map(_.toList)
+  private[this] def getAllTasks(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[List[StoredWaiterTask]] = {
+    db.run(waiterTasks.result).map(_.map(x => StoredWaiterTask(x._1, x._2, x._3, x._4.split(",").toSet, Map.empty))).map(_.toList)
   }
 
   def load(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[List[StoredWaiterTask]] = {

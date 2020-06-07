@@ -10,10 +10,9 @@ import utils.Selectable
 
 import scala.concurrent.Future
 
-case class Contest(id: Int, name: String, schoolMode: Boolean, startTime: DateTime, freezeTime: DateTime,
-                   endTime: DateTime, exposeTime: DateTime, printTickets: Boolean, paused: Boolean,
-                   polygonID: String, language: String) {
-  def frozen = (DateTime.now >= freezeTime) && (DateTime.now < exposeTime)
+case class Contest(id: Int, name: String, startTime: DateTime, freezeTime: Option[DateTime],
+                   endTime: DateTime, exposeTime: DateTime, polygonID: String, language: String) {
+  def frozen = freezeTime.map(x => (DateTime.now >= x) && (DateTime.now < exposeTime)).getOrElse(false)
   def finished = DateTime.now >= endTime
   def started = DateTime.now >= startTime
   def running = started && !finished
@@ -48,14 +47,13 @@ object Contest {
       Json.obj(
         "id" -> c.id,
         "name" -> c.name,
-        "schoolMode" -> c.schoolMode,
         "frozen" -> c.frozen,
         "startTime" -> c.startTime,
         "startTimeDelta" -> ntm(c.startTime),
         "endTime" -> c.endTime,
         "endTimeDelta" -> ntm(c.endTime),
         "freezeTime" -> c.freezeTime,
-        "freezeTimeDelta" -> ntm(c.freezeTime),
+        "freezeTimeDelta" -> ntm(c.freezeTime.getOrElse(c.endTime)),
         "exposeTime" -> c.exposeTime,
         "exposeTimeDelta" -> ntm(c.exposeTime)
       )
