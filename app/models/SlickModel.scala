@@ -343,9 +343,9 @@ object SlickModel {
 
   val eval = TableQuery[Eval]
 
-  case class Results(tag: Tag) extends Table[(Long, Long, Int, DateTime, Long, Long, Long, Array[Byte], Array[Byte], Long)](tag, "results") {
+  case class Results(tag: Tag) extends Table[(Long, Int, Int, DateTime, Long, Long, Long, Array[Byte], Array[Byte], Long)](tag, "results") {
     def testingID = column[Long]("testing_id")
-    def testID = column[Long]("test_id")
+    def testID = column[Int]("test_id")
     def resultCode = column[Int]("result_code")
     def recordTime = column[DateTime]("record_time")
     def timeMs = column[Long]("time_ms")
@@ -355,11 +355,23 @@ object SlickModel {
     def testerError = column[Array[Byte]]("tester_error")
     def testerReturnCode = column[Long]("tester_return_code")
 
-    override def * = (testingID, recordTime, resultCode, testID, timeMs, memoryBytes,
-      returnCode, testerOutput, testerError, testerReturnCode)
+    override def * = (testingID, testID, resultCode, recordTime, timeMs, memoryBytes, returnCode, testerOutput,
+      testerError, testerReturnCode)
   }
 
   val results = TableQuery[Results]
+
+  case class LiftedResultEntry(testingID: Rep[Long], testID: Rep[Int], resultCode: Rep[Int], timeMs: Rep[Long],
+                               memoryBytes: Rep[Long], returnCode: Rep[Long], testerReturnCode: Rep[Long],
+                               testerOutput: Rep[Array[Byte]], testerError: Rep[Array[Byte]])
+
+  case class DBResultEntry(testingID: Long, testID: Int, resultCode: Int, timeMs: Long, memoryBytes:Long,
+                           returnCode: Long, testerReturnCode: Long, testerOutput: Array[Byte], testerError: Array[Byte])
+
+  implicit object ResultEntryShape extends CaseClassShape(LiftedResultEntry.tupled, DBResultEntry.tupled)
+
+  val results0 = results.sortBy(_.testID).map(x => LiftedResultEntry(x.testingID, x.testID, x.resultCode, x.timeMs, x.memoryBytes,
+    x.returnCode, x.testerReturnCode, x.testerOutput, x.testerError))
 
   case class Area(id: Option[Int], name: String, printer: String)
 

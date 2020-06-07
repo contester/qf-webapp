@@ -143,8 +143,8 @@ object Memory {
   implicit val ordering: Ordering[Memory] = Ordering.by(_.underlying)
 }
 
-case class ResultEntry(test: Int, result: Int, time: TimeMs, memory: Memory, info: Int, testerExitCode: Int,
-                       testerOutput: String, testerError: String) {
+case class ResultEntry(testingID: Long, test: Int, result: Int, time: TimeMs, memory: Memory, info: Long, testerExitCode: Long,
+                       testerOutput: Array[Byte], testerError: Array[Byte]) {
   def resultString = SubmitResult.message(result)
 
   def timeLimitExceeded = result == 11
@@ -152,12 +152,6 @@ case class ResultEntry(test: Int, result: Int, time: TimeMs, memory: Memory, inf
   def success =
     if (test == 0) result == 1
     else result == 10
-}
-
-object ResultEntry {
-  implicit val getResultEntry = GetResult(r =>
-    ResultEntry(r.nextInt(), r.nextInt(), TimeMs(r.nextInt()), Memory(r.nextLong()), r.nextInt(), r.nextInt(), r.nextString(), r.nextString())
-  )
 }
 
 case class SubmitDetails(fsub: FullyDescribedSubmit, source: Array[Byte]) {
@@ -189,7 +183,7 @@ object Submits {
     submits.foldLeft((empty, Seq[(Submit, Option[Score])]())) {
       case (state, submit) =>
         val next = scorer(state._1, submit)
-        (next._1, state._2 :+((submit, next._2)))
+        (next._1, state._2 :+ ((submit, next._2)))
     }
 
   def indexAndScoreGrouped[Cell](submits: Seq[Submit], empty: Cell, scorer: SubmitScorer[Cell]) = {
@@ -206,9 +200,9 @@ object Submits {
       r.nextInt(), r.nextInt(),
       RatedProblem(r.nextString(), r.nextInt()),
       r.nextString()),
-      r.nextBoolean(),
-      r.nextBoolean(),
-      r.nextInt(), r.nextInt(), r.nextIntOption()
+    r.nextBoolean(),
+    r.nextBoolean(),
+    r.nextInt(), r.nextInt(), r.nextIntOption()
   ))
 
   def upliftSub(s: UpliftedSubmit): Submit =
@@ -216,7 +210,7 @@ object Submits {
       SubmitId(s.id.toInt, Arrived(s.arrived, s.arrivedSeconds.toInt, s.afterFreeze),
         s.teamID, s.contestID, RatedProblem(s.problemID, 30), s.ext), s.finished,
       s.compiled, s.passed, s.taken,
-      if(s.testingID == 0) None else Some(s.testingID.toInt))
+      if (s.testingID == 0) None else Some(s.testingID.toInt))
 
   def getContestSubmits(contest: Long) = {
     SlickModel.submits0.filter(_.contestID === contest.toInt).result
@@ -246,7 +240,7 @@ object Submits {
 
   def annotateGrouped(db: JdbcBackend#DatabaseDef, schoolMode: Boolean, submits: Seq[Submit])(implicit ec: ExecutionContext) = {
     val scored = if (schoolMode) scoreGrouped[SchoolCell](submits, SchoolCell.empty, SchoolScorer)
-      else scoreGrouped(submits, ACMCell.empty, ACMScorer)
+    else scoreGrouped(submits, ACMCell.empty, ACMScorer)
     val indexed = indexGrouped(scored._2)
 
     Future.sequence(
@@ -254,7 +248,7 @@ object Submits {
         case ((submit, optScore), index) =>
           SubmitResult.annotate(db, schoolMode, submit).map {
             case (submitResult, submitDetails, submitStats) =>
-            FullyDescribedSubmit(submit, index, optScore, submitResult, submitStats, submitDetails)
+              FullyDescribedSubmit(submit, index, optScore, submitResult, submitStats, submitDetails)
           }
       })
   }
@@ -266,6 +260,7 @@ object Submits {
 
 
   import scala.language.implicitConversions
+
   implicit def o2f[A](o: Option[Future[A]])(implicit ec: ExecutionContext): Future[Option[A]] =
     o.map(_.map(Some(_))).getOrElse(Future.successful(None))
 
@@ -273,89 +268,26 @@ object Submits {
     val pq = SlickModel.submits.filter(_.id === submitId.toLong).map(x => (x.contest, x.team, x.problem, x.source)).take(1).result.headOption
     db.run(pq)
       .flatMap { maybeSubmit =>
-      maybeSubmit map { short =>
-            db.run(getContestTeamProblemSubmits(short._1, short._2, short._3))
-              .flatMap(submits =>
+        maybeSubmit map { short =>
+          db.run(getContestTeamProblemSubmits(short._1, short._2, short._3))
+            .flatMap(submits =>
               groupAndAnnotate(db, false, submits.map(upliftSub(_)))).map { submits =>
-              submits.find(_.submit.submitId.id == submitId).map(SubmitDetails(_, short._4))
-            }
+            submits.find(_.submit.submitId.id == submitId).map(SubmitDetails(_, short._4))
           }
+        }
       }.map(_.flatten)
   }
 
   def loadSubmitDetails(db: JdbcBackend#DatabaseDef, testingId: Int)(implicit ec: ExecutionContext) =
-    db.run(
-      sql"""select Test, Result, Timex, Memory, Info, TesterExitCode, TesterOutput, TesterError
-           from Results where UID = $testingId order by Test""".as[ResultEntry])
+    db.run(SlickModel.results0.filter(_.testingID === testingId.toLong).result).map(_.map(x =>
+      ResultEntry(x.testingID, x.testID, x.resultCode, TimeMs(x.timeMs.toInt), Memory(x.memoryBytes),
+        x.returnCode, x.testerReturnCode, x.testerOutput, x.testerError)
+    ))
 
   def dbsub2sub(s: DatabaseSubmitRow): Submit = {
     Submit(SubmitId(s.submit.id.toInt, s.submit.arrived, s.submit.team.id.toInt, s.submit.contest.toInt, RatedProblem(s.submit.problem.id, s.submit.problem.rating), s.submit.ext),
       s.testingData.exists(_.finished), s.testingData.exists(_.compiled),
       s.testingData.map(_.passed).getOrElse(0), s.testingData.map(_.taken).getOrElse(0),
       s.testingData.map(_.testingId.toInt))
-  }
-
-  def loadAllSubmits(db: JdbcBackend#DatabaseDef, contestId: Int, teamId: Int, problemId: String)(implicit ec: ExecutionContext) = {
-    implicit val getResult = GetResult(r => {
-      import com.github.nscala_time.time.Imports._
-
-      val sub = UntestedSubmit(
-        r.nextLong(),
-        Arrived(
-          new DateTime(r.nextTimestamp()),
-          r.nextInt(),
-          r.nextBoolean()),
-        TeamData(r.nextInt(), ""),
-        r.nextLong(),
-        ProblemData(
-          r.nextString(),
-          r.nextString(),
-          r.nextInt()
-        ),
-        r.nextString()
-      )
-      val td = r.nextLongOption().map { testingId =>
-        SubmitTestingData(
-          testingId,
-          r.nextBoolean(),
-          r.nextBoolean(),
-          r.nextInt(),
-          r.nextInt(),
-          r.nextLong(),
-          r.nextLong()
-        )
-      }
-
-      DatabaseSubmitRow(sub, td)
-    }
-    )
-    db.run(
-      sql"""
-      select NewSubmits.ID,
-      NewSubmits.Arrived,
-      unix_timestamp(NewSubmits.Arrived) - unix_timestamp(Contests.Start) as ArrivedSeconds,
-      NewSubmits.Arrived > Contests.Finish as AfterFreeze,
-      NewSubmits.Team,
-      NewSubmits.Contest,
-      NewSubmits.Problem,
-      Problems.Name,
-      Problems.Rating,
-      Languages.Ext,
-      Submits.TestingID,
-      Submits.Finished,
-      Submits.Compiled,
-      Submits.Passed,
-      Submits.Taken,
-      max(Results.Timex) as MaxTime,
-      max(Results.Memory) as MaxMemory
-        from Contests, Problems, Languages, NewSubmits
-        LEFT join Submits on NewSubmits.ID = Submits.ID
-        left join Results on Submits.TestingID = Results.UID
-        where
-        NewSubmits.Contest = $contestId and NewSubmits.Team = $teamId and NewSubmits.Problem = $problemId
-      and NewSubmits.Arrived < Contests.End and NewSubmits.Arrived >= Contests.Start and
-      Contests.ID = NewSubmits.Contest and Problems.Contest = Contests.ID and
-      Languages.ID = NewSubmits.SrcLang and Languages.Contest = Contests.ID and
-      Problems.ID = NewSubmits.Problem group by NewSubmits.ID order by ArrivedSeconds""".as[DatabaseSubmitRow])
   }
 }

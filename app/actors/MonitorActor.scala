@@ -63,7 +63,7 @@ class MonitorActor(db: JdbcBackend#DatabaseDef,
         val calcStatus: (Seq[Submit]) => AnyStatus with Product with Serializable =
             ACM.calculateStatus(problems, teams.values.toSeq, _)
 
-        val subs0 = submits.filter(_.finished)
+        val subs0 = submits.filter(_.finished).map(Submits.upliftSub(_))
 
         StoredContestStatus(contest, calcStatus(subs0.filter(!_.afterFreeze)), calcStatus(subs0))
     }

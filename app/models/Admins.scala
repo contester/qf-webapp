@@ -23,22 +23,22 @@ trait WaiterPermissions {
   def filter(room: String): Boolean
 }
 
-case class Admin(username: String, passwordHash: String, spectator: Set[Long], administrator: Set[Long],
-                 locations: Set[String], unrestricted: Set[Long]) extends Identity with WaiterPermissions {
+case class Admin(username: String, passwordHash: String, spectator: Set[Int], administrator: Set[Int],
+                 locations: Set[String], unrestricted: Set[Int]) extends Identity with WaiterPermissions {
   override def toString = s"$username:$passwordHash"
 
   def toId = AdminId(username, passwordHash)
 
-  def canSpectate(contestId: Long) =
+  def canSpectate(contestId: Int) =
     spectator.contains(contestId) || spectator.contains(-1) || canModify(contestId)
 
-  def canSeeAll(contestId: Long) =
+  def canSeeAll(contestId: Int) =
     unrestricted.contains(contestId) || unrestricted.contains(-1) || canModify(contestId)
 
-  def canModify(contestId: Long) =
+  def canModify(contestId: Int) =
     administrator.contains(contestId) || administrator.contains(-1)
 
-  def canSeeTeamPasswords(contestId: Long) =
+  def canSeeTeamPasswords(contestId: Int) =
     canModify(contestId)
 
   lazy val defaultContest = {
@@ -66,18 +66,18 @@ object AdminId {
 object Admin {
   import utils.MyPostgresProfile.api._
 
-  private def parseSingleAcl(s: String): Option[Long] =
+  private[this] def parseSingleAcl(s: String): Option[Int] =
     if (s == "*")
       Some(-1)
-    else Try(s.toLong).toOption
+    else Try(s.toInt).toOption
 
-  private def parseAcl(s: String): Set[Long] =
+  private[this] def parseAcl(s: String): Set[Int] =
     s.split(',').flatMap(parseSingleAcl).toSet
 
-  private def parseStringAcl(s: String): Set[String] =
+  private[this] def parseStringAcl(s: String): Set[String] =
     s.split(',').toSet
 
-  private def buildAdmin(x: AdminModel.AdminEntry): Admin =
+  private[this] def buildAdmin(x: AdminModel.AdminEntry): Admin =
     Admin(x.username, x.password, parseAcl(x.spectator), parseAcl(x.administrator), parseStringAcl(x.locations),
       parseAcl(x.unrestricted))
 

@@ -41,7 +41,8 @@ case class EditTeam(schoolName: String, teamName: String, teamNum: Option[Int])
 
 case class DisplayTeam(team: SlickModel.Team, school: School, login: String, password: String)
 
-case class AdminPrintJob(id: Int, contestID: Int, team: Team, filename: String, arrived: DateTime, printed: Option[DateTime], computerName: String, error: Option[String])
+case class AdminPrintJob(id: Int, contestID: Int, team: Team, filename: String, arrived: DateTime,
+                         printed: Option[DateTime], computerName: String, error: String)
 
 case class SubmitIdLite(id: Int)
 object SubmitIdLite {
@@ -83,7 +84,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
   import utils.MyPostgresProfile.api._
 
-  private[this] def getSubmitCid(submitId: Long)(implicit ec: ExecutionContext): Future[Option[Long]] =
+  private[this] def getSubmitCid(submitId: Long)(implicit ec: ExecutionContext): Future[Option[Int]] =
     db.run(SlickModel.submits.filter(_.id === submitId).take(1).map(_.contest).result.headOption)
 
   private[this] def rejudgeRangeEx(range: String, account: Admin)(implicit ec: ExecutionContext): Future[Seq[Long]] = {
@@ -104,15 +105,15 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }
 
-  private def showSubs(contestId: Long, limit: Option[Int], account: Admin)(implicit request: RequestHeader, ec: ExecutionContext) =
+  private def showSubs(contestId: Int, limit: Option[Int], account: Admin)(implicit request: RequestHeader, ec: ExecutionContext) =
     getSelectedContests(contestId, account).zip(
       statusActorModel.teamClient.getTeams(contestId)
     ).zip(db.run(Submits.getContestSubmits(contestId))).flatMap {
-      case ((contest, teamMap), submits0) =>
+      case ((contest, teamMap), submitsx) =>
         val canSeeAll = account.canSeeAll(contestId)
         def canSeeSubmit(s: Submit) =
           if (canSeeAll) true else !s.afterFreeze
-        val submits = submits0.filter(canSeeSubmit)
+        val submits = submitsx.map(Submits.upliftSub(_)).filter(canSeeSubmit)
         Submits.groupAndAnnotate(db, false, limit.map(submits.takeRight(_)).getOrElse(submits)).map { fullyDescribedSubmits =>
           Ok(html.admin.submits(fullyDescribedSubmits, teamMap, contest, account))
         }
@@ -181,7 +182,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     } else com.google.common.collect.Range.singleton[java.lang.Long](item.toLong)
 
 
-  def submits(contestId: Long) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
+  def submits(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
     val lim = if (request.identity.canModify(contestId))
       None
     else
@@ -223,7 +224,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
   private def getTestingByID(testingID: Int) =
-    db.run(SlickModel.testings.filter(_.id === testingID).result.headOption)
+    db.run(SlickModel.testings.filter(_.id === testingID.toLong).result.headOption)
 
   private def getSubmitAndTesting(submitId: Int) =
     Submits.getSubmitById(db, submitId).flatMap {
@@ -238,11 +239,10 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   def showSubmit(contestId: Int, submitId: Int) = silhouette.SecuredAction(canSeeSubmit(submitId)).async { implicit request =>
     getSubmitAndTesting(submitId).flatMap {
       case Some((submit, testingOpt)) =>
-          testingOpt.flatMap { testing =>
-            testing.problemId.map { problemId =>
+          testingOpt.map { testing =>
+            val problemId = testing._4
               val phandle = PolygonURL(problemId)
-              Outputs.getAllAssets2(ws, fileserverBase, shortn, submit.fsub.submit.submitId.id, testing.id, submit.fsub.details.map(_.test), phandle)
-            }
+              Outputs.getAllAssets2(ws, fileserverBase, shortn, submit.fsub.submit.submitId.id, testing._1.toInt, submit.fsub.details.map(_.test), phandle)
           }.getOrElse(Future.successful(Map[Int, ResultAssets]())).zip(
           getSelectedContests(contestId, request.identity)).map {
           case (outputs, contest) =>
@@ -254,18 +254,19 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
   def downloadArchiveSubmit(contestId: Int, submitId: Int) = silhouette.SecuredAction(canSeeSubmit(submitId)).async { implicit request =>
-    getSubmitAndTesting(submitId).map {
-      case Some((submit, testingOpt)) =>
-        testingOpt.flatMap { testing =>
-          testing.problemId.map { problemId =>
-            val phandle = PolygonURL(problemId)
-            val pprefix = phandle.prefix.stripPrefix("problem/")
-            val downloadLoc = s"/fs2/?contest=$shortn&submit=${submit.fsub.submit.submitId.id}&testing=${testing.id}&problem=${pprefix}"
-            logger.trace(s"download: $downloadLoc")
-            Ok("download").as("application/zip").withHeaders("X-Accel-Redirect" -> downloadLoc)
-          }
-        }.getOrElse(NotFound)
-      case None => NotFound
+    val q = for {
+      s <- SlickModel.submits if s.id === submitId.toLong
+      t <- SlickModel.testings if s.testingID === t.id
+    } yield (s.testingID, t.problemURL)
+
+    db.run(q.take(1).result.headOption).map {
+        case Some((testingID, problemURL)) =>
+          val phandle = PolygonURL(problemURL)
+          val pprefix = phandle.prefix.stripPrefix("problem/")
+          val downloadLoc = s"/fs2/?contest=$shortn&submit=${submitId}&testing=${testingID}&problem=${pprefix}"
+          logger.trace(s"download: $downloadLoc")
+          Ok("download").as("application/zip").withHeaders("X-Accel-Redirect" -> downloadLoc)
+        case None => NotFound
     }
   }
 
@@ -417,7 +418,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
             BadRequest(html.admin.postanswer(formWithErrors, clr, answerList.toSeq, contest))
           },
           data => {
-            db.run(SlickModel.clarificationRequests.filter(_.id === clrId).map(x => (x.answer, x.answered)).update((Some(data.answer),true))).map { _ =>
+            db.run(SlickModel.clarificationRequests.filter(_.id === clrId.toLong).map(x => (x.answer, x.answered)).update((data.answer,true))).map { _ =>
               statusActorModel.statusActor ! ClarificationAnswered(clr.contest, clrId, clr.team, clr.problem, data.answer)
               Redirect(routes.AdminApplication.showQandA(clr.contest))
             }
@@ -472,7 +473,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     db.run(
       (for {
         (j, l) <- dbPrintJobs.filter(_.contest === contestID) join compLocations on (_.computer === _.id)
-      } yield (j.id, j.contest, j.team, j.filename, j.arrived, j.processed, l.name, j.error)).sortBy(_._5.desc).result)
+      } yield (j.id, j.contest, j.team, j.filename, j.arrived, j.printed, l.name, j.error)).sortBy(_._5.desc).result)
     .zip(statusActorModel.teamClient.getTeams(contestID)).map {
       case (jobs, teams) =>
         jobs.flatMap { src =>
