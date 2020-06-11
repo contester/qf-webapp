@@ -14,18 +14,18 @@ import slick.jdbc.{GetResult, JdbcBackend, JdbcProfile}
 
 import scala.concurrent.{ExecutionContext, Future}
 
-case class Clarification(id: Option[Int], contest: Int, problem: String, text: String, arrived: DateTime, hidden: Boolean)
+case class Clarification(id: Option[Long], contest: Int, problem: String, text: String, arrived: DateTime, hidden: Boolean)
 
 case class MaxSeen(contest: Int, team: Int, timestamp: DateTime)
 
-case class ClarificationRequest(id: Int, contest: Int, team: Int, problem: String, request: String,
+case class ClarificationRequest(id: Long, contest: Int, team: Int, problem: String, request: String,
                                 answer: String, arrived: DateTime, answered: Boolean) {
   def getAnswer = if (answered) {
     if (answer.isEmpty) "No comments" else answer
   } else "..."
 }
 
-case class Compiler(id: Int, contest: Int, name: String, ext: String)
+case class Compiler(id: Int, name: String, ext: String)
 
 case class School(id: Int, name: String)
 
@@ -48,7 +48,7 @@ object SlickModel {
   case class Assignment(contest: Int, teamId: Int, username: String, password: String)
 
   case class Clarifications(tag: Tag) extends Table[Clarification](tag, "clarifications") {
-    def id = column[Int]("id", O.PrimaryKey, O.AutoInc)
+    def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
     def contest = column[Int]("contest")
     def problem = column[String]("problem")
     def text = column[String]("text")
@@ -64,9 +64,9 @@ object SlickModel {
     clarifications.filter(_.contest === contestId).sortBy(_.arrived.desc)
 
   case class ClarificationRequests(tag: Tag) extends Table[ClarificationRequest](tag, "clarification_requests") {
-    def id = column[Long]("id", O.PrimaryKey)
-    def contest = column[Long]("contest")
-    def team = column[Long]("team")
+    def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
+    def contest = column[Int]("contest")
+    def team = column[Int]("team")
     def problem = column[String]("problem")
     def request = column[String]("request")
     def answer = column[String]("answer")
@@ -81,7 +81,7 @@ object SlickModel {
 
   val clarificationRequestsUnanswered = for {
     c <- clarificationRequests.filter(!_.answered)
-  } yield (c.id, c.contest)
+  } yield (c.contest, c.id)
 
   case class ClrSeen2(tag: Tag) extends Table[MaxSeen](tag, "clarifications_seen") {
     def contest = column[Int]("contest")
@@ -93,19 +93,19 @@ object SlickModel {
 
   val clrSeen2 = TableQuery[ClrSeen2]
 
-  case class Compilers(tag: Tag) extends Table[(Int, String, String)](tag, "languages") {
+  case class Compilers(tag: Tag) extends Table[Compiler](tag, "languages") {
     def id = column[Int]("id")
     def name = column[String]("name")
     def moduleID = column[String]("module_id")
 
-    def * = (id, name, moduleID)
+    def * = (id, name, moduleID) <> (Compiler.tupled, Compiler.unapply)
   }
 
   val compilers = TableQuery[Compilers]
 
   case class LiftedContest(id: Rep[Int], name: Rep[String], startTime: Rep[DateTime],
-                           freezeTime: Rep[Option[DateTime]], endTime: Rep[DateTime], exposeTime: Rep[DateTime],
-                           polygonId: Rep[String], language: Rep[String])
+                           freezeTime: Rep[DateTime], endTime: Rep[DateTime], exposeTime: Rep[DateTime],
+                           polygonId: Rep[String], language: Rep[String], schoolMode: Rep[Boolean])
 
   implicit object ContestShape extends CaseClassShape(LiftedContest.tupled, Contest.tupled)
 
@@ -113,22 +113,22 @@ object SlickModel {
     def id = column[Int]("id", O.AutoInc, O.PrimaryKey)
     def name = column[String]("name")
     def startTime = column[DateTime]("start_time")
-    def freezeTime = column[Option[DateTime]]("freeze_time")
+    def freezeTime = column[DateTime]("freeze_time")
     def endTime = column[DateTime]("end_time")
     def exposeTime = column[DateTime]("expose_time")
     def polygonId = column[String]("polygon_id")
     def language = column[String]("language")
-
+    def schoolMode = column[Boolean]("school_mode")
 
     override def * = (id, name, startTime, freezeTime, endTime, exposeTime,
-      polygonId, language) <> (Contest.tupled, Contest.unapply)
+      polygonId, language, schoolMode) <> (Contest.tupled, Contest.unapply)
   }
 
   val contests = TableQuery[Contests]
 
   val contests0 = for {
     c <- contests
-  } yield LiftedContest(c.id, c.name, c.startTime, c.freezeTime, c.endTime, c.exposeTime, c.polygonId, c.language)
+  } yield LiftedContest(c.id, c.name, c.startTime, c.freezeTime, c.endTime, c.exposeTime, c.polygonId, c.language, c.schoolMode)
 
   case class Schools(tag: Tag) extends Table[School](tag, "schools") {
     def id = column[Int]("id", O.AutoInc, O.PrimaryKey)
@@ -236,7 +236,7 @@ object SlickModel {
     def taken = column[Int]("taken")
     def compiled = column[Boolean]("compiled")
 
-    override def * = (id, contest, team, problem, language, source, arrived, arrivedSeconds, tested, success, passed, testingID, taken)
+    override def * = (id, contest, team, problem, language, source, arrived, arrivedSeconds, tested, success, passed, testingID, taken, compiled)
   }
 
   val submits = TableQuery[Submits]
@@ -247,7 +247,7 @@ object SlickModel {
     def tests = column[Int]("tests")
     def name = column[String]("name")
 
-    def * = (contestID, id, tests, name) <> (Problem.tupled, Problem.unapply)
+    def * = (contestID, id, name, tests) <> (Problem.tupled, Problem.unapply)
   }
 
   val problems = TableQuery[Problems]
@@ -268,7 +268,7 @@ object SlickModel {
     contest <- contests if s.contest === contest.id
     problem <- problems if s.problem === problem.id && s.contest === problem.contestID
     lang <- compilers if s.language === lang.id
-  } yield LiftedSubmit(s.id, s.arrived, s.arrivedSeconds, s.arrived > contest.freezeTime.getOrElse(contest.endTime),
+  } yield LiftedSubmit(s.id, s.arrived, s.arrivedSeconds, s.arrived > contest.freezeTime,
     s.team, s.contest, s.problem, lang.moduleID, s.tested, s.compiled, s.passed, s.taken, s.testingID)).sortBy(_.arrived)
 
   case class Testing(id: Int, submit: Int, start: DateTime, finish: Option[DateTime], problemId: Option[String])
@@ -318,60 +318,64 @@ object SlickModel {
 
   val compLocations = TableQuery[CompLocations]
 
-  case class EvalDBEntry(id: Option[Long], touched: DateTime, ext: String, source: Array[Byte], input: Array[Byte],
-                         output:Option[Array[Byte]], timex: Option[Long], memory: Option[Long], info: Option[Long],
-                         result: Int, contest: Int, team: Int, processed: Option[Int], arrived: DateTime)
+  case class CustomTests(tag: Tag) extends Table[(Long, Int, Int, Int, Array[Byte], Array[Byte], Array[Byte], DateTime,
+    Int, Option[DateTime], Int, TimeMs, Memory, Long)](tag, "custom_tests") {
+    def id = column[Long]("id", O.AutoInc, O.PrimaryKey)
+    def contest = column[Int]("contest")
+    def team = column[Int]("team_id")
+    def language = column[Int]("language_id")
+    def source = column[Array[Byte]]("source")
+    def input = column[Array[Byte]]("input")
+    def output = column[Array[Byte]]("output")
+    def arrived = column[DateTime]("submit_time_absolute")
+    def arrivedSeconds = column[Int]("submit_time_relative_seconds")
+    def finishTime = column[Option[DateTime]]("finish_time")
+    def resultCode = column[Int]("result_code")
+    def timeMs = column[TimeMs]("time_ms")
+    def memoryBytes = column[Memory]("memory_bytes")
+    def returnCode = column[Long]("return_code")
 
-  case class Eval(tag: Tag) extends Table[EvalDBEntry](tag, "Eval") {
-    def id = column[Long]("ID", O.AutoInc)
-    def touched = column[DateTime]("Touched")
-    def ext = column[String]("Ext")
-    def source = column[Array[Byte]]("Source")
-    def input = column[Array[Byte]]("Input")
-    def output = column[Option[Array[Byte]]]("Output")
-    def timex = column[Option[Long]]("Timex")
-    def memory = column[Option[Long]]("Memory")
-    def info = column[Option[Long]]("Info")
-    def result = column[Int]("Result")
-    def contest = column[Int]("Contest")
-    def team = column[Int]("Team")
-    def processed = column[Option[Int]]("Processed")
-    def arrived = column[DateTime]("Arrived")
-
-    override def * = (id.?, touched, ext, source, input, output, timex, memory, info, result, contest, team, processed, arrived) <> (EvalDBEntry.tupled, EvalDBEntry.unapply)
+    override def * = (id, contest, team, language, source, input, output, arrived, arrivedSeconds,
+      finishTime, resultCode, timeMs, memoryBytes, returnCode)
   }
 
-  val eval = TableQuery[Eval]
+  val customTests = TableQuery[CustomTests]
 
-  case class Results(tag: Tag) extends Table[(Long, Int, Int, DateTime, Long, Long, Long, Array[Byte], Array[Byte], Long)](tag, "results") {
+  case class LiftedCustomTest(id: Rep[Long], contest: Rep[Int], team: Rep[Int], languageName: Rep[String],
+                              source: Rep[Array[Byte]], input: Rep[Array[Byte]], output: Rep[Array[Byte]],
+                              arrived: Rep[DateTime], finishTime: Rep[Option[DateTime]], resultCode: Rep[Int],
+                              timeMs: Rep[TimeMs], memoryBytes: Rep[Memory], returnCode: Rep[Long])
+
+  implicit object CustomEntryShape extends CaseClassShape(LiftedCustomTest.tupled, EvalEntry.tupled)
+
+  val customTestWithLang = (for {
+    c <- customTests
+    l <- compilers if l.id === c.language
+  } yield LiftedCustomTest(c.id, c.contest, c.team, l.name, c.source, c.input, c.output, c.arrived, c.finishTime,
+    c.resultCode, c.timeMs, c.memoryBytes, c.returnCode)).sortBy(_.arrived.desc)
+
+  case class Results(tag: Tag) extends Table[DBResultEntry](tag, "results") {
     def testingID = column[Long]("testing_id")
     def testID = column[Int]("test_id")
     def resultCode = column[Int]("result_code")
     def recordTime = column[DateTime]("record_time")
-    def timeMs = column[Long]("time_ms")
-    def memoryBytes = column[Long]("memory_bytes")
+    def timeMs = column[TimeMs]("time_ms")
+    def memoryBytes = column[Memory]("memory_bytes")
     def returnCode = column[Long]("return_code")
     def testerOutput = column[Array[Byte]]("tester_output")
     def testerError = column[Array[Byte]]("tester_error")
     def testerReturnCode = column[Long]("tester_return_code")
 
     override def * = (testingID, testID, resultCode, recordTime, timeMs, memoryBytes, returnCode, testerOutput,
-      testerError, testerReturnCode)
+      testerError, testerReturnCode) <> (DBResultEntry.tupled, DBResultEntry.unapply)
   }
 
   val results = TableQuery[Results]
 
-  case class LiftedResultEntry(testingID: Rep[Long], testID: Rep[Int], resultCode: Rep[Int], timeMs: Rep[Long],
-                               memoryBytes: Rep[Long], returnCode: Rep[Long], testerReturnCode: Rep[Long],
-                               testerOutput: Rep[Array[Byte]], testerError: Rep[Array[Byte]])
+  case class DBResultEntry(testingID: Long, testID: Int, resultCode: Int, recordTime: DateTime, timeMs: TimeMs, memoryBytes:Memory,
+                           returnCode: Long, testerOutput: Array[Byte], testerError: Array[Byte], testerReturnCode: Long)
 
-  case class DBResultEntry(testingID: Long, testID: Int, resultCode: Int, timeMs: Long, memoryBytes:Long,
-                           returnCode: Long, testerReturnCode: Long, testerOutput: Array[Byte], testerError: Array[Byte])
-
-  implicit object ResultEntryShape extends CaseClassShape(LiftedResultEntry.tupled, DBResultEntry.tupled)
-
-  val results0 = results.sortBy(_.testID).map(x => LiftedResultEntry(x.testingID, x.testID, x.resultCode, x.timeMs, x.memoryBytes,
-    x.returnCode, x.testerReturnCode, x.testerOutput, x.testerError))
+  val results0 = results.sortBy(_.testID)
 
   case class Area(id: Option[Int], name: String, printer: String)
 
@@ -444,7 +448,7 @@ class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: Sta
     } yield (pj.id, pj.filename, pj.contest, pj.team, pj.computer, cl.name, area.id, area.name, area.printer, pj.data, pj.arrived)
     db.run(q.result.headOption).flatMap( pjOpt =>
       pjOpt.map { x =>
-        val pj = ShortenedPrintJob.tupled(x)
+        val pj = ShortenedPrintJob(x._1.toInt, x._2, x._3, x._4, x._5.toString, x._6, x._7, x._8, x._9, x._10, x._11)
         statusActorModel.teamClient.getTeam(pj.contest, pj.team).zip(statusActorModel.getContest(pj.contest)).map {
           case (team, contestOpt) =>
             Some(PrintJob(
@@ -489,33 +493,10 @@ object ClarificationModel extends Logging {
   import com.github.tototoshi.slick.PostgresJodaSupport._
   import utils.MyPostgresProfile.api._
 
-  def getClarifications(db: JdbcBackend#DatabaseDef, contestId: Int)(implicit ec: ExecutionContext) =
-    db.run(SlickModel.getClarificationsForContest(contestId).result)
-
-  def getClarification(db: JdbcBackend#DatabaseDef, id: Int)(implicit ec: ExecutionContext) =
-    db.run(SlickModel.clarifications.filter(_.id === id).result).map(_.headOption)
-
-  def updateClarification(db: JdbcBackend#DatabaseDef, cl: Clarification)(implicit ec: ExecutionContext) = {
-    val f = db.run(SlickModel.clarifications.returning(SlickModel.clarifications.map(_.id)).insertOrUpdate(cl)).map { opt =>
-      opt.map(x => cl.copy(id = Some(x)))
-    }
-    f.onComplete(x => logger.info(s"updated $x"))
-    f
-  }
-
-  def deleteClarification(db: JdbcBackend#DatabaseDef, id: Int)(implicit ec: ExecutionContext) =
-    db.run(SlickModel.clarifications.filter(_.id === id).delete)
-
-  def getClarificationReqs(db: JdbcBackend#DatabaseDef, contestId: Long)(implicit ec: ExecutionContext) =
+  def getClarificationReqs(db: JdbcBackend#DatabaseDef, contestId: Int)(implicit ec: ExecutionContext) =
     db.run(SlickModel.clarificationRequests.filter(_.contest === contestId).result).map(_.sortBy(_.arrived).reverse)
 
-  def getTeamClarificationReqs(db: JdbcBackend#DatabaseDef, contestId: Long, teamId: Long)(implicit ec: ExecutionContext) =
+  def getTeamClarificationReqs(db: JdbcBackend#DatabaseDef, contestId: Int, teamId: Int)(implicit ec: ExecutionContext) =
     db.run(SlickModel.clarificationRequests.filter(x => x.contest === contestId && x.team === teamId).result)
       .map(_.sortBy(_.arrived).reverse)
-
-  def getClarificationReq(db: JdbcBackend#DatabaseDef, id: Long)(implicit ec: ExecutionContext) =
-    db.run(SlickModel.clarificationRequests.filter(_.id === id).result).map(_.headOption)
-
-  def updateClarificationRequest(db: JdbcBackend#DatabaseDef, clr: ClarificationRequest)(implicit ec: ExecutionContext): Future[Option[Int]] =
-    db.run(SlickModel.clarificationRequests.returning(SlickModel.clarificationRequests.map(_.id)).insertOrUpdate(clr))
 }

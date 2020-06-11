@@ -45,12 +45,12 @@ class Application (cc: ControllerComponents,
 
   import scala.language.postfixOps
 
-  private val rabbitMq = rabbitMqModel.rabbitMq
+  private[this] val rabbitMq = rabbitMqModel.rabbitMq
 
-  private def getProblems(contest: Int)(implicit ec: ExecutionContext) =
+  private[this] def getProblems(contest: Int)(implicit ec: ExecutionContext) =
     statusActorModel.problemClient.getProblems(contest)
 
-  private def getProblemsAndCompilers(contestId: Int)(implicit ec: ExecutionContext) =
+  private[this] def getProblemsAndCompilers(contestId: Int)(implicit ec: ExecutionContext) =
     getProblems(contestId).zip(db.run(Contests.getCompilers(contestId).result))
 
   import scala.concurrent.ExecutionContext.Implicits.global
@@ -61,7 +61,7 @@ class Application (cc: ControllerComponents,
   }
 
   private def getSubmits(team: LoggedInTeam) =
-    db.run(Submits.getContestTeamSubmits(team.contest.id, team.team.localId))
+    db.run(Submits.getContestTeamSubmits(team.contest.id, team.team.id))
 
   private implicit val standardTimeout: akka.util.Timeout = {
     import scala.concurrent.duration._
@@ -71,7 +71,9 @@ class Application (cc: ControllerComponents,
   import utils.Db._
 
   def index = silhouette.SecuredAction.async { implicit request =>
-    getSubmits(request.identity).flatMap(Submits.groupAndAnnotate(db, request.identity.contest.schoolMode, _)).map { subs =>
+    getSubmits(request.identity).flatMap(x =>
+      Submits.groupAndAnnotate(db, request.identity.contest.schoolMode, x.map(Submits.upliftSub(_))
+      )).map { subs =>
       Ok(html.index(request.identity, subs))
     }
   }
@@ -97,10 +99,9 @@ class Application (cc: ControllerComponents,
     }
   }
 
-  private def submitInsertQuery(contestId: Int, teamId: Int, problemId: String, srcLang: Int, source: Array[Byte], remoteAddr: String) =
-    sqlu"""insert into NewSubmits (Contest, Team, Problem, SrcLang, Source, Computer, Arrived)
-          values ($contestId, $teamId, $problemId, $srcLang, $source, inet_aton($remoteAddr), CURRENT_TIMESTAMP())
-        """.andThen(sql"""select LAST_INSERT_ID()""".as[Long]).withPinnedSession
+  private[this] def submitInsertQuery(contestId: Int, teamId: Int, problemId: String, srcLang: Int, source: Array[Byte], remoteAddr: String) = {
+    (SlickModel.submits.map(x => (x.contest, x.team, x.problem, x.language, x.source)) returning(SlickModel.submits.map(_.id))) += (contestId, teamId, problemId, srcLang, source)
+  }
 
   import com.spingo.op_rabbit.PlayJsonSupport._
 
@@ -120,11 +121,10 @@ class Application (cc: ControllerComponents,
             } else if (!request.identity.contest.running) {
               Future.successful(Some(parsed.withGlobalError("Contest is not running")))
             } else {
-              db.run(submitInsertQuery(request.identity.contest.id, request.identity.team.localId, submitData.problem,
+              db.run(submitInsertQuery(request.identity.contest.id, request.identity.team.id, submitData.problem,
                 submitData.compiler, solutionBytes, request.remoteAddress)).map { wat =>
                 logger.info(s"Inserted submit id: $wat")
-                rabbitMq ! Message.queue(SubmitMessage(wat.head.toInt), queue = "contester.submitrequests")
-
+                rabbitMq ! Message.queue(SubmitMessage(wat.toInt), queue = "contester.submitrequests")
                 None
               }
             }
@@ -158,7 +158,7 @@ class Application (cc: ControllerComponents,
 
   private case class canSeeFeed(contestId: Int, teamId: Int) extends Authorization[LoggedInTeam, SessionAuthenticator] {
     override def isAuthorized[B](identity: LoggedInTeam, authenticator: SessionAuthenticator)(implicit request: Request[B]): Future[Boolean] =
-      Future.successful(identity.contest.id == contestId && identity.team.teamId == teamId)
+      Future.successful(identity.contest.id == contestId && identity.team.id == teamId)
   }
 
   def feed(contestId: Int, teamId: Int) = silhouette.SecuredAction(canSeeFeed(contestId, teamId)).async { implicit request =>
@@ -172,17 +172,5 @@ class Application (cc: ControllerComponents,
       }
       case _ => BadRequest("foo")
     }
-  }
-
-  // TODO: dafuq is this
-  def getCompilerOutput(testingId: Int) = silhouette.SecuredAction.async { implicit request =>
-    db.run(
-      sql"""select TesterOutput, TesterError
-           from Results where UID = $testingId and Test = 0 order by Test""".as[(String, String)].headOption)
-      .map { opt =>
-        opt.map { res =>
-          Ok(Json.obj("output" -> res._1, "error" -> res._2))
-        }.getOrElse(BadRequest(Json.obj()))
-      }
   }
 }

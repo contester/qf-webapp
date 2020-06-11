@@ -40,54 +40,39 @@ object ServerSideEvalID {
 class ServerSideEval (cc: ControllerComponents,
                       silhouette: Silhouette[TeamsEnv],
                       dbConfig: DatabaseConfig[JdbcProfile], rabbitMqModel: RabbitMqModel
-                             ) extends AbstractController(cc) with I18nSupport {
-  private val db = dbConfig.db
+                      ) extends AbstractController(cc) with I18nSupport {
+  private[this] val db = dbConfig.db
   import utils.Db._
   import dbConfig.profile.api._
   import controllers.serversideeval.ServerSideData
 
-  val rabbitMq = rabbitMqModel.rabbitMq
+  private[this] val rabbitMq = rabbitMqModel.rabbitMq
   import com.spingo.op_rabbit.PlayJsonSupport._
 
-
-  private val serverSideForm = Form {
+  private[this] val serverSideForm = Form {
     mapping("compiler" -> number, "inlinesolution" -> text, "inlinedata" -> text)(ServerSideData.apply)(ServerSideData.unapply)
   }
 
-  private def evalQuery(contest: Int, team: Int) =
-    sql"""SELECT ID, Touched, Ext, Source, Input, Output, Timex, Memory, Info, Result, Contest, Team, Processed, Arrived
-    FROM Eval WHERE Team=$team
-    AND Contest=$contest ORDER BY Arrived DESC""".as[EvalEntry]
-
-  private def getEvals(contest: Int, team: Int) =
-    db.run(evalQuery(contest, team))
-
-  private def getEvalById(id: Int)(implicit ec: ExecutionContext) =
-    db.run(sql"""SELECT ID, Touched, Ext, Source, Input, Output, Timex, Memory, Info, Result, Contest, Team, Processed, Arrived
-    FROM Eval WHERE ID = $id ORDER BY Arrived DESC""".as[EvalEntry]).map(_.headOption)
-
-  private def insertEval(contest:Int, team:Int, ext:String, solution: Array[Byte], data: Array[Byte]) =
-    db.run(
-      (sqlu"""insert into Eval (Contest, Team, Ext, Source, Input, Arrived) values
-                    ($contest, $team, $ext, $solution,
-                $data, CURRENT_TIMESTAMP())
-                  """.andThen(sql"select last_insert_id()".as[Int].head)).withPinnedSession
+  private[this] def insertEval(contest:Int, team:Int, lang:Int, solution: Array[Byte], data: Array[Byte]) = {
+    val q = (SlickModel.customTests.map(x => (x.contest, x.team, x.language, x.source, x.input)) returning SlickModel.customTests.map(_.id)) += (
+      contest, team, lang, solution, data
     )
+    db.run(q)
+  }
 
-  private def getEvalForm(loggedInTeam: LoggedInTeam, compilers:Seq[Compiler],
+  private[this] def getEvalForm(loggedInTeam: LoggedInTeam, compilers:Seq[Compiler],
                           form: Form[ServerSideData])(implicit request: RequestHeader, ec: ExecutionContext) =
-    getEvals(loggedInTeam.contest.id, loggedInTeam.team.localId).map { evals =>
+    db.run(SlickModel.customTestWithLang.filter(x => (x.contest === loggedInTeam.contest.id && x.team === loggedInTeam.team.id)).result).map { evals =>
       html.sendwithinput(loggedInTeam, form, Compilers.forForm(compilers), evals)
     }
 
-  case class canSeeEval(id: Int)(implicit ec: ExecutionContext) extends Authorization[LoggedInTeam, SessionAuthenticator] {
-    override def isAuthorized[B](identity: LoggedInTeam, authenticator: SessionAuthenticator)(implicit request: Request[B]): Future[Boolean] =
-      getEvalById(id).map { cids =>
-        cids.exists(cid => identity.matching(ContestTeamIds(cid.contest, cid.team)))
-      }
+  private[this] case class canSeeEval(id: Int)(implicit ec: ExecutionContext) extends Authorization[LoggedInTeam, SessionAuthenticator] {
+    override def isAuthorized[B](identity: LoggedInTeam, authenticator: SessionAuthenticator)(implicit request: Request[B]): Future[Boolean] = {
+      db.run(SlickModel.customTests.filter(x => (x.id === id.toLong && x.contest === identity.contest.id && x.team === identity.team.id)).exists.result)
+    }
   }
 
-  implicit val ec = defaultExecutionContext
+  private[this] implicit val ec = defaultExecutionContext
 
   def index = silhouette.SecuredAction.async { implicit request =>
     db.run(request.identity.contest.getCompilers.result).flatMap { compilers =>
@@ -96,7 +81,7 @@ class ServerSideEval (cc: ControllerComponents,
   }
 
   def details(id: Int) = silhouette.SecuredAction(canSeeEval(id)).async { implicit request =>
-    getEvalById(id).map { opt =>
+    db.run(SlickModel.customTestWithLang.filter(_.id === id.toLong).result.headOption).map { opt =>
       opt.map { ev =>
         Ok(html.evaldetails(request.identity, ev))
       }.getOrElse(Redirect(routes.ServerSideEval.index))
@@ -110,11 +95,10 @@ class ServerSideEval (cc: ControllerComponents,
         parsed.fold(
           formWithErrors => getEvalForm(request.identity, compilers, formWithErrors).map(BadRequest(_)),
           submitData => {
-            val cext = compilers.map(x => x.id -> x).toMap.apply(submitData.compiler).ext
             val solutionBytes = FormUtil.inlineOrFile(submitData.inlinesolution, request.body.file("file")).getOrElse(FormUtil.emptyBytes)
             val dataBytes = FormUtil.inlineOrFile(submitData.inlinedata, request.body.file("inputfile")).getOrElse(FormUtil.emptyBytes)
-            insertEval(request.identity.contest.id, request.identity.team.localId, cext, solutionBytes, dataBytes).map {  wid =>
-              rabbitMq ! Message.queue(ServerSideEvalID(wid), queue = "contester.evalrequests")
+            insertEval(request.identity.contest.id, request.identity.team.id, submitData.compiler, solutionBytes, dataBytes).map {  wid =>
+              rabbitMq ! Message.queue(ServerSideEvalID(wid.toInt), queue = "contester.evalrequests")
               Redirect(routes.ServerSideEval.index)
             }
           }

@@ -113,7 +113,7 @@ object AdminPermissions {
       Future.successful(identity.canModify(contestId))
   }
 
-  case class withSpectate(contestId: Long) extends Authorization[Admin, SessionAuthenticator] {
+  case class withSpectate(contestId: Int) extends Authorization[Admin, SessionAuthenticator] {
     override def isAuthorized[B](identity: Admin, authenticator: SessionAuthenticator)(implicit request: Request[B]): Future[Boolean] =
       Future.successful(identity.canSpectate(contestId))
   }

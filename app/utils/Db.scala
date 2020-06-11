@@ -19,12 +19,12 @@ object Db {
   }
 
 
-  import slick.jdbc.PostgresProfile.api._
-
-  implicit val jsValueColumnType = MappedColumnType.base[JsValue, String](
-    x => Json.stringify(x),
-    x => Json.parse(x)
-  )
+//  import slick.jdbc.PostgresProfile.api._
+//
+//  implicit val jsValueColumnType = MappedColumnType.base[JsValue, String](
+//    x => Json.stringify(x),
+//    x => Json.parse(x)
+//  )
 }
 
 object Ask {

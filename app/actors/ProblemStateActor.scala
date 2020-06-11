@@ -1,7 +1,7 @@
 package org.stingray.qf.actors
 
 import akka.actor.Props
-import models.Problem
+import models.{Problem, SlickModel}
 import slick.jdbc.JdbcBackend
 
 import scala.concurrent.Future
@@ -19,21 +19,19 @@ class ProblemStateActor(db: JdbcBackend#DatabaseDef) extends AnyStateActor[Probl
   import ProblemStateActor._
   import context.dispatcher
 
-  private var problems: ProblemState = Map.empty
+  private[this] var problems: ProblemState = Map.empty
 
-  import slick.jdbc.MySQLProfile.api._
+  override def loadStart(): Future[ProblemState] = {
+    import utils.MyPostgresProfile.api._
 
-  private val dbioCombined =
-    sql"""select Contest, ID, Tests, Name, Rating from Problems""".as[(Int, String, Int, String, Int)]
-
-  override def loadStart(): Future[ProblemState] =
-    db.run(dbioCombined).map { problemRows =>
-      problemRows.groupBy(_._1).mapValues { rows =>
+    db.run(SlickModel.problems.result).map { problemRows =>
+      problemRows.groupBy(_.contest).mapValues { rows =>
         rows.map { row =>
-          Problem(row._2.toUpperCase(), row._4, row._3, row._5)
+          row.copy(id = row.id.toUpperCase)
         }.sortBy(_.id)
       }
     }
+  }
 
   override def setState(v: ProblemState): Unit = {
     problems = v

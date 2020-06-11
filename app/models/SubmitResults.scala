@@ -7,6 +7,7 @@ import play.api.i18n.Messages
 import play.api.libs.EventSource.{EventDataExtractor, EventNameExtractor}
 import play.api.libs.json.{JsValue, Json, Writes}
 import slick.jdbc.{GetResult, JdbcBackend}
+import slick.lifted.MappedTo
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -17,8 +18,10 @@ trait SubmitResult {
   def message: String
 }
 
-case class TimeMs(underlying: Int) extends AnyVal {
+case class TimeMs(underlying: Long) extends AnyVal with MappedTo[Long] {
   override def toString: String = s"${underlying}"
+
+  override def value: Long = underlying
 }
 
 object TimeMs {
@@ -103,9 +106,9 @@ object SubmitResult extends Logging {
       Future.successful(SubmitPartialResult(finished.passed, finished.taken))
     else {
       val xtid = finished.testingId.toLong
-      db.run(SlickModel.results.filter(_.uid === xtid).sortBy(_.test.desc).take(1).map(x => (x.result, x.test)).result.headOption).map { lastResultOption =>
+      db.run(SlickModel.results.filter(_.testingID === xtid).sortBy(_.testID.desc).take(1).result.headOption).map { lastResultOption =>
         lastResultOption.map { lastResult =>
-          SubmitACMPartialResult(message.getOrElse(lastResult._1, "wtf"), lastResult._2)
+          SubmitACMPartialResult(message.getOrElse(lastResult.resultCode, "wtf"), Some(lastResult.testID))
         }.getOrElse(SubmitACMPartialResult("unknown", None))
       }
     }

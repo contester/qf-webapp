@@ -276,7 +276,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
   def showQandA(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
-    ClarificationModel.getClarifications(db, contestId)
+    db.run(SlickModel.getClarificationsForContest(contestId).result)
       .zip(ClarificationModel.getClarificationReqs(db, contestId))
       .zip(getSelectedContests(contestId, request.identity))
         .zip(getAllWaiterTasks(request.identity))
@@ -296,7 +296,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
   // TODO: check permissions, do just toggle instead of full update
-  def toggleClarification(clrId: Int) = silhouette.SecuredAction.async { implicit request =>
+  def toggleClarification(clrId: Long) = silhouette.SecuredAction.async { implicit request =>
     db.run(SlickModel.clarifications.filter(_.id === clrId).result).flatMap { found =>
       found.headOption match {
         case Some(clr) =>
@@ -341,7 +341,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     )(PostClarification.apply)(PostClarification.unapply)
   }
 
-  private def selectableProblems(problems: Seq[Problem]) = Seq[(String, String)](("", "Выберите задачу")) ++ Problems.toSelect(problems)
+  private[this] def selectableProblems(problems: Seq[Problem]) = Seq[(String, String)](("", "Выберите задачу")) ++ Problems.toSelect(problems)
 
   def postNewClarification(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request =>
     getSelectedContests(contestId, request.identity).flatMap { contest =>
@@ -352,8 +352,8 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
   // TODO: check permissions
-  def postUpdateClarification(clarificationId: Int) = silhouette.SecuredAction.async { implicit request =>
-    ClarificationModel.getClarification(db, clarificationId).flatMap { clOpt =>
+  def postUpdateClarification(clarificationId: Long) = silhouette.SecuredAction.async { implicit request =>
+    db.run(SlickModel.clarifications.filter(_.id === clarificationId).result.headOption).flatMap { clOpt =>
       clOpt.map { cl =>
         val clObj = PostClarification(
           cl.problem, cl.text, cl.hidden
@@ -368,8 +368,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
   // TODO: check permissions
-  def postClarification(contestId: Int, clarificationId: Option[Int]) = silhouette.SecuredAction.async { implicit request =>
-
+  def postClarification(contestId: Int, clarificationId: Option[Long]) = silhouette.SecuredAction.async { implicit request =>
     postClarificationForm.bindFromRequest.fold(
       formWithErrors => getSelectedContests(1, request.identity).flatMap { contest =>
         statusActorModel.problemClient.getProblems(contest.contest.id).map { problems =>
@@ -397,9 +396,12 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     "Pending" -> "Pending"
   )
 
+  private[this] def getClarificationReq(id: Long)(implicit ec: ExecutionContext) =
+    db.run(SlickModel.clarificationRequests.filter(_.id === id).result.headOption)
+
   // TODO: check permissions
-  def postAnswerForm(clrId: Int) = silhouette.SecuredAction.async { implicit request =>
-    ClarificationModel.getClarificationReq(db, clrId).flatMap { optClr =>
+  def postAnswerForm(clrId: Long) = silhouette.SecuredAction.async { implicit request =>
+    getClarificationReq(clrId).flatMap { optClr =>
       optClr.map { clr =>
         getSelectedContests(clr.contest, request.identity).map { contest =>
           Ok(html.admin.postanswer(
@@ -410,15 +412,15 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
   // TODO: check permissions
-  def postAnswer(clrId: Int) = silhouette.SecuredAction(parse.multipartFormData).async { implicit request =>
-    ClarificationModel.getClarificationReq(db, clrId).flatMap { optClr =>
+  def postAnswer(clrId: Long) = silhouette.SecuredAction(parse.multipartFormData).async { implicit request =>
+    getClarificationReq(clrId).flatMap { optClr =>
       optClr.map { clr =>
         clarificationResponseForm.bindFromRequest.fold(
           formWithErrors => getSelectedContests(clr.contest, request.identity).map { contest =>
             BadRequest(html.admin.postanswer(formWithErrors, clr, answerList.toSeq, contest))
           },
           data => {
-            db.run(SlickModel.clarificationRequests.filter(_.id === clrId.toLong).map(x => (x.answer, x.answered)).update((data.answer,true))).map { _ =>
+            db.run(SlickModel.clarificationRequests.filter(_.id === clrId).map(x => (x.answer, x.answered)).update((data.answer,true))).map { _ =>
               statusActorModel.statusActor ! ClarificationAnswered(clr.contest, clrId, clr.team, clr.problem, data.answer)
               Redirect(routes.AdminApplication.showQandA(clr.contest))
             }
@@ -506,7 +508,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
         t <- SlickModel.teams
         p <- SlickModel.participants if (t.id === p.team && p.contest === contestID)
         s <- SlickModel.schools if (s.id === t.school)
-        a <- SlickModel.assignments if (a.localId === p.localId && a.contest === p.contest)
+        a <- SlickModel.assignments if (a.team === p.team && a.contest === p.contest)
       } yield (t, p, s, a)).result).map { results =>
         val cvt = results.map {
           case (t, p, s, a) =>
@@ -525,7 +527,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
   private def displayEditTeam(form: Option[Form[EditTeam]], team: SlickModel.Team, school: School, contest: SelectedContest)(implicit request: RequestHeader, ec: ExecutionContext) = {
-    Ok(html.admin.editteam(form.getOrElse(editTeamForm.fill(EditTeam(school.name, team.name, team.num))), TeamDescription(team.id, school), contest))
+    Ok(html.admin.editteam(form.getOrElse(editTeamForm.fill(EditTeam(school.name, team.name, if (team.num!=0) Some(team.num) else None))), TeamDescription(team.id, school), contest))
   }
 
   def editTeam(contestID: Int, teamID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
@@ -579,7 +581,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
   def showContestList(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
     getSelectedContests(contestID, request.identity).flatMap { contest =>
-      db.run(SlickModel.contests0.sortBy(_.id).result).map { results =>
+      db.run(SlickModel.contests.sortBy(_.id).result).map { results =>
         val cvt = results.filter(x => request.identity.canSpectate(x.id))
         Ok(html.admin.contestlist(cvt, contest, request.identity))
       }
@@ -602,7 +604,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
   def editContest(contestID: Int, ceditID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(ceditID)).async { implicit request =>
     getSelectedContests(contestID, request.identity).zip(
-      db.run(SlickModel.contests0.filter(_.id === ceditID).take(1).result.headOption)
+      db.run(SlickModel.contests.filter(_.id === ceditID).take(1).result.headOption)
     ).map {
       case (sc, c) =>
         c match {

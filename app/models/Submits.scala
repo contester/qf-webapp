@@ -6,6 +6,7 @@ import models.SlickModel.UpliftedSubmit
 import org.joda.time.DateTime
 import play.api.Logging
 import slick.jdbc.{GetResult, JdbcBackend}
+import slick.lifted.MappedTo
 import spire.math.Rational
 import spire.math.extras.{FixedPoint, FixedScale}
 
@@ -135,8 +136,10 @@ case class ACMCell(attempt: Int, arrivedSeconds: Int, fullSolution: Boolean) ext
     else s"-$attempt"
 }
 
-case class Memory(underlying: Long) extends AnyVal {
+case class Memory(underlying: Long) extends AnyVal with MappedTo[Long] {
   override def toString: String = s"${underlying / 1024}"
+
+  override def value: Long = underlying
 }
 
 object Memory {
@@ -280,7 +283,7 @@ object Submits {
 
   def loadSubmitDetails(db: JdbcBackend#DatabaseDef, testingId: Int)(implicit ec: ExecutionContext) =
     db.run(SlickModel.results0.filter(_.testingID === testingId.toLong).result).map(_.map(x =>
-      ResultEntry(x.testingID, x.testID, x.resultCode, TimeMs(x.timeMs.toInt), Memory(x.memoryBytes),
+      ResultEntry(x.testingID, x.testID, x.resultCode, x.timeMs, x.memoryBytes,
         x.returnCode, x.testerReturnCode, x.testerOutput, x.testerError)
     ))
 

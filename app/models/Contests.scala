@@ -10,9 +10,12 @@ import utils.Selectable
 
 import scala.concurrent.Future
 
-case class Contest(id: Int, name: String, startTime: DateTime, freezeTime: Option[DateTime],
-                   endTime: DateTime, exposeTime: DateTime, polygonID: String, language: String) {
-  def frozen = freezeTime.map(x => (DateTime.now >= x) && (DateTime.now < exposeTime)).getOrElse(false)
+case class Contest(id: Int, name: String, startTime: DateTime, freezeTime: DateTime,
+                   endTime: DateTime, exposeTime: DateTime, polygonID: String, language: String, schoolMode: Boolean) {
+  def frozen = {
+    val now = DateTime.now
+    now >= freezeTime && now < exposeTime
+  }
   def finished = DateTime.now >= endTime
   def started = DateTime.now >= startTime
   def running = started && !finished
@@ -53,7 +56,7 @@ object Contest {
         "endTime" -> c.endTime,
         "endTimeDelta" -> ntm(c.endTime),
         "freezeTime" -> c.freezeTime,
-        "freezeTimeDelta" -> ntm(c.freezeTime.getOrElse(c.endTime)),
+        "freezeTimeDelta" -> ntm(c.freezeTime),
         "exposeTime" -> c.exposeTime,
         "exposeTimeDelta" -> ntm(c.exposeTime)
       )
@@ -68,7 +71,7 @@ object Contest {
 
 case class SelectedContest(contest: Contest, contests: Seq[(Int, String)])
 
-case class Problem(id: String, name: String, tests: Int, rating: Int)
+case class Problem(contest: Int, id: String, name: String, tests: Int)
 
 class ProblemClient(problemStateActor: ActorRef) {
   import akka.pattern.ask
@@ -104,7 +107,8 @@ object Contests {
     SlickModel.contests.filter(_.id === contestId)
 
   def getCompilers(contest: Int) =
-    SlickModel.compilers.filter(_.contest === contest).sortBy(_.id)
+    SlickModel.compilers.sortBy(_.id)
+    //SlickModel.compilers.filter(_.contest === contest).sortBy(_.id)
 }
 
 object Problems {

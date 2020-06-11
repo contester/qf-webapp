@@ -37,12 +37,12 @@ object StatusActor {
   case class GetSingleContest(id: Int)
   case class GetSingleContestResult(c: Option[Contest])
 
-  case class ClarificationRequested(contest: Int, clrId: Int)
-  case class ClarificationAnswered(contest: Int, clrId: Int, teamId: Int, problem: String, text: String)
-  case class ClarificationRequestsStoredState(values: Map[Int, Seq[Int]])
+  case class ClarificationRequested(contest: Int, clrId: Long)
+  case class ClarificationAnswered(contest: Int, clrId: Long, teamId: Int, problem: String, text: String)
+  case class ClarificationRequestsStoredState(values: Map[Int, Seq[Long]])
 
   case class ClarificationsInitialState(clr: Seq[Clarification], seen: Seq[MaxSeen])
-  case class DeleteClarification(id: Int)
+  case class DeleteClarification(id: Long)
   case class GetVisibleClarifications(contestId: Int)
 
   case class ClarificationState(contest: Int, team: Int, unseen: Boolean)
@@ -54,7 +54,7 @@ object StatusActor {
     }
   }
 
-  case class ClarificationPosted(id: Int, contest: Int, updated: Boolean, problem: Option[String], text: String)
+  case class ClarificationPosted(id: Long, contest: Int, updated: Boolean, problem: Option[String], text: String)
   object ClarificationPosted {
     implicit val format = Json.format[ClarificationPosted]
     implicit val eventNameExtractor = EventNameExtractor[ClarificationPosted](_ => Some("clarificationPosted"))
@@ -68,7 +68,7 @@ object StatusActor {
   private val userPing = Event("", None, Some("ping"))
 
   case class StatusActorInitialState(msgs: Iterable[Message2],
-                                     storedClarificationRequests: Map[Long, Seq[Long]],
+                                     storedClarificationRequests: Map[Int, Seq[Long]],
                                      clarifications: ClarificationsInitialState)
 }
 
@@ -109,8 +109,8 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
   private val (clr2Out, clr2Chan) = Concur.broadcast[ClarificationRequestState]()
   private val (clrPostOut, clrPostChannel) = Concur.broadcast[ClarificationPosted]()
 
-  private val clarifications = {
-    mutable.Map[Int, mutable.Map[Int, Clarification]]()
+  private[this] val clarifications = {
+    mutable.Map[Int, mutable.Map[Long, Clarification]]()
   }
   private val clarificationsSeen = {
     import com.github.nscala_time.time.Imports._
@@ -158,10 +158,10 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
 
   private def insertClarification(cl: Clarification) =
     for (id <- cl.id) {
-      clarifications.getOrElseUpdate(cl.contest, mutable.Map[Int, Clarification]()).put(id, cl)
+      clarifications.getOrElseUpdate(cl.contest, mutable.Map[Long, Clarification]()).put(id, cl)
     }
 
-  private def deleteClarification(id: Int) =
+  private def deleteClarification(id: Long) =
     clarifications.values.flatMap { m =>
       m.remove(id)
     }.headOption
@@ -218,7 +218,8 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
     case cl: Clarification => {
       val orig = cl.id.flatMap(id => clarifications.get(cl.contest).flatMap(_.get(id)))
       val saved = sender()
-      ClarificationModel.updateClarification(db, cl).map { opt =>
+      db.run((SlickModel.clarifications.returning(SlickModel.clarifications.map(_.id)) into((c: Clarification,id: Long) =>
+        c.copy(id=Some(id)))).insertOrUpdate(cl)).map { opt =>
         val prevVisible = orig.exists(!_.hidden)
         val next = opt.getOrElse(cl)
         val ifp = if(cl.problem.isEmpty) None else Some(cl.problem)
@@ -231,7 +232,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
 
     case DeleteClarification(clarificationId) => {
       val saved = sender()
-      ClarificationModel.deleteClarification(db, clarificationId).map { _ =>
+      db.run(SlickModel.clarifications.filter(_.id === clarificationId).delete).map { _ =>
         deleteClarification(clarificationId)
       }.onComplete(Ask.respond(saved, _))
     }

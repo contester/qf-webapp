@@ -38,7 +38,7 @@ class QandA (cc: ControllerComponents,
   private def clrForm(loggedInTeam: LoggedInTeam, form: Form[ClarificationReqData])(implicit request: RequestHeader, ec: ExecutionContext) =
     statusActorModel.problemClient.getProblems(loggedInTeam.contest.id).flatMap { probs =>
       Ask.apply[Seq[Clarification]](statusActorModel.statusActor, StatusActor.GetVisibleClarifications(loggedInTeam.contest.id)).flatMap { clars =>
-        ClarificationModel.getTeamClarificationReqs(db, loggedInTeam.contest.id, loggedInTeam.team.localId).map { clReq =>
+        ClarificationModel.getTeamClarificationReqs(db, loggedInTeam.contest.id, loggedInTeam.team.id).map { clReq =>
           html.clarifications(loggedInTeam, clars, clReq, Seq[(String, String)](("", "Select problem")) ++ Problems.toSelect(probs), form)
         }
       }
@@ -48,7 +48,7 @@ class QandA (cc: ControllerComponents,
 
   def index = silhouette.SecuredAction.async { implicit request =>
     clrForm(request.identity, clarificationReqForm).map { v =>
-      statusActorModel.statusActor ! StatusActor.AckAllClarifications(request.identity.contest.id, request.identity.team.localId)
+      statusActorModel.statusActor ! StatusActor.AckAllClarifications(request.identity.contest.id, request.identity.team.id)
       Ok(v)
     }
   }
@@ -57,15 +57,11 @@ class QandA (cc: ControllerComponents,
     clarificationReqForm.bindFromRequest.fold(
       formWithErrors => clrForm(request.identity, formWithErrors).map(BadRequest(_)),
       clrData => {
-        db.run(
-          (sqlu"""insert into ClarificationRequests (Contest, Team, Problem, Request, Arrived) values
-                (${request.identity.contest.id}, ${request.identity.team.localId}, ${clrData.problem}, ${clrData.text},
-                CURRENT_TIMESTAMP())
-              """.andThen(sql"select last_insert_id()".as[Int])).withPinnedSession
-        ).map { clrIds =>
-          for (clrId <- clrIds) {
-            statusActorModel.statusActor ! ClarificationRequested(request.identity.contest.id, clrId)
-          }
+        val q = (SlickModel.clarificationRequests.map(x => (x.contest, x.team, x.problem, x.request)) returning SlickModel.clarificationRequests.map(_.id)) += (
+          request.identity.contest.id, request.identity.team.id, clrData.problem, clrData.text)
+
+        db.run(q).map { clrId =>
+          statusActorModel.statusActor ! ClarificationRequested(request.identity.contest.id, clrId.toInt)
           Redirect(routes.QandA.index)
         }
       }

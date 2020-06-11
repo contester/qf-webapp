@@ -5,8 +5,6 @@ POST /clarifications controllers.QandA.post
 
 GET /extrainfo/:num controllers.Application.showExtraInfo(num: Int)
 
-GET /getCompilerOutput/:uid controllers.Application.getCompilerOutput(uid: Int)
-
 GET /sendwithinput controllers.ServerSideEval.index
 POST /sendwithinput controllers.ServerSideEval.post
 GET /evaldetails/:id controllers.ServerSideEval.details(id: Int)
@@ -44,19 +42,19 @@ POST /admin/rejudgeSubmit/:submitId controllers.AdminApplication.rejudgeSubmit(s
 + nocsrf
 POST /admin/reprintSubmit/:submitId controllers.AdminApplication.reprintSubmit(submitId: Int)
 
-GET /admin/postNewClarification/:contestId controllers.AdminApplication.postNewClarification(contestId: Int)
-GET /admin/updateClarification/:clrId controllers.AdminApplication.postUpdateClarification(clrId: Int)
-POST /admin/postClarification/:contestId controllers.AdminApplication.postClarification(contestId: Int, clarificationId: Option[Int])
+GET /admin/postNewClarification/:contestId controllers.AdminApplication.postNewClarification(contestId: Long)
+GET /admin/updateClarification/:clrId controllers.AdminApplication.postUpdateClarification(clrId: Long)
+POST /admin/postClarification/:contestId controllers.AdminApplication.postClarification(contestId: Int, clarificationId: Option[Long])
 
 + nocsrf
 POST /admin/toggleClarification/:clrId controllers.AdminApplication.toggleClarification(clrId: Int)
 
 + nocsrf
-POST /admin/deleteClarification/:contestId/:clrId controllers.AdminApplication.deleteClarification(contestId: Int, clrId: Int)
+POST /admin/deleteClarification/:contestId/:clrId controllers.AdminApplication.deleteClarification(contestId: Int, clrId: Long)
 GET /admin/qanda/:contestId controllers.AdminApplication.showQandA(contestId: Int)
 GET /admin/tasks/:contestId controllers.AdminApplication.tasks(contestId: Int)
-POST /admin/postAnswer/:clrId controllers.AdminApplication.postAnswer(clrId: Int)
-GET /admin/postAnswer/:clrId controllers.AdminApplication.postAnswerForm(clrId: Int)
+POST /admin/postAnswer/:clrId controllers.AdminApplication.postAnswer(clrId: Long)
+GET /admin/postAnswer/:clrId controllers.AdminApplication.postAnswerForm(clrId: Long)
 
 GET /admin/showsubmit/:contestId/:id controllers.AdminApplication.showSubmit(contestId: Int, id: Int)
 GET /admin/downloadSubmit/:contestId/:id controllers.AdminApplication.downloadArchiveSubmit(contestId: Int, id: Int)
