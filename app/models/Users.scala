@@ -23,7 +23,7 @@ trait Team {
     s" #$teamNum"
   } else ""
 
-  private[this] def schoolNameWithNum: String = s"$schoolName$teamSuffix"
+  def schoolNameWithNum: String = s"$schoolName$teamSuffix"
   def teamFullName: String = {
     schoolNameWithNum +
       (if (!teamName.isEmpty) s": $teamName"

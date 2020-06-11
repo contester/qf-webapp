@@ -29,7 +29,7 @@
 <script type="text/javascript">
     $(function() {
         askForPermission();
-        listenOnEvents('@routes.Application.feed(loggedIn.contest.id, loggedIn.team.localId)',
+        listenOnEvents('@routes.Application.feed(loggedIn.contest.id, loggedIn.team.id)',
             '@routes.Assets.versioned("images/")',
             '@routes.Application.ackMessage');
     });

@@ -90,24 +90,24 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
   }
 
 
-  private val tick = {
+  private[this] val tick = {
     import scala.concurrent.duration._
-    context.system.scheduler.schedule(0 seconds, 10 seconds, self, Tick)
+    context.system.scheduler.scheduleWithFixedDelay(0 seconds, 10 seconds, self, Tick)
   }
 
-  private val tickDuration = {
+  private[this] val tickDuration = {
     import scala.concurrent.duration._
     30 seconds
   }
 
-  private val (contestOut2, contestChannel2) = Concur.broadcast[Contest]()
-  private val contestStates = mutable.Map[Int, Contest]()
-  private val (msg2Out, msg2Channel) = Concur.broadcast[Message2]()
-  private val unacked = mutable.Map[(Int, Int), mutable.Map[Int, Message2]]()
-  private val (sub2Out, sub2Chan) = Concur.broadcast[AnnoSubmit]()
+  private[this] val (contestOut2, contestChannel2) = Concur.broadcast[Contest]()
+  private[this] val contestStates = mutable.Map[Int, Contest]()
+  private[this] val (msg2Out, msg2Channel) = Concur.broadcast[Message2]()
+  private[this] val unacked = mutable.Map[(Int, Int), mutable.Map[Int, Message2]]()
+  private[this] val (sub2Out, sub2Chan) = Concur.broadcast[AnnoSubmit]()
   private[this] val pendingClarificationRequests = mutable.Map[Long, mutable.Set[Long]]().withDefaultValue(mutable.Set[Long]())
-  private val (clr2Out, clr2Chan) = Concur.broadcast[ClarificationRequestState]()
-  private val (clrPostOut, clrPostChannel) = Concur.broadcast[ClarificationPosted]()
+  private[this] val (clr2Out, clr2Chan) = Concur.broadcast[ClarificationRequestState]()
+  private[this] val (clrPostOut, clrPostChannel) = Concur.broadcast[ClarificationPosted]()
 
   private[this] val clarifications = {
     mutable.Map[Int, mutable.Map[Long, Clarification]]()

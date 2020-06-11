@@ -70,7 +70,7 @@
         <tbody>
         @for(s <- evals) {
         <tr><th scope="row"><a href="@controllers.routes.ServerSideEval.details(s.id)">@s.id</a></th><td>@LocalDateFormat(s.arrived)</td><td>@s.resultStr</td>
-        <td>@s.timex</td><td>@s.memory</td><td>@s.info</td></tr>
+        <td>@s.timex</td><td>@s.memory</td><td>@s.returnCode</td></tr>
         }
 
         </tbody>

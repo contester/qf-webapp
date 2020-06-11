@@ -7,7 +7,7 @@ GET /extrainfo/:num controllers.Application.showExtraInfo(num: Int)
 
 GET /sendwithinput controllers.ServerSideEval.index
 POST /sendwithinput controllers.ServerSideEval.post
-GET /evaldetails/:id controllers.ServerSideEval.details(id: Int)
+GET /evaldetails/:id controllers.ServerSideEval.details(id: Long)
 
 GET /print controllers.Printing.index
 POST /print controllers.Printing.post
@@ -42,12 +42,12 @@ POST /admin/rejudgeSubmit/:submitId controllers.AdminApplication.rejudgeSubmit(s
 + nocsrf
 POST /admin/reprintSubmit/:submitId controllers.AdminApplication.reprintSubmit(submitId: Int)
 
-GET /admin/postNewClarification/:contestId controllers.AdminApplication.postNewClarification(contestId: Long)
+GET /admin/postNewClarification/:contestId controllers.AdminApplication.postNewClarification(contestId: Int)
 GET /admin/updateClarification/:clrId controllers.AdminApplication.postUpdateClarification(clrId: Long)
 POST /admin/postClarification/:contestId controllers.AdminApplication.postClarification(contestId: Int, clarificationId: Option[Long])
 
 + nocsrf
-POST /admin/toggleClarification/:clrId controllers.AdminApplication.toggleClarification(clrId: Int)
+POST /admin/toggleClarification/:clrId controllers.AdminApplication.toggleClarification(clrId: Long)
 
 + nocsrf
 POST /admin/deleteClarification/:contestId/:clrId controllers.AdminApplication.deleteClarification(contestId: Int, clrId: Long)

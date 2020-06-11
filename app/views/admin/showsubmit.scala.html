@@ -52,7 +52,7 @@
         @if(s.result != 1) {
             @panel("Компиляция", "info") {
                 @details(s, "компилятора")
-                @stdpanel("Вывод", s.testerOutput)
+                @stdpanel("Вывод", s.testerOutput.toString)
             }
         }
     } else {
@@ -63,7 +63,7 @@
                 @fscontent(messages("label.output"), out.output)
                 @fscontent("Ответ жюри", out.answer)
             }
-            @stdpanel("Комментарий чекера", s.testerOutput)
+            @stdpanel("Комментарий чекера", s.testerOutput.toString)
         }
     }
 }

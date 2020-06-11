@@ -66,9 +66,9 @@ class ServerSideEval (cc: ControllerComponents,
       html.sendwithinput(loggedInTeam, form, Compilers.forForm(compilers), evals)
     }
 
-  private[this] case class canSeeEval(id: Int)(implicit ec: ExecutionContext) extends Authorization[LoggedInTeam, SessionAuthenticator] {
+  private[this] case class canSeeEval(id: Long)(implicit ec: ExecutionContext) extends Authorization[LoggedInTeam, SessionAuthenticator] {
     override def isAuthorized[B](identity: LoggedInTeam, authenticator: SessionAuthenticator)(implicit request: Request[B]): Future[Boolean] = {
-      db.run(SlickModel.customTests.filter(x => (x.id === id.toLong && x.contest === identity.contest.id && x.team === identity.team.id)).exists.result)
+      db.run(SlickModel.customTests.filter(x => (x.id === id && x.contest === identity.contest.id && x.team === identity.team.id)).exists.result)
     }
   }
 
@@ -80,8 +80,8 @@ class ServerSideEval (cc: ControllerComponents,
     }
   }
 
-  def details(id: Int) = silhouette.SecuredAction(canSeeEval(id)).async { implicit request =>
-    db.run(SlickModel.customTestWithLang.filter(_.id === id.toLong).result.headOption).map { opt =>
+  def details(id: Long) = silhouette.SecuredAction(canSeeEval(id)).async { implicit request =>
+    db.run(SlickModel.customTestWithLang.filter(_.id === id).result.headOption).map { opt =>
       opt.map { ev =>
         Ok(html.evaldetails(request.identity, ev))
       }.getOrElse(Redirect(routes.ServerSideEval.index))
