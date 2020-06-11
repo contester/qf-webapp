@@ -41,7 +41,7 @@ case class EditTeam(schoolName: String, teamName: String, teamNum: Option[Int])
 
 case class DisplayTeam(team: SlickModel.Team, school: School, login: String, password: String)
 
-case class AdminPrintJob(id: Int, contestID: Int, team: Team, filename: String, arrived: DateTime,
+case class AdminPrintJob(id: Long, contestID: Int, team: Team, filename: String, arrived: DateTime,
                          printed: Option[DateTime], computerName: String, error: String)
 
 case class SubmitIdLite(id: Int)
@@ -469,18 +469,16 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
   private def getPrintJobs(contestID: Int) = {
-    import com.github.tototoshi.slick.MySQLJodaSupport._
+    import utils.MyPostgresProfile.api._
     import models.SlickModel._
 
     db.run(
-      (for {
-        (j, l) <- dbPrintJobs.filter(_.contest === contestID) join compLocations on (_.computer === _.id)
-      } yield (j.id, j.contest, j.team, j.filename, j.arrived, j.printed, l.name, j.error)).sortBy(_._5.desc).result)
+      locatedPrintJobs.filter(_.contest === contestID).result)
     .zip(statusActorModel.teamClient.getTeams(contestID)).map {
       case (jobs, teams) =>
         jobs.flatMap { src =>
-          teams.get(src._3).map { team =>
-            AdminPrintJob(src._1.toInt, src._2, team, src._4, src._5, src._6, src._7, src._8)
+          teams.get(src.team).map { team =>
+            AdminPrintJob(src.id, src.contest, team, src.filename, src.arrived, src.printed, src.computerName, src.error)
           }
         }
     }
@@ -496,7 +494,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
   }
 
-  def reprintJob(printJobID: Int) = silhouette.SecuredAction.async { implicit request =>
+  def reprintJob(printJobID: Long) = silhouette.SecuredAction.async { implicit request =>
     printingModel.printJobByID(printJobID).map { _ =>
       Ok("ok")
     }

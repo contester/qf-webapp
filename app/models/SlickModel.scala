@@ -306,6 +306,20 @@ object SlickModel {
 
   val dbPrintJobs = TableQuery[DBPrintJobs]
 
+  case class LiftedLocatedPrintJob(id: Rep[Long], contest: Rep[Int], team: Rep[Int], filename: Rep[String],
+                                   arrived: Rep[DateTime], printed: Rep[Option[DateTime]], computerName: Rep[String],
+                                   error: Rep[String])
+
+  case class LocatedPrintJob(id: Long, contest: Int, team: Int, filename: String, arrived: DateTime,
+                             printed: Option[DateTime], computerName: String, error: String)
+
+  implicit object CustomPrintJobShape extends CaseClassShape(LiftedLocatedPrintJob.tupled, LocatedPrintJob.tupled)
+
+  val locatedPrintJobs = (for {
+    p <- dbPrintJobs
+    l <- compLocations if p.computer === l.id
+  } yield LiftedLocatedPrintJob(p.id, p.contest, p.team, p.filename, p.arrived, p.printed, l.name, p.error)).sortBy(_.arrived.desc)
+
   case class CompLocation(id: IPv4Address, location: Int, name: String)
 
   case class CompLocations(tag: Tag) extends Table[CompLocation](tag, "computer_locations") {
