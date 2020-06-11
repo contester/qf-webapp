@@ -618,14 +618,15 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
   def postEditContest(contestID: Int, ceditID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(ceditID)).async { implicit request =>
     import utils.Db._
-    import com.github.tototoshi.slick.MySQLJodaSupport._
+    import com.github.tototoshi.slick.PostgresJodaSupport._
     getSelectedContests(contestID, request.identity).flatMap { sc =>
             editContestForm.bindFromRequest.fold(
               formWithErrors => {
                 Future.successful(Ok(html.admin.editcontest(formWithErrors, ContestDescription(ceditID), sc)))
               },
               data => {
-                val upd = SlickModel.contests.filter(_.id === ceditID).map(x => (x.name, x.schoolMode, x.startTime, x.freezeTime, x.endTime, x.exposeTime, x.polygonId, x.language))
+                val upd = SlickModel.contests.filter(_.id === ceditID)
+                  .map(x => (x.name, x.schoolMode, x.startTime, x.freezeTime, x.endTime, x.exposeTime, x.polygonId, x.language))
                     .update((data.name, data.schoolMode, data.startTime, data.freezeTime, data.endTime, data.exposeTime, data.polygonID, data.language))
                 db.run(upd).map { v =>
                   Redirect(routes.AdminApplication.editContest(contestID, ceditID))
