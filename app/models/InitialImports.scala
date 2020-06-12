@@ -96,18 +96,16 @@ object InitialImportTools {
       addParticipant(db, p._2, p._1)
     }))
 
-    await(Future.sequence(assignmentsWithPassword.map { a =>
-      db.run(SlickModel.assignments.filter(x => (x.contest === a._1 && x.team === a._2)).map(_.password).result.headOption).flatMap { xp =>
-        xp match {
-          case Some(pwd) =>
-            if (pwd == "") {
-              db.run(SlickModel.assignments.filter(x => (x.contest === a._1 && x.team === a._2)).map(x => (x.username, x.password)).update(a._3, a._4))
-            } else Future.successful(1)
-          case None =>
-            db.run(SlickModel.assignments.map(x => (x.contest, x.team, x.username, x.password)) += a)
-        }
+    await(db.run(DBIO.sequence(assignmentsWithPassword.map { a =>
+      SlickModel.assignments.filter(x => (x.contest === a._1 && x.team === a._2)).map(_.password).result.headOption.flatMap {
+        case Some(pwd) =>
+          if (pwd == "") {
+            SlickModel.assignments.filter(x => (x.contest === a._1 && x.team === a._2)).map(x => (x.username, x.password)).update(a._3, a._4)
+          } else DBIO.successful(1)
+        case None =>
+          SlickModel.assignments.map(x => (x.contest, x.team, x.username, x.password)) += a
       }
-    }))
+    })))
   }
 
   def getNetmapComputers(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext) =
