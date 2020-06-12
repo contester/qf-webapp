@@ -97,14 +97,14 @@ object InitialImportTools {
     }))
 
     await(Future.sequence(assignmentsWithPassword.map { a =>
-      db.run(sql"select Password from Assignments where Contest = ${a._1} and LocalID = ${a._2}".as[String].headOption).flatMap { xp =>
+      db.run(SlickModel.assignments.filter(x => (x.contest === a._1 && x.team === a._2)).map(_.password).result.headOption).flatMap { xp =>
         xp match {
           case Some(pwd) =>
             if (pwd == "") {
-              db.run(sqlu"replace into Assignments (Contest, LocalID, Username, Password) values (${a._1}, ${a._2}, ${a._3}, ${a._4})")
+              db.run(SlickModel.assignments.filter(x => (x.contest === a._1 && x.team === a._2)).map(x => (x.username, x.password)).update(a._3, a._4))
             } else Future.successful(1)
           case None =>
-            db.run(sqlu"replace into Assignments (Contest, LocalID, Username, Password) values (${a._1}, ${a._2}, ${a._3}, ${a._4})")
+            db.run(SlickModel.assignments.map(x => (x.contest, x.team, x.username, x.password)) += a)
         }
       }
     }))
