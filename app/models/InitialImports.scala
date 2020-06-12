@@ -1,5 +1,6 @@
 package models
 
+import inet.ipaddr.IPAddressString
 import slick.basic.DatabaseConfig
 import slick.jdbc.{JdbcBackend, JdbcProfile}
 import slick.sql.SqlStreamingAction
@@ -116,15 +117,15 @@ object InitialImportTools {
     val existingRooms = await(db.run(SlickModel.areas.map(x => (x.name, x.id)).result)).toMap
     val newRooms = roomSet -- existingRooms.keySet
 
-    val addedRooms = await(Future.sequence(newRooms.toSeq.map { room =>
-      db.run((SlickModel.areas.map(_.name) returning(SlickModel.areas.map(_.id)) into ((id, name) => name -> id)+= (room)))
-    })).toMap
+    val addedRooms = await(db.run(DBIO.sequence(newRooms.toSeq.map { room =>
+      (SlickModel.areas.map(_.name) returning(SlickModel.areas.map(_.id)) into ((id, name) => id -> name)+= (room))
+    }))).toMap
 
     val combinedRooms = addedRooms ++ existingRooms
-
-    Future.sequence(comps.map { comp =>
+    db.run(DBIO.sequence(comps.map { comp =>
       val roomID = combinedRooms.get(comp.location).get
-      db.run(sqlu"replace CompLocations (ID, Location, Name) values (inet_aton(${comp.addr}), $roomID, ${comp.name})")
-    })
+      val cAddr = new IPAddressString(comp.addr).getAddress.toIPv4
+      SlickModel.compLocations.insertOrUpdate(SlickModel.CompLocation(cAddr, roomID, comp.name))
+    }))
   }
 }
