@@ -27,7 +27,7 @@ case class ClarificationRequest(id: Long, contest: Int, team: Int, problem: Stri
 
 case class Compiler(id: Int, name: String, ext: String)
 
-case class School(id: Int, name: String)
+case class School(id: Int, name: String, fullName: String)
 
 case class Message2(id: Option[Int], contest: Int, team: Int, kind: String, data: JsValue, seen: Boolean)
 
@@ -132,9 +132,10 @@ object SlickModel {
 
   case class Schools(tag: Tag) extends Table[School](tag, "schools") {
     def id = column[Int]("id", O.AutoInc, O.PrimaryKey)
-    def name = column[String]("name")
+    def name = column[String]("short_name")
+    def fullName = column[String]("full_name")
 
-    override def * = (id, name) <> (School.tupled, School.unapply)
+    override def * = (id, name, fullName) <> (School.tupled, School.unapply)
   }
 
   val schools = TableQuery[Schools]

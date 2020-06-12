@@ -43,20 +43,20 @@ object InitialImportTools {
 
   private val selLastID = sql"select LAST_INSERT_ID()".as[Int].head
 
-  private def insertSchoolQuery(s: ImportedSchool) =
-    sqlu"insert into Schools (Name, FullName) values (${s.schoolName}, ${s.schoolFullName})".andThen(selLastID).withPinnedSession
+  private[this] def insertSchoolQuery(s: ImportedSchool) = {
+    (SlickModel.schools.map(x => (x.name, x.fullName)) returning(SlickModel.schools.map(_.id))) += (s.schoolName, s.schoolFullName)
+  }
 
-  private def addParticipant(db: JdbcBackend#DatabaseDef, teamID: Int, contestID: Int)(implicit ec: ExecutionContext) = async {
-    val foundAssignment = await(db.run(sql"select LocalID from Participants where Contest = $contestID and Team = $teamID".as[Int].headOption))
-    foundAssignment match {
-      case Some(id) => ()
-      case None => await(db.run(sqlu"insert into Participants (Contest, Team, LocalID) values ($contestID, $teamID, $teamID)").map(x => ()))
-    }
+  private def addParticipant(db: JdbcBackend#DatabaseDef, teamID: Int, contestID: Int)(implicit ec: ExecutionContext) = {
+    db.run(SlickModel.participants.filter(x => (x.contest === contestID && x.team === teamID)).result.headOption.flatMap {
+      case Some(id) => DBIO.successful(id)
+      case None => SlickModel.participants.map(x => (x.contest, x.team)).insertOrUpdate((contestID, teamID))
+    })
   }
 
   def populateContestsWithTeams(db: JdbcBackend#DatabaseDef, teams: Iterable[ImportedTeam], contests: Iterable[Int], passwords: Seq[String])(implicit ec: ExecutionContext): Future[Unit] = async {
-    val currentSchools = await(db.run(sql"select ID, Name, FullName from Schools".as[(Int, String, String)]))
-    val schoolLookups = currentSchools.map(x => (x._2 -> x._1)).toMap
+    val currentSchools = await(db.run(SlickModel.schools.result))
+    val schoolLookups = currentSchools.map(x => (x.name -> x.id)).toMap
     val importedSchools = teams.map(_.school).toSet
     val foundSchools = importedSchools.map(x => x -> schoolLookups.get(x.schoolName)).toMap
     val addedSchools = await(Future.sequence(foundSchools.filter(_._2.isEmpty).keySet.map { ns =>
@@ -66,17 +66,18 @@ object InitialImportTools {
     val mergedSchools = (foundSchools.filter(_._2.isDefined).mapValues(_.get).toSeq ++ addedSchools).toMap
 
     val teamIDs = await(Future.sequence(teams.map { team =>
-      val schoolID = mergedSchools.get(team.school)
-      db.run(sql"select ID, Name from Teams where School = $schoolID and Num = ${team.teamID}".as[(Int, String)].headOption).flatMap { zx =>
+      val schoolID = mergedSchools.get(team.school).get
+      db.run(SlickModel.teams.filter(x => (x.school === schoolID && x.num === team.teamID)).map(x => (x.id, x.name)).take(1).result.headOption).flatMap { zx =>
         zx match {
           case Some(x) =>
             if (x._2 == team.teamName) {
               Future.successful(x._1)
             } else {
-              db.run(sqlu"update Teams set Name = ${team.teamName} where ID = ${x._1}").map(_ => x._1)
+              db.run(SlickModel.teams.filter(_.id === x._1).map(_.name).update(team.teamName).map(_ => x._1))
             }
           case None =>
-            db.run(sqlu"insert into Teams (School, Num, Name) values ($schoolID, ${team.teamID}, ${team.teamName})".andThen(selLastID).withPinnedSession)
+            val q = (SlickModel.teams.map(x => (x.school, x.num, x.name)) returning(SlickModel.teams.map(_.id))) += (schoolID, team.teamID, team.teamName)
+            db.run(q)
         }
       }}))
 

@@ -10,9 +10,7 @@ import play.api.{Logger, Logging}
 import play.api.libs.EventSource
 import play.api.libs.EventSource.{Event, EventDataExtractor, EventNameExtractor}
 import play.api.libs.json._
-import slick.dbio.Effect
 import slick.jdbc.{GetResult, JdbcBackend}
-import slick.sql.FixedSqlAction
 import utils.{Ask, Concur}
 
 import scala.collection.mutable

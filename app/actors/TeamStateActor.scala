@@ -20,9 +20,9 @@ class TeamStateActor(db: JdbcBackend#DatabaseDef) extends AnyStateActor[TeamStat
   import TeamStateActor._
   import context.dispatcher
 
-  private var teams: TeamState = Map.empty
+  private[this] var teams: TeamState = Map.empty
 
-  import slick.jdbc.MySQLProfile.api._
+  import utils.MyPostgresProfile.api._
 
   override def loadStart(): Future[TeamState] =
     db.run(SlickModel.schools.result zip SlickModel.teams.result zip SlickModel.participants.result).map {
