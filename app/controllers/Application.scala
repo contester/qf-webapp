@@ -145,11 +145,10 @@ class Application (cc: ControllerComponents,
     Future.successful(Ok("ok"))
   }
 
-  private case class canSeeSubmit(submitId: Int) extends Authorization[LoggedInTeam, SessionAuthenticator] {
-    override def isAuthorized[B](identity: LoggedInTeam, authenticator: SessionAuthenticator)(implicit request: Request[B]): Future[Boolean] =
-      db.run(sql"select Contest, Team from NewSubmits where ID = $submitId".as[ContestTeamIds]).map { ids =>
-        ids.exists(identity.matching)
-      }
+  private case class canSeeSubmit(submitId: Long) extends Authorization[LoggedInTeam, SessionAuthenticator] {
+    override def isAuthorized[B](identity: LoggedInTeam, authenticator: SessionAuthenticator)(implicit request: Request[B]): Future[Boolean] = {
+      db.run(SlickModel.submits.filter(x => (x.id === submitId && x.contest === identity.contest.id && x.team === identity.team.id)).exists.result)
+    }
   }
 
   def showSubmit(submitId: Int) = silhouette.SecuredAction(canSeeSubmit(submitId)).async { implicit request =>

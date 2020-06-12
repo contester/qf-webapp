@@ -41,10 +41,7 @@ class TeamsServiceImpl(dbConfig: DatabaseConfig[JdbcProfile])(implicit val ec: E
     Users.resolve(dbConfig.db, loginInfo.providerKey)
 }
 
-case class LoggedInTeam(username: String, contest: Contest, team: LocalTeam, einfo: Seq[Extrainfo]) extends Identity {
-  def matching(ctid: ContestTeamIds) =
-    ctid.contestId == contest.id && ctid.teamId == team.id
-}
+case class LoggedInTeam(username: String, contest: Contest, team: LocalTeam, einfo: Seq[Extrainfo]) extends Identity
 
 case class Extrainfo(contest: Int, num: Int, heading: String, data: String)
 
@@ -88,9 +85,3 @@ object Users {
 }
 
 case class ContestTeamIds(contestId: Int, teamId: Int)
-
-object ContestTeamIds {
-  implicit val getResult = GetResult(r =>
-    ContestTeamIds(r.nextInt(), r.nextInt())
-  )
-}

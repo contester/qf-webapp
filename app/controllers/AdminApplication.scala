@@ -57,8 +57,6 @@ object SubmitTicketLite {
 case class EditContest(name: String, schoolMode: Boolean, startTime: DateTime, freezeTime: DateTime, endTime: DateTime,
                        exposeTime: DateTime, polygonID: String, language: String)
 
-case class ImportTeamsProps(contests: Seq[Int])
-
 class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEnv], dbConfig: DatabaseConfig[JdbcProfile],
                              monitorModel: Monitor,
                                  rabbitMqModel: RabbitMqModel,

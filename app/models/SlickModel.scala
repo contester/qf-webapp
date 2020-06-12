@@ -241,6 +241,13 @@ object SlickModel {
 
   val submits = TableQuery[Submits]
 
+  case class LiftedContestTeamID(contest: Rep[Int], team: Rep[Int])
+
+  implicit object ContestTeamIDShape extends CaseClassShape(LiftedContestTeamID.tupled, ContestTeamIds.tupled)
+
+  def getContestTeamIDs(submitID: Long) =
+    submits.filter(_.id === submitID).map(x => LiftedContestTeamID(x.contest, x.team)).take(1)
+
   case class Problems(tag: Tag) extends Table[Problem](tag, "problems") {
     def contestID = column[Int]("contest_id")
     def id = column[String]("id")
