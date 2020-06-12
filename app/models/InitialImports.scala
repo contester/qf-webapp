@@ -113,11 +113,11 @@ object InitialImportTools {
 
   def importNetmapComputers(db: JdbcBackend#DatabaseDef, comps: Seq[ImportedComputer])(implicit ec: ExecutionContext) = async {
     val roomSet = comps.map(_.location).toSet
-    val existingRooms = await(db.run(sql"select Name, ID from Areas".as[(String, Int)])).toMap
+    val existingRooms = await(db.run(SlickModel.areas.map(x => (x.name, x.id)).result)).toMap
     val newRooms = roomSet -- existingRooms.keySet
 
     val addedRooms = await(Future.sequence(newRooms.toSeq.map { room =>
-      db.run(sqlu"insert into Areas (Name) values ($room)".andThen(selLastID).withPinnedSession).map(room -> _)
+      db.run((SlickModel.areas.map(_.name) returning(SlickModel.areas.map(_.id)) into ((id, name) => name -> id)+= (room)))
     })).toMap
 
     val combinedRooms = addedRooms ++ existingRooms
