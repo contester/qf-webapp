@@ -65,7 +65,7 @@ object InitialImportTools {
 
     val mergedSchools = (foundSchools.filter(_._2.isDefined).mapValues(_.get).toSeq ++ addedSchools).toMap
 
-    val teamIDs = await(Future.sequence(teams.map { team =>
+    val teamIDs = await(db.run(DBIO.sequence(teams.map { team =>
       val schoolID = mergedSchools.get(team.school).get
       val schoolQuery = SlickModel.teams.filter(x => (x.school === schoolID && x.num === team.teamID)).map(x => (x.id, x.name)).take(1).result.headOption.flatMap {
         case Some(x) =>
@@ -77,8 +77,8 @@ object InitialImportTools {
         case None =>
           (SlickModel.teams.map(x => (x.school, x.num, x.name)) returning (SlickModel.teams.map(_.id))) += (schoolID, team.teamID, team.teamName)
       }
-      db.run(schoolQuery)
-    }))
+      schoolQuery
+    })))
 
     val participantsToUpdate = for {
       c <- contests
