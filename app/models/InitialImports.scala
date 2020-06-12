@@ -67,19 +67,18 @@ object InitialImportTools {
 
     val teamIDs = await(Future.sequence(teams.map { team =>
       val schoolID = mergedSchools.get(team.school).get
-      db.run(SlickModel.teams.filter(x => (x.school === schoolID && x.num === team.teamID)).map(x => (x.id, x.name)).take(1).result.headOption).flatMap { zx =>
-        zx match {
-          case Some(x) =>
-            if (x._2 == team.teamName) {
-              Future.successful(x._1)
-            } else {
-              db.run(SlickModel.teams.filter(_.id === x._1).map(_.name).update(team.teamName).map(_ => x._1))
-            }
-          case None =>
-            val q = (SlickModel.teams.map(x => (x.school, x.num, x.name)) returning(SlickModel.teams.map(_.id))) += (schoolID, team.teamID, team.teamName)
-            db.run(q)
-        }
-      }}))
+      val schoolQuery = SlickModel.teams.filter(x => (x.school === schoolID && x.num === team.teamID)).map(x => (x.id, x.name)).take(1).result.headOption.flatMap {
+        case Some(x) =>
+          if (x._2 == team.teamName) {
+            DBIO.successful(x._1)
+          } else {
+            SlickModel.teams.filter(_.id === x._1).map(_.name).update(team.teamName).map(_ => x._1)
+          }
+        case None =>
+          (SlickModel.teams.map(x => (x.school, x.num, x.name)) returning (SlickModel.teams.map(_.id))) += (schoolID, team.teamID, team.teamName)
+      }
+      db.run(schoolQuery)
+    }))
 
     val participantsToUpdate = for {
       c <- contests
