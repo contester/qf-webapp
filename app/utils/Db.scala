@@ -1,31 +1,12 @@
 package utils
 
-import java.sql.Timestamp
-
-import actors.WaiterActor
 import akka.actor.ActorRef
-import com.github.nscala_time.time.Imports
 import play.api.libs.json.{JsValue, Json}
-import slick.jdbc.{JdbcCapabilities, PositionedParameters, SetParameter}
 import slick.basic.Capability
-import slick.driver.JdbcProfile
+import slick.jdbc.JdbcCapabilities
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
-
-object Db {
-  implicit object SetByteArray extends SetParameter[Array[Byte]] {
-    override def apply(v1: Array[Byte], v2: PositionedParameters): Unit = v2.setBytes(v1)
-  }
-
-
-//  import slick.jdbc.PostgresProfile.api._
-//
-//  implicit val jsValueColumnType = MappedColumnType.base[JsValue, String](
-//    x => Json.stringify(x),
-//    x => Json.parse(x)
-//  )
-}
 
 object Ask {
   def apply[T](ref: ActorRef, msg: AnyRef)(implicit timeout: akka.util.Timeout, ec: ExecutionContext) = {

@@ -15,7 +15,6 @@ case class ImportedComputer(location: String, addr: String, name: String)
 
 object InitialImportTools {
   import slick.jdbc.MySQLProfile.api._
-  import utils.Db._
   import com.github.tototoshi.slick.MySQLJodaSupport._
 
   private def pickName(s: String) =

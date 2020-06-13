@@ -68,8 +68,6 @@ class Application (cc: ControllerComponents,
     Duration(5, SECONDS)
   }
 
-  import utils.Db._
-
   def index = silhouette.SecuredAction.async { implicit request =>
     getSubmits(request.identity).flatMap(x =>
       Submits.groupAndAnnotate(db, request.identity.contest.schoolMode, x.map(Submits.upliftSub(_))

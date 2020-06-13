@@ -42,7 +42,6 @@ class ServerSideEval (cc: ControllerComponents,
                       dbConfig: DatabaseConfig[JdbcProfile], rabbitMqModel: RabbitMqModel
                       ) extends AbstractController(cc) with I18nSupport {
   private[this] val db = dbConfig.db
-  import utils.Db._
   import dbConfig.profile.api._
   import controllers.serversideeval.ServerSideData
 

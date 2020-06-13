@@ -615,7 +615,6 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
   def postEditContest(contestID: Int, ceditID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(ceditID)).async { implicit request =>
-    import utils.Db._
     import com.github.tototoshi.slick.PostgresJodaSupport._
     getSelectedContests(contestID, request.identity).flatMap { sc =>
             editContestForm.bindFromRequest.fold(

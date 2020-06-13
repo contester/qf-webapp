@@ -34,7 +34,6 @@ case class Message2(id: Option[Int], contest: Int, team: Int, kind: String, data
 object SlickModel {
   import com.github.tototoshi.slick.PostgresJodaSupport._
   import utils.MyPostgresProfile.api._
-  import utils.Db._
 
   implicit val ipv4ColumnType = MappedColumnType.base[IPv4Address, Long](
     x => UnsignedInts.toLong(x.intValue()),
