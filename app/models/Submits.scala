@@ -196,20 +196,9 @@ object Submits {
     scored._1 -> indexed
   }
 
-  implicit val getSubmitResult = GetResult(r => Submit(
-    SubmitId(r.nextInt(),
-      Arrived(new DateTime(r.nextTimestamp()), r.nextInt(), r.nextBoolean()),
-      r.nextInt(), r.nextInt(),
-      RatedProblem(r.nextString(), r.nextInt()),
-      r.nextString()),
-    r.nextBoolean(),
-    r.nextBoolean(),
-    r.nextInt(), r.nextInt(), r.nextIntOption()
-  ))
-
   def upliftSub(s: UpliftedSubmit): Submit =
     Submit(
-      SubmitId(s.id.toInt, Arrived(s.arrived, s.arrivedSeconds.toInt, s.afterFreeze),
+      SubmitId(s.id.toInt, Arrived(s.arrived, s.arrivedSeconds, s.afterFreeze),
         s.teamID, s.contestID, RatedProblem(s.problemID, 30), s.ext), s.finished,
       s.compiled, s.passed, s.taken,
       if (s.testingID == 0) None else Some(s.testingID.toInt))
