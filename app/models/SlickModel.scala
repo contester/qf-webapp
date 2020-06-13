@@ -399,14 +399,12 @@ object SlickModel {
 
   val results0 = results.sortBy(_.testID)
 
-  case class Area(id: Option[Int], name: String, printer: String)
-
   case class Areas(tag: Tag) extends Table[Area](tag, "areas") {
     def id = column[Int]("id", O.AutoInc, O.PrimaryKey)
     def name = column[String]("name")
     def printer = column[String]("printer")
 
-    override def * = (id.?, name, printer) <> (Area.tupled, Area.unapply)
+    override def * = (id, name, printer) <> (Area.tupled, Area.unapply)
   }
 
   val areas = TableQuery[Areas]
@@ -443,7 +441,6 @@ class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: Sta
   import com.github.tototoshi.slick.PostgresJodaSupport._
   import utils.MyPostgresProfile.api._
   import SlickModel._
-//  import utils.Db._
 
   private[this] val db = dbConfig.db
 
