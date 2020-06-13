@@ -88,7 +88,7 @@ object Compilers {
 }
 
 object Contests {
-  import slick.jdbc.MySQLProfile.api._
+  import utils.MyPostgresProfile.api._
 
   def formatHMS(ms: Long) = {
     val s = ms / 1000

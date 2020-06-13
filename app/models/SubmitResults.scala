@@ -96,7 +96,7 @@ object SubmitResult extends Logging {
     finished.compiled && finished.taken != 0 && finished.passed == finished.taken
 
   def annotateFinished2(db: JdbcBackend#DatabaseDef, finished: FinishedTesting)(implicit ec: ExecutionContext): Future[AnnoSubmit] = {
-    import slick.jdbc.MySQLProfile.api._
+    import utils.MyPostgresProfile.api._
 
     val sr = if (finishedSuccess(finished))
       Future.successful(SubmitAccepted)

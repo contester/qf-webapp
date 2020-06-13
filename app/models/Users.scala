@@ -57,9 +57,9 @@ class TeamsProvider(dbConfig: DatabaseConfig[JdbcProfile]) extends OneUserProvid
 }
 
 object Users {
-  import slick.jdbc.MySQLProfile.api._
+  import utils.MyPostgresProfile.api._
 
-  private def extraInfoQuery(contest: Int) =
+  private[this] def extraInfoQuery(contest: Int) =
     SlickModel.extraInfos.filter(_.contest === contest).result
 
   def resolveQuery(username: String) =

@@ -165,8 +165,7 @@ case class FullyDescribedSubmit(submit: Submit, index: Int, score: Option[Score]
                                 stats: SubmitStats, details: Seq[ResultEntry])
 
 object Submits {
-
-  import slick.jdbc.MySQLProfile.api._
+  import utils.MyPostgresProfile.api._
 
   case class ScoredSubmit[Sc](submit: Submit, score: Score, index: Int)
 
