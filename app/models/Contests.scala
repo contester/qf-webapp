@@ -100,11 +100,8 @@ object Contests {
     f"$hours%02d:$minutes%02d:$seconds%02d"
   }
 
-  def getContest(contestId: Int) =
-    SlickModel.contests.filter(_.id === contestId)
-
   def getCompilers(contest: Int) =
-    SlickModel.compilers.sortBy(_.id)
+    SlickModel.sortedCompilers
     //SlickModel.compilers.filter(_.contest === contest).sortBy(_.id)
 }
 

@@ -95,6 +95,8 @@ object SlickModel {
 
   val compilers = TableQuery[Compilers]
 
+  val sortedCompilers = compilers.sortBy(_.name)
+
   case class LiftedContest(id: Rep[Int], name: Rep[String], startTime: Rep[DateTime],
                            freezeTime: Rep[DateTime], endTime: Rep[DateTime], exposeTime: Rep[DateTime],
                            polygonId: Rep[String], language: Rep[String], schoolMode: Rep[Boolean])

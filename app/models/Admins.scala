@@ -82,12 +82,11 @@ object Admin {
       parseAcl(x.unrestricted))
 
   def query(db: JdbcBackend#DatabaseDef, username: String, passwordHash: String)(implicit ec: ExecutionContext) =
-    db.run(AdminModel.admins.filter(x => x.username === username && x.password === passwordHash).take(1).result)
-      .map(_.headOption.map(buildAdmin))
+    db.run(AdminModel.adminQuery(username,passwordHash).result.headOption)
+      .map(_.map(buildAdmin))
 }
 
 object AdminModel {
-  import com.github.tototoshi.slick.PostgresJodaSupport._
   import slick.jdbc.PostgresProfile.api._
 
   case class AdminEntry(username: String, password: String, spectator: String, administrator: String,
@@ -104,7 +103,9 @@ object AdminModel {
     override def * = (username, password, spectator, administrator, locations, unrestricted) <> (AdminEntry.tupled, AdminEntry.unapply)
   }
 
-  val admins = TableQuery[Admins]
+  private[this] val admins = TableQuery[Admins]
+  val adminQuery = Compiled((username: Rep[String], passwordHash: Rep[String]) =>
+    admins.filter(x => x.username === username && x.password === passwordHash).take(1))
 }
 
 object AdminPermissions {
