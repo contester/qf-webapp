@@ -8,7 +8,7 @@ import play.api.data.FormError
 import play.api.data.format.Formatter
 
 object DateParse {
-  def nscalaTimeFormat(pattern: String): Formatter[DateTime] =
+  private[this] def nscalaTimeFormat(pattern: String): Formatter[DateTime] =
     new Formatter[Imports.DateTime] {
       private val fmt = DateTimeFormat.forPattern(pattern)
       private val p0 = ISODateTimeFormat.dateTimeParser()
