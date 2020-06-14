@@ -67,7 +67,8 @@ object StatusActor {
 
   case class StatusActorInitialState(msgs: Iterable[Message2],
                                      storedClarificationRequests: Map[Int, Seq[Long]],
-                                     clarifications: ClarificationsInitialState)
+                                     clarifications: ClarificationsInitialState,
+                                     contests: Iterable[Contest])
 }
 
 class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Logging {
@@ -132,15 +133,16 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
         SlickModel.messages2.filter(!_.seen).result zip
         SlickModel.clarificationRequestsUnanswered.result zip
           SlickModel.clarifications.result zip
-          SlickModel.clrSeen2.result
+          SlickModel.clrSeen2.result zip
+          SlickModel.contests.result
       )
 
     f.failed.foreach(e => logger.error(s"loading status actor: $e"))
 
     f.map {
-      case (((msgs, clst), clrs), seen2) =>
+      case ((((msgs, clst), clrs), seen2), contests) =>
         val clst2 = clst.groupBy(_._1).mapValues(x => x.map(_._2))
-        StatusActorInitialState(msgs, clst2, ClarificationsInitialState(clrs, seen2))
+        StatusActorInitialState(msgs, clst2, ClarificationsInitialState(clrs, seen2), contests)
     }
 
   }
@@ -171,7 +173,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
       }
     }
 
-    case StatusActorInitialState(msgs, clrs, cls) => {
+    case StatusActorInitialState(msgs, clrs, cls, contests) => {
       clrs.foreach {
         case (contest, pending) => {
           val pendingSet = mutable.Set[Long](pending:_*)
@@ -188,6 +190,10 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
       }
       for (s <- cls.seen) {
         clarificationsSeen.put((s.contest, s.team), s.timestamp)
+      }
+
+      for (c <- contests) {
+        contestStates.put(c.id, c)
       }
 
       for (msg <- msgs)
@@ -209,6 +215,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
     case ClarificationAnswered(contest, clrId, teamId, problem, text) => {
       pendingClarificationRequests(contest) -= clrId
       clr2Chan.offer(ClarificationRequestState(contest, pendingClarificationRequests(contest).size, newRequest = false))
+      logger.info(s"pushPersistent: $contest $clrId $teamId $problem $text")
       pushPersistent(contest, teamId, "clarificationAnswered", Json.obj("problem" -> problem, "text" -> text))
     }
 
@@ -216,10 +223,16 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
     case cl: Clarification => {
       val orig = cl.id.flatMap(id => clarifications.get(cl.contest).flatMap(_.get(id)))
       val saved = sender()
-      db.run((SlickModel.clarifications.returning(SlickModel.clarifications.map(_.id)) into((c: Clarification,id: Long) =>
-        c.copy(id=Some(id)))).insertOrUpdate(cl)).map { opt =>
+
+      val q = if (orig.isDefined) {
+        (SlickModel.clarifications.filter(_.id === cl.id.get).update(cl).map(_ => cl))
+      } else {
+        (SlickModel.clarifications.returning(SlickModel.clarifications.map(_.id)) into((c: Clarification,id: Long) =>
+          c.copy(id=Some(id)))) += cl
+      }
+
+      db.run(q).map { next =>
         val prevVisible = orig.exists(!_.hidden)
-        val next = opt.getOrElse(cl)
         val ifp = if(cl.problem.isEmpty) None else Some(cl.problem)
         insertClarification(next)
         if (!next.hidden)
@@ -264,6 +277,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
     }
 
     case Ack(loggedInTeam, msgid) => {
+      logger.info(s"acking $msgid for $loggedInTeam")
       getUnacked(loggedInTeam.contest.id, loggedInTeam.team.id) -= msgid
       val loc = for {c <- SlickModel.messages2 if c.id === msgid } yield c.seen
       val upd = loc.update(true)
@@ -271,6 +285,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
     }
 
     case GetAllContests => {
+      logger.info(s"getAllContests <- $contestStates")
       sender() ! Success(AllContests(contestStates.values.toSeq))
     }
 
@@ -296,6 +311,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
       for (c <- cs) {
         val old = contestStates.get(c.id)
         if (old.isEmpty || old.get != c) {
+          logger.info(s"put: $c")
           contestStates.put(c.id, c)
           contestChannel2.offer(c)
         }
@@ -303,7 +319,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
     }
 
     case Tick => {
-      db.run(Contests.getContests).map { contests =>
+      db.run(SlickModel.contests.result).map { contests =>
         self ! NewMultiContestState(contests)
       }
     }

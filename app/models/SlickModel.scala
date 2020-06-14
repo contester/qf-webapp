@@ -76,8 +76,8 @@ object SlickModel {
   } yield (c.contest, c.id)
 
   case class ClrSeen2(tag: Tag) extends Table[MaxSeen](tag, "clarifications_seen") {
-    def contest = column[Int]("contest")
-    def team = column[Int]("team")
+    def contest = column[Int]("contest", O.PrimaryKey)
+    def team = column[Int]("team", O.PrimaryKey)
     def timestamp = column[DateTime]("max_seen")
 
     override def * = (contest, team, timestamp) <> (MaxSeen.tupled, MaxSeen.unapply)
@@ -101,7 +101,7 @@ object SlickModel {
 
   implicit object ContestShape extends CaseClassShape(LiftedContest.tupled, Contest.tupled)
 
-  case class Contests(tag: Tag) extends Table[Contest](tag, "Contests") {
+  case class Contests(tag: Tag) extends Table[Contest](tag, "contests") {
     def id = column[Int]("id", O.AutoInc, O.PrimaryKey)
     def name = column[String]("name")
     def startTime = column[DateTime]("start_time")
@@ -213,7 +213,7 @@ object SlickModel {
       contests0 on (_._1.contest === _.id)
   } yield LiftedLoggedInTeam0(assignment.username, assignment.password, contest, team)
 
-  case class Submits(tag: Tag) extends Table[(Long, Int, Int, String, Int, Array[Byte], DateTime, Int, Boolean, Boolean, Int, Long, Int, Boolean)](tag, "submits") {
+  case class Submits(tag: Tag) extends Table[(Long, Int, Int, String, Int, Array[Byte], DateTime, Boolean, Boolean, Int, Long, Int, Boolean)](tag, "submits") {
     def id = column[Long]("id", O.AutoInc, O.PrimaryKey)
     def contest = column[Int]("contest")
     def team = column[Int]("team_id")
@@ -221,7 +221,6 @@ object SlickModel {
     def language = column[Int]("language_id")
     def source = column[Array[Byte]]("source")
     def arrived = column[DateTime]("submit_time_absolute")
-    def arrivedSeconds = column[Int]("submit_time_relative_seconds")
     def tested = column[Boolean]("tested")
     def success = column[Boolean]("success")
     def passed = column[Int]("passed")
@@ -229,7 +228,7 @@ object SlickModel {
     def taken = column[Int]("taken")
     def compiled = column[Boolean]("compiled")
 
-    override def * = (id, contest, team, problem, language, source, arrived, arrivedSeconds, tested, success, passed, testingID, taken, compiled)
+    override def * = (id, contest, team, problem, language, source, arrived, tested, success, passed, testingID, taken, compiled)
   }
 
   val submits = TableQuery[Submits]
@@ -252,12 +251,12 @@ object SlickModel {
 
   val problems = TableQuery[Problems]
 
-  case class LiftedSubmit(id: Rep[Long], arrived: Rep[DateTime], arrivedSeconds: Rep[Int], afterFreeze: Rep[Boolean],
+  case class LiftedSubmit(id: Rep[Long], arrived: Rep[DateTime], arrivedSeconds: Rep[Period], afterFreeze: Rep[Boolean],
                           teamID: Rep[Int], contestID: Rep[Int], problemID: Rep[String], ext: Rep[String],
                           finished: Rep[Boolean], compiled: Rep[Boolean], passed: Rep[Int], taken: Rep[Int],
                           testingID: Rep[Long])
 
-  case class UpliftedSubmit(id: Long, arrived: DateTime, arrivedSeconds: Int, afterFreeze: Boolean, teamID: Int,
+  case class UpliftedSubmit(id: Long, arrived: DateTime, arrivedSeconds: Period, afterFreeze: Boolean, teamID: Int,
                             contestID: Int, problemID: String, ext: String, finished: Boolean, compiled: Boolean,
                             passed: Int, taken: Int, testingID: Long)
 
@@ -268,7 +267,7 @@ object SlickModel {
     contest <- contests if s.contest === contest.id
     problem <- problems if s.problem === problem.id && s.contest === problem.contestID
     lang <- compilers if s.language === lang.id
-  } yield LiftedSubmit(s.id, s.arrived, s.arrivedSeconds, s.arrived > contest.freezeTime,
+  } yield LiftedSubmit(s.id, s.arrived, s.arrived - contest.startTime, s.arrived > contest.freezeTime,
     s.team, s.contest, s.problem, lang.moduleID, s.tested, s.compiled, s.passed, s.taken, s.testingID)).sortBy(_.arrived)
 
   case class Testing(id: Int, submit: Int, start: DateTime, finish: Option[DateTime], problemId: Option[String])
@@ -289,7 +288,7 @@ object SlickModel {
                         computer: InetString, arrived: DateTime, printed: Option[DateTime],
                         pages: Int, error: String)
 
-  case class DBPrintJobs(tag: Tag) extends Table[DBPrintJob](tag, "PrintJobs") {
+  case class DBPrintJobs(tag: Tag) extends Table[DBPrintJob](tag, "print_jobs") {
     def id = column[Long]("id", O.AutoInc, O.PrimaryKey)
     def contest = column[Int]("contest")
     def team = column[Int]("team")
@@ -315,11 +314,6 @@ object SlickModel {
 
   implicit object CustomPrintJobShape extends CaseClassShape(LiftedLocatedPrintJob.tupled, LocatedPrintJob.tupled)
 
-  val locatedPrintJobs = (for {
-    p <- dbPrintJobs
-    l <- compLocations if p.computer === l.id
-  } yield LiftedLocatedPrintJob(p.id, p.contest, p.team, p.filename, p.arrived, p.printed, l.name, p.error)).sortBy(_.arrived.desc)
-
   case class CompLocation(id: InetString, location: Int, name: String)
 
   case class CompLocations(tag: Tag) extends Table[CompLocation](tag, "computer_locations") {
@@ -331,6 +325,11 @@ object SlickModel {
   }
 
   val compLocations = TableQuery[CompLocations]
+
+  val locatedPrintJobs = (for {
+    p <- dbPrintJobs
+    l <- compLocations if p.computer === l.id
+  } yield LiftedLocatedPrintJob(p.id, p.contest, p.team, p.filename, p.arrived, p.printed, l.name, p.error)).sortBy(_.arrived.desc)
 
   case class CustomTests(tag: Tag) extends Table[(Long, Int, Int, Int, Array[Byte], Array[Byte], Array[Byte], DateTime,
     Int, Option[DateTime], Int, TimeMs, Memory, Long)](tag, "custom_tests") {

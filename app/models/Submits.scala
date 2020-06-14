@@ -198,7 +198,7 @@ object Submits {
 
   def upliftSub(s: UpliftedSubmit): Submit =
     Submit(
-      SubmitId(s.id.toInt, Arrived(s.arrived, s.arrivedSeconds, s.afterFreeze),
+      SubmitId(s.id.toInt, Arrived(s.arrived, s.arrivedSeconds.toStandardSeconds.getSeconds, s.afterFreeze),
         s.teamID, s.contestID, RatedProblem(s.problemID, 30), s.ext), s.finished,
       s.compiled, s.passed, s.taken,
       if (s.testingID == 0) None else Some(s.testingID.toInt))

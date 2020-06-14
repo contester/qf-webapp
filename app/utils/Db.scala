@@ -31,6 +31,7 @@ import com.github.tminglei.slickpg._
 trait MyPostgresProfile extends ExPostgresProfile
   with PgArraySupport
   with PgDate2Support
+  with PgDateSupportJoda
   with PgRangeSupport
   with PgHStoreSupport
   with PgPlayJsonSupport

@@ -20,6 +20,7 @@ import utils.auth.{AdminEnv, BaseEnv, TeamsEnv}
 
 import scala.concurrent.ExecutionContext
 import scala.io.Source
+import scala.util.Try
 
 class MyApplicationLoader extends ApplicationLoader {
   private var components: MyComponents = _
@@ -110,7 +111,7 @@ class MyComponents(context: ApplicationLoader.Context)
 
   lazy val dbConfig: DatabaseConfig[JdbcProfile] = slickApi.dbConfig[JdbcProfile](DbName("default"))
 
-  val pwList = Source.fromFile(configuration.get[String]("passwordlist")).getLines().toSeq
+  val pwList = Try(Source.fromFile(configuration.get[String]("passwordlist")).getLines().toSeq).toOption.toSeq.flatten
 
   lazy val externalDatabases = ExternalDatabases(
     slickApi.dbConfig[JdbcProfile](DbName("studentWeb")),

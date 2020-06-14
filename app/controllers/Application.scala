@@ -60,8 +60,9 @@ class Application (cc: ControllerComponents,
       Ok(html.loggedinmonitor(x.get.contest, x.get.status, request.identity))})
   }
 
-  private def getSubmits(team: LoggedInTeam) =
+  private[this] def getSubmits(team: LoggedInTeam) = {
     db.run(Submits.getContestTeamSubmits(team.contest.id, team.team.id))
+  }
 
   private implicit val standardTimeout: akka.util.Timeout = {
     import scala.concurrent.duration._

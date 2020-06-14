@@ -100,9 +100,6 @@ object Contests {
     f"$hours%02d:$minutes%02d:$seconds%02d"
   }
 
-  val getContests =
-    SlickModel.contests.result
-
   def getContest(contestId: Int) =
     SlickModel.contests.filter(_.id === contestId)
 
