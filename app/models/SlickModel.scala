@@ -332,7 +332,7 @@ object SlickModel {
   } yield LiftedLocatedPrintJob(p.id, p.contest, p.team, p.filename, p.arrived, p.printed, l.name, p.error)).sortBy(_.arrived.desc)
 
   case class CustomTests(tag: Tag) extends Table[(Long, Int, Int, Int, Array[Byte], Array[Byte], Array[Byte], DateTime,
-    Int, Option[DateTime], Int, TimeMs, Memory, Long)](tag, "custom_tests") {
+    Option[DateTime], Int, TimeMs, Memory, Long)](tag, "custom_test") {
     def id = column[Long]("id", O.AutoInc, O.PrimaryKey)
     def contest = column[Int]("contest")
     def team = column[Int]("team_id")
@@ -341,14 +341,13 @@ object SlickModel {
     def input = column[Array[Byte]]("input")
     def output = column[Array[Byte]]("output")
     def arrived = column[DateTime]("submit_time_absolute")
-    def arrivedSeconds = column[Int]("submit_time_relative_seconds")
     def finishTime = column[Option[DateTime]]("finish_time")
     def resultCode = column[Int]("result_code")
     def timeMs = column[TimeMs]("time_ms")
     def memoryBytes = column[Memory]("memory_bytes")
     def returnCode = column[Long]("return_code")
 
-    override def * = (id, contest, team, language, source, input, output, arrived, arrivedSeconds,
+    override def * = (id, contest, team, language, source, input, output, arrived,
       finishTime, resultCode, timeMs, memoryBytes, returnCode)
   }
 
