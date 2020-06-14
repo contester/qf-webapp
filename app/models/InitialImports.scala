@@ -1,5 +1,6 @@
 package models
 
+import com.github.tminglei.slickpg.InetString
 import inet.ipaddr.IPAddressString
 import slick.basic.DatabaseConfig
 import slick.jdbc.{JdbcBackend, JdbcProfile}
@@ -123,8 +124,7 @@ object InitialImportTools {
     val combinedRooms = addedRooms ++ existingRooms
     db.run(DBIO.sequence(comps.map { comp =>
       val roomID = combinedRooms.get(comp.location).get
-      val cAddr = new IPAddressString(comp.addr).getAddress.toIPv4
-      SlickModel.compLocations.insertOrUpdate(SlickModel.CompLocation(cAddr, roomID, comp.name))
+      SlickModel.compLocations.insertOrUpdate(SlickModel.CompLocation(InetString(comp.addr), roomID, comp.name))
     }))
   }
 }

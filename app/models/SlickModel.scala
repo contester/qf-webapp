@@ -1,11 +1,9 @@
 package models
 
 import com.github.nscala_time.time.Imports._
-import com.google.common.primitives.UnsignedInts
+import com.github.tminglei.slickpg.InetString
 import com.google.protobuf.ByteString
 import com.spingo.op_rabbit.Message
-import inet.ipaddr.IPAddressString
-import inet.ipaddr.ipv4.IPv4Address
 import play.api.{Logger, Logging}
 import play.api.libs.json.JsValue
 import protos.Tickets.{Computer, IdName, PrintJob, PrintJobReport}
@@ -34,11 +32,6 @@ case class Message2(id: Option[Int], contest: Int, team: Int, kind: String, data
 object SlickModel {
   import com.github.tototoshi.slick.PostgresJodaSupport._
   import utils.MyPostgresProfile.api._
-
-  implicit val ipv4ColumnType = MappedColumnType.base[IPv4Address, Long](
-    x => UnsignedInts.toLong(x.intValue()),
-    x => new IPv4Address(UnsignedInts.checkedCast(x))
-  )
 
   case class Team(id: Int, school: Int, num: Int, name: String)
 
@@ -293,8 +286,8 @@ object SlickModel {
   val testings = TableQuery[Testings]
 
   case class DBPrintJob(id: Option[Long], contest: Int, team: Int, filename: String, data: Array[Byte],
-                      computer: IPv4Address, arrived: DateTime, printed: Option[DateTime],
-                      pages: Int, error: String)
+                        computer: InetString, arrived: DateTime, printed: Option[DateTime],
+                        pages: Int, error: String)
 
   case class DBPrintJobs(tag: Tag) extends Table[DBPrintJob](tag, "PrintJobs") {
     def id = column[Long]("id", O.AutoInc, O.PrimaryKey)
@@ -302,7 +295,7 @@ object SlickModel {
     def team = column[Int]("team")
     def filename = column[String]("filename")
     def data = column[Array[Byte]]("data")
-    def computer = column[IPv4Address]("computer_id")
+    def computer = column[InetString]("computer_id")
     def arrived = column[DateTime]("arrived")
     def printed = column[Option[DateTime]]("printed")
     def pages = column[Int]("pages")
@@ -327,10 +320,10 @@ object SlickModel {
     l <- compLocations if p.computer === l.id
   } yield LiftedLocatedPrintJob(p.id, p.contest, p.team, p.filename, p.arrived, p.printed, l.name, p.error)).sortBy(_.arrived.desc)
 
-  case class CompLocation(id: IPv4Address, location: Int, name: String)
+  case class CompLocation(id: InetString, location: Int, name: String)
 
   case class CompLocations(tag: Tag) extends Table[CompLocation](tag, "computer_locations") {
-    def id = column[IPv4Address]("id", O.PrimaryKey)
+    def id = column[InetString]("id", O.PrimaryKey)
     def location = column[Int]("location")
     def name = column[String]("name")
 
@@ -445,9 +438,8 @@ class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: Sta
 
 
   def insertAndPrintJob(contest:Int, team:Int, filename: String, data: Array[Byte], computerAsString: String) = {
-    val cAddr = new IPAddressString(computerAsString).getAddress
     db.run((dbPrintJobs.map(x => (x.contest, x.team, x.filename, x.data, x.computer)) returning(dbPrintJobs.map(_.id))) += (
-      contest, team, filename, data, cAddr.toIPv4
+      contest, team, filename, data, InetString(computerAsString)
     )).flatMap { id =>
       printJobByID(id)
     }

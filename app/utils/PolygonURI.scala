@@ -36,9 +36,6 @@ object PolygonURL {
   def apply(urlString: String): PolygonProblemHandle =
     apply(new URL(urlString))
 
-//  def shortId(url: URL) =
-//    url.getPath.split("/").takeRight(2).mkString("/")
-
   def getPathPart(url: URL) =
     url.getPath.stripPrefix("/").stripSuffix("/")
 
@@ -48,48 +45,7 @@ object PolygonURL {
 }
 
 class PolygonProblemHandle(val url: URL, val revision: Option[Int]) {
-//  val objectUrl = new URL(url, "problem.xml")
-//  val params = revision.map("revision" -> _.toString).toIterable
-
   override def toString = "PolygonProblemHandle(\"%s\"%s)".format(url, revision.map(", " + _).getOrElse(""))
 
-//  def uri: URI =
-//    new URI(PolygonURL.withQuery(url, params.toMap).toString)
-
   val prefix = "problem/" + PolygonURL.getPdbPath(url) + "/" + revision.get.toString
-
-  /**
-   * Shorthand for creating all other paths.
-   * @param suffix
-   * @return
-   */
-//  final private def dbName(suffix: String) =
-//    prefix + "/" + suffix
-
-  /**
-   * Checker path.
-   * @return
-   */
-//  final def checkerName = dbName("checker")
-
-  /**
-   * Prefix for a given test id.
-   * @param testId Test id.
-   * @return
-   */
-//  final def testPrefix(testId: Int) = dbName("tests/" + testId + "/")
-
-  /**
-   * Input data path.
-   * @param testId Test id.
-   * @return
-   */
-//  final def inputName(testId: Int) = testPrefix(testId) + "input.txt"
-
-  /**
-   * Answer file path.
-   * @param testId Test id.
-   * @return
-   */
-//  final def answerName(testId: Int) = testPrefix(testId) + "answer.txt"
 }
