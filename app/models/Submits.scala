@@ -229,7 +229,7 @@ object Submits {
   def getTestingLastResult(details: Seq[ResultEntry]) =
     trOption(details).map(_.maxBy(_.test))
 
-  def annotateGrouped(db: JdbcBackend#DatabaseDef, schoolMode: Boolean, submits: Seq[Submit])(implicit ec: ExecutionContext) = {
+  private[this] def annotateGrouped(db: JdbcBackend#DatabaseDef, schoolMode: Boolean, submits: Seq[Submit])(implicit ec: ExecutionContext) = {
     val scored = if (schoolMode) scoreGrouped[SchoolCell](submits, SchoolCell.empty, SchoolScorer)
     else scoreGrouped(submits, ACMCell.empty, ACMScorer)
     val indexed = indexGrouped(scored._2)

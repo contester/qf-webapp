@@ -1,6 +1,7 @@
 package org.stingray.qf.actors
 
 import akka.actor.{Actor, Stash}
+import play.api.Logging
 
 import scala.concurrent.Future
 import scala.util.{Failure, Success}
@@ -9,7 +10,7 @@ object AnyStateActor {
   case object Refresh
 }
 
-trait AnyStateActor[StateType] extends Actor with Stash {
+trait AnyStateActor[StateType] extends Actor with Stash with Logging {
   import AnyStateActor._
   import context.dispatcher
 
@@ -33,6 +34,9 @@ trait AnyStateActor[StateType] extends Actor with Stash {
   def doRefresh() = {
     val fu = loadStart()
     fu.foreach(x => self ! State(x))
+    fu.failed.foreach { e =>
+      logger.error(s"loading state", e)
+    }
     fu.onComplete { _ =>
       context.system.scheduler.scheduleOnce(defaultRefresh, self, Refresh)
     }

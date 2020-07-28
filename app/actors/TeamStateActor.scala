@@ -2,6 +2,7 @@ package org.stingray.qf.actors
 
 import akka.actor.Props
 import models.{LocalTeam, SlickModel}
+import play.api.Logging
 import slick.jdbc.JdbcBackend
 
 import scala.concurrent.Future
@@ -15,7 +16,7 @@ object TeamStateActor {
   def props(db: JdbcBackend#DatabaseDef) = Props(new TeamStateActor(db))
 }
 
-class TeamStateActor(db: JdbcBackend#DatabaseDef) extends AnyStateActor[TeamStateActor.TeamState] {
+class TeamStateActor(db: JdbcBackend#DatabaseDef) extends AnyStateActor[TeamStateActor.TeamState] with Logging {
   import AnyStateActor._
   import TeamStateActor._
   import context.dispatcher
