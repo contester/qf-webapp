@@ -65,6 +65,8 @@ object AdminId {
 
 object Admin {
   import org.stingray.contester.dbmodel.MyPostgresProfile.api._
+  import org.stingray.contester.dbmodel._
+  import org.stingray.contester.dbmodel.SlickModel._
 
   private[this] def parseSingleAcl(s: String): Option[Int] =
     if (s == "*")
@@ -77,35 +79,13 @@ object Admin {
   private[this] def parseStringAcl(s: String): Set[String] =
     s.split(',').toSet
 
-  private[this] def buildAdmin(x: AdminModel.AdminEntry): Admin =
+  private[this] def buildAdmin(x: AdminEntry): Admin =
     Admin(x.username, x.password, parseAcl(x.spectator), parseAcl(x.administrator), parseStringAcl(x.locations),
       parseAcl(x.unrestricted))
 
   def query(db: JdbcBackend#DatabaseDef, username: String, passwordHash: String)(implicit ec: ExecutionContext) =
-    db.run(AdminModel.adminQuery(username,passwordHash).result.headOption)
+    db.run(adminQuery(username,passwordHash).result.headOption)
       .map(_.map(buildAdmin))
-}
-
-object AdminModel {
-  import org.stingray.contester.dbmodel.MyPostgresProfile.api._
-
-  case class AdminEntry(username: String, password: String, spectator: String, administrator: String,
-                        locations: String, unrestricted: String)
-
-  case class Admins(tag: Tag) extends Table[AdminEntry](tag, "admins") {
-    def username = column[String]("username", O.PrimaryKey)
-    def password = column[String]("password")
-    def spectator = column[String]("spectator")
-    def administrator = column[String]("administrator")
-    def locations = column[String]("locations")
-    def unrestricted = column[String]("unrestricted_view")
-
-    override def * = (username, password, spectator, administrator, locations, unrestricted) <> (AdminEntry.tupled, AdminEntry.unapply)
-  }
-
-  private[this] val admins = TableQuery[Admins]
-  val adminQuery = Compiled((username: Rep[String], passwordHash: Rep[String]) =>
-    admins.filter(x => x.username === username && x.password === passwordHash).take(1))
 }
 
 object AdminPermissions {
