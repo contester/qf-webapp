@@ -122,7 +122,7 @@ class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
 
       f.foreach { loaded => self ! Loaded(loaded) }
       f.failed.foreach { x =>
-          logger.error(s"failed to load waiter model, reloading: $x")
+          logger.error(s"failed to load waiter model, reloading: $x", x)
           // reload in 5 seconds
           import scala.concurrent.duration._
           import scala.language.postfixOps

@@ -37,10 +37,10 @@ val spireVersion = "0.13.0"
 
 val silhouetteVersion = "6.1.1"
 
-val slickPG = "0.19.0"
+val slickPG = "0.19.2"
 
 libraryDependencies ++= Seq(
-  "org.stingray.contester" %% "contester-dbmodel" % "2020.0.1",
+  "org.stingray.contester" %% "contester-dbmodel" % "2020.0.1-SNAPSHOT",
   "com.typesafe.play" %% "play-slick" % "4.0.2",
   "com.github.tototoshi" %% "slick-joda-mapper" % "2.4.2",
   "com.softwaremill.macwire" %% "macros" % "2.3.5" % "provided",
@@ -59,7 +59,7 @@ libraryDependencies ++= Seq(
   "org.webjars.bower" % "roboto-fontface" % "0.7.0",
   "org.apache.httpcomponents" % "httpclient" % "4.5.12",
   "org.apache.httpcomponents" % "httpcore" % "4.4.13",
-  "org.postgresql" % "postgresql" % "42.2.12",
+  "org.postgresql" % "postgresql" % "42.2.14",
   "commons-io" % "commons-io" % "2.7",
   "com.github.nscala-time" %% "nscala-time" % "2.24.0",
   "com.googlecode.htmlcompressor" % "htmlcompressor" % "1.5.2",
