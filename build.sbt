@@ -1,6 +1,6 @@
 name := "qf"
 
-scalaVersion := "2.12.11"
+scalaVersion := "2.12.12"
 
 organization := "org.stingray.contester"
 
@@ -10,6 +10,7 @@ version := "2020.6"
 
 scalacOptions ++= Seq(
   "-Xfatal-warnings",  // New lines for each options
+  "-Xasync",
   "-deprecation",
   "-unchecked",
   "-language:implicitConversions",
@@ -24,6 +25,7 @@ scalacOptions ++= Seq(
 lazy val root = (project in file(".")).enablePlugins(PlayScala)
 
 resolvers ++= Seq(
+  Resolver.mavenLocal,
   Resolver.jcenterRepo,
   Resolver.sonatypeRepo("snapshots"),
   "Atlassian Releases" at "https://maven.atlassian.com/public/"
@@ -38,6 +40,7 @@ val silhouetteVersion = "6.1.1"
 val slickPG = "0.19.0"
 
 libraryDependencies ++= Seq(
+  "org.stingray.contester" %% "contester-dbmodel" % "2020.0.1",
   "com.typesafe.play" %% "play-slick" % "4.0.2",
   "com.github.tototoshi" %% "slick-joda-mapper" % "2.4.2",
   "com.softwaremill.macwire" %% "macros" % "2.3.5" % "provided",
@@ -62,6 +65,7 @@ libraryDependencies ++= Seq(
   "com.googlecode.htmlcompressor" % "htmlcompressor" % "1.5.2",
   "rhino" % "js" % "1.7R2",
   "org.scala-lang.modules" %% "scala-async" % "0.10.0",
+  "org.scala-lang" % "scala-reflect" % scalaVersion.value % Provided,
   "org.typelevel" %% "cats-core" % "2.1.1",
   "com.github.fkoehler" %% "play-html-compressor" % "2.8.0",
   "com.mohiva" %% "play-silhouette" % silhouetteVersion,

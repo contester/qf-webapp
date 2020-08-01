@@ -1,7 +1,7 @@
 package org.stingray.qf.actors
 
 import akka.actor.Props
-import models.{Problem, SlickModel}
+import org.stingray.contester.dbmodel.Problem
 import slick.jdbc.JdbcBackend
 
 import scala.concurrent.Future
@@ -22,7 +22,8 @@ class ProblemStateActor(db: JdbcBackend#DatabaseDef) extends AnyStateActor[Probl
   private[this] var problems: ProblemState = Map.empty
 
   override def loadStart(): Future[ProblemState] = {
-    import utils.MyPostgresProfile.api._
+    import org.stingray.contester.dbmodel.MyPostgresProfile.api._
+    import org.stingray.contester.dbmodel.SlickModel
 
     db.run(SlickModel.problems.result).map { problemRows =>
       problemRows.groupBy(_.contest).mapValues { rows =>

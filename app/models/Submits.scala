@@ -2,8 +2,8 @@ package models
 
 import java.nio.charset.StandardCharsets
 
-import models.SlickModel.UpliftedSubmit
 import org.joda.time.DateTime
+import org.stingray.contester.dbmodel.{Memory, TimeMs}
 import play.api.Logging
 import slick.jdbc.{GetResult, JdbcBackend}
 import slick.lifted.MappedTo
@@ -136,16 +136,6 @@ case class ACMCell(attempt: Int, arrivedSeconds: Int, fullSolution: Boolean) ext
     else s"-$attempt"
 }
 
-case class Memory(underlying: Long) extends AnyVal with MappedTo[Long] {
-  override def toString: String = s"${underlying / 1024}"
-
-  override def value: Long = underlying
-}
-
-object Memory {
-  implicit val ordering: Ordering[Memory] = Ordering.by(_.underlying)
-}
-
 case class ResultEntry(testingID: Long, test: Int, result: Int, time: TimeMs, memory: Memory, info: Long, testerExitCode: Long,
                        testerOutput: Array[Byte], testerError: Array[Byte]) {
   def resultString = SubmitResult.message(result)
@@ -165,7 +155,9 @@ case class FullyDescribedSubmit(submit: Submit, index: Int, score: Option[Score]
                                 stats: SubmitStats, details: Seq[ResultEntry])
 
 object Submits {
-  import utils.MyPostgresProfile.api._
+  import org.stingray.contester.dbmodel.MyPostgresProfile.api._
+  import org.stingray.contester.dbmodel.SlickModel
+  import org.stingray.contester.dbmodel.SlickModel.UpliftedSubmit
 
   case class ScoredSubmit[Sc](submit: Submit, score: Score, index: Int)
 

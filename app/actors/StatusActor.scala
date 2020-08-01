@@ -6,6 +6,7 @@ import akka.stream.scaladsl.{BroadcastHub, Keep, Merge, Sink, Source}
 import akka.stream.{ActorMaterializer, OverflowStrategy}
 import models.ContesterResults.{CustomTestResult, FinishedTesting}
 import models._
+import org.stingray.contester.dbmodel.{Clarification, Contest, MaxSeen, Message2}
 import play.api.{Logger, Logging}
 import play.api.libs.EventSource
 import play.api.libs.EventSource.{Event, EventDataExtractor, EventNameExtractor}
@@ -119,7 +120,8 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
   private def getUnacked(contest: Int, team: Int) =
     unacked.getOrElseUpdate((contest, team), mutable.Map[Int, Message2]())
 
-  import utils.MyPostgresProfile.api._
+  import org.stingray.contester.dbmodel.MyPostgresProfile.api._
+  import org.stingray.contester.dbmodel.SlickModel
 
   private def pushPersistent(contest: Int, team: Int, kind: String, data: JsValue) =
     db.run(
@@ -325,6 +327,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
     }
 
     case JoinAdmin(c: Int) => {
+      import ContestWrites._
       val enum = Try {
         val sev= sub2Out.filter(_.contest == c) via EventSource.flow
         val pings = Source.tick(tickDuration, tickDuration, userPing)
@@ -358,6 +361,8 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
         }
         case None => false
       }
+
+      import ContestWrites._
 
       val allSources = Source.combine(
         contestStreamSource(contest) via EventSource.flow,

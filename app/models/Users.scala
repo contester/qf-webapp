@@ -5,34 +5,13 @@ import com.mohiva.play.silhouette.api.services.IdentityService
 import com.mohiva.play.silhouette.api.util.Credentials
 import com.mohiva.play.silhouette.impl.exceptions.InvalidPasswordException
 import org.joda.time.DateTime
+import org.stingray.contester.dbmodel.{Contest, Extrainfo, LocalTeam}
 import play.api.Logger
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import slick.jdbc.{GetResult, JdbcBackend}
 
 import scala.concurrent.{ExecutionContext, Future}
-
-trait Team {
-  def schoolName: String
-  def teamNum: Int
-  def teamName: String
-  def notRated: Boolean
-  def id: Int
-
-  private[this] def teamSuffix = if (teamNum != 0) {
-    s" #$teamNum"
-  } else ""
-
-  def schoolNameWithNum: String = s"$schoolName$teamSuffix"
-  def teamFullName: String = {
-    schoolNameWithNum +
-      (if (!teamName.isEmpty) s": $teamName"
-      else "")
-  }
-}
-
-case class LocalTeam(id: Int, contest: Int, schoolName: String, teamNum: Int, teamName: String,
-                     notRated: Boolean, noPrint: Boolean, disabled: Boolean) extends Team
 
 trait TeamsService extends IdentityService[LoggedInTeam]
 
@@ -42,8 +21,6 @@ class TeamsServiceImpl(dbConfig: DatabaseConfig[JdbcProfile])(implicit val ec: E
 }
 
 case class LoggedInTeam(username: String, contest: Contest, team: LocalTeam, einfo: Seq[Extrainfo]) extends Identity
-
-case class Extrainfo(contest: Int, num: Int, heading: String, data: String)
 
 trait OneUserProvider extends Provider {
   def authenticate(credentials: Credentials)(implicit ec: ExecutionContext): Future[Option[LoginInfo]]
@@ -57,7 +34,8 @@ class TeamsProvider(dbConfig: DatabaseConfig[JdbcProfile]) extends OneUserProvid
 }
 
 object Users {
-  import utils.MyPostgresProfile.api._
+  import org.stingray.contester.dbmodel.MyPostgresProfile.api._
+  import org.stingray.contester.dbmodel.SlickModel
 
   private[this] def extraInfoQuery(contest: Int) =
     SlickModel.extraInfos.filter(_.contest === contest).result

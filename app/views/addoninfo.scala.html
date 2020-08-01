@@ -1,3 +1,4 @@
+@import org.stingray.contester.dbmodel._
 @(loggedIn: LoggedInTeam, content: Option[Extrainfo])(implicit request: RequestHeader, messages: Messages)
 
 @main(loggedIn, tab = content.map(x => s"extrainfo${x.num}").getOrElse("")) {

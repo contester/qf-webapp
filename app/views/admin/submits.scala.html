@@ -1,3 +1,4 @@
+@import org.stingray.contester.dbmodel._
 @(submits: Seq[FullyDescribedSubmit], teams: Map[Int, Team], contest: SelectedContest, admin: Admin)(implicit request: RequestHeader, messages: Messages)
 @adminmain(tab = "status", contest = contest) {
 @defining(admin.canModify(contest.contest.id)) { showRejudge =>

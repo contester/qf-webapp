@@ -64,7 +64,7 @@ object AdminId {
 }
 
 object Admin {
-  import utils.MyPostgresProfile.api._
+  import org.stingray.contester.dbmodel.MyPostgresProfile.api._
 
   private[this] def parseSingleAcl(s: String): Option[Int] =
     if (s == "*")
@@ -87,7 +87,7 @@ object Admin {
 }
 
 object AdminModel {
-  import slick.jdbc.PostgresProfile.api._
+  import org.stingray.contester.dbmodel.MyPostgresProfile.api._
 
   case class AdminEntry(username: String, password: String, spectator: String, administrator: String,
                         locations: String, unrestricted: String)

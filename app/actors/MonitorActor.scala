@@ -7,6 +7,7 @@ import java.nio.file.{Files, StandardCopyOption}
 import akka.actor.{Actor, Props, Stash}
 import models._
 import org.apache.commons.io.FileUtils
+import org.stingray.contester.dbmodel.Contest
 import org.stingray.qf.models.TeamClient
 import play.api.i18n.{Lang, Messages, MessagesApi, MessagesImpl}
 import slick.jdbc.JdbcBackend
@@ -70,7 +71,9 @@ class MonitorActor(db: JdbcBackend#DatabaseDef,
   }
 
   private def loadMonitors()(implicit ec: ExecutionContext) = {
-    import utils.MyPostgresProfile.api._
+    import org.stingray.contester.dbmodel.MyPostgresProfile.api._
+    import org.stingray.contester.dbmodel.SlickModel
+
     val fu = db.run(SlickModel.contests.result).flatMap { contests =>
       Future.sequence(contests.map(getContestMonitor))
     }

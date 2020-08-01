@@ -29,8 +29,8 @@ case class AdaptedWaiterTask(id: Long, when: DateTime, message: String, unacked:
                              acked: Seq[RoomWithPermission], canDelete: Boolean)
 
 object WaiterModel {
-  import SlickModel._
-  import utils.MyPostgresProfile.api._
+  import org.stingray.contester.dbmodel.MyPostgresProfile.api._
+  import org.stingray.contester.dbmodel.SlickModel._
 
   // TODO: move to SlickModel
   private def maybeMakeRooms(db: JdbcBackend#DatabaseDef, roomsActive: Iterable[String])(implicit ec: ExecutionContext): Future[Iterable[String]] = {

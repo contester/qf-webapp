@@ -2,6 +2,7 @@ package models
 
 import models.ContesterResults.FinishedTesting
 import models.Submits.{indexGrouped, scoreGrouped}
+import org.stingray.contester.dbmodel.{Memory, TimeMs}
 import play.api.{Logger, Logging}
 import play.api.i18n.Messages
 import play.api.libs.EventSource.{EventDataExtractor, EventNameExtractor}
@@ -16,16 +17,6 @@ case class AnnoSubmit(submitId: Int, contest: Int, team: Int, problem: String, r
 trait SubmitResult {
   def success: Boolean
   def message: String
-}
-
-case class TimeMs(underlying: Long) extends AnyVal with MappedTo[Long] {
-  override def toString: String = s"${underlying}"
-
-  override def value: Long = underlying
-}
-
-object TimeMs {
-  implicit val ordering: Ordering[TimeMs] = Ordering.by(_.underlying)
 }
 
 case class SubmitStats(timeMs: TimeMs, memory: Memory, timeLimitExceeded: Boolean = false)
@@ -96,7 +87,8 @@ object SubmitResult extends Logging {
     finished.compiled && finished.taken != 0 && finished.passed == finished.taken
 
   def annotateFinished2(db: JdbcBackend#DatabaseDef, finished: FinishedTesting)(implicit ec: ExecutionContext): Future[AnnoSubmit] = {
-    import utils.MyPostgresProfile.api._
+    import org.stingray.contester.dbmodel.MyPostgresProfile.api._
+    import org.stingray.contester.dbmodel.SlickModel
 
     val sr = if (finishedSuccess(finished))
       Future.successful(SubmitAccepted)

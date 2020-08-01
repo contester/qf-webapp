@@ -1,3 +1,4 @@
+@import org.stingray.contester.dbmodel._
 @(loggedIn: LoggedInTeam, form: Form[serversideeval.ServerSideData], languages: Seq[(String, String)],
   evals: Seq[EvalEntry])(implicit flash: Flash, messages: Messages, request: RequestHeader)
 
@@ -69,7 +70,8 @@
         </thead>
         <tbody>
         @for(s <- evals) {
-        <tr><th scope="row"><a href="@controllers.routes.ServerSideEval.details(s.id)">@s.id</a></th><td>@LocalDateFormat(s.arrived)</td><td>@s.resultStr</td>
+        <tr><th scope="row"><a href="@controllers.routes.ServerSideEval.details(s.id)">@s.id</a></th><td>@LocalDateFormat(s.arrived)</td>
+            <td>@if(s.finishTime.isEmpty){ @messages("status.running") } else { @messages(s"status.${s.resultCode}") }</td>
         <td>@s.timex</td><td>@s.memory</td><td>@s.returnCode</td></tr>
         }
 

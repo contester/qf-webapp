@@ -1,3 +1,4 @@
+@import org.stingray.contester.dbmodel._
 @(contest: Contest)(implicit messages: Messages)
 
 <p id="contest-frozen" class="text-warning" @if(!contest.frozen) { hidden }>@messages("msg.scoreboardFrozen")</p>

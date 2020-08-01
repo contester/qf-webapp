@@ -41,7 +41,8 @@ class Application (cc: ControllerComponents,
                             configuration: Configuration) extends AbstractController(cc) with I18nSupport with Logging {
 
   private val db = dbConfig.db
-  import dbConfig.profile.api._
+  import org.stingray.contester.dbmodel.MyPostgresProfile.api._
+  import org.stingray.contester.dbmodel._
 
   import scala.language.postfixOps
 

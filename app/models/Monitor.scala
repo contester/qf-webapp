@@ -3,6 +3,7 @@ package models
 import actors.MonitorActor
 import akka.actor.ActorSystem
 import models.Foo.RankedRow
+import org.stingray.contester.dbmodel.{Contest, Problem, Team}
 import org.stingray.qf.actors.{ProblemStateActor, TeamStateActor}
 import org.stingray.qf.models.TeamClient
 import play.api.Configuration
@@ -76,11 +77,11 @@ object Foo {
     rows.foldLeft((Seq[RankedRow[ScoreType, CellType]](), 0))(pullRank)._1
 
   case class SomeRow[ScoreType, CellType](team: Team, score: ScoreType,
-                                                                cells: Map[String, CellType]) extends MonitorRow[ScoreType, CellType]
+                                          cells: Map[String, CellType]) extends MonitorRow[ScoreType, CellType]
 
   def groupAndRank[ScoreType, CellType <: ProblemCell](teams: Seq[Team], submits: Seq[Submit],
-                                                               getCell: (Seq[Submit]) => CellType,
-                                                               getScore: (Seq[CellType]) => ScoreType)(implicit ord: Ordering[ScoreType]): Seq[RankedRow[ScoreType, CellType]] = {
+                                                       getCell: (Seq[Submit]) => CellType,
+                                                       getScore: (Seq[CellType]) => ScoreType)(implicit ord: Ordering[ScoreType]): Seq[RankedRow[ScoreType, CellType]] = {
     val rows = submits.groupBy(_.submitId.teamId).map {
       case (teamId, s0) =>
         val cells: Map[String, CellType] = s0.groupBy(_.submitId.problem.id).map {

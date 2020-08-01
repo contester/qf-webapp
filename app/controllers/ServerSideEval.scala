@@ -42,7 +42,8 @@ class ServerSideEval (cc: ControllerComponents,
                       dbConfig: DatabaseConfig[JdbcProfile], rabbitMqModel: RabbitMqModel
                       ) extends AbstractController(cc) with I18nSupport {
   private[this] val db = dbConfig.db
-  import dbConfig.profile.api._
+  import org.stingray.contester.dbmodel.MyPostgresProfile.api._
+  import org.stingray.contester.dbmodel._
   import controllers.serversideeval.ServerSideData
 
   private[this] val rabbitMq = rabbitMqModel.rabbitMq
@@ -73,8 +74,10 @@ class ServerSideEval (cc: ControllerComponents,
 
   private[this] implicit val ec = defaultExecutionContext
 
+  val getCompilers = SlickModel.sortedCompilers
+
   def index = silhouette.SecuredAction.async { implicit request =>
-    db.run(request.identity.contest.getCompilers.result).flatMap { compilers =>
+    db.run(getCompilers.result).flatMap { compilers =>
       getEvalForm(request.identity, compilers, serverSideForm).map(Ok(_))
     }
   }
@@ -88,7 +91,7 @@ class ServerSideEval (cc: ControllerComponents,
   }
 
   def post = silhouette.SecuredAction(parse.multipartFormData).async { implicit request =>
-    db.run(request.identity.contest.getCompilers.result).flatMap { compilers =>
+    db.run(getCompilers.result).flatMap { compilers =>
         val parsed = serverSideForm.bindFromRequest
 
         parsed.fold(
@@ -104,6 +107,4 @@ class ServerSideEval (cc: ControllerComponents,
         )
     }
   }
-
-
 }

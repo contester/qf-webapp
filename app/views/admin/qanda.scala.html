@@ -1,3 +1,4 @@
+@import org.stingray.contester.dbmodel._
 @(tasks: Seq[AdaptedWaiterTask], clarifications: Seq[Clarification], clReqs: Seq[ClarificationRequest], contest: SelectedContest)(implicit request: RequestHeader, messages: Messages)
 
 @adminmain(tab = "qanda", contest=contest) {

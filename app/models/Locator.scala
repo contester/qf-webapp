@@ -13,8 +13,8 @@ case class Location(id: InetString, area: Area, name: String)
 
 object Locator {
   def locate(db: JdbcBackend#DatabaseDef, remoteAddress: String)(implicit ec: ExecutionContext): Future[Option[Location]] = {
-    import utils.MyPostgresProfile.api._
-    import SlickModel._
+    import org.stingray.contester.dbmodel.MyPostgresProfile.api._
+    import org.stingray.contester.dbmodel.SlickModel._
 
     val cAddr = InetString(remoteAddress)
 

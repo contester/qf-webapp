@@ -4,6 +4,7 @@ import actors.StatusActor
 import actors.StatusActor.ClarificationRequested
 import com.mohiva.play.silhouette.api.Silhouette
 import models._
+import org.stingray.contester.dbmodel.Clarification
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.i18n.I18nSupport
@@ -22,7 +23,8 @@ class QandA (cc: ControllerComponents,
              dbConfig: DatabaseConfig[JdbcProfile],
                        statusActorModel: StatusActorModel) extends AbstractController(cc) with I18nSupport {
   private val db = dbConfig.db
-  import dbConfig.profile.api._
+  import org.stingray.contester.dbmodel.MyPostgresProfile.api._
+  import org.stingray.contester.dbmodel.SlickModel
 
   private val clarificationReqForm = Form {
     mapping("problem" -> text, "text" -> text)(ClarificationReqData.apply)(ClarificationReqData.unapply)

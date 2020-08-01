@@ -15,8 +15,8 @@ case class ImportedTeam(school: ImportedSchool, teamID: Int, teamName: String)
 case class ImportedComputer(location: String, addr: String, name: String)
 
 object InitialImportTools {
-  import slick.jdbc.MySQLProfile.api._
-  import com.github.tototoshi.slick.MySQLJodaSupport._
+  import org.stingray.contester.dbmodel.MyPostgresProfile.api._
+  import org.stingray.contester.dbmodel.SlickModel
 
   private def pickName(s: String) =
     s.split(' ').head

@@ -10,6 +10,8 @@ import com.mohiva.play.silhouette.api.{Authorization, Silhouette}
 import com.mohiva.play.silhouette.impl.authenticators.SessionAuthenticator
 import com.spingo.op_rabbit.Message
 import models._
+import org.stingray.contester.dbmodel.{Clarification, Problem, School}
+import org.stingray.contester.dbmodel.SlickModel.Team
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.http.ContentTypes
@@ -39,9 +41,9 @@ case class ContestDescription(id: Int)
 
 case class EditTeam(schoolName: String, teamName: String, teamNum: Option[Int])
 
-case class DisplayTeam(team: SlickModel.Team, school: School, login: String, password: String)
+case class DisplayTeam(team: Team, school: School, login: String, password: String)
 
-case class AdminPrintJob(id: Long, contestID: Int, team: Team, filename: String, arrived: DateTime,
+case class AdminPrintJob(id: Long, contestID: Int, team: org.stingray.contester.dbmodel.Team, filename: String, arrived: DateTime,
                          printed: Option[DateTime], computerName: String, error: String)
 
 case class SubmitIdLite(id: Int)
@@ -80,7 +82,8 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
   logger.info(s"fileserverBase: $fileserverBase")
 
-  import utils.MyPostgresProfile.api._
+  import org.stingray.contester.dbmodel.SlickModel
+  import org.stingray.contester.dbmodel.MyPostgresProfile.api._
 
   private[this] def getSubmitCid(submitId: Long)(implicit ec: ExecutionContext): Future[Option[Int]] =
     db.run(SlickModel.submits.filter(_.id === submitId).take(1).map(_.contest).result.headOption)
@@ -467,8 +470,8 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
   private def getPrintJobs(contestID: Int) = {
-    import utils.MyPostgresProfile.api._
-    import models.SlickModel._
+    import org.stingray.contester.dbmodel.MyPostgresProfile.api._
+    import org.stingray.contester.dbmodel.SlickModel._
 
     db.run(
       locatedPrintJobs.filter(_.contest === contestID).result)

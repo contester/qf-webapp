@@ -1,3 +1,4 @@
+@import org.stingray.contester.dbmodel._
 @(s: FullyDescribedSubmit, teams: Function[Int, Team], showRejudge: Boolean)
 
 <tr id="result-row-@{s.submit.submitId.id}"><th scope="row"><a href="@routes.AdminApplication.showSubmit(s.submit.submitId.contestId, s.submit.submitId.id)">@s.submit.submitId.id</a></th>

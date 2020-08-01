@@ -8,6 +8,7 @@ import org.stingray.qf.models.TeamClient
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import utils.Ask
+import org.stingray.contester.dbmodel._
 
 import scala.concurrent.{ExecutionContext, Future}
 

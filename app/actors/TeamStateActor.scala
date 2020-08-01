@@ -1,7 +1,7 @@
 package org.stingray.qf.actors
 
 import akka.actor.Props
-import models.{LocalTeam, SlickModel}
+import org.stingray.contester.dbmodel._
 import play.api.Logging
 import slick.jdbc.JdbcBackend
 
@@ -23,7 +23,8 @@ class TeamStateActor(db: JdbcBackend#DatabaseDef) extends AnyStateActor[TeamStat
 
   private[this] var teams: TeamState = Map.empty
 
-  import utils.MyPostgresProfile.api._
+  import org.stingray.contester.dbmodel.MyPostgresProfile.api._
+  import org.stingray.contester.dbmodel.SlickModel
 
   override def loadStart(): Future[TeamState] =
     db.run(SlickModel.schools.result zip SlickModel.teams.result zip SlickModel.participants.result).map {

@@ -1,7 +1,7 @@
 package org.stingray.qf.models
 
 import akka.actor.ActorRef
-import models.{LocalTeam, Team}
+import org.stingray.contester.dbmodel.LocalTeam
 import org.stingray.qf.actors.TeamStateActor
 
 import scala.concurrent.Future
