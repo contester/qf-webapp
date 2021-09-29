@@ -35,7 +35,7 @@ updateOptions := updateOptions.value.withCachedResolution(true)
 
 val spireVersion = "0.13.0"
 
-val silhouetteVersion = "6.1.1"
+val silhouetteVersion = "7.0.0"
 
 val slickPG = "0.19.2"
 
@@ -43,9 +43,9 @@ libraryDependencies ++= Seq(
   "org.stingray.contester" %% "contester-dbmodel" % "2020.0.1-SNAPSHOT",
   "com.typesafe.play" %% "play-slick" % "4.0.2",
   "com.github.tototoshi" %% "slick-joda-mapper" % "2.4.2",
-  "com.softwaremill.macwire" %% "macros" % "2.3.5" % "provided",
+  "com.softwaremill.macwire" %% "macros" % "2.4.1" % "provided",
   "javax.xml.bind" % "jaxb-api" % "2.3.0",
-  "com.adrianhurt" %% "play-bootstrap" % "1.5.1-P27-B3",
+  "com.adrianhurt" %% "play-bootstrap" % "1.6.1-P28-B3",
   cacheApi,
   ws,
   "org.webjars" %% "webjars-play" % "2.7.3",
@@ -60,7 +60,7 @@ libraryDependencies ++= Seq(
   "org.apache.httpcomponents" % "httpclient" % "4.5.12",
   "org.apache.httpcomponents" % "httpcore" % "4.4.13",
   "org.postgresql" % "postgresql" % "42.2.14",
-  "commons-io" % "commons-io" % "2.7",
+  "commons-io" % "commons-io" % "2.11.0",
   "com.github.nscala-time" %% "nscala-time" % "2.24.0",
   "com.googlecode.htmlcompressor" % "htmlcompressor" % "1.5.2",
   "rhino" % "js" % "1.7R2",
