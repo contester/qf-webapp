@@ -80,6 +80,8 @@ POST /admin/reprintPrintJob/:id controllers.AdminApplication.reprintJob(id: Long
 
 GET /admin/:contestID/editTeam/:teamID controllers.AdminApplication.editTeam(contestID: Int, teamID: Int)
 
+GET /admin/:contestID/editSchool/:schoolID controllers.AdminApplication.editSchool(contestID: Int, schoolID: Int)
+
 GET /admin/:contestID/teams/ controllers.AdminApplication.listTeams(contestID: Int)
 
 GET /admin/:contestID/contests/ controllers.AdminApplication.showContestList(contestID: Int)

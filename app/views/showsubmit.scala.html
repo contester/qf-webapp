@@ -17,7 +17,7 @@
         @for(s <- sub.fsub.details.reverse) {
         <tr><td>@s.test</td><td>@s.resultString</td><td>@if(!s.timeLimitExceeded){ @s.time }</td><td>@s.memory</td></tr>
         @if(s.test == 0 && !s.success) {
-        <tr><td colspan="4"><pre>@s.testerOutput</pre></td></tr>
+        <tr><td colspan="4"><pre>@s.testerOutputStr</pre></td></tr>
         }
         }
         </tbody>

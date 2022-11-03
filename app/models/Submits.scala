@@ -140,6 +140,10 @@ case class ResultEntry(testingID: Long, test: Int, result: Int, time: TimeMs, me
                        testerOutput: Array[Byte], testerError: Array[Byte]) {
   def resultString = SubmitResult.message(result)
 
+  def testerOutputStr = new String(testerOutput, StandardCharsets.UTF_8)
+
+  def testerErrorStr = new String(testerError, StandardCharsets.UTF_8)
+
   def timeLimitExceeded = result == 11
 
   def success =

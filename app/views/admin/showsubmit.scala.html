@@ -52,7 +52,10 @@
         @if(s.result != 1) {
             @panel("Компиляция", "info") {
                 @details(s, "компилятора")
-                @stdpanel("Вывод", s.testerOutput.toString)
+                @stdpanel("Вывод", s.testerOutputStr)
+                @if(!s.testerErrorStr.isEmpty) {
+                    @stdpanel("Stderr", s.testerErrorStr)
+                }
             }
         }
     } else {
@@ -63,7 +66,10 @@
                 @fscontent(messages("label.output"), out.output)
                 @fscontent("Ответ жюри", out.answer)
             }
-            @stdpanel("Комментарий чекера", s.testerOutput.toString)
+            @stdpanel("Комментарий чекера", s.testerOutputStr)
+            @if(!s.testerErrorStr.isEmpty) {
+                @stdpanel("Stderr", s.testerErrorStr)
+            }
         }
     }
 }

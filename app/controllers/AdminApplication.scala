@@ -11,7 +11,7 @@ import com.mohiva.play.silhouette.impl.authenticators.SessionAuthenticator
 import com.spingo.op_rabbit.Message
 import models._
 import org.stingray.contester.dbmodel.{Clarification, Problem, School}
-import org.stingray.contester.dbmodel.SlickModel.Team
+import org.stingray.contester.dbmodel.SlickModel.{Team, teams}
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.http.ContentTypes
@@ -42,6 +42,8 @@ case class ContestDescription(id: Int)
 case class EditTeam(schoolName: String, teamName: String, teamNum: Option[Int])
 
 case class DisplayTeam(team: Team, school: School, login: String, password: String)
+
+case class DisplaySchool(school: School)
 
 case class AdminPrintJob(id: Long, contestID: Int, team: org.stingray.contester.dbmodel.Team, filename: String, arrived: DateTime,
                          printed: Option[DateTime], computerName: String, error: String)
@@ -503,17 +505,22 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
   def listTeams(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
     getSelectedContests(contestID, request.identity).flatMap { contest =>
-      db.run((for {
+      val teamQuery = (for {
         t <- SlickModel.teams
         p <- SlickModel.participants if (t.id === p.team && p.contest === contestID)
         s <- SlickModel.schools if (s.id === t.school)
         a <- SlickModel.assignments if (a.team === p.team && a.contest === p.contest)
-      } yield (t, p, s, a)).result).map { results =>
+      } yield (t, p, s, a)).result
+
+      val schoolQuery = SlickModel.schools.sortBy(_.name).result
+
+      db.run(teamQuery.zip(schoolQuery)).map { case (results, schools) =>
         val cvt = results.map {
           case (t, p, s, a) =>
             DisplayTeam(t, s, a.username, a.password)
         }
-        Ok(html.admin.teamlist(cvt, contest, request.identity))
+        val dsc = schools.map(DisplaySchool(_))
+        Ok(html.admin.teamlist(cvt, dsc, contest, request.identity))
       }
     }
   }
@@ -542,6 +549,10 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
           NotFound
       }
     }
+  }
+
+  def editSchool(contestID: Int, schoolID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
+    Future.successful(NotFound)
   }
 
   def postEditTeam(contestID: Int, teamID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
