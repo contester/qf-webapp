@@ -226,7 +226,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
   private def getTestingByID(testingID: Int) =
-    db.run(SlickModel.testings.filter(_.id === testingID.toLong).result.headOption)
+    db.run(SlickModel.testingByID(testingID.toLong).result.headOption)
 
   private def getSubmitAndTesting(submitId: Int) =
     Submits.getSubmitById(db, submitId).flatMap {
@@ -299,7 +299,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
   // TODO: check permissions, do just toggle instead of full update
   def toggleClarification(clrId: Long) = silhouette.SecuredAction.async { implicit request =>
-    db.run(SlickModel.clarifications.filter(_.id === clrId).result).flatMap { found =>
+    db.run(SlickModel.clarificationByID(clrId).result).flatMap { found =>
       found.headOption match {
         case Some(clr) =>
           Ask.apply[Clarification](statusActorModel.statusActor, clr.copy(hidden = !clr.hidden))
@@ -355,7 +355,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
   // TODO: check permissions
   def postUpdateClarification(clarificationId: Long) = silhouette.SecuredAction.async { implicit request =>
-    db.run(SlickModel.clarifications.filter(_.id === clarificationId).result.headOption).flatMap { clOpt =>
+    db.run(SlickModel.clarificationByID(clarificationId).result.headOption).flatMap { clOpt =>
       clOpt.map { cl =>
         val clObj = PostClarification(
           cl.problem, cl.text, cl.hidden
@@ -399,7 +399,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   )
 
   private[this] def getClarificationReq(id: Long)(implicit ec: ExecutionContext) =
-    db.run(SlickModel.clarificationRequests.filter(_.id === id).result.headOption)
+    db.run(ClarificationModel.getClarificationReq(id).result.headOption)
 
   // TODO: check permissions
   def postAnswerForm(clrId: Long) = silhouette.SecuredAction.async { implicit request =>
@@ -422,7 +422,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
             BadRequest(html.admin.postanswer(formWithErrors, clr, answerList.toSeq, contest))
           },
           data => {
-            db.run(SlickModel.clarificationRequests.filter(_.id === clrId).map(x => (x.answer, x.answered)).update((data.answer,true))).map { _ =>
+            db.run(ClarificationModel.getClarificationReqShort(clrId).update((data.answer,true))).map { _ =>
               statusActorModel.statusActor ! ClarificationAnswered(clr.contest, clrId, clr.team, clr.problem, data.answer)
               Redirect(routes.AdminApplication.showQandA(clr.contest))
             }
@@ -475,7 +475,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     import org.stingray.contester.dbmodel.SlickModel._
 
     db.run(
-      locatedPrintJobs.filter(_.contest === contestID).result)
+      locatedPrintJobsByContest(contestID).result)
     .zip(statusActorModel.teamClient.getTeams(contestID)).map {
       case (jobs, teams) =>
         jobs.flatMap { src =>
@@ -580,7 +580,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
   def showContestList(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
     getSelectedContests(contestID, request.identity).flatMap { contest =>
-      db.run(SlickModel.contests.sortBy(_.id).result).map { results =>
+      db.run(SlickModel.allContests.result).map { results =>
         val cvt = results.filter(x => request.identity.canSpectate(x.id))
         Ok(html.admin.contestlist(cvt, contest, request.identity))
       }
@@ -603,7 +603,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
   def editContest(contestID: Int, ceditID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(ceditID)).async { implicit request =>
     getSelectedContests(contestID, request.identity).zip(
-      db.run(SlickModel.contests.filter(_.id === ceditID).take(1).result.headOption)
+      db.run(SlickModel.getContestByID(ceditID).result.headOption)
     ).map {
       case (sc, c) =>
         c match {
@@ -625,8 +625,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
                 Future.successful(Ok(html.admin.editcontest(formWithErrors, ContestDescription(ceditID), sc)))
               },
               data => {
-                val upd = SlickModel.contests.filter(_.id === ceditID)
-                  .map(x => (x.name, x.schoolMode, x.startTime, x.freezeTime, x.endTime, x.exposeTime, x.polygonId, x.language))
+                val upd = SlickModel.getContestByIDToResync(ceditID)
                     .update((data.name, data.schoolMode, data.startTime, data.freezeTime, data.endTime, data.exposeTime, data.polygonID, data.language))
                 db.run(upd).map { v =>
                   Redirect(routes.AdminApplication.editContest(contestID, ceditID))

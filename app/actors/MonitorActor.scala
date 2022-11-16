@@ -74,7 +74,7 @@ class MonitorActor(db: JdbcBackend#DatabaseDef,
     import org.stingray.contester.dbmodel.MyPostgresProfile.api._
     import org.stingray.contester.dbmodel.SlickModel
 
-    val fu = db.run(SlickModel.contests.result).flatMap { contests =>
+    val fu = db.run(SlickModel.allContests.result).flatMap { contests =>
       Future.sequence(contests.map(getContestMonitor))
     }
     fu.foreach(st => self ! State(st))

@@ -136,7 +136,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
         SlickModel.clarificationRequestsUnanswered.result zip
           SlickModel.clarifications.result zip
           SlickModel.clrSeen2.result zip
-          SlickModel.contests.result
+          SlickModel.allContests.result
       )
 
     f.failed.foreach(e => logger.error(s"loading status actor: $e"))
@@ -321,7 +321,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
     }
 
     case Tick => {
-      db.run(SlickModel.contests.result).map { contests =>
+      db.run(SlickModel.allContests.result).map { contests =>
         self ! NewMultiContestState(contests)
       }
     }

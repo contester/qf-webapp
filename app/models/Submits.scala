@@ -200,15 +200,15 @@ object Submits {
       if (s.testingID == 0) None else Some(s.testingID.toInt))
 
   def getContestSubmits(contest: Long) = {
-    SlickModel.submits0.filter(_.contestID === contest.toInt).result
+    SlickModel.submits0ByContest(contest.toInt).result
   }
 
   def getContestTeamSubmits(contest: Int, team: Int) = {
-    SlickModel.submits0.filter(x => (x.contestID === contest && x.teamID === team)).result
+    SlickModel.submits0ByContestTeam(contest, team).result
   }
 
   def getContestTeamProblemSubmits(contest: Int, team: Int, problem: String) = {
-    SlickModel.submits0.filter(x => (x.contestID === contest && x.teamID === team && x.problemID === problem)).result
+    SlickModel.submits0ByContestTeamProblem(contest, team, problem).result
   }
 
   private def trOption(items: Seq[ResultEntry]): Option[Seq[ResultEntry]] =
@@ -252,7 +252,7 @@ object Submits {
     o.map(_.map(Some(_))).getOrElse(Future.successful(None))
 
   def getSubmitById(db: JdbcBackend#DatabaseDef, submitId: Int)(implicit ec: ExecutionContext): Future[Option[SubmitDetails]] = {
-    val pq = SlickModel.submits.filter(_.id === submitId.toLong).map(x => (x.contest, x.team, x.problem, x.source)).take(1).result.headOption
+    val pq = SlickModel.shortSubmitByID(submitId.toLong).result.headOption
     db.run(pq)
       .flatMap { maybeSubmit =>
         maybeSubmit map { short =>
@@ -266,7 +266,7 @@ object Submits {
   }
 
   def loadSubmitDetails(db: JdbcBackend#DatabaseDef, testingId: Int)(implicit ec: ExecutionContext) =
-    db.run(SlickModel.results0.filter(_.testingID === testingId.toLong).result).map(_.map(x =>
+    db.run(SlickModel.results0ByTesting(testingId.toLong).result).map(_.map(x =>
       ResultEntry(x.testingID, x.testID, x.resultCode, x.timeMs, x.memoryBytes,
         x.returnCode, x.testerReturnCode, x.testerOutput, x.testerError)
     ))
