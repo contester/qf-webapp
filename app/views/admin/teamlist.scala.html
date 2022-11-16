@@ -41,14 +41,13 @@
 
         <table id="schools" class="table table-hover table-bordered table-responsive">
             <thead>
-            <tr><th>ID</th><th>Short name</th><th>Full name</th></tr>
+            <tr><th>ID</th><th>Short name</th></tr>
             </thead>
             <tbody>
             @for(s <- schools) {
-            <tr id="@s.school.id">
-                <th scope="row">@s.school.id</th>
-                <td>@s.school.name</td>
-                <td><a href="@routes.AdminApplication.editSchool(contest.contest.id, s.school.id)">@s.school.fullName</a></td>
+            <tr id="@s.id">
+                <th scope="row"><a href="@routes.AdminApplication.editSchool(contest.contest.id, s.id)">@s.id</a</th>
+                <td>@s.name</td>
             </tr>
             }
             </tbody>

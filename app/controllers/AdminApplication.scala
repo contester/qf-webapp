@@ -6,6 +6,7 @@ import akka.NotUsed
 import akka.stream.scaladsl.{Merge, Source}
 import com.github.nscala_time.time.Imports._
 import com.google.common.collect.ImmutableRangeSet
+import com.mohiva.play.silhouette.api.actions.SecuredRequest
 import com.mohiva.play.silhouette.api.{Authorization, Silhouette}
 import com.mohiva.play.silhouette.impl.authenticators.SessionAuthenticator
 import com.spingo.op_rabbit.Message
@@ -35,15 +36,13 @@ case class ClarificationResponse(answer: String)
 
 case class PostWaiterTask(message: String, rooms: String)
 
-case class TeamDescription(id: Int, school: School)
-
 case class ContestDescription(id: Int)
 
-case class EditTeam(schoolName: String, teamName: String, teamNum: Option[Int])
+case class EditTeam(schoolID: Int, teamName: String, teamNum: Option[Int])
 
 case class DisplayTeam(team: Team, school: School, login: String, password: String)
 
-case class DisplaySchool(school: School)
+case class DisplaySchool(id: Int, name: String)
 
 case class AdminPrintJob(id: Long, contestID: Int, team: org.stingray.contester.dbmodel.Team, filename: String, arrived: DateTime,
                          printed: Option[DateTime], computerName: String, error: String)
@@ -210,7 +209,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
       },
       data => rejudgeRangeEx(data.range, request.identity).map { rejudged =>
         Redirect(routes.AdminApplication.rejudgePage(contestId)).flashing(
-          "success" -> rejudged.mkString(" ")
+          "success" -> s"${rejudged.length} submits"
         )
       }
     )
@@ -519,35 +518,37 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
           case (t, p, s, a) =>
             DisplayTeam(t, s, a.username, a.password)
         }
-        val dsc = schools.map(DisplaySchool(_))
+        val dsc = schools.map(x => DisplaySchool(x.id, x.name))
         Ok(html.admin.teamlist(cvt, dsc, contest, request.identity))
       }
     }
   }
 
   private val editTeamForm = Form {
-    mapping("schoolName" -> text,
+    mapping("schoolID" -> number,
     "teamName" -> text,
     "teamNum" -> optional(number)
     )(EditTeam.apply)(EditTeam.unapply)
   }
 
-  private def displayEditTeam(form: Option[Form[EditTeam]], team: SlickModel.Team, school: School, contest: SelectedContest)(implicit request: RequestHeader, ec: ExecutionContext) = {
-    Ok(html.admin.editteam(form.getOrElse(editTeamForm.fill(EditTeam(school.name, team.name, if (team.num!=0) Some(team.num) else None))), TeamDescription(team.id, school), contest))
+  private def displayEditTeam(form: Option[Form[EditTeam]], team: SlickModel.Team, schools: Seq[DisplaySchool], contest: SelectedContest)(implicit request: RequestHeader, ec: ExecutionContext) = {
+    Ok(html.admin.editteam(form.getOrElse(
+      editTeamForm.fill(EditTeam(team.school, team.name, if (team.num!=0) Some(team.num) else None))), team.id, schools.map(x => x.id.toString -> x.name), contest))
   }
 
-  def editTeam(contestID: Int, teamID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
+  private def forEditTeam(request: SecuredRequest[AdminEnv, AnyContent], contestID: Int, teamID: Int) =
     getSelectedContests(contestID, request.identity)
-      .zip(db.run((for {
-      (t, s) <- SlickModel.teams.filter(_.id === teamID) join SlickModel.schools on (_.school === _.id)
-    } yield (t, s)).result.headOption)).map {
-      case (contest, vOpt) =>
-      vOpt match {
-        case Some((team, school)) =>
-          displayEditTeam(None, team, school, contest)
-        case None =>
-          NotFound
-      }
+      .zip(db.run(SlickModel.teams.filter(_.id === teamID).result.headOption zip SlickModel.schools.sortBy(_.name).result)).map {
+      case (contest, (teamOpt, schools)) =>
+        teamOpt match {
+          case Some(team) => Some((contest, team, schools.map(x => DisplaySchool(x.id, x.name))))
+          case None => None
+    }}
+
+  def editTeam(contestID: Int, teamID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
+    forEditTeam(request, contestID, teamID).map {
+      case Some((contest, team, schools)) => displayEditTeam(None, team, schools, contest)
+      case None => NotFound
     }
   }
 
@@ -556,29 +557,18 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
   def postEditTeam(contestID: Int, teamID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
-    getSelectedContests(contestID, request.identity)
-      .zip(db.run((for {
-        (t, s) <- SlickModel.teams.filter(_.id === teamID) join SlickModel.schools on (_.school === _.id)
-      } yield (t, s)).result.headOption)).flatMap {
-      case (contest, vOpt) =>
-        vOpt match {
-          case Some((team, school)) =>
+    forEditTeam(request, contestID, teamID).flatMap {
+      case Some((contest, team, schools)) =>
             editTeamForm.bindFromRequest.fold(
               formWithErrors => {
-                Future.successful(displayEditTeam(Some(formWithErrors), team, school, contest))
+                Future.successful(displayEditTeam(Some(formWithErrors), team, schools, contest))
               },
               data => {
-                val updateSchool = if (data.schoolName != school.name) {
-                  Some(SlickModel.schools.filter(_.id === school.id).map(_.name).update(data.schoolName))
-                } else None
-                val updateTeam = if (data.teamName != team.name) {
-                  Some(SlickModel.teams.filter(_.id === team.id).map(_.name).update(data.teamName))
-                } else None
+                val updateTeam = if (data.teamName != team.name || data.schoolID != team.school) {
+                  db.run(SlickModel.teams.filter(_.id === team.id).map(x => (x.name, x.school)).update((data.teamName, data.schoolID)))
+                } else Future.successful(None)
 
-                val vec = updateSchool.toVector ++ updateTeam.toVector
-                val vseq = DBIO.sequence(vec)
-
-                db.run(vseq).map { v =>
+                updateTeam.map { v =>
                   Redirect(routes.AdminApplication.editTeam(contestID, teamID))
                 }
               },
@@ -586,7 +576,6 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
           case None =>
             Future.successful(NotFound)
         }
-    }
   }
 
   def showContestList(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>

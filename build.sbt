@@ -64,7 +64,7 @@ libraryDependencies ++= Seq(
   "com.github.nscala-time" %% "nscala-time" % "2.24.0",
   "com.googlecode.htmlcompressor" % "htmlcompressor" % "1.5.2",
   "rhino" % "js" % "1.7R2",
-  "org.scala-lang.modules" %% "scala-async" % "0.10.0",
+  "org.scala-lang.modules" %% "scala-async" % "1.0.1",
   "org.scala-lang" % "scala-reflect" % scalaVersion.value % Provided,
   "org.typelevel" %% "cats-core" % "2.1.1",
   "com.github.fkoehler" %% "play-html-compressor" % "2.8.0",

@@ -51,6 +51,12 @@ case class SubmitACMPartialResult(text: String, test: Option[Int]) extends Submi
     s"${text}${test.map(x => s" on test $x").getOrElse("")}"
 }
 
+case object BeingRetestedResult extends SubmitResult {
+  override val success: Boolean = false
+
+  override val message: String = "Testing in progress..."
+}
+
 object SubmitResult extends Logging {
   implicit val submitResultWrites = new Writes[SubmitResult] {
     override def writes(o: SubmitResult): JsValue = Json.obj(
@@ -98,10 +104,10 @@ object SubmitResult extends Logging {
       Future.successful(SubmitPartialResult(finished.passed, finished.taken))
     else {
       val xtid = finished.testingId.toLong
-      db.run(SlickModel.results.filter(_.testingID === xtid).sortBy(_.testID.desc).take(1).result.headOption).map { lastResultOption =>
+      db.run(SlickModel.headResultByTesting(xtid).result.headOption).map { lastResultOption =>
         lastResultOption.map { lastResult =>
           SubmitACMPartialResult(message.getOrElse(lastResult.resultCode, "wtf"), Some(lastResult.testID))
-        }.getOrElse(SubmitACMPartialResult("unknown", None))
+        }.getOrElse(BeingRetestedResult)
       }
     }
 
