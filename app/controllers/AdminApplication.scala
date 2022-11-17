@@ -272,11 +272,6 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }
 
-  def reprintSubmit(submitId: Int) = silhouette.SecuredAction(canRejudgeSubmit(submitId)).async { implicit request =>
-    rabbitMq ! Message.queue(SubmitTicketLite(SubmitIdLite(submitId)), queue = "contester.tickets")
-    Future.successful(Ok("ok"))
-  }
-
   def showQandA(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
     db.run(SlickModel.getClarificationsForContest(contestId).result)
       .zip(ClarificationModel.getClarificationReqs(db, contestId))
@@ -635,17 +630,22 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }
 
-  def showImportedTeamList(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
+  def showImportedTeamList(contestID: Int, school: Boolean) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
     getSelectedContests(contestID, request.identity).flatMap { contest =>
-      InitialImportTools.getImportedTeamsEn(externalDatabases.studentWeb.db).map { results =>
-        Ok(html.admin.importedteams(results.toSeq, contest, request.identity))
+      val sdb = if (school) externalDatabases.schoolWeb.db else externalDatabases.studentWeb.db
+      InitialImportTools.getImportedTeams(sdb, school).map { results =>
+        Ok(html.admin.importedteams(results.toSeq, contest, request.identity, school))
       }
     }}
 
-  def importTeams(contestID: Int)= silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>
+  def importTeams(contestID: Int, school: Boolean)= silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>
     getSelectedContests(contestID, request.identity).flatMap { contest =>
-      InitialImportTools.getImportedTeamsEn(externalDatabases.studentWeb.db).map { results =>
-        Redirect(routes.AdminApplication.index)
+      val sdb = if (school) externalDatabases.schoolWeb.db else externalDatabases.studentWeb.db
+      InitialImportTools.getImportedTeams(sdb, school).flatMap { results =>
+        val contests = if(school) Seq(3,4) else Seq(1,2)
+        InitialImportTools.populateContestsWithTeams(db, results, contests).map { _ =>
+          Redirect(routes.AdminApplication.index)
+        }
       }
     }
   }

@@ -45,6 +45,7 @@ libraryDependencies ++= Seq(
   "com.github.tototoshi" %% "slick-joda-mapper" % "2.4.2",
   "com.softwaremill.macwire" %% "macros" % "2.4.1" % "provided",
   "javax.xml.bind" % "jaxb-api" % "2.3.0",
+  "org.mariadb.jdbc" % "mariadb-java-client" % "3.1.0",
   "com.adrianhurt" %% "play-bootstrap" % "1.6.1-P28-B3",
   cacheApi,
   ws,

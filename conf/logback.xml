@@ -34,9 +34,9 @@
   <logger name="play" level="DEBUG" />
   <logger name="application" level="DEBUG" />
 
-  <logger name="slick" level="TRACE" additivity="false">
-    <appender-ref ref="SLICK"/>
-  </logger>
+<!--  <logger name="slick" level="TRACE" additivity="false">-->
+<!--    <appender-ref ref="SLICK"/>-->
+<!--  </logger>-->
 
 
   <!-- Off these ones as they are annoying, and anyway we manage configuration ourselves -->
