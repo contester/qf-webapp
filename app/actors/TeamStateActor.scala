@@ -26,8 +26,12 @@ class TeamStateActor(db: JdbcBackend#DatabaseDef) extends AnyStateActor[TeamStat
   import org.stingray.contester.dbmodel.MyPostgresProfile.api._
   import org.stingray.contester.dbmodel.SlickModel
 
+  private[this] val allSchools = Compiled(SlickModel.schools.map(identity))
+  private[this] val allTeams = Compiled(SlickModel.teams.map(identity))
+  private[this] val allParticipants = Compiled(SlickModel.participants.map(identity))
+
   override def loadStart(): Future[TeamState] =
-    db.run(SlickModel.schools.result zip SlickModel.teams.result zip SlickModel.participants.result).map {
+    db.run(allSchools.result zip allTeams.result zip allParticipants.result).map {
       case ((schoolRows, teamRows), localRows) =>
         val schoolMap = schoolRows.map(x => x.id -> x).toMap
         val globalTeamMap = teamRows.flatMap{x =>

@@ -40,20 +40,28 @@ object Users {
   private[this] def extraInfoQuery(contest: Int) =
     SlickModel.extraInfos.filter(_.contest === contest).result
 
+  private[this] val resolveQ = Compiled((username: Rep[String]) =>
+    SlickModel.joinedLoginQuery.filter(_.username === username).take(1)
+  )
+
   def resolveQuery(username: String) =
-    SlickModel.joinedLoginQuery.filter(_.username === username).result
+    resolveQ(username).result.headOption
 
   def toLoginInfo(x: SlickModel.LoggedInTeam0): LoggedInTeam =
     LoggedInTeam(x.username, x.contest, x.team, Seq())
 
+  private[this] val authQ = Compiled((username: Rep[String], password: Rep[String]) =>
+    SlickModel.joinedLoginQuery.filter(a => (a.username === username) && (a.password === password)).take(1)
+  )
+
   def authQuery(username: String, password: String) =
-    SlickModel.joinedLoginQuery.filter(a => (a.username === username) && (a.password === password)).result
+    authQ(username, password).result.headOption
 
   def authenticate(db: JdbcBackend#DatabaseDef, username: String, password: String)(implicit ec: ExecutionContext): Future[Option[LoggedInTeam]] =
-    db.run(authQuery(username, password)).map(_.headOption.map(toLoginInfo))
+    db.run(authQuery(username, password)).map(_.map(toLoginInfo))
 
   def resolve(db: JdbcBackend#DatabaseDef, username: String)(implicit ec: ExecutionContext): Future[Option[LoggedInTeam]] =
-    db.run(resolveQuery(username)).map(_.headOption).flatMap { opt =>
+    db.run(resolveQuery(username)).flatMap { opt =>
       opt.map(toLoginInfo).map { lt =>
         db.run(extraInfoQuery(lt.contest.id)).map { einfo =>
           Some(LoggedInTeam(lt.username, lt.contest, lt.team, einfo))

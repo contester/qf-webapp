@@ -125,14 +125,14 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
 
   private def pushPersistent(contest: Int, team: Int, kind: String, data: JsValue) =
     db.run(
-      (SlickModel.messages2 returning SlickModel.messages2.map(_.id) into ((user, id) => user.copy(id=Some(id)))) += Message2(None, contest, team, kind, data, seen = false)).foreach { m2 =>
+      SlickModel.messages2Add += Message2(None, contest, team, kind, data, seen = false)).foreach { m2 =>
       self ! m2
     }
 
   private def loadAll() = {
     val f =
       db.run(
-        SlickModel.messages2.filter(!_.seen).result zip
+        SlickModel.messages2Unseen.result zip
         SlickModel.clarificationRequestsUnanswered.result zip
           SlickModel.clarifications.result zip
           SlickModel.clrSeen2.result zip
@@ -281,7 +281,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
     case Ack(loggedInTeam, msgid) => {
       logger.info(s"acking $msgid for $loggedInTeam")
       getUnacked(loggedInTeam.contest.id, loggedInTeam.team.id) -= msgid
-      val loc = for {c <- SlickModel.messages2 if c.id === msgid } yield c.seen
+      val loc = SlickModel.messageSeenByID(msgid)
       val upd = loc.update(true)
       db.run(upd)
     }

@@ -48,10 +48,16 @@ object InitialImportTools {
     (SlickModel.schools.map(x => (x.name, x.fullName)) returning(SlickModel.schools.map(_.id))) += (s.schoolName, s.schoolFullName)
   }
 
+
+  private[this] val participantByCT = Compiled((contestID: Rep[Int], teamID: Rep[Int]) =>
+    SlickModel.participants.filter(x => (x.contest === contestID && x.team === teamID)).take(1)
+  )
+
+  private[this] val participantsToUpdateQ = Compiled(SlickModel.participants.map(x => (x.contest, x.team)))
   private def addParticipant(db: JdbcBackend#DatabaseDef, teamID: Int, contestID: Int)(implicit ec: ExecutionContext) = {
-    db.run(SlickModel.participants.filter(x => (x.contest === contestID && x.team === teamID)).result.headOption.flatMap {
+    db.run(participantByCT(contestID, teamID).result.headOption.flatMap {
       case Some(id) => DBIO.successful(id)
-      case None => SlickModel.participants.map(x => (x.contest, x.team)).insertOrUpdate((contestID, teamID))
+      case None => participantsToUpdateQ.insertOrUpdate((contestID, teamID))
     })
   }
 
