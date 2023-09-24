@@ -16,7 +16,7 @@ case class ShortenedPrintJob(id: Int, filename: String, contest: Int, team: Int,
                              computerName: String, areaID: Int, areaName: String, printer: String,
                              data: Array[Byte], arrived: DateTime)
 
-case class PrintEntry(filename: String, arrived: DateTime, printed: Boolean)
+case class PrintEntry(filename: String, arrived: DateTime, printed: Boolean, pages: Int)
 
 class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: StatusActorModel, rabbitMqModel: RabbitMqModel)(implicit ec: ExecutionContext) extends Logging {
   import org.stingray.contester.dbmodel.MyPostgresProfile.api._
@@ -46,7 +46,7 @@ class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: Sta
     } yield (pj.id, pj.filename, pj.contest, pj.team, pj.computer, cl.name, area.id, area.name, area.printer, pj.data, pj.arrived)
     db.run(q.result.headOption).flatMap( pjOpt =>
       pjOpt.map { x =>
-        val pj = ShortenedPrintJob(x._1.toInt, x._2, x._3, x._4, x._5.toString, x._6, x._7, x._8, x._9, x._10, x._11)
+        val pj = ShortenedPrintJob(x._1.toInt, x._2, x._3, x._4, x._5.address, x._6, x._7, x._8, x._9, x._10, x._11)
         statusActorModel.teamClient.getTeam(pj.contest, pj.team).zip(statusActorModel.getContest(pj.contest)).map {
           case (team, contestOpt) =>
             Some(PrintJob(
@@ -78,13 +78,13 @@ class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: Sta
     if (r.jobExpandedId.startsWith("s-")) {
       val jobId = r.jobExpandedId.substring(2).toLong
       val procTime = new DateTime(r.timestampSeconds * 1000)
-      db.run(dbPrintJobs.filter(_.id === jobId).map(x => (x.printed, x.error)).update((Some(procTime), r.errorMessage)))
+      db.run(dbPrintJobs.filter(_.id === jobId).map(x => (x.printed, x.error, x.pages)).update((Some(procTime), r.errorMessage, r.numPages.toInt)))
     } else Future.successful(0)
   }
 
   def printJobsForTeam(contest:Int, team: Int) =
     db.run(dbPrintJobs.filter(x => ((x.contest === contest) && (x.team === team)))
-      .map(x => (x.filename, x.arrived, x.printed.isDefined)).sortBy(_._2.desc).result).map(_.map(PrintEntry.tupled))
+      .map(x => (x.filename, x.arrived, x.printed.isDefined, x.pages)).sortBy(_._2.desc).result).map(_.map(PrintEntry.tupled))
 }
 
 object ClarificationModel extends Logging {

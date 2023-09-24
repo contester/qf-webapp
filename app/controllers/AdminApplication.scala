@@ -45,7 +45,7 @@ case class DisplayTeam(team: Team, school: School, login: String, password: Stri
 case class DisplaySchool(id: Int, name: String)
 
 case class AdminPrintJob(id: Long, contestID: Int, team: org.stingray.contester.dbmodel.Team, filename: String, arrived: DateTime,
-                         printed: Option[DateTime], computerName: String, error: String)
+                         printed: Option[DateTime], computerName: String, pages: Int, error: String)
 
 case class SubmitIdLite(id: Int)
 object SubmitIdLite {
@@ -475,7 +475,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
       case (jobs, teams) =>
         jobs.flatMap { src =>
           teams.get(src.team).map { team =>
-            AdminPrintJob(src.id, src.contest, team, src.filename, src.arrived, src.printed, src.computerName, src.error)
+            AdminPrintJob(src.id, src.contest, team, src.filename, src.arrived, src.printed, src.computerName, src.pages, src.error)
           }
         }
     }
@@ -506,14 +506,14 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
         a <- SlickModel.assignments if (a.team === p.team && a.contest === p.contest)
       } yield (t, p, s, a)).result
 
-      val schoolQuery = SlickModel.schools.sortBy(_.name).result
+      val schoolQuery = SlickModel.schools.sortBy(_.fullName).result
 
       db.run(teamQuery.zip(schoolQuery)).map { case (results, schools) =>
         val cvt = results.map {
           case (t, p, s, a) =>
             DisplayTeam(t, s, a.username, a.password)
         }
-        val dsc = schools.map(x => DisplaySchool(x.id, x.name))
+        val dsc = schools.map(x => DisplaySchool(x.id, x.fullName))
         Ok(html.admin.teamlist(cvt, dsc, contest, request.identity))
       }
     }
@@ -533,10 +533,10 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
   private def forEditTeam(request: SecuredRequest[AdminEnv, AnyContent], contestID: Int, teamID: Int) =
     getSelectedContests(contestID, request.identity)
-      .zip(db.run(SlickModel.teams.filter(_.id === teamID).result.headOption zip SlickModel.schools.sortBy(_.name).result)).map {
+      .zip(db.run(SlickModel.teams.filter(_.id === teamID).result.headOption zip SlickModel.schools.sortBy(_.fullName).result)).map {
       case (contest, (teamOpt, schools)) =>
         teamOpt match {
-          case Some(team) => Some((contest, team, schools.map(x => DisplaySchool(x.id, x.name))))
+          case Some(team) => Some((contest, team, schools.map(x => DisplaySchool(x.id, x.fullName))))
           case None => None
     }}
 
@@ -647,6 +647,12 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
           Redirect(routes.AdminApplication.index)
         }
       }
+    }
+  }
+
+  def addJuryTeams(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>
+    InitialImportTools.addJuryTeams(db).map { _ =>
+          Redirect(routes.AdminApplication.index)
     }
   }
 

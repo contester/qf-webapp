@@ -20,7 +20,7 @@
             @for(s <- teams) {
             <tr id="@s.team.id">
                 <th scope="row">@s.team.id</th>
-                <td>@s.school.name</td>
+                <td>@s.school.fullName</td>
                 <td>@s.team.num</td>
                 <td><a href="@routes.AdminApplication.editTeam(contest.contest.id, s.team.id)">@s.team.name</a></td>
                 @if(withPasswords) {

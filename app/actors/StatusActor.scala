@@ -287,7 +287,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
     }
 
     case GetAllContests => {
-      logger.info(s"getAllContests <- $contestStates")
       sender() ! Success(AllContests(contestStates.values.toSeq))
     }
 
@@ -296,7 +295,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
     }
 
     case annotated: AnnoSubmit => {
-      logger.info(s"received annotated: $annotated")
+      logger.debug(s"received annotated: $annotated")
 
       sub2Chan.offer(annotated)
       pushPersistent(annotated.contest, annotated.team, "submit", Json.toJson(annotated))

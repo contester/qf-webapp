@@ -1,5 +1,5 @@
 @import org.stingray.contester.dbmodel._
-@(s: FullyDescribedSubmit, teams: Function[Int, Team], showRejudge: Boolean)
+@(s: FullyDescribedSubmit, teams: Map[Int, Team], showRejudge: Boolean)
 
 <tr id="result-row-@{s.submit.submitId.id}"><th scope="row"><a href="@routes.AdminApplication.showSubmit(s.submit.submitId.contestId, s.submit.submitId.id)">@s.submit.submitId.id</a></th>
     @if(showRejudge){<td>
@@ -14,7 +14,7 @@
     </td>
     }
     <td>@s.submit.submitId.arrived.asString</td>
-    <td>@teams(s.submit.submitId.teamId).teamFullName</td><td>@s.submit.submitId.problem.id</td><td>@s.submit.submitId.ext</td>
+    <td>@{teams.get(s.submit.submitId.teamId).map(_.teamFullName).getOrElse(s"Team $s.submit.submitId.teamId")}</td><td>@s.submit.submitId.problem.id</td><td>@s.submit.submitId.ext</td>
     <td @if(s.result.success) { class="success" } id="result-@{s.submit.submitId.id}">
         @s.result.message
     </td><td>@s.score.getOrElse("")</td>

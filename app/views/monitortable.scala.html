@@ -29,7 +29,7 @@
     @for(r <- status.anyRows) {
     <tr @if(current == r.team.id) { class="info" } >
         <th scope="row">@r.rankStr</th><td>@r.team.id</td>
-        <td>@r.team.schoolNameWithNum<br/><small>@r.team.teamName</small></td>
+        <td>@r.team.schoolFullNameWithNum<br/><small>@r.team.teamName</small></td>
         @r.anyScore match {
         case sc: ACM.Score => {
         <td>@sc.solved</td><td>@sc.penalty</td>

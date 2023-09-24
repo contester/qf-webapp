@@ -65,7 +65,7 @@ object WaiterModel {
   }
 
   def delete(db: JdbcBackend#DatabaseDef, id: Long)(implicit ec: ExecutionContext): Future[Unit] = {
-    db.run(DBIO.seq(waiterTaskRecords.filter(_.id === id).delete, sqlu"""delete from WaiterTasks where ID = $id"""))
+    db.run(DBIO.seq(waiterTaskRecords.filter(_.id === id).delete, waiterTasks.filter(_.id === id).delete))
   }
 
   private def getAllRecords(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[Map[Long, Map[String, DateTime]]] =

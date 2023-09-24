@@ -52,12 +52,12 @@
     <div class="panel-heading"><h3 class="panel-title">@messages("label.printJobs")</h3></div>
     <table class="table table-bordered table-responsive">
         <thead>
-        <tr><th>@messages("label.time")</th><th>@messages("label.fileName")</th><th>@messages("label.result")</th></tr>
+        <tr><th>@messages("label.time")</th><th>@messages("label.fileName")</th><th>@messages("label.result")</th><th>@messages("label.pages")</th></tr>
         </thead>
         <tbody>
         @for(s <- jobs) {
         <tr><td>@LocalDateFormat(s.arrived)</td><td>@s.filename</td>
-            <td>@s.printed</td></tr>
+            <td>@s.printed</td><td>@s.pages</td></tr>
         }
 
         </tbody>

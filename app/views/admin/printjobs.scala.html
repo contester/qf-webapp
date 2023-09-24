@@ -9,7 +9,7 @@
         <table id="printjobs" class="table table-hover table-bordered table-responsive">
             <thead>
             <tr><th>ID</th><th></th><th>Computer</th><th>Team</th><th>Filename</th>
-                <th>Arrived</th><th>Printed</th><th>Error</th></tr>
+                <th>Arrived</th><th>Printed</th><th>Pages</th><th>Error</th></tr>
             </thead>
             <tbody>
             @for(s <- jobs) {
@@ -30,6 +30,7 @@
                 <td>@s.filename</td>
                 <td>@s.arrived</td>
                 <td>@s.printed</td>
+                <td>@s.pages</td>
                 <td>@s.error</td>
             </tr>
             }

@@ -1,7 +1,8 @@
 package models
 
-import java.nio.charset.StandardCharsets
+import com.google.common.math.IntMath
 
+import java.nio.charset.StandardCharsets
 import org.joda.time.DateTime
 import org.stingray.contester.dbmodel.{Memory, TimeMs}
 import play.api.Logging
@@ -10,6 +11,7 @@ import slick.lifted.MappedTo
 import spire.math.Rational
 import spire.math.extras.{FixedPoint, FixedScale}
 
+import java.math.RoundingMode
 import scala.concurrent.{ExecutionContext, Future}
 
 case class Arrived(timestamp: DateTime, seconds: Int, afterFreeze: Boolean) {
@@ -128,7 +130,7 @@ object ACMScorer extends SubmitScorer[ACMCell] {
 }
 
 case class ACMCell(attempt: Int, arrivedSeconds: Int, fullSolution: Boolean) extends ProblemCell {
-  def score = if (fullSolution) (arrivedSeconds / 60 + (attempt - 1) * 20) else 0
+  def score = if (fullSolution) (IntMath.divide(arrivedSeconds, 60, RoundingMode.FLOOR) + (attempt - 1) * 20) else 0
 
   override def toString =
     if (attempt == 0) ""

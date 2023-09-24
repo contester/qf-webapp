@@ -51,32 +51,22 @@ object InitialImportTools {
 
   import scala.async.Async.{async, await}
 
-  private val selLastID = sql"select LAST_INSERT_ID()".as[Int].head
 
   private[this] def insertSchoolQuery(s: ImportedSchool) = {
-    (SlickModel.schools.map(x => (x.name, x.fullName)) returning(SlickModel.schools.map(_.id))) += (s.schoolFullName, s.schoolFullName)
+    (SlickModel.schools.map(x => (x.shortName, x.fullName)) returning(SlickModel.schools.map(_.id))) += (s.schoolName, s.schoolFullName)
   }
 
-
-  private[this] val participantByCT = Compiled((contestID: Rep[Int], teamID: Rep[Int]) =>
-    SlickModel.participants.filter(x => (x.contest === contestID && x.team === teamID)).take(1)
-  )
 
   private[this] val participantsToUpdateQ = Compiled(SlickModel.participants.map(x => (x.contest, x.team)))
-  private def addParticipant(db: JdbcBackend#DatabaseDef, teamID: Int, contestID: Int)(implicit ec: ExecutionContext) = {
-    db.run(participantByCT(contestID, teamID).result.headOption.flatMap {
-      case Some(id) => DBIO.successful(id)
-      case None => participantsToUpdateQ ++= Seq((contestID, teamID))
-    })
-  }
 
   private[this] def genPassword(): String = {
     Range.inclusive(0, 10).map(_ => Random.nextInt(10)).mkString
   }
 
   def populateContestsWithTeams(db: JdbcBackend#DatabaseDef, teams: Iterable[ImportedTeam], contests: Iterable[Int])(implicit ec: ExecutionContext): Future[Unit] = async {
+    // Import missing schools and create mapping schoolname -> id
     val currentSchools = await(db.run(SlickModel.schools.result))
-    val schoolLookups = currentSchools.map(x => (x.name -> x.id)).toMap
+    val schoolLookups = currentSchools.map(x => (x.fullName -> x.id)).toMap
     val importedSchools = teams.map(_.school).toSet
     val foundSchools = importedSchools.map(x => x -> schoolLookups.get(x.schoolFullName)).toMap
     val addedSchools = await(Future.sequence(foundSchools.filter(_._2.isEmpty).keySet.map { ns =>
@@ -130,8 +120,15 @@ object InitialImportTools {
     await(db.run(DBIO.sequence(fresq)))
   }
 
+  def addJuryTeams(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext) = {
+    val jurySchool = ImportedSchool("Jury", "Contest Jury")
+    val teams = Seq(ImportedTeam(jurySchool, 1, "Test 1"), ImportedTeam(jurySchool, 2, "Test 2"), ImportedTeam(jurySchool, 3, "Test 3"))
+
+    populateContestsWithTeams(db, teams, Seq(1,2,3,4,11,12,13,14))
+  }
+
   def getNetmapComputers(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext) =
-    db.run(sql"select l.room, inet_ntoa(l.ip), h.name from contest_locations l, unetmap_host h where l.ip = h.ip order by l.room, h.name".as[(String, String, String)]).map(_.map(x => ImportedComputer(x._1, x._2, x._3)))
+    db.run(sql"select l.room, inet_ntoa(h.ip), h.name from contest_locations l, unetmap_host h where l.id = h.id order by l.room, h.name".as[(String, String, String)]).map(_.map(x => ImportedComputer(x._1, x._2, x._3)))
 
   def importNetmapComputers(db: JdbcBackend#DatabaseDef, comps: Seq[ImportedComputer])(implicit ec: ExecutionContext) = async {
     val roomSet = comps.map(_.location).toSet

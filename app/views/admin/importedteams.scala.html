@@ -26,6 +26,10 @@
         "col-md-2", "col-md-10", 'enctype -> "multipart/form-data") { implicit fc =>
         @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Import}
         }
+        @b3.horizontal.formCSRF(controllers.routes.AdminApplication.addJuryTeams(contest.contest.id),
+        "col-md-2", "col-md-10", 'enctype -> "multipart/form-data") { implicit fc =>
+        @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Add jury teams}
+        }
     </div>
 </div>
 

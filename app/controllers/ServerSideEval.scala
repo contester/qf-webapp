@@ -1,7 +1,6 @@
 package controllers
 
 import java.nio.charset.StandardCharsets
-
 import javax.inject.Inject
 import akka.actor.{ActorSystem, Props}
 import com.mohiva.play.silhouette.api.{Authorization, Silhouette}
@@ -9,6 +8,7 @@ import com.mohiva.play.silhouette.impl.authenticators.SessionAuthenticator
 import com.spingo.op_rabbit.{Message, RabbitControl}
 import models._
 import org.apache.commons.io.FileUtils
+import play.api.Logging
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.db.slick.DatabaseConfigProvider
@@ -40,7 +40,7 @@ object ServerSideEvalID {
 class ServerSideEval (cc: ControllerComponents,
                       silhouette: Silhouette[TeamsEnv],
                       dbConfig: DatabaseConfig[JdbcProfile], rabbitMqModel: RabbitMqModel
-                      ) extends AbstractController(cc) with I18nSupport {
+                      ) extends AbstractController(cc) with I18nSupport with Logging {
   private[this] val db = dbConfig.db
   import org.stingray.contester.dbmodel.MyPostgresProfile.api._
   import org.stingray.contester.dbmodel._
@@ -74,7 +74,7 @@ class ServerSideEval (cc: ControllerComponents,
 
   private[this] implicit val ec = defaultExecutionContext
 
-  val getCompilers = SlickModel.sortedCompilers
+  private[this] val getCompilers = SlickModel.sortedCompilers
 
   def index = silhouette.SecuredAction.async { implicit request =>
     db.run(getCompilers.result).flatMap { compilers =>
@@ -82,8 +82,10 @@ class ServerSideEval (cc: ControllerComponents,
     }
   }
 
+  private[this] val singleCustomTest = Compiled((id: Rep[Long]) => SlickModel.customTestWithLang.filter(_.id === id).take(1))
+
   def details(id: Long) = silhouette.SecuredAction(canSeeEval(id)).async { implicit request =>
-    db.run(SlickModel.customTestWithLang.filter(_.id === id).result.headOption).map { opt =>
+    db.run(singleCustomTest(id).result.headOption).map { opt =>
       opt.map { ev =>
         Ok(html.evaldetails(request.identity, ev))
       }.getOrElse(Redirect(routes.ServerSideEval.index))
