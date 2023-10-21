@@ -70,7 +70,7 @@ trait CommonAuthForms[E <: BaseEnv, P <: OneUserProvider] {
   def authenticate = silhouette.UnsecuredAction.async { implicit request =>
     AuthData.form.bindFromRequest.fold(
       formWithErrors => Future.successful(BadRequest(loginForm(formWithErrors))),
-      user => credentialsProvider.authenticate(Credentials(user.username, user.password)).flatMap {
+      user => credentialsProvider.authenticate(Credentials(user.username.toLowerCase, user.password)).flatMap {
         case Some(loginInfo) => teamsService.retrieve(loginInfo).flatMap {
           case Some(vuser) => authenticatorService.create(loginInfo).flatMap {
             authenticator => {
