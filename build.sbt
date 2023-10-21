@@ -1,12 +1,12 @@
 name := "qf"
 
-scalaVersion := "2.12.17"
+scalaVersion := "2.12.18"
 
 organization := "org.stingray.contester"
 
 maintainer := "i@stingr.net"
 
-version := "2022.1"
+version := "2023.1"
 
 scalacOptions ++= Seq(
   "-Xfatal-warnings",  // New lines for each options
@@ -41,7 +41,7 @@ val slickPG = "0.19.2"
 
 libraryDependencies ++= Seq(
   "org.stingray.contester" %% "contester-dbmodel" % "2022.0.1-SNAPSHOT",
-  "com.typesafe.play" %% "play-slick" % "4.0.2",
+  "com.typesafe.play" %% "play-slick" % "5.0.0",
   "com.github.tototoshi" %% "slick-joda-mapper" % "2.4.2",
   "com.softwaremill.macwire" %% "macros" % "2.4.1" % "provided",
   "javax.xml.bind" % "jaxb-api" % "2.3.0",
