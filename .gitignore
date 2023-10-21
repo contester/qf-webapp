@@ -81,3 +81,5 @@ server.pid
 .cache
 
 /conf/application.conf
+
+/.bsp/
