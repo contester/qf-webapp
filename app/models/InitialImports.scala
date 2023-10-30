@@ -29,7 +29,8 @@ object InitialImportTools {
     db.run(
       sql"""select t.contestant1_name_en, t.contestant2_name_en, t.contestant3_name_en, u.full_name_en,
            u.short_name_en from universities u, teams t where u.un_id=t.un_idf AND u.is_deleted='0'
-           AND t.is_deleted='0' ORDER BY u.full_name, t.team_id""".as[(String, String, String, String, String)]).map(convertImportedTeams(_))
+           AND t.is_deleted='0' ORDER BY u.full_name, t.team_id""".as[(String, String, String, String, String)])
+      .map(convertImportedTeams(_))
   }
 
   private def getImportedTeamsRu(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[Iterable[ImportedTeam]] = {
@@ -47,7 +48,9 @@ object InitialImportTools {
     }
   }
   private def convertImportedTeams(m: Iterable[(String, String, String, String, String)]): Iterable[ImportedTeam] =
-    m.groupBy(x => (x._5, x._4)).mapValues(_.zipWithIndex.map(x => ImportedTeam(ImportedSchool(x._1._5, x._1._4), x._2+1, pickNames(x._1._1, x._1._2, x._1._3)))).values.flatten
+    m.filter(x => (!x._1.isBlank && !x._2.isBlank && !x._3.isBlank))
+      .groupBy(x => (x._5, x._4))
+      .mapValues(_.zipWithIndex.map(x => ImportedTeam(ImportedSchool(x._1._5, x._1._4), x._2+1, pickNames(x._1._1, x._1._2, x._1._3)))).values.flatten
 
   import scala.async.Async.{async, await}
 
