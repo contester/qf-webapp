@@ -15,6 +15,7 @@ import spire.math.Rational
 import utils.Ask
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.math.Ordered.orderingToOrdered
 
 case class ContestMonitor(contest: Contest, status: AnyStatus)
 
@@ -54,9 +55,9 @@ object Foo {
     override def anyCells: Map[String, ProblemCell] = cells
   }
 
-  type RankState[ScoreType, CellType <: ProblemCell] = (Seq[RankedRow[ScoreType, CellType]], Int)
+  private type RankState[ScoreType, CellType <: ProblemCell] = (Seq[RankedRow[ScoreType, CellType]], Int)
 
-  def pullRank[ScoreType, CellType <: ProblemCell](state: RankState[ScoreType, CellType], next: MonitorRow[ScoreType, CellType]): RankState[ScoreType, CellType] = {
+  private def pullRank[ScoreType, CellType <: ProblemCell](state: RankState[ScoreType, CellType], next: MonitorRow[ScoreType, CellType]): RankState[ScoreType, CellType] = {
     val position = state._2
 
     val nextR =
@@ -73,11 +74,11 @@ object Foo {
   }
 
 
-  def rank[ScoreType, CellType <: ProblemCell](rows: Seq[MonitorRow[ScoreType, CellType]]): Seq[RankedRow[ScoreType, CellType]] =
+  private def rank[ScoreType, CellType <: ProblemCell](rows: Seq[MonitorRow[ScoreType, CellType]]): Seq[RankedRow[ScoreType, CellType]] =
     rows.foldLeft((Seq[RankedRow[ScoreType, CellType]](), 0))(pullRank)._1
 
-  case class SomeRow[ScoreType, CellType](team: Team, score: ScoreType,
-                                          cells: Map[String, CellType]) extends MonitorRow[ScoreType, CellType]
+  private case class SomeRow[ScoreType, CellType](team: Team, score: ScoreType,
+                                                  cells: Map[String, CellType]) extends MonitorRow[ScoreType, CellType]
 
   def groupAndRank[ScoreType, CellType <: ProblemCell](teams: Seq[Team], submits: Seq[Submit],
                                                        getCell: (Seq[Submit]) => CellType,
@@ -97,7 +98,17 @@ object Foo {
       val score = getScore(cells.values.toSeq)
 
       SomeRow(team, score, cells)
-    }.sortBy(_.score)
+    }.sortWith((a: SomeRow[ScoreType, CellType], b: SomeRow[ScoreType, CellType]) => {
+      a.score.compare(b.score) match {
+        case -1 => true
+        case 1 => false
+        case 0 => {
+          if ((!a.team.notRated) && b.team.notRated) { true }
+          else if (a.team.notRated && !b.team.notRated) { false }
+          else (a.team.teamFullName < b.team.teamFullName)
+        }
+      }
+    })
 
     Foo.rank(teamRows)
   }
@@ -145,19 +156,19 @@ object ACM {
     }
   }
 
-  def getCell(submits: Seq[Submit]): ACMCell =
+  private def getCell(submits: Seq[Submit]): ACMCell =
     Submits.indexAndScoreGrouped(submits, ACMCell.empty, ACMScorer)._1
 
-  def cellFold(state: Score, cell: ACMCell) =
+  private def cellFold(state: Score, cell: ACMCell) =
     if (cell.fullSolution)
         Score(state.solved + 1, state.penalty + cell.score, state.lastSubmitPenalty.max(cell.score))
     else
         state
 
-  def getScore(cells: Seq[ACMCell]) =
+  private def getScore(cells: Seq[ACMCell]) =
     cells.foldLeft(Score(0, 0, 0))(cellFold)
 
-  def calculateStatus(problems: Seq[Problem], teams: Seq[Team], submits: Seq[Submit]) =
+  def calculateStatus(problems: Seq[Problem], teams: Seq[Team], submits: Seq[Submit]): Status =
     Status(problems.map(_.id), Foo.groupAndRank(teams, submits, getCell, getScore))
 }
 
