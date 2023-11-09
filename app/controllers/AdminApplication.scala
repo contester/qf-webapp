@@ -504,7 +504,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
         p <- SlickModel.participants if (t.id === p.team && p.contest === contestID)
         s <- SlickModel.schools if (s.id === t.school)
         a <- SlickModel.assignments if (a.team === p.team && a.contest === p.contest)
-      } yield (t, p, s, a)).result
+      } yield (t, p, s, a)).sortBy(_._1.id).result
 
       val schoolQuery = SlickModel.schools.sortBy(_.fullName).result
 
@@ -643,7 +643,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
       val sdb = if (school) externalDatabases.schoolWeb.db else externalDatabases.studentWeb.db
       InitialImportTools.getImportedTeams(sdb, school).flatMap { results =>
         val contests = if(school) Seq(3,4) else Seq(1,2)
-        InitialImportTools.populateContestsWithTeams(db, results, contests).map { _ =>
+        InitialImportTools.populateContestsWithTeams(db, results, contests, false).map { _ =>
           Redirect(routes.AdminApplication.index)
         }
       }

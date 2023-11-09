@@ -60,13 +60,13 @@ object InitialImportTools {
   }
 
 
-  private[this] val participantsToUpdateQ = Compiled(SlickModel.participants.map(x => (x.contest, x.team)))
+  private[this] val participantsToUpdateQ = Compiled(SlickModel.participants.map(x => (x.contest, x.team, x.notRated)))
 
   private[this] def genPassword(): String = {
     Range.inclusive(0, 10).map(_ => Random.nextInt(10)).mkString
   }
 
-  def populateContestsWithTeams(db: JdbcBackend#DatabaseDef, teams: Iterable[ImportedTeam], contests: Iterable[Int])(implicit ec: ExecutionContext): Future[Unit] = async {
+  def populateContestsWithTeams(db: JdbcBackend#DatabaseDef, teams: Iterable[ImportedTeam], contests: Iterable[Int], notRated: Boolean)(implicit ec: ExecutionContext): Future[Unit] = async {
     // Import missing schools and create mapping schoolname -> id
     val currentSchools = await(db.run(SlickModel.schools.result))
     val schoolLookups = currentSchools.map(x => (x.fullName -> x.id)).toMap
@@ -100,7 +100,7 @@ object InitialImportTools {
       t <- teamIDs
     } yield (c, t)
 
-    val filteredParticipants = participantsToUpdate.filterNot(allParticipants)
+    val filteredParticipants = participantsToUpdate.filterNot(allParticipants).map(x => (x._1, x._2, notRated))
 
     await(db.run(participantsToUpdateQ ++= filteredParticipants))
 
@@ -125,9 +125,9 @@ object InitialImportTools {
 
   def addJuryTeams(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext) = {
     val jurySchool = ImportedSchool("Jury", "Contest Jury")
-    val teams = Seq(ImportedTeam(jurySchool, 1, "Test 1"), ImportedTeam(jurySchool, 2, "Test 2"), ImportedTeam(jurySchool, 3, "Test 3"))
+    val teams = (1.to(10)).map(x => ImportedTeam(jurySchool, x, s"Test $x"))
 
-    populateContestsWithTeams(db, teams, Seq(1,2,3,4,11,12,13,14))
+    populateContestsWithTeams(db, teams, Seq(1,2,3,4,11,12,13,14), true)
   }
 
   def getNetmapComputers(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext) =
