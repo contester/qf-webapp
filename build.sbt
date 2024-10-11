@@ -1,6 +1,6 @@
 name := "qf"
 
-scalaVersion := "2.12.18"
+scalaVersion := "2.12.20"
 
 organization := "org.stingray.contester"
 
@@ -27,9 +27,8 @@ lazy val root = (project in file(".")).enablePlugins(PlayScala)
 resolvers ++= Seq(
   Resolver.mavenLocal,
   Resolver.jcenterRepo,
-  Resolver.sonatypeRepo("snapshots"),
   "Atlassian Releases" at "https://maven.atlassian.com/public/"
-)
+) ++ Resolver.sonatypeOssRepos("snapshots")
 
 updateOptions := updateOptions.value.withCachedResolution(true)
 
@@ -37,11 +36,11 @@ val spireVersion = "0.13.0"
 
 val silhouetteVersion = "7.0.0"
 
-val slickPG = "0.19.2"
+val slickPG = "0.21.1"
 
 libraryDependencies ++= Seq(
-  "org.stingray.contester" %% "contester-dbmodel" % "2022.0.1-SNAPSHOT",
-  "com.typesafe.play" %% "play-slick" % "5.0.0",
+  "org.stingray.contester" %% "contester-dbmodel" % "2024.0.1-SNAPSHOT",
+  "com.typesafe.play" %% "play-slick" % "5.1.0",
   "com.github.tototoshi" %% "slick-joda-mapper" % "2.4.2",
   "com.softwaremill.macwire" %% "macros" % "2.4.1" % "provided",
   "javax.xml.bind" % "jaxb-api" % "2.3.0",

@@ -4,7 +4,7 @@
 ThisBuild / libraryDependencySchemes += "org.scala-lang.modules" %% "scala-xml" % VersionScheme.Always
 
 // Use the Play sbt plugin for Play projects
-addSbtPlugin("com.typesafe.play" % "sbt-plugin" % "2.8.20")
+addSbtPlugin("com.typesafe.play" % "sbt-plugin" % "2.8.22")
 
 // addSbtPlugin("com.typesafe.sbt" % "sbt-jshint" % "1.0.4")
 
