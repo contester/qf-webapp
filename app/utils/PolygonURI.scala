@@ -1,8 +1,7 @@
 package utils
 
-import java.net.URL
+import java.net.{URI, URL}
 import java.nio.charset.StandardCharsets
-
 import org.apache.http.NameValuePair
 import org.apache.http.client.utils.URLEncodedUtils
 import org.apache.http.message.BasicNameValuePair

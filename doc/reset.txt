@@ -1,6 +1,6 @@
 truncate clarification_requests, clarifications, clarifications_seen, custom_test, logins, messages, participants, print_jobs, problems, results, schools, submits, teams, testings, waiter_tasks, waiter_task_record;
 alter sequence clarification_requests_id_seq RESTART;
-alter sequence  clarifications_id_seq RESTART;
+alter sequence clarifications_id_seq RESTART;
 alter sequence custom_test_id_seq RESTART;
 alter sequence messages_id_seq RESTART;
 alter sequence print_jobs_id_seq RESTART;

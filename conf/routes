@@ -96,6 +96,8 @@ POST /admin/:contestID/importTeams/:school controllers.AdminApplication.importTe
 
 POST /admin/:contestID/addJuryTeams controllers.AdminApplication.addJuryTeams(contestID: Int)
 
+POST /admin/:contestID/addCoachTeams controllers.AdminApplication.addCoachTeams(contestID: Int)
+
 POST /admin/mega/importComputers controllers.AdminApplication.importNetmapComputers
 
 GET /admin/:contestID/misc controllers.AdminApplication.miscForms(contestID: Int)

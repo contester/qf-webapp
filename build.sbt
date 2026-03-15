@@ -6,7 +6,7 @@ organization := "org.stingray.contester"
 
 maintainer := "i@stingr.net"
 
-version := "2023.1"
+version := "2025.1"
 
 scalacOptions ++= Seq(
   "-Xfatal-warnings",  // New lines for each options

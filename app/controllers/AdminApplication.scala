@@ -656,6 +656,13 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }
 
+  def addCoachTeams(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>
+    InitialImportTools.addCoachTeams(db).map { _ =>
+      Redirect(routes.AdminApplication.index)
+    }
+  }
+
+
   def importNetmapComputers = silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>
     InitialImportTools.getNetmapComputers(externalDatabases.netmap.db).flatMap { comps =>
       InitialImportTools.importNetmapComputers(db, comps).map { _ =>
