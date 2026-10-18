@@ -12,8 +12,18 @@ object PolygonURL {
     URLEncodedUtils.parse(url.toURI, StandardCharsets.UTF_8).asScala.map(x => x.getName -> x.getValue).toMap
   }
 
-  private[this] def stripQuery(url: URL) =
-    new URL(url.getProtocol, url.getHost, url.getPort, url.getPath)
+  // Reassemble protocol/host/port/path without the query string. Built as a
+  // string and parsed by URI so an already-encoded path is passed through
+  // verbatim (the multi-arg URI constructors would re-quote it).
+  private[this] def strippedString(url: URL): String = {
+    val sb = new StringBuilder(url.getProtocol).append("://").append(url.getHost)
+    if (url.getPort != -1) sb.append(":").append(url.getPort)
+    sb.append(url.getPath)
+    sb.toString
+  }
+
+  private[this] def stripQuery(url: URL): URL =
+    new URI(strippedString(url)).toURL
 
   def withQuery(url: URL, params: Map[String, String]) =
     if (params.isEmpty)
@@ -22,7 +32,7 @@ object PolygonURL {
       import collection.JavaConverters._
       val newParams = asJavaIterable((getParams(url) ++ params).map(x => new BasicNameValuePair(x._1, x._2).asInstanceOf[NameValuePair]))
       val newQuery = URLEncodedUtils.format(newParams, StandardCharsets.UTF_8)
-      new URL(stripQuery(url), "?" + newQuery)
+      new URI(strippedString(url) + "?" + newQuery).toURL
     }
 
   def apply(url: URL): PolygonProblemHandle = {
@@ -33,7 +43,7 @@ object PolygonURL {
   }
 
   def apply(urlString: String): PolygonProblemHandle =
-    apply(new URL(urlString))
+    apply(new URI(urlString).toURL)
 
   def getPathPart(url: URL) =
     url.getPath.stripPrefix("/").stripSuffix("/")
