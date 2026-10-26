@@ -28,4 +28,15 @@
 
 </div>
 
+<div class="panel panel-warning">
+    <div class="panel-heading"><h3 class="panel-title">Copy contests for testing</h3></div>
+    <div class="panel-body">
+        <p>Overwrites contests 11-20 with contests 1-10: start time is set to now, other times are copied.</p>
+        @b3.horizontal.formCSRF(controllers.routes.AdminApplication.copyContestsForTesting(contest.contest.id),
+        "col-md-2", "col-md-10") { implicit fc =>
+        @b3.submit('class -> "btn btn-large btn-warning"){ <span class="glyphicon glyphicon-duplicate"></span> Copy contests 1-10 to 11-20}
+        }
+    </div>
+</div>
+
 }

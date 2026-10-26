@@ -100,6 +100,8 @@ POST /admin/:contestID/addCoachTeams controllers.AdminApplication.addCoachTeams(
 
 POST /admin/mega/importComputers controllers.AdminApplication.importNetmapComputers
 
+POST /admin/:contestID/copyContestsForTesting controllers.AdminApplication.copyContestsForTesting(contestID: Int)
+
 GET /admin/:contestID/misc controllers.AdminApplication.miscForms(contestID: Int)
 
 GET     /assets/*file               controllers.Assets.versioned(path="/public", file: Asset)

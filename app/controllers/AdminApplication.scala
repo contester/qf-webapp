@@ -671,6 +671,20 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }
 
+  def copyContestsForTesting(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>
+    import com.github.tototoshi.slick.PostgresJodaSupport._
+    val now = org.joda.time.DateTime.now
+    val action = SlickModel.contests.filter(_.id <= 10).sortBy(_.id).result.flatMap { originals =>
+      DBIO.sequence(originals.map { c =>
+        SlickModel.getContestByIDToResync(c.id + 10)
+          .update((c.name, c.schoolMode, now, c.freezeTime, c.endTime, c.exposeTime, c.polygonID, c.language))
+      })
+    }
+    db.run(action.transactionally).map { _ =>
+      Redirect(routes.AdminApplication.miscForms(contestID))
+    }
+  }
+
   def miscForms(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>
     getSelectedContests(contestID, request.identity).flatMap { contest =>
       InitialImportTools.getNetmapComputers(externalDatabases.netmap.db).map { comps =>
