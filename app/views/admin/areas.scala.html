@@ -1,0 +1,35 @@
+@(areas: Seq[org.stingray.contester.dbmodel.Area], contest: SelectedContest)(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@import helper.Implicits._
+@adminmain(tab = "", contest=contest) {
+@flash.get("success").map { message =>
+<div class="alert alert-success" role="alert">@message</div>
+}
+@flash.get("error").map { message =>
+<div class="alert alert-danger" role="alert">@message</div>
+}
+<div class="panel panel-success">
+    <div class="panel-heading"><h3 class="panel-title">Areas</h3></div>
+    <div class="panel-body">
+        <table class="table table-hover table-bordered table-responsive">
+            <thead>
+            <tr><th>ID</th><th>Name</th><th>Printer</th></tr>
+            </thead>
+            <tbody>
+            @for(a <- areas) {
+            <tr>
+                <td>@a.id</td>
+                <th scope="row">@a.name</th>
+                <td>
+                    @helper.form(controllers.routes.AdminApplication.postEditArea(contest.contest.id, a.id), 'class -> "form-inline") {
+                        @helper.CSRF.formField
+                        <input type="text" class="form-control input-sm" name="printer" value="@a.printer">
+                        <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                    }
+                </td>
+            </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+}

@@ -102,6 +102,14 @@ POST /admin/mega/importComputers controllers.AdminApplication.importNetmapComput
 
 POST /admin/:contestID/copyContestsForTesting controllers.AdminApplication.copyContestsForTesting(contestID: Int)
 
+GET /admin/:contestID/admins controllers.AdminApplication.adminsPage(contestID: Int)
+POST /admin/:contestID/admins controllers.AdminApplication.postAddAdmin(contestID: Int)
+GET /admin/:contestID/admins/:username controllers.AdminApplication.editAdmin(contestID: Int, username: String)
+POST /admin/:contestID/admins/:username controllers.AdminApplication.postEditAdmin(contestID: Int, username: String)
+POST /admin/:contestID/admins/:username/delete controllers.AdminApplication.deleteAdmin(contestID: Int, username: String)
+GET /admin/:contestID/areas controllers.AdminApplication.areasPage(contestID: Int)
+POST /admin/:contestID/areas/:areaID controllers.AdminApplication.postEditArea(contestID: Int, areaID: Int)
+
 GET /admin/:contestID/misc controllers.AdminApplication.miscForms(contestID: Int)
 
 GET     /assets/*file               controllers.Assets.versioned(path="/public", file: Asset)

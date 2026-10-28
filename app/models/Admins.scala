@@ -38,6 +38,9 @@ case class Admin(username: String, passwordHash: String, spectator: Set[Int], ad
   def canModify(contestId: Int) =
     administrator.contains(contestId) || administrator.contains(-1)
 
+  def isSuperAdmin =
+    administrator.contains(-1)
+
   def canSeeTeamPasswords(contestId: Int) =
     canModify(contestId)
 
@@ -97,6 +100,11 @@ object AdminPermissions {
   case class withSpectate(contestId: Int) extends Authorization[Admin, SessionAuthenticator] {
     override def isAuthorized[B](identity: Admin, authenticator: SessionAuthenticator)(implicit request: Request[B]): Future[Boolean] =
       Future.successful(identity.canSpectate(contestId))
+  }
+
+  case object withSuperAdmin extends Authorization[Admin, SessionAuthenticator] {
+    override def isAuthorized[B](identity: Admin, authenticator: SessionAuthenticator)(implicit request: Request[B]): Future[Boolean] =
+      Future.successful(identity.isSuperAdmin)
   }
 
   case object withCreateTasks extends Authorization[Admin, SessionAuthenticator] {

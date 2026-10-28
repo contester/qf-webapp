@@ -60,6 +60,9 @@ object SubmitTicketLite {
 case class EditContest(name: String, schoolMode: Boolean, startTime: DateTime, freezeTime: DateTime, endTime: DateTime,
                        exposeTime: DateTime, polygonID: String, language: String)
 
+case class EditAdmin(username: String, password: String, spectator: String, administrator: String,
+                     locations: String, unrestricted: String)
+
 class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEnv], dbConfig: DatabaseConfig[JdbcProfile],
                              monitorModel: Monitor,
                                  rabbitMqModel: RabbitMqModel,
@@ -683,6 +686,127 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     db.run(action.transactionally).map { _ =>
       Redirect(routes.AdminApplication.miscForms(contestID))
     }
+  }
+
+  private def normalizeList(s: String) =
+    s.split(',').map(_.trim).filter(_.nonEmpty).mkString(",")
+
+  private val aclConstraint = play.api.data.validation.Constraint[String]("constraint.acl") { s =>
+    val bad = s.split(',').map(_.trim).filter(_.nonEmpty).filterNot(x => x == "*" || scala.util.Try(x.toInt).isSuccess)
+    if (bad.isEmpty) play.api.data.validation.Valid
+    else play.api.data.validation.Invalid(s"Not a contest id or *: ${bad.mkString(", ")}")
+  }
+
+  private val adminForm = Form {
+    mapping(
+      "username" -> nonEmptyText,
+      "password" -> text,
+      "spectator" -> text.verifying(aclConstraint),
+      "administrator" -> text.verifying(aclConstraint),
+      "locations" -> text,
+      "unrestricted" -> text.verifying(aclConstraint)
+    )(EditAdmin.apply)(EditAdmin.unapply)
+  }
+
+  private def showAdmins(contest: SelectedContest, form: Form[EditAdmin], status: Status)(implicit request: RequestHeader) =
+    db.run(SlickModel.admins.sortBy(_.username).result).map { admins =>
+      status(html.admin.admins(admins, form, contest))
+    }
+
+  def adminsPage(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
+    getSelectedContests(contestID, request.identity).flatMap { contest =>
+      showAdmins(contest, adminForm, Ok)
+    }
+  }
+
+  def postAddAdmin(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
+    getSelectedContests(contestID, request.identity).flatMap { contest =>
+      adminForm.bindFromRequest.fold(
+        formWithErrors => showAdmins(contest, formWithErrors, BadRequest),
+        data => {
+          val form = adminForm.fill(data.copy(password = ""))
+          if (data.password.isEmpty)
+            showAdmins(contest, form.withError("password", "Password is required"), BadRequest)
+          else
+            db.run(SlickModel.admins.filter(_.username === data.username).exists.result).flatMap {
+              case true =>
+                showAdmins(contest, form.withError("username", "Already exists"), BadRequest)
+              case false =>
+                val entry = org.stingray.contester.dbmodel.AdminEntry(data.username, Hasher.getSha1(data.password),
+                  normalizeList(data.spectator), normalizeList(data.administrator), normalizeList(data.locations),
+                  normalizeList(data.unrestricted))
+                db.run(SlickModel.admins += entry).map { _ =>
+                  Redirect(routes.AdminApplication.adminsPage(contestID)).flashing("success" -> s"Added ${data.username}")
+                }
+            }
+        }
+      )
+    }
+  }
+
+  def editAdmin(contestID: Int, username: String) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
+    getSelectedContests(contestID, request.identity).zip(
+      db.run(SlickModel.admins.filter(_.username === username).result.headOption)
+    ).map {
+      case (contest, Some(a)) =>
+        val data = EditAdmin(a.username, "", a.spectator, a.administrator, a.locations, a.unrestricted)
+        Ok(html.admin.editadmin(adminForm.fill(data), username, contest))
+      case _ => NotFound
+    }
+  }
+
+  def postEditAdmin(contestID: Int, username: String) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
+    getSelectedContests(contestID, request.identity).flatMap { contest =>
+      adminForm.bindFromRequest.fold(
+        formWithErrors => Future.successful(BadRequest(html.admin.editadmin(formWithErrors, username, contest))),
+        data => {
+          val administrator = normalizeList(data.administrator)
+          val dropsOwnSuper = username == request.identity.username && !administrator.split(',').contains("*")
+          if (dropsOwnSuper)
+            Future.successful(BadRequest(html.admin.editadmin(
+              adminForm.fill(data.copy(password = "")).withError("administrator", "You can't remove * from your own account"),
+              username, contest)))
+          else {
+            val q = SlickModel.admins.filter(_.username === username)
+            val perms = q.map(x => (x.spectator, x.administrator, x.locations, x.unrestricted))
+              .update((normalizeList(data.spectator), administrator, normalizeList(data.locations), normalizeList(data.unrestricted)))
+            val action =
+              if (data.password.isEmpty) perms
+              else perms.andThen(q.map(_.password).update(Hasher.getSha1(data.password)))
+            db.run(action.transactionally).map { _ =>
+              Redirect(routes.AdminApplication.adminsPage(contestID)).flashing("success" -> s"Updated $username")
+            }
+          }
+        }
+      )
+    }
+  }
+
+  def deleteAdmin(contestID: Int, username: String) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
+    if (username == request.identity.username)
+      Future.successful(Redirect(routes.AdminApplication.adminsPage(contestID)).flashing("error" -> "You can't delete your own account"))
+    else
+      db.run(SlickModel.admins.filter(_.username === username).delete).map { _ =>
+        Redirect(routes.AdminApplication.adminsPage(contestID)).flashing("success" -> s"Deleted $username")
+      }
+  }
+
+  private val areaPrinterForm = Form(single("printer" -> text))
+
+  def areasPage(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
+    getSelectedContests(contestID, request.identity).zip(db.run(SlickModel.areas.sortBy(_.id).result)).map {
+      case (contest, areas) => Ok(html.admin.areas(areas, contest))
+    }
+  }
+
+  def postEditArea(contestID: Int, areaID: Int) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
+    areaPrinterForm.bindFromRequest.fold(
+      _ => Future.successful(BadRequest),
+      printer => db.run(SlickModel.areas.filter(_.id === areaID).map(_.printer).update(printer.trim)).map { n =>
+        Redirect(routes.AdminApplication.areasPage(contestID)).flashing(
+          if (n == 0) "error" -> s"No area $areaID" else "success" -> s"Saved printer for area $areaID")
+      }
+    )
   }
 
   def miscForms(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>

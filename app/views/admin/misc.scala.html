@@ -39,4 +39,14 @@
     </div>
 </div>
 
+@if(admin.isSuperAdmin) {
+<div class="panel panel-danger">
+    <div class="panel-heading"><h3 class="panel-title">Super-admin</h3></div>
+    <div class="panel-body">
+        <a class="btn btn-default" href="@controllers.routes.AdminApplication.adminsPage(contest.contest.id)">Edit admins</a>
+        <a class="btn btn-default" href="@controllers.routes.AdminApplication.areasPage(contest.contest.id)">Edit areas</a>
+    </div>
+</div>
+}
+
 }

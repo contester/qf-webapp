@@ -1,0 +1,57 @@
+@(admins: Seq[org.stingray.contester.dbmodel.AdminEntry], form: Form[EditAdmin], contest: SelectedContest)(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@import helper.Implicits._
+@import b3.vertical.fieldConstructor
+@adminmain(tab = "", contest=contest) {
+@flash.get("success").map { message =>
+<div class="alert alert-success" role="alert">@message</div>
+}
+@flash.get("error").map { message =>
+<div class="alert alert-danger" role="alert">@message</div>
+}
+<div class="panel panel-success">
+    <div class="panel-heading"><h3 class="panel-title">Admins</h3></div>
+    <div class="panel-body">
+        <p>Permission lists are comma-separated contest ids, or <code>*</code> for all. Locations are room names, or <code>*</code>.</p>
+        <table class="table table-hover table-bordered table-responsive">
+            <thead>
+            <tr><th>Username</th><th>Spectator</th><th>Administrator</th><th>Unrestricted view</th><th>Locations</th><th></th></tr>
+            </thead>
+            <tbody>
+            @for(a <- admins) {
+            <tr>
+                <th scope="row">@a.username</th>
+                <td>@a.spectator</td>
+                <td>@a.administrator</td>
+                <td>@a.unrestricted</td>
+                <td>@a.locations</td>
+                <td>
+                    <a class="btn btn-xs btn-primary" href="@controllers.routes.AdminApplication.editAdmin(contest.contest.id, a.username)">Edit</a>
+                    @helper.form(controllers.routes.AdminApplication.deleteAdmin(contest.contest.id, a.username), 'style -> "display:inline",
+                        'onsubmit -> "return confirm('Delete this admin?');") {
+                        @helper.CSRF.formField
+                        <button type="submit" class="btn btn-xs btn-danger">Delete</button>
+                    }
+                </td>
+            </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="panel panel-warning">
+    <div class="panel-heading"><h3 class="panel-title">Add admin</h3></div>
+    <div class="panel-body">
+        @b3.horizontal.formCSRF(controllers.routes.AdminApplication.postAddAdmin(contest.contest.id),
+        "col-md-2", "col-md-10") { implicit fc =>
+        @b3.text(form("username"), '_label -> "Username")
+        @b3.password(form("password"), '_label -> "Password")
+        @b3.text(form("spectator"), '_label -> "Spectator")
+        @b3.text(form("administrator"), '_label -> "Administrator")
+        @b3.text(form("unrestricted"), '_label -> "Unrestricted view")
+        @b3.text(form("locations"), '_label -> "Locations")
+        @b3.submit('class -> "btn btn-large btn-warning"){ <span class="glyphicon glyphicon-plus"></span> Add}
+        }
+    </div>
+</div>
+}
