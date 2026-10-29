@@ -110,6 +110,10 @@ POST /admin/:contestID/admins/:username/delete controllers.AdminApplication.dele
 GET /admin/:contestID/areas controllers.AdminApplication.areasPage(contestID: Int)
 POST /admin/:contestID/areas/:areaID controllers.AdminApplication.postEditArea(contestID: Int, areaID: Int)
 
+POST /admin/:contestID/areas/:areaID/delete controllers.AdminApplication.deleteArea(contestID: Int, areaID: Int)
+GET /admin/:contestID/computers controllers.AdminApplication.computersPage(contestID: Int)
+POST /admin/:contestID/computers/:addr/delete controllers.AdminApplication.deleteComputer(contestID: Int, addr: String)
+
 GET /admin/:contestID/misc controllers.AdminApplication.miscForms(contestID: Int)
 
 GET     /assets/*file               controllers.Assets.versioned(path="/public", file: Asset)

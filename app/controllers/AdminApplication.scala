@@ -809,6 +809,35 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     )
   }
 
+  def deleteArea(contestID: Int, areaID: Int) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
+    val back = Redirect(routes.AdminApplication.areasPage(contestID))
+    db.run(SlickModel.compLocations.filter(_.location === areaID).length.result).flatMap {
+      case 0 =>
+        db.run(SlickModel.areas.filter(_.id === areaID).delete).map { n =>
+          back.flashing(if (n == 0) "error" -> s"No area $areaID" else "success" -> s"Deleted area $areaID")
+        }
+      case n =>
+        Future.successful(back.flashing("error" -> s"Area $areaID still has $n computers; delete them first"))
+    }
+  }
+
+  def computersPage(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
+    val q = (for {
+      c <- SlickModel.compLocations
+      a <- SlickModel.areas if a.id === c.location
+    } yield (c.id, c.name, a.name)).sortBy(x => (x._3, x._2))
+    getSelectedContests(contestID, request.identity).zip(db.run(q.result)).map {
+      case (contest, comps) => Ok(html.admin.computers(comps.map(x => (x._1.address, x._2, x._3)), contest))
+    }
+  }
+
+  def deleteComputer(contestID: Int, addr: String) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
+    db.run(SlickModel.compLocations.filter(_.id === com.github.tminglei.slickpg.InetString(addr)).delete).map { n =>
+      Redirect(routes.AdminApplication.computersPage(contestID)).flashing(
+        if (n == 0) "error" -> s"No computer $addr" else "success" -> s"Deleted computer $addr")
+    }
+  }
+
   def miscForms(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>
     getSelectedContests(contestID, request.identity).flatMap { contest =>
       InitialImportTools.getNetmapComputers(externalDatabases.netmap.db).map { comps =>

@@ -1,0 +1,36 @@
+@(comps: Seq[(String, String, String)], contest: SelectedContest)(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@import helper.Implicits._
+@adminmain(tab = "", contest=contest) {
+@flash.get("success").map { message =>
+<div class="alert alert-success" role="alert">@message</div>
+}
+@flash.get("error").map { message =>
+<div class="alert alert-danger" role="alert">@message</div>
+}
+<div class="panel panel-success">
+    <div class="panel-heading"><h3 class="panel-title">Imported computers</h3></div>
+    <div class="panel-body">
+        <table class="table table-hover table-bordered table-responsive">
+            <thead>
+            <tr><th>Name</th><th>Address</th><th>Area</th><th></th></tr>
+            </thead>
+            <tbody>
+            @for(c <- comps) {
+            <tr>
+                <th scope="row">@c._2</th>
+                <td>@c._1</td>
+                <td>@c._3</td>
+                <td>
+                    @helper.form(controllers.routes.AdminApplication.deleteComputer(contest.contest.id, c._1),
+                        'onsubmit -> "return confirm('Delete this computer?');") {
+                        @helper.CSRF.formField
+                        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                    }
+                </td>
+            </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+}

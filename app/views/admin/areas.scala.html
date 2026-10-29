@@ -12,7 +12,7 @@
     <div class="panel-body">
         <table class="table table-hover table-bordered table-responsive">
             <thead>
-            <tr><th>ID</th><th>Name</th><th>Printer</th></tr>
+            <tr><th>ID</th><th>Name</th><th>Printer</th><th></th></tr>
             </thead>
             <tbody>
             @for(a <- areas) {
@@ -24,6 +24,13 @@
                         @helper.CSRF.formField
                         <input type="text" class="form-control input-sm" name="printer" value="@a.printer">
                         <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                    }
+                </td>
+                <td>
+                    @helper.form(controllers.routes.AdminApplication.deleteArea(contest.contest.id, a.id),
+                        'onsubmit -> "return confirm('Delete this area?');") {
+                        @helper.CSRF.formField
+                        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
                     }
                 </td>
             </tr>
