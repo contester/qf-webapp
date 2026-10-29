@@ -831,11 +831,15 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }
 
-  def deleteComputer(contestID: Int, addr: String) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
-    db.run(SlickModel.compLocations.filter(_.id === com.github.tminglei.slickpg.InetString(addr)).delete).map { n =>
-      Redirect(routes.AdminApplication.computersPage(contestID)).flashing(
-        if (n == 0) "error" -> s"No computer $addr" else "success" -> s"Deleted computer $addr")
-    }
+  def deleteComputers(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
+    val addrs = request.body.asFormUrlEncoded.flatMap(_.get("addr")).getOrElse(Seq.empty)
+    val back = Redirect(routes.AdminApplication.computersPage(contestID))
+    if (addrs.isEmpty)
+      Future.successful(back.flashing("error" -> "Nothing selected"))
+    else
+      db.run(SlickModel.compLocations.filter(_.id inSet addrs.map(com.github.tminglei.slickpg.InetString(_))).delete).map { n =>
+        back.flashing("success" -> s"Deleted $n computers")
+      }
   }
 
   def miscForms(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>

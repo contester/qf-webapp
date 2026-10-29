@@ -112,7 +112,7 @@ POST /admin/:contestID/areas/:areaID controllers.AdminApplication.postEditArea(c
 
 POST /admin/:contestID/areas/:areaID/delete controllers.AdminApplication.deleteArea(contestID: Int, areaID: Int)
 GET /admin/:contestID/computers controllers.AdminApplication.computersPage(contestID: Int)
-POST /admin/:contestID/computers/:addr/delete controllers.AdminApplication.deleteComputer(contestID: Int, addr: String)
+POST /admin/:contestID/computers/delete controllers.AdminApplication.deleteComputers(contestID: Int)
 
 GET /admin/:contestID/misc controllers.AdminApplication.miscForms(contestID: Int)
 

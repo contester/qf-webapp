@@ -10,27 +10,32 @@
 <div class="panel panel-success">
     <div class="panel-heading"><h3 class="panel-title">Imported computers</h3></div>
     <div class="panel-body">
+        @helper.form(controllers.routes.AdminApplication.deleteComputers(contest.contest.id),
+            'onsubmit -> "return confirm('Delete selected computers?');") {
+        @helper.CSRF.formField
         <table class="table table-hover table-bordered table-responsive">
             <thead>
-            <tr><th>Name</th><th>Address</th><th>Area</th><th></th></tr>
+            <tr><th><input type="checkbox" id="selectAll"></th><th>Name</th><th>Address</th><th>Area</th></tr>
             </thead>
             <tbody>
             @for(c <- comps) {
             <tr>
+                <td><input type="checkbox" name="addr" value="@c._1" class="comp-check"></td>
                 <th scope="row">@c._2</th>
                 <td>@c._1</td>
                 <td>@c._3</td>
-                <td>
-                    @helper.form(controllers.routes.AdminApplication.deleteComputer(contest.contest.id, c._1),
-                        'onsubmit -> "return confirm('Delete this computer?');") {
-                        @helper.CSRF.formField
-                        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-                    }
-                </td>
             </tr>
             }
             </tbody>
         </table>
+        <button type="submit" class="btn btn-danger">Delete selected</button>
+        }
+        <script type="text/javascript">
+        document.getElementById('selectAll').addEventListener('change', function() {
+            var on = this.checked;
+            document.querySelectorAll('.comp-check').forEach(function(c) { c.checked = on; });
+        });
+        </script>
     </div>
 </div>
 }
