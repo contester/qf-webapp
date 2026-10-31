@@ -68,3 +68,6 @@ status.14=Wrong answer
 status.15=Memory limit exceeded
 status.16=Tester error
 status.21=Rejected
+label.printFailed=Failed
+label.printDone=Printed
+label.printPending=Pending

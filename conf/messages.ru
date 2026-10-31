@@ -56,3 +56,6 @@ label.test=Тест
 label.tasks=Задания
 label.response=Ответ
 label.hidden=Не показывать
+label.printFailed=Ошибка
+label.printDone=Напечатано
+label.printPending=В очереди

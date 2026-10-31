@@ -16,7 +16,7 @@ case class ShortenedPrintJob(id: Int, filename: String, contest: Int, team: Int,
                              computerName: String, areaID: Int, areaName: String, printer: String,
                              data: Array[Byte], arrived: DateTime)
 
-case class PrintEntry(filename: String, arrived: DateTime, printed: Boolean, pages: Int)
+case class PrintEntry(filename: String, arrived: DateTime, printed: Boolean, pages: Int, failed: Boolean)
 
 class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: StatusActorModel, rabbitMqModel: RabbitMqModel)(implicit ec: ExecutionContext) extends Logging {
   import org.stingray.contester.dbmodel.MyPostgresProfile.api._
@@ -84,7 +84,7 @@ class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: Sta
 
   def printJobsForTeam(contest:Int, team: Int) =
     db.run(dbPrintJobs.filter(x => ((x.contest === contest) && (x.team === team)))
-      .map(x => (x.filename, x.arrived, x.printed.isDefined, x.pages)).sortBy(_._2.desc).result).map(_.map(PrintEntry.tupled))
+      .map(x => (x.filename, x.arrived, x.printed.isDefined, x.pages, x.error =!= "")).sortBy(_._2.desc).result).map(_.map(PrintEntry.tupled))
 }
 
 object ClarificationModel extends Logging {

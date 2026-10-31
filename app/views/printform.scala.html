@@ -57,7 +57,7 @@
         <tbody>
         @for(s <- jobs) {
         <tr><td>@LocalDateFormat(s.arrived)</td><td>@s.filename</td>
-            <td>@s.printed</td><td>@s.pages</td></tr>
+            <td>@if(s.failed) { @messages("label.printFailed") } else if(s.printed) { @messages("label.printDone") } else { @messages("label.printPending") }</td><td>@s.pages</td></tr>
         }
 
         </tbody>
