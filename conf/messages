@@ -71,3 +71,4 @@ status.21=Rejected
 label.printFailed=Failed
 label.printDone=Printed
 label.printPending=Pending
+error.printNotQueued=Could not queue the file for printing. Please tell the staff.

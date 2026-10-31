@@ -6,14 +6,14 @@ import org.apache.commons.io.FileUtils
 import play.api.Logging
 import play.api.data.Form
 import play.api.data.Forms._
-import play.api.i18n.I18nSupport
+import play.api.i18n.{I18nSupport, Messages}
 import play.api.mvc.{AbstractController, ControllerComponents, RequestHeader}
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import utils.auth.TeamsEnv
 import views.html
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 
 package printing {
 case class SubmitData(textOnly: Boolean)
@@ -72,8 +72,10 @@ class Printing (cc: ControllerComponents,
         formWithErrors => getPrintForm(request.identity, formWithErrors, location).map(BadRequest(_)),
         submitData => {
           printingModel.insertAndPrintJob(request.identity.contest.id, request.identity.team.id,
-            solutionOpt.get._1, solutionOpt.get._2, request.remoteAddress).map { _ =>
-              Redirect(routes.Printing.index)
+            solutionOpt.get._1, solutionOpt.get._2, request.remoteAddress).flatMap {
+              case true => Future.successful(Redirect(routes.Printing.index))
+              case false =>
+                getPrintForm(request.identity, parsed0.withGlobalError(Messages("error.printNotQueued")), location).map(InternalServerError(_))
             }
         }
       )

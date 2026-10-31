@@ -48,18 +48,21 @@ class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: Sta
       pjOpt.map { x =>
         val pj = ShortenedPrintJob(x._1.toInt, x._2, x._3, x._4, x._5.address, x._6, x._7, x._8, x._9, x._10, x._11)
         statusActorModel.teamClient.getTeam(pj.contest, pj.team).zip(statusActorModel.getContest(pj.contest)).map {
-          case (team, contestOpt) =>
-            Some(PrintJob(
+          case (teamOpt, contestOpt) =>
+            for {
+              team <- teamOpt
+              contest <- contestOpt
+            } yield PrintJob(
               filename=pj.filename,
-              contest=Some(IdName(pj.contest, contestOpt.get.name)),
-              team=Some(IdName(pj.team, team.get.teamFullName)),
+              contest=Some(IdName(pj.contest, contest.name)),
+              team=Some(IdName(pj.team, team.teamFullName)),
               computer=Some(Computer(id=pj.computerID, name=pj.computerName)),
               area=Some(IdName(id=pj.areaID, name=pj.areaName)),
               data = ByteString.copyFrom(pj.data),
               timestampSeconds = pj.arrived.getMillis / 1000,
               printer=pj.printer,
               jobId = s"s-$id"
-            ))
+            )
         }
       }.getOrElse(Future.successful(None))
     )
@@ -67,11 +70,16 @@ class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: Sta
 
   import utils.ProtoRabbitSupport._
 
-  def printJobByID(id: Long) =
-    buildProtoFromID(id).map{ optJob =>
-      optJob.map { job =>
+  /** Queues the print job for printing. Returns false (and queues nothing) if the job can't be built,
+    * e.g. the computer has no known location. */
+  def printJobByID(id: Long): Future[Boolean] =
+    buildProtoFromID(id).map {
+      case Some(job) =>
         rabbitMqModel.rabbitMq ! Message.queue(job, queue = "contester.protoprintjobs")
-      }
+        true
+      case None =>
+        logger.error(s"Can't build print job $id (unknown computer location, team or contest?), not queued")
+        false
     }
 
   def processPrintJobReport(r: PrintJobReport): Future[Int] = {

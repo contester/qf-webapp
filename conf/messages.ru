@@ -59,3 +59,4 @@ label.hidden=Не показывать
 label.printFailed=Ошибка
 label.printDone=Напечатано
 label.printPending=В очереди
+error.printNotQueued=Не удалось поставить файл в очередь печати. Сообщите организаторам.

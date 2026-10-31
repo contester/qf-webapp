@@ -495,8 +495,9 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
   def reprintJob(printJobID: Long) = silhouette.SecuredAction.async { implicit request =>
-    printingModel.printJobByID(printJobID).map { _ =>
-      Ok("ok")
+    printingModel.printJobByID(printJobID).map {
+      case true => Ok("ok")
+      case false => InternalServerError("can't build print job (unknown computer location, team or contest?)")
     }
   }
 
