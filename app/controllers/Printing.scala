@@ -42,24 +42,11 @@ class Printing (cc: ControllerComponents,
     }
   }
 
-  private val russianLetters = "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЬЫЪЭЮЯ"
-  private val russianSet = (russianLetters + russianLetters.toLowerCase).toSet
-  private def countRussianLetters(x: String) = x.count(russianSet)
-
-  private def toQ(x: Byte): Byte =
-    if (x > 127) {
-      "?".toByte
-    } else x
-
-  private def fixEncoding(x: Array[Byte]): Array[Byte] = {
-    x.map(toQ)
-  }
-
   def post = silhouette.SecuredAction(parse.multipartFormData).async { implicit request =>
     val parsed = printForm.bindFromRequest
     val solutionOpt = request.body.file("file").map { solution =>
       solution.filename -> FileUtils.readFileToByteArray(solution.ref.path.toFile)
-    }.map(x => x._1 -> fixEncoding(x._2))
+    }
 
     val parsed0 = if (solutionOpt.isDefined) parsed
       else parsed.withGlobalError("can't read file")

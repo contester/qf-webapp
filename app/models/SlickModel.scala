@@ -61,6 +61,7 @@ class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: Sta
               data = ByteString.copyFrom(pj.data),
               timestampSeconds = pj.arrived.getMillis / 1000,
               printer=pj.printer,
+              charset=utils.CharsetDetect.detect(pj.data),
               jobId = s"s-$id"
             )
         }
