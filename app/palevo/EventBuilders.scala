@@ -23,4 +23,7 @@ object EventBuilders {
 
   def taskCreated(task: StoredWaiterTask, now: DateTime): PalevoEvent =
     TaskCreated(task.id, now, task.message, task.rooms.toSeq.sorted)
+
+  def printError(jobId: Long, contest: PContest, team: Option[PTeam], error: String, now: DateTime): PalevoEvent =
+    PrintError(jobId, contest, now, team, error)
 }

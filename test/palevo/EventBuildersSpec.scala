@@ -36,4 +36,9 @@ class EventBuildersSpec extends AnyFunSuite {
   test("unknown team gets a placeholder name rather than dropping the event") {
     assert(EventBuilders.teamOrPlaceholder(7, None) == PTeam(7, "team 7"))
   }
+
+  test("printError with and without a team") {
+    assert(EventBuilders.printError(4, c, Some(team), "no paper", now) == PrintError(4, c, now, Some(team), "no paper"))
+    assert(EventBuilders.printError(4, c, None, "no paper", now) == PrintError(4, c, now, None, "no paper"))
+  }
 }
