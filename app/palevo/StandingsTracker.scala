@@ -14,7 +14,7 @@ import scala.collection.mutable
   * records its state, so a restart mid-contest announces nothing. Teams that are not rated are ignored.
   * Not thread-safe: call it from one actor.
   */
-final class StandingsTracker {
+final class StandingsTracker(audience: Audience = PublicAudience) {
   import StandingsTracker._
 
   private val states = mutable.Map[Int, State]()
@@ -52,15 +52,15 @@ final class StandingsTracker {
         val contestFirst =
           if (!state.contestFirst && solves.nonEmpty) {
             val s = solves.minBy(x => (x.seconds, x.team.id))
-            Seq(FirstSolveContest(pc, now, s.team, s.problem, s.seconds))
+            Seq(FirstSolveContest(pc, now, s.team, s.problem, s.seconds, audience))
           } else Nil
 
         val problemFirsts = (firstByProblem -- state.problems).values.toSeq
           .sortBy(s => (s.seconds, s.problem))
-          .map(s => FirstSolveProblem(pc, now, s.team, s.problem, s.seconds))
+          .map(s => FirstSolveProblem(pc, now, s.team, s.problem, s.seconds, audience))
 
         val leaderChange = currentLeader match {
-          case Some((t, solved)) if hadSolves && !state.leader.contains(t.id) => Seq(NewLeader(pc, now, t, solved))
+          case Some((t, solved)) if hadSolves && !state.leader.contains(t.id) => Seq(NewLeader(pc, now, t, solved, audience))
           case _ => Nil
         }
 
@@ -74,6 +74,13 @@ final class StandingsTracker {
 }
 
 object StandingsTracker {
+  /**
+    * True while the public scoreboard is frozen and the real one is not yet exposed. Contests without a freeze
+    * (freezeTime >= endTime) have no such window.
+    */
+  def liveWindow(c: Contest, now: DateTime): Boolean =
+    c.freezeTime.isBefore(c.endTime) && !now.isBefore(c.freezeTime) && now.isBefore(c.exposeTime)
+
   private final class State(var problems: Set[String], var contestFirst: Boolean, var leader: Option[Int])
 
   private final case class Solve(team: PTeam, problem: String, seconds: Int)

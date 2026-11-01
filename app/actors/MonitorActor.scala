@@ -6,7 +6,7 @@ import java.nio.file.{Files, StandardCopyOption}
 
 import akka.actor.{Actor, Props, Stash}
 import models._
-import palevo.{PalevoSink, StandingsTracker}
+import palevo.{PalevoSink, StandingsAnnouncer}
 import org.apache.commons.io.FileUtils
 import org.stingray.contester.dbmodel.Contest
 import org.stingray.qf.models.TeamClient
@@ -88,14 +88,15 @@ class MonitorActor(db: JdbcBackend#DatabaseDef,
   }
 
   private val monitors = mutable.HashMap[Int, StoredContestStatus]()
-  private val standings = new StandingsTracker
+  private val standings = new StandingsAnnouncer
 
   private def updateMonitors(state: Seq[StoredContestStatus]) = {
     state.map(_.contest.id).foreach(monitors.remove)
     state.foreach { st =>
       monitors.put(st.contest.id, st)
-      // Pre-freeze status only: it cannot change after the freeze, so nothing leaks.
-      standings.observe(st.contest, st.frozen, org.joda.time.DateTime.now).foreach(palevo.send)
+      // Public events come from the pre-freeze status only (it cannot change after the freeze, so nothing leaks);
+      // the jury additionally hears the real standings while the public scoreboard is frozen.
+      standings.observe(st.contest, st.frozen, st.exposed, org.joda.time.DateTime.now).foreach(palevo.send)
       if (st.contest.id <11) {
         for (location <- staticLocationFile) {
           val tmpFile = new File(location, s"${st.contest.id}.html.new")
