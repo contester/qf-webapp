@@ -87,4 +87,34 @@ class PalevoEventSpec extends AnyFunSuite {
     val e = ClarificationRequested(1, c, ts, team, "A", "t")
     assert(PalevoEvent.toJson(e) == PalevoEvent.toJson(e))
   }
+
+  test("public events carry no audience key") {
+    val events = Seq(ContestStarted(c, ts), FirstSolveProblem(c, ts, team, "B", 1), FirstSolveContest(c, ts, team, "B", 1),
+      NewLeader(c, ts, team, 1), ClarificationPosted(1, c, ts, updated = false, None, "t"))
+    events.foreach { e =>
+      assert((PalevoEvent.toJson(e) \ "audience").toOption.isEmpty, e.eventType)
+      assert(e.audience == PublicAudience)
+    }
+  }
+
+  test("jury standings events carry audience and qf-jury- ids") {
+    val fp = FirstSolveProblem(c, ts, team, "B", 60, JuryAudience)
+    val fc = FirstSolveContest(c, ts, team, "B", 60, JuryAudience)
+    val nl = NewLeader(c, ts, team, 3, JuryAudience)
+    assert(fp.id == "qf-jury-first-problem-12-B")
+    assert(fc.id == "qf-jury-first-contest-12")
+    assert(nl.id == "qf-jury-leader-12-7-3")
+    for (e <- Seq[PalevoEvent](fp, fc, nl)) {
+      assert((PalevoEvent.toJson(e) \ "audience").as[String] == "jury", e.eventType)
+      assert((PalevoEvent.toJson(e) \ "id").as[String].startsWith("qf-jury-"))
+    }
+    // the payload itself is unchanged
+    assert((PalevoEvent.toJson(fp) \ "data").get == (PalevoEvent.toJson(FirstSolveProblem(c, ts, team, "B", 60)) \ "data").get)
+  }
+
+  test("a public and a jury event for the same fact never share an id") {
+    assert(FirstSolveProblem(c, ts, team, "B", 60).id != FirstSolveProblem(c, ts, team, "B", 60, JuryAudience).id)
+    assert(FirstSolveContest(c, ts, team, "B", 60).id != FirstSolveContest(c, ts, team, "B", 60, JuryAudience).id)
+    assert(NewLeader(c, ts, team, 3).id != NewLeader(c, ts, team, 3, JuryAudience).id)
+  }
 }

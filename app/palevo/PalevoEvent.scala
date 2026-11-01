@@ -4,6 +4,11 @@ import org.joda.time.{DateTime, DateTimeZone}
 import org.joda.time.format.ISODateTimeFormat
 import play.api.libs.json._
 
+/** Who may see an event. Jury events carry real-state information (e.g. standings during a freeze). */
+sealed trait Audience
+case object PublicAudience extends Audience
+case object JuryAudience extends Audience
+
 final case class PContest(id: Int, name: String)
 final case class PTeam(id: Int, name: String)
 
@@ -14,6 +19,7 @@ sealed trait PalevoEvent {
   def contest: PContest
   def ts: DateTime
   def data: JsObject
+  def audience: Audience = PublicAudience
 }
 
 object PalevoEvent {
@@ -27,9 +33,18 @@ object PalevoEvent {
     "ts" -> tsFormat.print(e.ts.withZone(DateTimeZone.UTC)),
     "contest" -> Json.obj("id" -> e.contest.id, "name" -> e.contest.name),
     "data" -> e.data
-  )
+  ) ++ (e.audience match {
+    case JuryAudience => Json.obj("audience" -> "jury")
+    case PublicAudience => Json.obj()
+  })
 
   private[palevo] def team(t: PTeam): JsValue = Json.toJson(t)
+
+  /** Jury ids get a prefix so they can never collide with the public id of the same fact. */
+  private[palevo] def idPrefix(a: Audience): String = a match {
+    case JuryAudience => "qf-jury-"
+    case PublicAudience => "qf-"
+  }
 }
 
 /** Events that have no contest (waiter tasks) use this placeholder. */
@@ -78,21 +93,22 @@ final case class ContestFinished(contest: PContest, ts: DateTime) extends Palevo
 }
 
 final case class FirstSolveContest(contest: PContest, ts: DateTime, team: PTeam, problem: String,
-                                   elapsedSeconds: Int) extends PalevoEvent {
-  def id = s"qf-first-contest-${contest.id}"
+                                   elapsedSeconds: Int, override val audience: Audience = PublicAudience) extends PalevoEvent {
+  def id = s"${PalevoEvent.idPrefix(audience)}first-contest-${contest.id}"
   def eventType = "first_solve_contest"
   def data = Json.obj("team" -> PalevoEvent.team(team), "problem" -> problem, "elapsed_seconds" -> elapsedSeconds)
 }
 
 final case class FirstSolveProblem(contest: PContest, ts: DateTime, team: PTeam, problem: String,
-                                   elapsedSeconds: Int) extends PalevoEvent {
-  def id = s"qf-first-problem-${contest.id}-$problem"
+                                   elapsedSeconds: Int, override val audience: Audience = PublicAudience) extends PalevoEvent {
+  def id = s"${PalevoEvent.idPrefix(audience)}first-problem-${contest.id}-$problem"
   def eventType = "first_solve_problem"
   def data = Json.obj("team" -> PalevoEvent.team(team), "problem" -> problem, "elapsed_seconds" -> elapsedSeconds)
 }
 
-final case class NewLeader(contest: PContest, ts: DateTime, team: PTeam, solved: Int) extends PalevoEvent {
-  def id = s"qf-leader-${contest.id}-${team.id}-$solved"
+final case class NewLeader(contest: PContest, ts: DateTime, team: PTeam, solved: Int,
+                           override val audience: Audience = PublicAudience) extends PalevoEvent {
+  def id = s"${PalevoEvent.idPrefix(audience)}leader-${contest.id}-${team.id}-$solved"
   def eventType = "new_leader"
   def data = Json.obj("team" -> PalevoEvent.team(team), "solved" -> solved)
 }
