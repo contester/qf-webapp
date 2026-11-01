@@ -39,7 +39,7 @@ object NoContest {
 
 final case class ClarificationRequested(requestId: Long, contest: PContest, ts: DateTime, team: PTeam,
                                         problem: String, text: String) extends PalevoEvent {
-  def id = s"qf-clr-req-$requestId"
+  def id = s"qf-clr-req-$requestId-${ts.getMillis}"
   def eventType = "clarification_requested"
   def data = Json.obj("team" -> PalevoEvent.team(team), "problem" -> problem, "text" -> text)
 }
@@ -53,7 +53,7 @@ final case class ClarificationPosted(clarificationId: Long, contest: PContest, t
 }
 
 final case class TaskCreated(taskId: Long, ts: DateTime, text: String, rooms: Seq[String]) extends PalevoEvent {
-  def id = s"qf-task-$taskId"
+  def id = s"qf-task-$taskId-${ts.getMillis}"
   def eventType = "task_created"
   def contest = NoContest.value
   def data = Json.obj("text" -> text, "rooms" -> rooms)
@@ -99,7 +99,7 @@ final case class NewLeader(contest: PContest, ts: DateTime, team: PTeam, solved:
 
 final case class PrintError(jobId: Long, contest: PContest, ts: DateTime, team: Option[PTeam],
                             error: String) extends PalevoEvent {
-  def id = s"qf-print-$jobId"
+  def id = s"qf-print-$jobId-${ts.getMillis}"
   def eventType = "print_error"
   def data = Json.obj("error" -> error) ++ team.fold(Json.obj())(t => Json.obj("team" -> PalevoEvent.team(t)))
 }

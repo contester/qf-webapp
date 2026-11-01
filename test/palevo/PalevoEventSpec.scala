@@ -27,7 +27,7 @@ class PalevoEventSpec extends AnyFunSuite {
   test("task_created has no contest and carries rooms") {
     val e = TaskCreated(5, ts, "bring water", Seq("101", "102"))
     val j = PalevoEvent.toJson(e)
-    assert((j \ "id").as[String] == "qf-task-5")
+    assert((j \ "id").as[String] == s"qf-task-5-${ts.getMillis}")
     assert((j \ "contest").get == Json.obj("id" -> 0, "name" -> ""))
     assert((j \ "data").get == Json.obj("text" -> "bring water", "rooms" -> Seq("101", "102")))
   }
@@ -42,14 +42,14 @@ class PalevoEventSpec extends AnyFunSuite {
 
   test("clarification_requested") {
     val j = PalevoEvent.toJson(ClarificationRequested(9, c, ts, team, "A", "why?"))
-    assert((j \ "id").as[String] == "qf-clr-req-9")
+    assert((j \ "id").as[String] == s"qf-clr-req-9-${ts.getMillis}")
     assert((j \ "type").as[String] == "clarification_requested")
     assert((j \ "data").get == Json.obj("team" -> Json.obj("id" -> 7, "name" -> "Name"), "problem" -> "A", "text" -> "why?"))
   }
 
   test("print_error omits team when unknown") {
     val j = PalevoEvent.toJson(PrintError(4, c, ts, None, "no paper"))
-    assert((j \ "id").as[String] == "qf-print-4")
+    assert((j \ "id").as[String] == s"qf-print-4-${ts.getMillis}")
     assert((j \ "data").get == Json.obj("error" -> "no paper"))
     val k = PalevoEvent.toJson(PrintError(4, c, ts, Some(team), "no paper"))
     assert((k \ "data" \ "team").get == Json.obj("id" -> 7, "name" -> "Name"))
@@ -74,5 +74,17 @@ class PalevoEventSpec extends AnyFunSuite {
     val back = Json.parse(new String(bytes, StandardCharsets.UTF_8))
     assert((back \ "data" \ "text").as[String] == text)
     assert((back \ "data" \ "team" \ "name").as[String] == "Школа №5")
+  }
+
+  test("ids of one-shot events differ when a database sequence restarts and reuses a row id") {
+    val later = ts.plusDays(30)
+    assert(ClarificationRequested(1, c, ts, team, "A", "t").id != ClarificationRequested(1, c, later, team, "A", "t").id)
+    assert(TaskCreated(1, ts, "t", Nil).id != TaskCreated(1, later, "t", Nil).id)
+    assert(PrintError(1, c, ts, None, "e").id != PrintError(1, c, later, None, "e").id)
+  }
+
+  test("a retry of the same event keeps the same id") {
+    val e = ClarificationRequested(1, c, ts, team, "A", "t")
+    assert(PalevoEvent.toJson(e) == PalevoEvent.toJson(e))
   }
 }
