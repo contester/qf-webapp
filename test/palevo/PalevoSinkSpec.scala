@@ -5,9 +5,10 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.joda.time.DateTime
 import org.scalatest.funsuite.AnyFunSuite
 import play.api.libs.json.JsValue
+import scala.collection.mutable
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.concurrent.duration._
 
 class PalevoSinkSpec extends AnyFunSuite {
@@ -87,5 +88,52 @@ class PalevoSinkSpec extends AnyFunSuite {
 
   test("Noop does nothing") {
     NoopPalevoSink.send(event)
+  }
+
+  private def ev(n: Int) = ContestStarted(PContest(n, s"C$n"), event.ts)
+
+  private def idOf(j: JsValue) = (j \ "id").as[String]
+
+  test("events are delivered in order, one at a time") {
+    val promises = ArrayBuffer[Promise[Int]]()
+    val posted = ArrayBuffer[String]()
+    val sink = new HttpPalevoSink(j => { posted += idOf(j); val p = Promise[Int](); promises += p; p.future },
+      delays, schedule)(sameThread)
+    sink.send(ev(1)); sink.send(ev(2)); sink.send(ev(3))
+    assert(posted.toList == List(ev(1).id)) // the others wait
+    promises(0).success(202)
+    assert(posted.toList == List(ev(1).id, ev(2).id))
+    promises(1).success(202)
+    promises(2).success(202)
+    assert(posted.toList == List(ev(1).id, ev(2).id, ev(3).id))
+  }
+
+  test("a retried event is delivered before the next one") {
+    val posted = ArrayBuffer[String]()
+    val statuses = mutable.Queue(503, 202, 202)
+    val sink = new HttpPalevoSink(j => { posted += idOf(j); Future.successful(statuses.dequeue()) },
+      delays, schedule)(sameThread)
+    sink.send(ev(1)); sink.send(ev(2))
+    assert(posted.toList == List(ev(1).id, ev(1).id, ev(2).id))
+  }
+
+  test("a dropped event does not block the ones behind it") {
+    val posted = ArrayBuffer[String]()
+    val sink = new HttpPalevoSink(j => { posted += idOf(j); Future.successful(if (idOf(j) == ev(1).id) 422 else 202) },
+      delays, schedule)(sameThread)
+    sink.send(ev(1)); sink.send(ev(2))
+    assert(posted.toList == List(ev(1).id, ev(2).id))
+  }
+
+  test("backlog is bounded and drops the oldest waiting events") {
+    val promises = ArrayBuffer[Promise[Int]]()
+    val posted = ArrayBuffer[String]()
+    val sink = new HttpPalevoSink(j => { posted += idOf(j); val p = Promise[Int](); promises += p; p.future },
+      delays, schedule, maxBacklog = 2)(sameThread)
+    (1 to 5).foreach(n => sink.send(ev(n))) // 1 in flight, 2..5 waiting, only the newest two are kept
+    promises(0).success(202)
+    promises(1).success(202)
+    promises(2).success(202)
+    assert(posted.toList == List(ev(1).id, ev(4).id, ev(5).id))
   }
 }
