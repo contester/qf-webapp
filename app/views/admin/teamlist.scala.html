@@ -7,6 +7,9 @@
 <div class="panel panel-success">
     <div class="panel-heading"><h3 class="panel-title">Team editor</h3></div>
     <div class="panel-body">
+        @if(withPasswords) {
+        <p><a class="btn btn-primary" href="@routes.AdminApplication.passwordSheet(contest.contest.id, None, None)"><span class="glyphicon glyphicon-print"></span> Password sheets (PDF)</a></p>
+        }
 
         <table id="teams" class="table table-hover table-bordered table-responsive">
             <thead>
@@ -25,7 +28,7 @@
                 <td><a href="@routes.AdminApplication.editTeam(contest.contest.id, s.team.id)">@s.team.name</a></td>
                 @if(withPasswords) {
                 <td>@s.login</td>
-                <td>@s.password</td>
+                <td>@s.password <a href="@routes.AdminApplication.passwordSheet(contest.contest.id, None, Some(s.team.id))" title="Password sheet (PDF)"><span class="glyphicon glyphicon-print"></span></a></td>
                 }
             </tr>
             }

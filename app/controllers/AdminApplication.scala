@@ -501,6 +501,35 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }
 
+  /** Password slips of the contest as a PDF; optionally only one school's or one team's. */
+  def passwordSheet(contestID: Int, school: Option[Int], team: Option[Int]) =
+    silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
+      if (!request.identity.canSeeTeamPasswords(contestID)) {
+        Future.successful(Forbidden("not allowed to see team passwords"))
+      } else {
+        getSelectedContests(contestID, request.identity).flatMap { contest =>
+          val q = (for {
+            t <- SlickModel.teams
+            p <- SlickModel.participants if (t.id === p.team && p.contest === contestID)
+            s <- SlickModel.schools if (s.id === t.school)
+            a <- SlickModel.assignments if (a.team === p.team && a.contest === p.contest)
+          } yield (t, s, a)).result
+
+          db.run(q).map { rows =>
+            val all = rows.map { case (t, s, a) =>
+              (t, PasswordCard(contest.contest.name, s.fullName, t.num, t.name, a.username, a.password))
+            }
+            val selected = all.filter { case (t, _) =>
+              school.forall(_ == t.school) && team.forall(_ == t.id)
+            }.map(_._2)
+            Ok(PasswordSheet.render(selected, all.map(_._2)))
+              .as("application/pdf")
+              .withHeaders("Content-Disposition" -> s"""inline; filename="passwords-$contestID.pdf"""")
+          }
+        }
+      }
+    }
+
   def listTeams(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
     getSelectedContests(contestID, request.identity).flatMap { contest =>
       val teamQuery = (for {

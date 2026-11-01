@@ -80,6 +80,7 @@ GET /admin/:contestID/editTeam/:teamID controllers.AdminApplication.editTeam(con
 GET /admin/:contestID/editSchool/:schoolID controllers.AdminApplication.editSchool(contestID: Int, schoolID: Int)
 
 GET /admin/:contestID/teams/ controllers.AdminApplication.listTeams(contestID: Int)
+GET /admin/:contestID/passwordSheet controllers.AdminApplication.passwordSheet(contestID: Int, school: Option[Int], team: Option[Int])
 
 GET /admin/:contestID/contests/ controllers.AdminApplication.showContestList(contestID: Int)
 
