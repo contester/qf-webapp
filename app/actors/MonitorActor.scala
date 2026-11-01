@@ -6,6 +6,7 @@ import java.nio.file.{Files, StandardCopyOption}
 
 import akka.actor.{Actor, Props, Stash}
 import models._
+import palevo.{PalevoSink, StandingsTracker}
 import org.apache.commons.io.FileUtils
 import org.stingray.contester.dbmodel.Contest
 import org.stingray.qf.models.TeamClient
@@ -18,8 +19,9 @@ import scala.util.Try
 
 object MonitorActor {
   def props(db: JdbcBackend#DatabaseDef, staticLocation: Option[String],
-            teamClient: TeamClient, problemClient: ProblemClient, messagesApi: MessagesApi) =
-    Props(new MonitorActor(db, staticLocation, teamClient, problemClient, messagesApi))
+            teamClient: TeamClient, problemClient: ProblemClient, messagesApi: MessagesApi,
+            palevo: PalevoSink) =
+    Props(new MonitorActor(db, staticLocation, teamClient, problemClient, messagesApi, palevo))
 
   case class Get(contest: Int)
   case object Start
@@ -31,7 +33,8 @@ class MonitorActor(db: JdbcBackend#DatabaseDef,
                    staticLocation: Option[String],
                    teamClient: TeamClient,
                    problemClient: ProblemClient,
-                   messagesApi: MessagesApi) extends Actor with Stash {
+                   messagesApi: MessagesApi,
+                   palevo: PalevoSink) extends Actor with Stash {
   import MonitorActor._
   import context.dispatcher
 
@@ -85,11 +88,14 @@ class MonitorActor(db: JdbcBackend#DatabaseDef,
   }
 
   private val monitors = mutable.HashMap[Int, StoredContestStatus]()
+  private val standings = new StandingsTracker
 
   private def updateMonitors(state: Seq[StoredContestStatus]) = {
     state.map(_.contest.id).foreach(monitors.remove)
     state.foreach { st =>
       monitors.put(st.contest.id, st)
+      // Pre-freeze status only: it cannot change after the freeze, so nothing leaks.
+      standings.observe(st.contest, st.frozen, org.joda.time.DateTime.now).foreach(palevo.send)
       if (st.contest.id <11) {
         for (location <- staticLocationFile) {
           val tmpFile = new File(location, s"${st.contest.id}.html.new")
