@@ -6,7 +6,7 @@ import akka.stream.scaladsl.{BroadcastHub, Keep, Merge, Sink, Source}
 import akka.stream.{ActorMaterializer, OverflowStrategy}
 import models.ContesterResults.{CustomTestResult, FinishedTesting}
 import models._
-import palevo.{ContestPhaseTracker, PalevoSink}
+import palevo.{ContestPhaseTracker, EventBuilders, PContest, PalevoSink}
 import org.stingray.contester.dbmodel.{Clarification, Contest, MaxSeen, Message2}
 import play.api.{Logger, Logging}
 import play.api.libs.EventSource
@@ -20,7 +20,8 @@ import scala.concurrent.Future
 import scala.util.{Success, Try}
 
 object StatusActor {
-  def props(db: JdbcBackend#DatabaseDef, palevo: PalevoSink) = Props(classOf[StatusActor], db, palevo)
+  def props(db: JdbcBackend#DatabaseDef, palevo: PalevoSink, teamLookup: (Int, Int) => Future[Option[org.stingray.contester.dbmodel.LocalTeam]]) =
+    Props(classOf[StatusActor], db, palevo, teamLookup)
 
   case object Init
   case object Tick
@@ -73,7 +74,8 @@ object StatusActor {
                                      contests: Iterable[Contest])
 }
 
-class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink) extends Actor with Stash with Logging {
+class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
+                  teamLookup: (Int, Int) => Future[Option[org.stingray.contester.dbmodel.LocalTeam]]) extends Actor with Stash with Logging {
   import StatusActor._
   import context.dispatcher
 
@@ -170,6 +172,24 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink) extends Actor
       m.remove(id)
     }.headOption
 
+  private def contestForPalevo(contest: Int): PContest =
+    contestStates.get(contest).map(EventBuilders.contestOf).getOrElse(PContest(contest, ""))
+
+  /** Looks up the request and its team, then tells palevo. Any failure is logged and the announcement skipped. */
+  private def announceClarificationRequest(contest: Int, clrId: Long): Unit = {
+    val pcontest = contestForPalevo(contest)
+    val f = db.run(ClarificationModel.getClarificationReq(clrId).result.headOption).flatMap {
+      case Some(req) =>
+        teamLookup(contest, req.team).map { team =>
+          palevo.send(EventBuilders.clarificationRequested(req, pcontest,
+            EventBuilders.teamOrPlaceholder(req.team, team), com.github.nscala_time.time.Imports.DateTime.now))
+        }
+      case None =>
+        Future.successful(logger.warn(s"palevo: clarification request $clrId not found"))
+    }
+    f.failed.foreach(e => logger.warn(s"palevo: cannot announce clarification request $clrId: $e"))
+  }
+
   override def receive = {
     case Init => {
       loadAll.foreach { sis =>
@@ -214,6 +234,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink) extends Actor
     case ClarificationRequested(contest, clrId) => {
       pendingClarificationRequests(contest) += clrId
       clr2Chan.offer(ClarificationRequestState(contest, pendingClarificationRequests(contest).size, newRequest = true))
+      announceClarificationRequest(contest, clrId)
     }
 
     case ClarificationAnswered(contest, clrId, teamId, problem, text) => {
@@ -228,6 +249,8 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink) extends Actor
       val orig = cl.id.flatMap(id => clarifications.get(cl.contest).flatMap(_.get(id)))
       val saved = sender()
 
+      val pcontest = contestForPalevo(cl.contest)
+
       val q = if (orig.isDefined) {
         (SlickModel.clarifications.filter(_.id === cl.id.get).update(cl).map(_ => cl))
       } else {
@@ -239,8 +262,11 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink) extends Actor
         val prevVisible = orig.exists(!_.hidden)
         val ifp = if(cl.problem.isEmpty) None else Some(cl.problem)
         insertClarification(next)
-        if (!next.hidden)
+        if (!next.hidden) {
           clrPostChannel.offer(ClarificationPosted(next.id.get, next.contest, prevVisible, ifp, next.text))
+          palevo.send(EventBuilders.clarificationPosted(next.id.get, pcontest, prevVisible, next.problem, next.text,
+            com.github.nscala_time.time.Imports.DateTime.now))
+        }
         next
       }.onComplete(Ask.respond(saved, _))
     }
