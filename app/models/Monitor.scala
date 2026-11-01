@@ -184,12 +184,12 @@ case class StoredContestStatus(contest: Contest, frozen: AnyStatus, exposed: Any
 }
 
 class Monitor(dbConfig: DatabaseConfig[JdbcProfile], system: ActorSystem, configuration: Configuration,
-              messagesApi: MessagesApi, statusActorModel: StatusActorModel) {
+              messagesApi: MessagesApi, statusActorModel: StatusActorModel, palevoSink: palevo.PalevoSink) {
   private val db = dbConfig.db
 
   private[this] val monitorActor = system.actorOf(MonitorActor.props(
     db, configuration.getOptional[String]("monitor.static_location"),
-    statusActorModel.teamClient, statusActorModel.problemClient, messagesApi), "monitor-actor")
+    statusActorModel.teamClient, statusActorModel.problemClient, messagesApi, palevoSink), "monitor-actor")
 
   private implicit val monitorTimeout: akka.util.Timeout = {
     import scala.concurrent.duration._

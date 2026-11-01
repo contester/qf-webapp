@@ -6,6 +6,7 @@ import akka.stream.scaladsl.{BroadcastHub, Keep, Merge, Sink, Source}
 import akka.stream.{ActorMaterializer, OverflowStrategy}
 import models.ContesterResults.{CustomTestResult, FinishedTesting}
 import models._
+import palevo.{ContestPhaseTracker, EventBuilders, PContest, PalevoSink}
 import org.stingray.contester.dbmodel.{Clarification, Contest, MaxSeen, Message2}
 import play.api.{Logger, Logging}
 import play.api.libs.EventSource
@@ -19,7 +20,8 @@ import scala.concurrent.Future
 import scala.util.{Success, Try}
 
 object StatusActor {
-  def props(db: JdbcBackend#DatabaseDef) = Props(classOf[StatusActor], db)
+  def props(db: JdbcBackend#DatabaseDef, palevo: PalevoSink, teamLookup: (Int, Int) => Future[Option[org.stingray.contester.dbmodel.LocalTeam]]) =
+    Props(classOf[StatusActor], db, palevo, teamLookup)
 
   case object Init
   case object Tick
@@ -72,7 +74,8 @@ object StatusActor {
                                      contests: Iterable[Contest])
 }
 
-class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Logging {
+class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
+                  teamLookup: (Int, Int) => Future[Option[org.stingray.contester.dbmodel.LocalTeam]]) extends Actor with Stash with Logging {
   import StatusActor._
   import context.dispatcher
 
@@ -102,6 +105,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
 
   private[this] val (contestOut2, contestChannel2) = Concur.broadcast[Contest]()
   private[this] val contestStates = mutable.Map[Int, Contest]()
+  private[this] val phaseTracker = new ContestPhaseTracker
   private[this] val (msg2Out, msg2Channel) = Concur.broadcast[Message2]()
   private[this] val unacked = mutable.Map[(Int, Int), mutable.Map[Int, Message2]]()
   private[this] val (sub2Out, sub2Chan) = Concur.broadcast[AnnoSubmit]()
@@ -168,6 +172,24 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
       m.remove(id)
     }.headOption
 
+  private def contestForPalevo(contest: Int): PContest =
+    contestStates.get(contest).map(EventBuilders.contestOf).getOrElse(PContest(contest, ""))
+
+  /** Looks up the request and its team, then tells palevo. Any failure is logged and the announcement skipped. */
+  private def announceClarificationRequest(contest: Int, clrId: Long): Unit = {
+    val pcontest = contestForPalevo(contest)
+    val f = db.run(ClarificationModel.getClarificationReq(clrId).result.headOption).flatMap {
+      case Some(req) =>
+        teamLookup(contest, req.team).map { team =>
+          palevo.send(EventBuilders.clarificationRequested(req, pcontest,
+            EventBuilders.teamOrPlaceholder(req.team, team), com.github.nscala_time.time.Imports.DateTime.now))
+        }
+      case None =>
+        Future.successful(logger.warn(s"palevo: clarification request $clrId not found"))
+    }
+    f.failed.foreach(e => logger.warn(s"palevo: cannot announce clarification request $clrId: $e"))
+  }
+
   override def receive = {
     case Init => {
       loadAll.foreach { sis =>
@@ -212,6 +234,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
     case ClarificationRequested(contest, clrId) => {
       pendingClarificationRequests(contest) += clrId
       clr2Chan.offer(ClarificationRequestState(contest, pendingClarificationRequests(contest).size, newRequest = true))
+      announceClarificationRequest(contest, clrId)
     }
 
     case ClarificationAnswered(contest, clrId, teamId, problem, text) => {
@@ -226,6 +249,8 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
       val orig = cl.id.flatMap(id => clarifications.get(cl.contest).flatMap(_.get(id)))
       val saved = sender()
 
+      val pcontest = contestForPalevo(cl.contest)
+
       val q = if (orig.isDefined) {
         (SlickModel.clarifications.filter(_.id === cl.id.get).update(cl).map(_ => cl))
       } else {
@@ -237,8 +262,11 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
         val prevVisible = orig.exists(!_.hidden)
         val ifp = if(cl.problem.isEmpty) None else Some(cl.problem)
         insertClarification(next)
-        if (!next.hidden)
+        if (!next.hidden) {
           clrPostChannel.offer(ClarificationPosted(next.id.get, next.contest, prevVisible, ifp, next.text))
+          palevo.send(EventBuilders.clarificationPosted(next.id.get, pcontest, prevVisible, next.problem, next.text,
+            com.github.nscala_time.time.Imports.DateTime.now))
+        }
         next
       }.onComplete(Ask.respond(saved, _))
     }
@@ -310,6 +338,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
 
     case NewMultiContestState(cs) => {
       for (c <- cs) {
+        phaseTracker.observe(c, com.github.nscala_time.time.Imports.DateTime.now).foreach(palevo.send)
         val old = contestStates.get(c.id)
         if (old.isEmpty || old.get != c) {
           logger.info(s"put: $c")

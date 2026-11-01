@@ -18,7 +18,8 @@ case class ShortenedPrintJob(id: Int, filename: String, contest: Int, team: Int,
 
 case class PrintEntry(filename: String, arrived: DateTime, printed: Boolean, pages: Int, failed: Boolean)
 
-class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: StatusActorModel, rabbitMqModel: RabbitMqModel)(implicit ec: ExecutionContext) extends Logging {
+class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: StatusActorModel, rabbitMqModel: RabbitMqModel,
+                    palevoSink: palevo.PalevoSink)(implicit ec: ExecutionContext) extends Logging {
   import org.stingray.contester.dbmodel.MyPostgresProfile.api._
   import org.stingray.contester.dbmodel.SlickModel._
 
@@ -80,12 +81,32 @@ class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: Sta
         true
       case None =>
         logger.error(s"Can't build print job $id (unknown computer location, team or contest?), not queued")
+        announcePrintError(id, "cannot queue print job: unknown computer location, team or contest")
         false
     }
+
+  /** Tells palevo about a print failure. Fire-and-forget: lookup failures are logged and never propagate. */
+  private def announcePrintError(jobId: Long, error: String): Unit = {
+    import palevo.{EventBuilders, PContest}
+    val now = DateTime.now
+    val f = db.run(dbPrintJobs.filter(_.id === jobId).map(x => (x.contest, x.team)).result.headOption).flatMap {
+      case Some((contestId, teamId)) =>
+        statusActorModel.teamClient.getTeam(contestId, teamId).zip(statusActorModel.getContest(contestId)).map {
+          case (teamOpt, contestOpt) =>
+            palevoSink.send(EventBuilders.printError(jobId,
+              contestOpt.map(EventBuilders.contestOf).getOrElse(PContest(contestId, "")),
+              Some(EventBuilders.teamOrPlaceholder(teamId, teamOpt)), error, now))
+        }
+      case None =>
+        Future.successful(palevoSink.send(EventBuilders.printError(jobId, PContest(0, ""), None, error, now)))
+    }
+    f.failed.foreach(e => logger.warn(s"palevo: cannot announce print error for job $jobId: $e"))
+  }
 
   def processPrintJobReport(r: PrintJobReport): Future[Int] = {
     if (r.jobExpandedId.startsWith("s-")) {
       val jobId = r.jobExpandedId.substring(2).toLong
+      if (r.errorMessage.nonEmpty) announcePrintError(jobId, r.errorMessage)
       val procTime = new DateTime(r.timestampSeconds * 1000)
       db.run(dbPrintJobs.filter(_.id === jobId).map(x => (x.printed, x.error, x.pages)).update((Some(procTime), r.errorMessage, r.numPages.toInt)))
     } else Future.successful(0)

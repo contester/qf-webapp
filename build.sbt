@@ -39,6 +39,7 @@ val silhouetteVersion = "7.0.0"
 val slickPG = "0.21.1"
 
 libraryDependencies ++= Seq(
+  "org.scalatest" %% "scalatest" % "3.2.19" % Test,
   "org.stingray.contester" %% "contester-dbmodel" % "2024.0.1-SNAPSHOT",
   "com.typesafe.play" %% "play-slick" % "5.1.0",
   "com.github.tototoshi" %% "slick-joda-mapper" % "2.4.2",
