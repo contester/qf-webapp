@@ -40,6 +40,8 @@ case class ContestDescription(id: Int)
 
 case class EditTeam(schoolID: Int, teamName: String, teamNum: Option[Int])
 
+case class EditSchool(shortName: String, fullName: String)
+
 case class DisplayTeam(team: Team, school: School, login: String, password: String)
 
 case class DisplaySchool(id: Int, name: String)
@@ -580,8 +582,37 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }
 
+  private val editSchoolForm = Form {
+    mapping("shortName" -> text,
+      "fullName" -> nonEmptyText
+    )(EditSchool.apply)(EditSchool.unapply)
+  }
+
+  private def displayEditSchool(form: Form[EditSchool], schoolID: Int, contest: SelectedContest)(implicit request: RequestHeader) =
+    Ok(html.admin.editschool(form, schoolID, contest))
+
   def editSchool(contestID: Int, schoolID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
-    Future.successful(NotFound)
+    getSelectedContests(contestID, request.identity)
+      .zip(db.run(SlickModel.schools.filter(_.id === schoolID).result.headOption)).map {
+      case (contest, Some(school)) =>
+        displayEditSchool(editSchoolForm.fill(EditSchool(school.shortName, school.fullName)), schoolID, contest)
+      case _ => NotFound
+    }
+  }
+
+  def postEditSchool(contestID: Int, schoolID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
+    getSelectedContests(contestID, request.identity)
+      .zip(db.run(SlickModel.schools.filter(_.id === schoolID).result.headOption)).flatMap {
+      case (contest, Some(_)) =>
+        editSchoolForm.bindFromRequest.fold(
+          formWithErrors => Future.successful(BadRequest(html.admin.editschool(formWithErrors, schoolID, contest))),
+          data => db.run(SlickModel.schools.filter(_.id === schoolID).map(x => (x.shortName, x.fullName))
+            .update((data.shortName.trim, data.fullName.trim))).map { _ =>
+            Redirect(routes.AdminApplication.editSchool(contestID, schoolID)).flashing("success" -> "School updated.")
+          }
+        )
+      case _ => Future.successful(NotFound)
+    }
   }
 
   def postEditTeam(contestID: Int, teamID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>

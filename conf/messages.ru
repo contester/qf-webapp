@@ -60,3 +60,6 @@ label.printFailed=Ошибка
 label.printDone=Напечатано
 label.printPending=В очереди
 error.printNotQueued=Не удалось поставить файл в очередь печати. Сообщите организаторам.
+error=Ошибка
+label.pages=Страниц
+status.running=Выполняется...

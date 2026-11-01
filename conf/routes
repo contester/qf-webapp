@@ -86,6 +86,7 @@ GET /admin/:contestID/contests/ controllers.AdminApplication.showContestList(con
 
 + nocsrf
 POST /admin/:contestID/editTeam/:teamID controllers.AdminApplication.postEditTeam(contestID: Int, teamID: Int)
+POST /admin/:contestID/editSchool/:schoolID controllers.AdminApplication.postEditSchool(contestID: Int, schoolID: Int)
 
 GET /admin/:contestID/contests/:cid controllers.AdminApplication.editContest(contestID: Int, cid: Int)
 

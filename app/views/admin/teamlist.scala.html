@@ -44,12 +44,12 @@
 
         <table id="schools" class="table table-hover table-bordered table-responsive">
             <thead>
-            <tr><th>ID</th><th>Short name</th></tr>
+            <tr><th>ID</th><th>@messages("label.fullName")</th></tr>
             </thead>
             <tbody>
             @for(s <- schools) {
             <tr id="@s.id">
-                <th scope="row"><a href="@routes.AdminApplication.editSchool(contest.contest.id, s.id)">@s.id</a</th>
+                <th scope="row"><a href="@routes.AdminApplication.editSchool(contest.contest.id, s.id)">@s.id</a></th>
                 <td>@s.name</td>
             </tr>
             }
