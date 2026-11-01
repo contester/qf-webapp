@@ -19,50 +19,53 @@ object InitialImportTools {
   import org.stingray.contester.dbmodel.MyPostgresProfile.api._
   import org.stingray.contester.dbmodel.SlickModel
 
-  private def pickName(s: String) =
-    s.split(' ').head
+  // NULL columns come back as null strings.
+  private def nz(s: String): String = Option(s).map(_.trim).getOrElse("")
 
-  private def pickLastName(s: String) =
-    s.split(' ').last
+  // English names are "First Last", Russian ones "Фамилия Имя Отчество".
+  private[models] def pickSurnameEn(s: String) = s.split(' ').last
+  private[models] def pickSurnameRu(s: String) = s.split(' ').head
 
+  /**
+   * What goes into teams.name: "ShortName: Surname, Surname, Surname", or just the
+   * surnames when the team has no custom name. Surnames never contain a colon, so
+   * consumers that only want the custom name can split on the last ": ".
+   */
+  private[models] def composeTeamName(customName: String, surnames: Seq[String]): String = {
+    val members = surnames.mkString(", ")
+    if (customName.isEmpty) members else s"$customName: $members"
+  }
 
-  private def pickNames(n1: String, n2: String, n3: String) =
-    s"${pickName(n1)}, ${pickName(n2)}, ${pickName(n3)}"
+  // (contestant1..3, school full name, school short name, team name)
+  private type Row = (String, String, String, String, String, String)
 
-  private def pickLastNames(n1: String, n2: String, n3: String) =
-    s"${pickLastName(n1)}, ${pickLastName(n2)}, ${pickLastName(n3)}"
-
+  private def convertImportedTeams(pickSurname: String => String)(m: Iterable[Row]): Iterable[ImportedTeam] =
+    m.map(x => (nz(x._1), nz(x._2), nz(x._3), nz(x._4), nz(x._5), nz(x._6)))
+      .filter(x => x._1.nonEmpty && x._2.nonEmpty && x._3.nonEmpty)
+      .groupBy(x => (x._5, x._4))
+      .mapValues(_.zipWithIndex.map { case (x, i) =>
+        ImportedTeam(ImportedSchool(x._5, x._4), i + 1,
+          composeTeamName(x._6, Seq(x._1, x._2, x._3).map(pickSurname)))
+      }).values.flatten
 
   private def getImportedTeamsEn(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[Iterable[ImportedTeam]] = {
     db.run(
       sql"""select t.contestant1_name_en, t.contestant2_name_en, t.contestant3_name_en, u.full_name_en,
            u.short_name_en, t.team_name from universities u, teams t where u.un_id=t.un_idf AND u.is_deleted='0'
-           AND t.is_deleted='0' ORDER BY u.full_name, t.team_id""".as[(String, String, String, String, String, String)])
-      .map(convertImportedTeams2(_))
+           AND t.is_deleted='0' ORDER BY u.full_name, t.team_id""".as[Row])
+      .map(convertImportedTeams(pickSurnameEn))
   }
 
   private def getImportedTeamsRu(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[Iterable[ImportedTeam]] = {
     db.run(
       sql"""select t.contestant1_name, t.contestant2_name, t.contestant3_name, u.full_name,
-           u.short_name from universities u, teams t where u.un_id=t.un_idf AND u.is_deleted='0'
-           AND t.is_deleted='0' ORDER BY u.full_name, t.team_id""".as[(String, String, String, String, String)]).map(convertImportedTeams(_))
+           u.short_name, t.team_name from universities u, teams t where u.un_id=t.un_idf AND u.is_deleted='0'
+           AND t.is_deleted='0' ORDER BY u.full_name, t.team_id""".as[Row])
+      .map(convertImportedTeams(pickSurnameRu))
   }
 
-  def getImportedTeams(db: JdbcBackend#DatabaseDef, russian: Boolean)(implicit ec: ExecutionContext): Future[Iterable[ImportedTeam]] = {
-    if (russian) {
-      getImportedTeamsRu(db)
-    } else {
-      getImportedTeamsEn(db)
-    }
-  }
-  private def convertImportedTeams(m: Iterable[(String, String, String, String, String)]): Iterable[ImportedTeam] =
-    m.filter(x => (!x._1.isBlank && !x._2.isBlank && !x._3.isBlank))
-      .groupBy(x => (x._5, x._4))
-      .mapValues(_.zipWithIndex.map(x => ImportedTeam(ImportedSchool(x._1._5, x._1._4), x._2+1, pickNames(x._1._1, x._1._2, x._1._3)))).values.flatten
-  private def convertImportedTeams2(m: Iterable[(String, String, String, String, String, String)]): Iterable[ImportedTeam] =
-    m.filter(x => (!x._1.isBlank && !x._2.isBlank && !x._3.isBlank))
-      .groupBy(x => (x._5, x._4))
-      .mapValues(_.zipWithIndex.map(x => ImportedTeam(ImportedSchool(x._1._5, x._1._4), x._2+1, x._1._6 + ": " + pickLastNames(x._1._1, x._1._2, x._1._3)))).values.flatten
+  def getImportedTeams(db: JdbcBackend#DatabaseDef, russian: Boolean)(implicit ec: ExecutionContext): Future[Iterable[ImportedTeam]] =
+    if (russian) getImportedTeamsRu(db) else getImportedTeamsEn(db)
 
   import scala.async.Async.{async, await}
 
