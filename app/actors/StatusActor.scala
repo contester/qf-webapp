@@ -6,6 +6,7 @@ import akka.stream.scaladsl.{BroadcastHub, Keep, Merge, Sink, Source}
 import akka.stream.{ActorMaterializer, OverflowStrategy}
 import models.ContesterResults.{CustomTestResult, FinishedTesting}
 import models._
+import palevo.{ContestPhaseTracker, PalevoSink}
 import org.stingray.contester.dbmodel.{Clarification, Contest, MaxSeen, Message2}
 import play.api.{Logger, Logging}
 import play.api.libs.EventSource
@@ -19,7 +20,7 @@ import scala.concurrent.Future
 import scala.util.{Success, Try}
 
 object StatusActor {
-  def props(db: JdbcBackend#DatabaseDef) = Props(classOf[StatusActor], db)
+  def props(db: JdbcBackend#DatabaseDef, palevo: PalevoSink) = Props(classOf[StatusActor], db, palevo)
 
   case object Init
   case object Tick
@@ -72,7 +73,7 @@ object StatusActor {
                                      contests: Iterable[Contest])
 }
 
-class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Logging {
+class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink) extends Actor with Stash with Logging {
   import StatusActor._
   import context.dispatcher
 
@@ -102,6 +103,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
 
   private[this] val (contestOut2, contestChannel2) = Concur.broadcast[Contest]()
   private[this] val contestStates = mutable.Map[Int, Contest]()
+  private[this] val phaseTracker = new ContestPhaseTracker
   private[this] val (msg2Out, msg2Channel) = Concur.broadcast[Message2]()
   private[this] val unacked = mutable.Map[(Int, Int), mutable.Map[Int, Message2]]()
   private[this] val (sub2Out, sub2Chan) = Concur.broadcast[AnnoSubmit]()
@@ -310,6 +312,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Log
 
     case NewMultiContestState(cs) => {
       for (c <- cs) {
+        phaseTracker.observe(c, com.github.nscala_time.time.Imports.DateTime.now).foreach(palevo.send)
         val old = contestStates.get(c.id)
         if (old.isEmpty || old.get != c) {
           logger.info(s"put: $c")

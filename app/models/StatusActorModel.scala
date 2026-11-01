@@ -4,6 +4,7 @@ import actors.StatusActor.GetSingleContestResult
 import actors.{StatusActor, WaiterActor}
 import akka.actor.ActorSystem
 import org.stingray.qf.actors.{ProblemStateActor, TeamStateActor}
+import palevo.PalevoSink
 import org.stingray.qf.models.TeamClient
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
@@ -12,9 +13,9 @@ import org.stingray.contester.dbmodel._
 
 import scala.concurrent.{ExecutionContext, Future}
 
-class StatusActorModel (dbConfig: DatabaseConfig[JdbcProfile], system: ActorSystem) {
+class StatusActorModel (dbConfig: DatabaseConfig[JdbcProfile], system: ActorSystem, palevo: PalevoSink) {
   private val db = dbConfig.db
-  val statusActor = system.actorOf(StatusActor.props(db), "status-actor")
+  val statusActor = system.actorOf(StatusActor.props(db, palevo), "status-actor")
   val waiterActor = system.actorOf(WaiterActor.props(db), "waiter-actor")
   val teamStateActor = system.actorOf(TeamStateActor.props(db), "team-state-actor")
   val teamClient = new TeamClient(teamStateActor)

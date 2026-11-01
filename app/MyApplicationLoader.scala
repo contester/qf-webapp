@@ -119,6 +119,8 @@ class MyComponents(context: ApplicationLoader.Context)
     slickApi.dbConfig[JdbcProfile](DbName("netmap")),
     pwList)
 
+  lazy val palevoSink: palevo.PalevoSink = palevo.PalevoSink.fromConfig(configuration, wsClient, actorSystem)(executionContext)
+
   lazy val monitorModel = wire[Monitor]
   lazy val rabbitModel = wire[RabbitMqModel]
   lazy val statusActorModel = wire[StatusActorModel]
