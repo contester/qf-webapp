@@ -16,7 +16,7 @@ case class ImportedTeam(school: ImportedSchool, teamID: Int, teamName: String)
 case class ImportedComputer(location: String, addr: String, name: String)
 
 object InitialImportTools {
-  /** Full names of the service schools created by addJuryTeams / addCoachTeams. */
+  /** Full names of the service schools created by addServiceTeams. */
   val JurySchoolFullName = "Contest Jury"
   val CoachSchoolFullName = "Coaches team"
 
@@ -142,20 +142,27 @@ object InitialImportTools {
     await(db.run(DBIO.sequence(fresq)))
   }
 
-  def addJuryTeams(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext) = {
-    val jurySchool = ImportedSchool("Jury", JurySchoolFullName)
-    val teams = (1.to(10)).map(x => ImportedTeam(jurySchool, x, s"Test $x"))
-
-    populateContestsWithTeams(db, teams, Seq(1,2,3,4,11,12,13,14), true)
+  /** A kind of service team (jury, coaches): its own school, team naming and default contests. */
+  case class ServiceTeamKind(key: String, shortName: String, fullName: String, teamPrefix: String, defaultContests: Seq[Int]) {
+    def school: ImportedSchool = ImportedSchool(shortName, fullName)
+    def teams(count: Int): Seq[ImportedTeam] = (1 to count).map(i => ImportedTeam(school, i, s"$teamPrefix$i"))
   }
 
-  def addCoachTeams(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext) = {
-    val coachSchool = ImportedSchool("Coaches", CoachSchoolFullName)
-    val teams = (1.to(10)).map(x => ImportedTeam(coachSchool, x, s"Coach$x"))
+  val JuryTeams = ServiceTeamKind("jury", "Jury", JurySchoolFullName, "Test ", Seq(1, 2, 3, 4, 11, 12, 13, 14))
+  val CoachTeams = ServiceTeamKind("coach", "Coaches", CoachSchoolFullName, "Coach", Seq(1, 2, 3, 4))
+  val ServiceTeamKinds = Seq(JuryTeams, CoachTeams)
 
-    populateContestsWithTeams(db, teams, Seq(1,2,3,4), true)
-  }
+  /** Makes sure the kind has `count` teams (never removes any) taking part, unrated, in the given contests. */
+  def addServiceTeams(db: JdbcBackend#DatabaseDef, kind: ServiceTeamKind, count: Int, contests: Seq[Int])(implicit ec: ExecutionContext): Future[Unit] =
+    populateContestsWithTeams(db, kind.teams(count), contests, true)
 
+  /** How many teams the kind's school has, and the school's id (None until the first teams are added). */
+  def serviceTeamStatus(db: JdbcBackend#DatabaseDef, kind: ServiceTeamKind)(implicit ec: ExecutionContext): Future[(Option[Int], Int)] =
+    db.run(SlickModel.schools.filter(_.fullName === kind.fullName).result.headOption).flatMap {
+      case None => Future.successful((None, 0))
+      case Some(school) =>
+        db.run(SlickModel.teams.filter(_.school === school.id).length.result).map(n => (Some(school.id), n))
+    }
 
   def getNetmapComputers(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext) =
     db.run(sql"select l.room, inet_ntoa(h.ip), h.name from contest_locations l, unetmap_host h where l.id = h.id order by l.room, h.name".as[(String, String, String)]).map(_.map(x => ImportedComputer(x._1, x._2, x._3)))

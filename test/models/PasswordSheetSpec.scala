@@ -72,3 +72,13 @@ class PasswordSheetSpec extends AnyFunSuite {
     assert(PasswordSheet.select(rows, Some(10), Some(4)).map(_.login) == Seq("team1_4"))
   }
 }
+
+class ServiceTeamsSpec extends AnyFunSuite {
+  test("jury and coach teams are numbered from 1 with the established names") {
+    val jury = InitialImportTools.JuryTeams.teams(3)
+    assert(jury.map(_.teamID) == Seq(1, 2, 3))
+    assert(jury.map(_.teamName) == Seq("Test 1", "Test 2", "Test 3"))
+    assert(jury.forall(_.school.schoolFullName == "Contest Jury"))
+    assert(InitialImportTools.CoachTeams.teams(2).map(_.teamName) == Seq("Coach1", "Coach2"))
+  }
+}

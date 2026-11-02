@@ -1,6 +1,18 @@
-@(comps: Seq[ImportedComputer], contest: SelectedContest, admin: Admin)(implicit request: RequestHeader, messages: Messages)
+@(comps: Seq[ImportedComputer], serviceTeams: Seq[ServiceTeamsStatus], contest: SelectedContest, admin: Admin)(implicit request: RequestHeader, messages: Messages)
 
 @adminmain(tab = "", contest=contest) {
+
+@request.flash.get("success").map { message =>
+<div class="alert alert-success" role="alert">
+    @message
+    @for(c <- request.flash.get("sheetContest"); sc <- request.flash.get("sheetSchool") if sc.nonEmpty) {
+    <a href="@routes.AdminApplication.passwordSheet(c.toInt, Some(sc.toInt), None)">Password sheet (PDF)</a>
+    }
+</div>
+}
+@request.flash.get("error").map { message =>
+<div class="alert alert-danger" role="alert">@message</div>
+}
 
 <div class="panel panel-success">
     <div class="panel-heading"><h3 class="panel-title">Import computers</h3></div>
@@ -34,6 +46,34 @@
         <p>Shows what would be imported from the registration site first; nothing changes until you confirm on the next page.</p>
         <a class="btn btn-primary" href="@controllers.routes.AdminApplication.showImportedTeamList(contest.contest.id, false)"><span class="glyphicon glyphicon-list"></span> University teams (contests 1-2)</a>
         <a class="btn btn-primary" href="@controllers.routes.AdminApplication.showImportedTeamList(contest.contest.id, true)"><span class="glyphicon glyphicon-list"></span> School teams (contests 3-4)</a>
+    </div>
+</div>
+
+<div class="panel panel-success">
+    <div class="panel-heading"><h3 class="panel-title">Jury and coach teams</h3></div>
+    <div class="panel-body">
+        <p>Adds numbered unrated teams with logins to the chosen contests. Safe to repeat: existing teams and passwords are kept, and a higher number only adds more. Rename them in the team editor.</p>
+        @for(st <- serviceTeams) {
+        <form class="form-inline" method="post" action="@(if (st.kind.key == "jury") controllers.routes.AdminApplication.addJuryTeams(contest.contest.id) else controllers.routes.AdminApplication.addCoachTeams(contest.contest.id))" style="margin-bottom: 1.5em">
+            @helper.CSRF.formField
+            <h4>@st.kind.fullName <small>@if(st.teams == 0) { no teams yet } else { @st.teams teams exist }</small></h4>
+            <div class="form-group">
+                <label for="count-@st.kind.key">Teams</label>
+                <input type="number" min="1" max="50" id="count-@st.kind.key" name="count" class="form-control" style="width: 6em" value="@(if (st.teams == 0) 10 else st.teams)"/>
+            </div>
+            <div class="form-group" style="margin-left: 1em">
+                @for(((cid, cname), i) <- contest.contests.sortBy(_._1).zipWithIndex) {
+                <label class="checkbox-inline" style="margin-right: 1em">
+                    <input type="checkbox" name="contests[@i]" value="@cid" @if(st.kind.defaultContests.contains(cid)) { checked }/> @cname
+                </label>
+                }
+            </div>
+            <button type="submit" class="btn btn-primary" style="margin-left: 1em"><span class="glyphicon glyphicon-plus"></span> Add</button>
+            @for(sid <- st.schoolId) {
+            <a class="btn btn-default" href="@routes.AdminApplication.passwordSheet(contest.contest.id, Some(sid), None)"><span class="glyphicon glyphicon-print"></span> Sheet</a>
+            }
+        </form>
+        }
     </div>
 </div>
 

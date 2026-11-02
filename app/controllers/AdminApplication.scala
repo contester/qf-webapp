@@ -40,6 +40,8 @@ case class ContestDescription(id: Int)
 
 case class EditTeam(schoolID: Int, teamName: String, teamNum: Option[Int])
 
+case class ServiceTeamsStatus(kind: InitialImportTools.ServiceTeamKind, schoolId: Option[Int], teams: Int)
+
 case class EditSchool(shortName: String, fullName: String)
 
 case class DisplayTeam(team: Team, school: School, login: String, password: String)
@@ -712,18 +714,37 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }
 
-  def addJuryTeams(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>
-    InitialImportTools.addJuryTeams(db).map { _ =>
-          Redirect(routes.AdminApplication.index)
-    }
+  private case class ServiceTeamsRequest(count: Int, contests: List[Int])
+
+  private val serviceTeamsForm = Form {
+    mapping("count" -> number(min = 1, max = 50), "contests" -> list(number))(ServiceTeamsRequest.apply)(ServiceTeamsRequest.unapply)
+      .verifying("Pick at least one contest", _.contests.nonEmpty)
   }
 
-  def addCoachTeams(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>
-    InitialImportTools.addCoachTeams(db).map { _ =>
-      Redirect(routes.AdminApplication.index)
+  private def addServiceTeams(contestID: Int, kind: InitialImportTools.ServiceTeamKind) =
+    silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>
+      val back = Redirect(routes.AdminApplication.miscForms(contestID))
+      serviceTeamsForm.bindFromRequest.fold(
+        formWithErrors => Future.successful(back.flashing("error" ->
+          s"${kind.fullName}: ${(formWithErrors.errors ++ formWithErrors.globalErrors).map(_.message).mkString("; ")}")),
+        data => getSelectedContests(contestID, request.identity).flatMap { selected =>
+          val known = selected.contests.map(_._1).toSet
+          val contests = data.contests.filter(known).distinct.sorted
+          if (contests.isEmpty) Future.successful(back.flashing("error" -> s"${kind.fullName}: no known contests selected"))
+          else for {
+            _ <- InitialImportTools.addServiceTeams(db, kind, data.count, contests)
+            status <- InitialImportTools.serviceTeamStatus(db, kind)
+          } yield back.flashing(
+            "success" -> s"${kind.fullName}: ${data.count} teams in contests ${contests.mkString(", ")}.",
+            "sheetContest" -> contests.head.toString,
+            "sheetSchool" -> status._1.map(_.toString).getOrElse(""))
+        }
+      )
     }
-  }
 
+  def addJuryTeams(contestID: Int) = addServiceTeams(contestID, InitialImportTools.JuryTeams)
+
+  def addCoachTeams(contestID: Int) = addServiceTeams(contestID, InitialImportTools.CoachTeams)
 
   def importNetmapComputers = silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>
     InitialImportTools.getNetmapComputers(externalDatabases.netmap.db).flatMap { comps =>
@@ -903,9 +924,12 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
   def miscForms(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>
     getSelectedContests(contestID, request.identity).flatMap { contest =>
-      InitialImportTools.getNetmapComputers(externalDatabases.netmap.db).map { comps =>
-        Ok(html.admin.misc(comps, contest, request.identity))
-      }
+      for {
+        comps <- InitialImportTools.getNetmapComputers(externalDatabases.netmap.db)
+        statuses <- Future.sequence(InitialImportTools.ServiceTeamKinds.map { kind =>
+          InitialImportTools.serviceTeamStatus(db, kind).map { case (schoolId, count) => ServiceTeamsStatus(kind, schoolId, count) }
+        })
+      } yield Ok(html.admin.misc(comps, statuses, contest, request.identity))
     }
   }
 }
