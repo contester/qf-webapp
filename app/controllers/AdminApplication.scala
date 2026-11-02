@@ -299,10 +299,11 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
       }
   }
 
-  // TODO: check permissions, do just toggle instead of full update
+  // TODO: do just toggle instead of full update
   def toggleClarification(clrId: Long) = silhouette.SecuredAction.async { implicit request =>
     db.run(SlickModel.clarificationByID(clrId).result).flatMap { found =>
       found.headOption match {
+        case Some(clr) if !request.identity.canModify(clr.contest) => Future.successful(Forbidden)
         case Some(clr) =>
           Ask.apply[Clarification](statusActorModel.statusActor, clr.copy(hidden = !clr.hidden))
             .map { _ =>
@@ -355,26 +356,33 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }
 
-  // TODO: check permissions
   def postUpdateClarification(clarificationId: Long) = silhouette.SecuredAction.async { implicit request =>
     db.run(SlickModel.clarificationByID(clarificationId).result.headOption).flatMap { clOpt =>
       clOpt.map { cl =>
-        val clObj = PostClarification(
-          cl.problem, cl.text, cl.hidden
-        )
-        getSelectedContests(cl.contest, request.identity).flatMap { contest =>
-          statusActorModel.problemClient.getProblems(contest.contest.id).map { problems =>
-            Ok(html.admin.postclarification(cl.id, postClarificationForm.fill(clObj), selectableProblems(problems), contest))
+        if (!request.identity.canModify(cl.contest)) Future.successful(Forbidden) else {
+          val clObj = PostClarification(
+            cl.problem, cl.text, cl.hidden
+          )
+          getSelectedContests(cl.contest, request.identity).flatMap { contest =>
+            statusActorModel.problemClient.getProblems(contest.contest.id).map { problems =>
+              Ok(html.admin.postclarification(cl.id, postClarificationForm.fill(clObj), selectableProblems(problems), contest))
+            }
           }
         }
-      }.getOrElse(Future.successful(Redirect(routes.AdminApplication.postNewClarification(1))))
+      }.getOrElse(Future.successful(Redirect(routes.AdminApplication.index)))
     }
   }
 
-  // TODO: check permissions
-  def postClarification(contestId: Int, clarificationId: Option[Long]) = silhouette.SecuredAction.async { implicit request =>
-    postClarificationForm.bindFromRequest.fold(
-      formWithErrors => getSelectedContests(1, request.identity).flatMap { contest =>
+  def postClarification(contestId: Int, clarificationId: Option[Long]) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request =>
+    // an existing clarification may only be edited within its own contest
+    val ownedByContest = clarificationId match {
+      case Some(id) => db.run(SlickModel.clarificationByID(id).result.headOption).map(_.exists(_.contest == contestId))
+      case None => Future.successful(true)
+    }
+    ownedByContest.flatMap {
+      case false => Future.successful(Forbidden)
+      case true => postClarificationForm.bindFromRequest.fold(
+      formWithErrors => getSelectedContests(contestId, request.identity).flatMap { contest =>
         statusActorModel.problemClient.getProblems(contest.contest.id).map { problems =>
           BadRequest(html.admin.postclarification(clarificationId, formWithErrors, selectableProblems(problems), contest))
         }
@@ -387,6 +395,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
         }
       }
     )
+    }
   }
 
   private val clarificationResponseForm = Form {
@@ -403,22 +412,22 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   private[this] def getClarificationReq(id: Long)(implicit ec: ExecutionContext) =
     db.run(ClarificationModel.getClarificationReq(id).result.headOption)
 
-  // TODO: check permissions
   def postAnswerForm(clrId: Long) = silhouette.SecuredAction.async { implicit request =>
     getClarificationReq(clrId).flatMap { optClr =>
       optClr.map { clr =>
+        if (!request.identity.canModify(clr.contest)) Future.successful(Forbidden) else
         getSelectedContests(clr.contest, request.identity).map { contest =>
           Ok(html.admin.postanswer(
             clarificationResponseForm.fill(ClarificationResponse(clr.getAnswer)), clr, answerList.toSeq, contest))
         }
-      }.getOrElse(Future.successful(Redirect(routes.AdminApplication.showQandA(1))))
+      }.getOrElse(Future.successful(Redirect(routes.AdminApplication.index)))
     }
   }
 
-  // TODO: check permissions
   def postAnswer(clrId: Long) = silhouette.SecuredAction(parse.multipartFormData).async { implicit request =>
     getClarificationReq(clrId).flatMap { optClr =>
       optClr.map { clr =>
+        if (!request.identity.canModify(clr.contest)) Future.successful(Forbidden) else
         clarificationResponseForm.bindFromRequest.fold(
           formWithErrors => getSelectedContests(clr.contest, request.identity).map { contest =>
             BadRequest(html.admin.postanswer(formWithErrors, clr, answerList.toSeq, contest))
@@ -430,7 +439,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
             }
           }
         )
-      }.getOrElse(Future.successful(Redirect(routes.AdminApplication.showQandA(1))))
+      }.getOrElse(Future.successful(Redirect(routes.AdminApplication.index)))
     }
   }
 
