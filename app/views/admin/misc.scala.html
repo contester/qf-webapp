@@ -64,7 +64,7 @@
             <div class="form-group" style="margin-left: 1em">
                 @for(((cid, cname), i) <- contest.contests.sortBy(_._1).zipWithIndex) {
                 <label class="checkbox-inline" style="margin-right: 1em">
-                    <input type="checkbox" name="contests[@i]" value="@cid" @if(st.kind.defaultContests.contains(cid)) { checked }/> @cname
+                    <input type="checkbox" name="contests[@i]" value="@cid" @if(st.kind.defaultContests.contains(cid)) { checked }/> @cname (@cid)
                 </label>
                 }
             </div>
