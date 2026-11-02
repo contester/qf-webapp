@@ -16,6 +16,10 @@ case class ImportedTeam(school: ImportedSchool, teamID: Int, teamName: String)
 case class ImportedComputer(location: String, addr: String, name: String)
 
 object InitialImportTools {
+  /** Full names of the service schools created by addJuryTeams / addCoachTeams. */
+  val JurySchoolFullName = "Contest Jury"
+  val CoachSchoolFullName = "Coaches team"
+
   import org.stingray.contester.dbmodel.MyPostgresProfile.api._
   import org.stingray.contester.dbmodel.SlickModel
 
@@ -139,14 +143,14 @@ object InitialImportTools {
   }
 
   def addJuryTeams(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext) = {
-    val jurySchool = ImportedSchool("Jury", "Contest Jury")
+    val jurySchool = ImportedSchool("Jury", JurySchoolFullName)
     val teams = (1.to(10)).map(x => ImportedTeam(jurySchool, x, s"Test $x"))
 
     populateContestsWithTeams(db, teams, Seq(1,2,3,4,11,12,13,14), true)
   }
 
   def addCoachTeams(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext) = {
-    val coachSchool = ImportedSchool("Coaches", "Coaches team")
+    val coachSchool = ImportedSchool("Coaches", CoachSchoolFullName)
     val teams = (1.to(10)).map(x => ImportedTeam(coachSchool, x, s"Coach$x"))
 
     populateContestsWithTeams(db, teams, Seq(1,2,3,4), true)

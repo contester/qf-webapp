@@ -28,6 +28,21 @@ object PasswordSheet {
     if (card.teamNum == 0 || all.count(c => c.school == card.school && c.contestName == card.contestName) < 2) card.school
     else s"${card.school} #${card.teamNum}"
 
+  /** A card together with the ids it can be filtered by. */
+  case class Row(teamId: Int, schoolId: Int, card: PasswordCard)
+
+  private val ServiceSchools = Set(InitialImportTools.JurySchoolFullName, InitialImportTools.CoachSchoolFullName)
+
+  /**
+   * The cards to print. Without a filter that is everyone except the jury and coach teams;
+   * asking for a school or a team explicitly prints it even if it is a jury or coach one.
+   */
+  def select(rows: Seq[Row], school: Option[Int], team: Option[Int]): Seq[PasswordCard] =
+    rows.filter { r =>
+      if (school.isEmpty && team.isEmpty) !ServiceSchools.contains(r.card.school)
+      else school.forall(_ == r.schoolId) && team.forall(_ == r.teamId)
+    }.map(_.card)
+
   def sorted(cards: Seq[PasswordCard]): Seq[PasswordCard] =
     cards.sortBy(c => (c.school, c.teamNum, c.login))
 

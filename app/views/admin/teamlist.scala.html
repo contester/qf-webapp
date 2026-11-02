@@ -8,7 +8,8 @@
     <div class="panel-heading"><h3 class="panel-title">Team editor</h3></div>
     <div class="panel-body">
         @if(withPasswords) {
-        <p><a class="btn btn-primary" href="@routes.AdminApplication.passwordSheet(contest.contest.id, None, None)"><span class="glyphicon glyphicon-print"></span> Password sheets (PDF)</a></p>
+        <p><a class="btn btn-primary" href="@routes.AdminApplication.passwordSheet(contest.contest.id, None, None)"><span class="glyphicon glyphicon-print"></span> Password sheets (PDF)</a>
+        <span class="help-block">Without the jury and coach teams. Use the print icon next to a school or a team to print just those.</span></p>
         }
 
         <table id="teams" class="table table-hover table-bordered table-responsive">
@@ -50,7 +51,11 @@
             @for(s <- schools) {
             <tr id="@s.id">
                 <th scope="row"><a href="@routes.AdminApplication.editSchool(contest.contest.id, s.id)">@s.id</a></th>
-                <td>@s.name</td>
+                <td>@s.name
+                    @if(withPasswords) {
+                    <a href="@routes.AdminApplication.passwordSheet(contest.contest.id, Some(s.id), None)" title="Password sheet for this school (PDF)"><span class="glyphicon glyphicon-print"></span></a>
+                    }
+                </td>
             </tr>
             }
             </tbody>

@@ -503,7 +503,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }
 
-  /** Password slips of the contest as a PDF; optionally only one school's or one team's. */
+  /** Password slips of the contest as a PDF, without jury and coach teams; or only one school's or one team's. */
   def passwordSheet(contestID: Int, school: Option[Int], team: Option[Int]) =
     silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
       if (!request.identity.canSeeTeamPasswords(contestID)) {
@@ -519,12 +519,10 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
           db.run(q).map { rows =>
             val all = rows.map { case (t, s, a) =>
-              (t, PasswordCard(contest.contest.name, s.fullName, t.num, t.name, a.username, a.password))
+              PasswordSheet.Row(t.id, s.id, PasswordCard(contest.contest.name, s.fullName, t.num, t.name, a.username, a.password))
             }
-            val selected = all.filter { case (t, _) =>
-              school.forall(_ == t.school) && team.forall(_ == t.id)
-            }.map(_._2)
-            Ok(PasswordSheet.render(selected, all.map(_._2)))
+            val selected = PasswordSheet.select(all, school, team)
+            Ok(PasswordSheet.render(selected, all.map(_.card)))
               .as("application/pdf")
               .withHeaders("Content-Disposition" -> s"""inline; filename="passwords-$contestID.pdf"""")
           }

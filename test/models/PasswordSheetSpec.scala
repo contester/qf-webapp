@@ -57,4 +57,18 @@ class PasswordSheetSpec extends AnyFunSuite {
     val out = Paths.get("target", "test-password-sheet.pdf")
     Files.write(out, PasswordSheet.render(cards, cards))
   }
+
+  test("default selection leaves out jury and coach teams, explicit filters do not") {
+    def row(teamId: Int, schoolId: Int, school: String) =
+      PasswordSheet.Row(teamId, schoolId, card(school, 1, "n", teamId))
+    val rows = Seq(
+      row(1, 10, "Innopolis University"),
+      row(2, 11, InitialImportTools.JurySchoolFullName),
+      row(3, 12, InitialImportTools.CoachSchoolFullName),
+      row(4, 10, "Innopolis University"))
+    assert(PasswordSheet.select(rows, None, None).map(_.login) == Seq("team1_1", "team1_4"))
+    assert(PasswordSheet.select(rows, Some(11), None).map(_.login) == Seq("team1_2"))
+    assert(PasswordSheet.select(rows, None, Some(3)).map(_.login) == Seq("team1_3"))
+    assert(PasswordSheet.select(rows, Some(10), Some(4)).map(_.login) == Seq("team1_4"))
+  }
 }
