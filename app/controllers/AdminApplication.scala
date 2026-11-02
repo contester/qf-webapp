@@ -144,8 +144,9 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
   def monitor(id: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(id)).async { implicit request =>
     getSelectedContests(id, request.identity).zip(monitorModel.getMonitor(id, request.identity.canSeeAll(id))).map {
-      case (contest, status) =>
-        Ok(html.admin.monitor(contest, status.get.status))
+      case (contest, Some(status)) =>
+        Ok(html.admin.monitor(contest, status.status))
+      case (_, None) => NotFound
     }
   }
 

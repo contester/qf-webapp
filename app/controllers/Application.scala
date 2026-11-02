@@ -57,8 +57,10 @@ class Application (cc: ControllerComponents,
   import scala.concurrent.ExecutionContext.Implicits.global
 
   def monitorDefault = silhouette.SecuredAction.async { implicit request =>
-    monitorModel.getMonitor(request.identity.contest.id, overrideFreeze = false).map(x => {
-      Ok(html.loggedinmonitor(x.get.contest, x.get.status, request.identity))})
+    monitorModel.getMonitor(request.identity.contest.id, overrideFreeze = false).map {
+      case Some(x) => Ok(html.loggedinmonitor(x.contest, x.status, request.identity))
+      case None => NotFound
+    }
   }
 
   private[this] def getSubmits(team: LoggedInTeam) = {

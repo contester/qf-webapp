@@ -56,5 +56,5 @@ object PolygonURL {
 class PolygonProblemHandle(val url: URL, val revision: Option[Int]) {
   override def toString = "PolygonProblemHandle(\"%s\"%s)".format(url, revision.map(", " + _).getOrElse(""))
 
-  val prefix = "problem/" + PolygonURL.getPdbPath(url) + "/" + revision.get.toString
+  val prefix = "problem/" + PolygonURL.getPdbPath(url) + "/" + revision.getOrElse(throw new IllegalArgumentException(s"Polygon problem URL has no revision: $url")).toString
 }
