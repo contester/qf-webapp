@@ -18,6 +18,7 @@ object PasswordSheet {
   private val Mm = 72f / 25.4f
 
   val CardsPerPage = 9
+  val Website = "qf.sgu.ru"
   private val Margin = 10 * Mm
   private val CardHeight = 26 * Mm
   private val Gap = 5 * Mm
@@ -111,23 +112,24 @@ object PasswordSheet {
     val (nameSize, nameLines) = fit(card.name, regular, 10f, 7f, textWidth, 2)
     nameLines.foreach(line(regular, nameSize, _))
 
-    // login and password, values in bold
-    val size = 11f
+    // site, login and password; the values are bold
+    val pieces = Seq(
+      regular -> "Website: ", bold -> Website,
+      regular -> "   User name: ", bold -> card.login,
+      regular -> "   Password: ", bold -> card.password
+    ).map { case (f, t) => f -> sanitize(t, f) }
+    val total = pieces.map { case (f, t) => width(f, t, 11f) }.sum
+    val size = if (total <= textWidth) 11f else 11f * textWidth / total
     y -= 2f + size
     var x = left + Padding
-    def piece(font: PDType0Font, text: String): Unit = {
-      val t = sanitize(text, font)
+    pieces.foreach { case (font, text) =>
       cs.beginText()
       cs.setFont(font, size)
       cs.newLineAtOffset(x, y)
-      cs.showText(t)
+      cs.showText(text)
       cs.endText()
-      x += width(font, t, size)
+      x += width(font, text, size)
     }
-    piece(regular, "Имя: ")
-    piece(bold, card.login)
-    piece(regular, "   Пароль: ")
-    piece(bold, card.password)
   }
 
   private def width(font: PDType0Font, text: String, size: Float): Float =
