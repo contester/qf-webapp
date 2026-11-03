@@ -844,7 +844,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
         else for {
           rooms <- InitialImportTools.roomsWithComputers(db)
           logins = InitialImportTools.roomLogins(rooms, data.letter)
-          _ <- InitialImportTools.upsertRoomAdmins(db, logins, contests, Hasher.getSha1)
+          _ <- InitialImportTools.upsertRoomAdmins(db, logins, contests, PasswordHash.hash)
         } yield back.flashing(
           "success" -> s"Room admins: ${logins.size} logins, spectating contests ${contests.mkString(", ")}.",
           "roomLogins" -> logins.map(l => s"${l.username}\t${l.password}").mkString("\n"))
@@ -922,7 +922,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
               case true =>
                 showAdmins(contest, form.withError("username", "Already exists"), BadRequest)
               case false =>
-                val entry = org.stingray.contester.dbmodel.AdminEntry(data.username, Hasher.getSha1(data.password),
+                val entry = org.stingray.contester.dbmodel.AdminEntry(data.username, PasswordHash.hash(data.password),
                   normalizeList(data.spectator), normalizeList(data.administrator), normalizeList(data.locations),
                   normalizeList(data.unrestricted))
                 db.run(SlickModel.admins += entry).map { _ =>
@@ -962,7 +962,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
               .update((normalizeList(data.spectator), administrator, normalizeList(data.locations), normalizeList(data.unrestricted)))
             val action =
               if (data.password.isEmpty) perms
-              else perms.andThen(q.map(_.password).update(Hasher.getSha1(data.password)))
+              else perms.andThen(q.map(_.password).update(PasswordHash.hash(data.password)))
             db.run(action.transactionally).map { _ =>
               Redirect(routes.AdminApplication.adminsPage(contestID)).flashing("success" -> s"Updated $username")
             }
