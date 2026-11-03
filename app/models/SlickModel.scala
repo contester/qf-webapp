@@ -6,7 +6,7 @@ import com.google.protobuf.ByteString
 import com.spingo.op_rabbit.Message
 import play.api.Logging
 import play.api.libs.json.JsValue
-import protos.Tickets.{Computer, IdName, PrintJob, PrintJobReport}
+import protos.Tickets.{BinaryJob, Computer, IdName, PrintJob, PrintJobReport}
 import slick.basic.DatabaseConfig
 import slick.jdbc.{JdbcBackend, JdbcProfile}
 
@@ -30,7 +30,7 @@ class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: Sta
     db.run((dbPrintJobs.map(x => (x.contest, x.team, x.filename, x.data, x.computer)) returning(dbPrintJobs.map(_.id))) += (
       contest, team, filename, data, InetString(computerAsString)
     )).flatMap { id =>
-      printJobByID(id)
+      createFullAttempt(id, None).map(_.isDefined)
     }
   }
 
@@ -39,7 +39,7 @@ class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: Sta
     Duration(5, SECONDS)
   }
 
-  private[this] def buildProtoFromID(id: Long) = {
+  private[this] def buildProto(id: Long, correlationId: String) = {
     val q = for {
       pj <- dbPrintJobs.filter(_.id === id)
       cl <- compLocations if cl.id === pj.computer
@@ -63,7 +63,7 @@ class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: Sta
               timestampSeconds = pj.arrived.getMillis / 1000,
               printer=pj.printer,
               charset=utils.CharsetDetect.detect(pj.data),
-              jobId = s"s-$id"
+              jobId = correlationId
             )
         }
       }.getOrElse(Future.successful(None))
@@ -72,17 +72,65 @@ class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: Sta
 
   import utils.ProtoRabbitSupport._
 
-  /** Queues the print job for printing. Returns false (and queues nothing) if the job can't be built,
-    * e.g. the computer has no known location. */
-  def printJobByID(id: Long): Future[Boolean] =
-    buildProtoFromID(id).map {
-      case Some(job) =>
-        rabbitMqModel.rabbitMq ! Message.queue(job, queue = "contester.protoprintjobs")
-        true
+  private val binaryQueue = "contester.binaryproto"
+
+  private def printerForJob(jobId: Long): Future[Option[String]] =
+    db.run((for {
+      pj <- dbPrintJobs.filter(_.id === jobId)
+      cl <- compLocations if cl.id === pj.computer
+      area <- areas if area.id === cl.location
+    } yield area.printer).result.headOption)
+
+  private def insertAttempt(jobId: Long, kind: String, requestedBy: Option[String], printer: String,
+                            renderId: Option[Long], status: String): Future[Long] =
+    db.run((dbPrintAttempts returning dbPrintAttempts.map(_.id)) +=
+      DBPrintAttempt(None, jobId, kind, DateTime.now, requestedBy, printer, renderId, status, None, 0, None, "", ""))
+
+  private def failAttempt(attemptId: Long, jobId: Long, error: String): Future[Unit] = {
+    announcePrintError(jobId, error)
+    db.run(dbPrintAttempts.filter(_.id === attemptId).map(x => (x.status, x.finished, x.error))
+      .update((PrintAttempts.Status.Failed, Some(DateTime.now), error))).map(_ => ())
+  }
+
+  /** Starts a new attempt that renders the job from its source and prints it. Returns the attempt id, or None
+    * (and records a failed attempt) if the job can't be built, e.g. the computer has no known location. */
+  def createFullAttempt(jobId: Long, requestedBy: Option[String]): Future[Option[Long]] =
+    for {
+      printer <- printerForJob(jobId)
+      attemptId <- insertAttempt(jobId, "full", requestedBy, printer.getOrElse(""), None, PrintAttempts.Status.Queued)
+      built <- buildProto(jobId, s"a-$attemptId")
+      queued <- built match {
+        case Some(job) =>
+          import utils.ProtoRabbitSupport._
+          rabbitMqModel.rabbitMq ! Message.queue(job, queue = "contester.protoprintjobs")
+          Future.successful(Some(attemptId))
+        case None =>
+          logger.error(s"Can't build print job $jobId (unknown computer location, team or contest?), not queued")
+          failAttempt(attemptId, jobId, "cannot queue print job: unknown computer location, team or contest").map(_ => None)
+      }
+    } yield queued
+
+  /** Prints the job again from its newest stored render, skipping the render. Without a render this is a full attempt. */
+  def createPrintOnlyAttempt(jobId: Long, requestedBy: Option[String]): Future[Either[String, Long]] =
+    db.run(dbPrintRenders.filter(_.jobId === jobId).sortBy(_.id.desc).result.headOption).flatMap {
       case None =>
-        logger.error(s"Can't build print job $id (unknown computer location, team or contest?), not queued")
-        announcePrintError(id, "cannot queue print job: unknown computer location, team or contest")
-        false
+        createFullAttempt(jobId, requestedBy).map(_.toRight("can't build print job (unknown computer location, team or contest?)"))
+      case Some(render) =>
+        printerForJob(jobId).flatMap {
+          case Some(printer) if printer.trim.nonEmpty =>
+            insertAttempt(jobId, "print_only", requestedBy, printer, render.id, PrintAttempts.Status.Rendered).map { attemptId =>
+              import utils.ProtoRabbitSupport._
+              val bytes = ByteString.copyFrom(render.data)
+              rabbitMqModel.rabbitMq ! Message.queue(BinaryJob(
+                printer = printer,
+                jobId = s"a-$attemptId",
+                pages = render.pages,
+                payload = if (render.format == "pdf") BinaryJob.Payload.Pdf(bytes) else BinaryJob.Payload.Ps(bytes)),
+                queue = binaryQueue)
+              Right(attemptId)
+            }
+          case _ => Future.successful(Left("the area of this computer has no printer"))
+        }
     }
 
   /** Tells palevo about a print failure. Fire-and-forget: lookup failures are logged and never propagate. */
@@ -104,12 +152,68 @@ class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: Sta
   }
 
   def processPrintJobReport(r: PrintJobReport): Future[Int] = {
-    if (r.jobExpandedId.startsWith("s-")) {
-      val jobId = r.jobExpandedId.substring(2).toLong
-      if (r.errorMessage.nonEmpty) announcePrintError(jobId, r.errorMessage)
-      val procTime = new DateTime(r.timestampSeconds * 1000)
-      db.run(dbPrintJobs.filter(_.id === jobId).map(x => (x.printed, x.error, x.pages)).update((Some(procTime), r.errorMessage, r.numPages.toInt)))
-    } else Future.successful(0)
+    import PrintAttempts._
+    parseJobId(r.jobExpandedId) match {
+      case None =>
+        logger.warn(s"Ignoring print report with unknown job id ${r.jobExpandedId}")
+        Future.successful(0)
+      case Some(AttemptRef(attemptId)) => applyReport(attemptId, r)
+      case Some(LegacyJobRef(jobId)) =>
+        db.run(dbPrintAttempts.filter(_.jobId === jobId).map(_.id).max.result).flatMap {
+          case Some(latest) => applyReport(latest, r)
+          case None => updateJobSummary(jobId, r) // a job from before attempts existed
+        }
+    }
+  }
+
+  private def updateJobSummary(jobId: Long, r: PrintJobReport): Future[Int] = {
+    if (r.errorMessage.nonEmpty) announcePrintError(jobId, r.errorMessage)
+    val procTime = new DateTime(r.timestampSeconds * 1000)
+    db.run(dbPrintJobs.filter(_.id === jobId).map(x => (x.printed, x.error, x.pages)).update((Some(procTime), r.errorMessage, r.numPages.toInt)))
+  }
+
+  private def applyReport(attemptId: Long, r: PrintJobReport): Future[Int] = {
+    import PrintAttempts._
+    val procTime = new DateTime(r.timestampSeconds * 1000)
+    val work = dbPrintAttempts.filter(_.id === attemptId).result.headOption.flatMap {
+      case None =>
+        logger.warn(s"Ignoring print report for unknown attempt $attemptId")
+        DBIO.successful((0, Option.empty[(Long, String)]))
+      case Some(a) => decide(AttemptState(a.status, a.renderId.isDefined), r) match {
+        case Ignore =>
+          logger.info(s"Ignoring print report for attempt $attemptId (${a.status}): stage ${r.stage}")
+          DBIO.successful((0, None))
+        case AttachRender(render, advance) =>
+          val (format, bytes) = render.payload match {
+            case BinaryJob.Payload.Pdf(b) => ("pdf", b.toByteArray)
+            case BinaryJob.Payload.Ps(b) => ("ps", b.toByteArray)
+            case BinaryJob.Payload.Empty => ("ps", Array.emptyByteArray) // decide() never lets this through
+          }
+          for {
+            renderId <- (dbPrintRenders returning dbPrintRenders.map(_.id)) +=
+              DBPrintRender(None, a.jobId, format, render.pages.toInt, bytes, DateTime.now)
+            n <- dbPrintAttempts.filter(_.id === attemptId).map(x => (x.renderId, x.status))
+              .update((Some(renderId), if (advance) Status.Rendered else a.status))
+          } yield (n, None)
+        case Finish(printed) =>
+          for {
+            n <- dbPrintAttempts.filter(_.id === attemptId)
+              .map(x => (x.status, x.finished, x.pagesPrinted, x.spoolerJobId, x.error, x.detail))
+              .update((if (printed) Status.Printed else Status.Failed, Some(procTime), r.pagesPrinted.toInt,
+                Some(r.spoolerJobId.toLong).filter(_ != 0), r.errorMessage, r.detail))
+            latest <- dbPrintAttempts.filter(_.jobId === a.jobId).map(_.id).max.result
+            isLatest = latest.contains(attemptId)
+            _ <- if (isLatest)
+              dbPrintJobs.filter(_.id === a.jobId).map(x => (x.printed, x.error, x.pages))
+                .update((Some(procTime), r.errorMessage, r.numPages.toInt))
+            else DBIO.successful(0)
+          } yield (n, if (isLatest && r.errorMessage.nonEmpty) Some((a.jobId, r.errorMessage)) else None)
+      }
+    }
+    db.run(work.transactionally).map { case (n, announce) =>
+      announce.foreach { case (jobId, error) => announcePrintError(jobId, error) }
+      n
+    }
   }
 
   def printJobsForTeam(contest:Int, team: Int) =

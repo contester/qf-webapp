@@ -62,4 +62,8 @@ class PrintAttemptsSpec extends AnyFunSuite {
     val future = PrintJobReport(jobExpandedId = "a-1", stage = PrintJobReport.Stage.Unrecognized(42))
     assert(decide(AttemptState(Status.Queued, hasRender = false), future) == Ignore)
   }
+
+  test("RENDERED whose render has no payload is ignored") {
+    assert(decide(AttemptState(Status.Queued, hasRender = false), rendered(Some(BinaryJob(jobId = "a-1")))) == Ignore)
+  }
 }

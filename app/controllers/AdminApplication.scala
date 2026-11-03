@@ -558,10 +558,19 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }
 
+  /** Prints the job again from its stored render (or renders it, if it never was). */
   def reprintJob(printJobID: Long) = silhouette.SecuredAction.async { implicit request =>
-    printingModel.printJobByID(printJobID).map {
-      case true => Ok("ok")
-      case false => InternalServerError("can't build print job (unknown computer location, team or contest?)")
+    printingModel.createPrintOnlyAttempt(printJobID, Some(request.identity.username)).map {
+      case Right(_) => Ok("ok")
+      case Left(message) => InternalServerError(message)
+    }
+  }
+
+  /** Renders the job from its source again, and prints the result. */
+  def rerenderJob(printJobID: Long) = silhouette.SecuredAction.async { implicit request =>
+    printingModel.createFullAttempt(printJobID, Some(request.identity.username)).map {
+      case Some(_) => Ok("ok")
+      case None => InternalServerError("can't build print job (unknown computer location, team or contest?)")
     }
   }
 

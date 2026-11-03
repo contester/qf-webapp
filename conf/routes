@@ -75,6 +75,7 @@ POST /admin/deleteWaiterTask/:id controllers.AdminApplication.deleteWaiterTask(i
 
 + nocsrf
 POST /admin/reprintPrintJob/:id controllers.AdminApplication.reprintJob(id: Long)
+POST /admin/rerenderPrintJob/:id controllers.AdminApplication.rerenderJob(id: Long)
 
 GET /admin/:contestID/editTeam/:teamID controllers.AdminApplication.editTeam(contestID: Int, teamID: Int)
 

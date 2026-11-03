@@ -40,7 +40,7 @@ object PrintAttempts {
     report.stage match {
       case PrintJobReport.Stage.RENDERED =>
         report.render match {
-          case Some(render) if !state.hasRender => AttachRender(render, advanceStatus = !isTerminal(state.status))
+          case Some(render) if !state.hasRender && !render.payload.isEmpty => AttachRender(render, advanceStatus = !isTerminal(state.status))
           case _ => Ignore
         }
       case PrintJobReport.Stage.FINAL =>
