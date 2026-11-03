@@ -199,7 +199,7 @@ object Submits {
       SubmitId(s.id.toInt, Arrived(s.arrived, s.arrivedSeconds.toStandardSeconds.getSeconds, s.afterFreeze),
         s.teamID, s.contestID, RatedProblem(s.problemID, 30), s.ext), s.finished,
       s.compiled, s.passed, s.taken,
-      if (s.testingID == 0) None else Some(s.testingID.toInt))
+      s.testingID.map(_.toInt))
 
   def getContestSubmits(contest: Long) = {
     SlickModel.submits0ByContest(contest.toInt).result

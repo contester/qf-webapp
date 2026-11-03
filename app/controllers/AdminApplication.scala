@@ -273,7 +273,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     val q = for {
       s <- SlickModel.submits if s.id === submitId.toLong
       t <- SlickModel.testings if s.testingID === t.id
-    } yield (s.testingID, t.problemURL)
+    } yield (t.id, t.problemURL)
 
     db.run(q.take(1).result.headOption).map {
         case Some((testingID, problemURL)) =>
