@@ -182,4 +182,27 @@ object InitialImportTools {
       SlickModel.compLocations.insertOrUpdate(SlickModel.CompLocation(InetString(comp.addr), roomID, comp.name))
     }))
   }
+
+  case class RoomLogin(username: String, password: String, room: String)
+
+  def roomLogins(rooms: Seq[String], letter: String): Seq[RoomLogin] =
+    rooms.distinct.sorted.map(r => RoomLogin("d" + r, letter + r, r))
+
+  /** Rooms (areas) that have at least one computer. */
+  def roomsWithComputers(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[Seq[String]] = {
+    import org.stingray.contester.dbmodel.MyPostgresProfile.api._
+    db.run((for {
+      a <- SlickModel.areas
+      if SlickModel.compLocations.filter(_.location === a.id).exists
+    } yield a.name).result)
+  }
+
+  /** Creates or overwrites a room admin per room: spectator of the given contests, located in the room. */
+  def upsertRoomAdmins(db: JdbcBackend#DatabaseDef, logins: Seq[RoomLogin], contests: Seq[Int], hash: String => String)(implicit ec: ExecutionContext): Future[Unit] = {
+    import org.stingray.contester.dbmodel.MyPostgresProfile.api._
+    db.run(DBIO.sequence(logins.map { l =>
+      SlickModel.admins.insertOrUpdate(org.stingray.contester.dbmodel.AdminEntry(
+        l.username, hash(l.password), contests.mkString(","), "", l.room, ""))
+    }).transactionally).map(_ => ())
+  }
 }

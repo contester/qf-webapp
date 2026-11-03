@@ -5,6 +5,16 @@
 @request.flash.get("success").map { message =>
 <div class="alert alert-success" role="alert">
     @message
+    @for(rl <- request.flash.get("roomLogins") if rl.nonEmpty) {
+    <table class="table table-condensed" style="width: auto; margin-top: 1em">
+        <thead><tr><th>Username</th><th>Password</th></tr></thead>
+        <tbody>
+        @for(line <- rl.split("\n")) {
+        <tr>@for(cell <- line.split("\t")) {<td><code>@cell</code></td>}</tr>
+        }
+        </tbody>
+    </table>
+    }
     @for(c <- request.flash.get("sheetContest"); sc <- request.flash.get("sheetSchool") if sc.nonEmpty) {
     <a href="@routes.AdminApplication.passwordSheet(c.toInt, Some(sc.toInt), None)">Password sheet (PDF)</a>
     }
@@ -76,6 +86,30 @@
         }
     </div>
 </div>
+
+@if(admin.isSuperAdmin) {
+<div class="panel panel-success">
+    <div class="panel-heading"><h3 class="panel-title">Room admins</h3></div>
+    <div class="panel-body">
+        <p>Creates or overwrites a login <code>d&lt;room&gt;</code> with password <code>&lt;letter&gt;&lt;room&gt;</code> for every room that has computers. Each one spectates the chosen contests and is located in its room. The passwords are shown once after applying.</p>
+        <form class="form-inline" method="post" action="@controllers.routes.AdminApplication.postRoomAdmins(contest.contest.id)">
+            @helper.CSRF.formField
+            <div class="form-group">
+                <label for="room-letter">Password letter</label>
+                <input type="text" maxlength="1" id="room-letter" name="letter" class="form-control" style="width: 4em" value="l"/>
+            </div>
+            <div class="form-group" style="margin-left: 1em">
+                @for(((cid, cname), i) <- contest.contests.sortBy(_._1).zipWithIndex) {
+                <label class="checkbox-inline" style="margin-right: 1em">
+                    <input type="checkbox" name="contests[@i]" value="@cid"/> @cname (@cid)
+                </label>
+                }
+            </div>
+            <button type="submit" class="btn btn-primary" style="margin-left: 1em"><span class="glyphicon glyphicon-user"></span> Apply</button>
+        </form>
+    </div>
+</div>
+}
 
 <div class="panel panel-warning">
     <div class="panel-heading"><h3 class="panel-title">Copy contests for testing</h3></div>

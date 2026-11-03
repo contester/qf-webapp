@@ -103,6 +103,8 @@ POST /admin/:contestID/addJuryTeams controllers.AdminApplication.addJuryTeams(co
 
 POST /admin/:contestID/addCoachTeams controllers.AdminApplication.addCoachTeams(contestID: Int)
 
+POST /admin/:contestID/roomAdmins controllers.AdminApplication.postRoomAdmins(contestID: Int)
+
 POST /admin/mega/importComputers controllers.AdminApplication.importNetmapComputers
 
 POST /admin/:contestID/copyContestsForTesting controllers.AdminApplication.copyContestsForTesting(contestID: Int)

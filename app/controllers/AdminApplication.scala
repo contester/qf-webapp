@@ -825,6 +825,33 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
       )
     }
 
+  private case class RoomAdminsRequest(letter: String, contests: List[Int])
+
+  private val roomAdminsForm = Form {
+    mapping("letter" -> nonEmptyText(maxLength = 1), "contests" -> list(number))(RoomAdminsRequest.apply)(RoomAdminsRequest.unapply)
+      .verifying("Pick at least one contest", _.contests.nonEmpty)
+  }
+
+  def postRoomAdmins(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
+    val back = Redirect(routes.AdminApplication.miscForms(contestID))
+    roomAdminsForm.bindFromRequest.fold(
+      formWithErrors => Future.successful(back.flashing("error" ->
+        s"Room admins: ${(formWithErrors.errors ++ formWithErrors.globalErrors).map(_.message).mkString("; ")}")),
+      data => getSelectedContests(contestID, request.identity).flatMap { selected =>
+        val known = selected.contests.map(_._1).toSet
+        val contests = data.contests.filter(known).distinct.sorted
+        if (contests.isEmpty) Future.successful(back.flashing("error" -> "Room admins: no known contests selected"))
+        else for {
+          rooms <- InitialImportTools.roomsWithComputers(db)
+          logins = InitialImportTools.roomLogins(rooms, data.letter)
+          _ <- InitialImportTools.upsertRoomAdmins(db, logins, contests, Hasher.getSha1)
+        } yield back.flashing(
+          "success" -> s"Room admins: ${logins.size} logins, spectating contests ${contests.mkString(", ")}.",
+          "roomLogins" -> logins.map(l => s"${l.username}\t${l.password}").mkString("\n"))
+      }
+    )
+  }
+
   def addJuryTeams(contestID: Int) = addServiceTeams(contestID, InitialImportTools.JuryTeams)
 
   def addCoachTeams(contestID: Int) = addServiceTeams(contestID, InitialImportTools.CoachTeams)
