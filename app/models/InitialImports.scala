@@ -26,8 +26,8 @@ object InitialImportTools {
   // NULL columns come back as null strings.
   private def nz(s: String): String = Option(s).map(_.trim).getOrElse("")
 
-  // English names are "First Last", Russian ones "Фамилия Имя Отчество".
-  private[models] def pickSurnameEn(s: String) = s.split(' ').last
+  // Both English and Russian names have the surname first: "Last First" / "Фамилия Имя Отчество".
+  private[models] def pickSurnameEn(s: String) = s.split(' ').head
   private[models] def pickSurnameRu(s: String) = s.split(' ').head
 
   /**

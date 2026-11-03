@@ -13,8 +13,8 @@ class ComposeTeamNameSpec extends AnyFunSuite {
 }
 
 class PickSurnameSpec extends AnyFunSuite {
-  test("english: last token") {
-    assert(InitialImportTools.pickSurnameEn("Ivan Petrov") == "Petrov")
+  test("english: first token") {
+    assert(InitialImportTools.pickSurnameEn("Petrov Ivan") == "Petrov")
   }
 
   test("russian: first token") {
