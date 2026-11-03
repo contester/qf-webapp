@@ -26,7 +26,7 @@ object Hasher {
 }
 
 /**
-  * admins.password holds a bcrypt hash ("$2a$..."); director and cttools read the same column and
+  * admins.password holds a bcrypt hash (prefix 2a, 2b or 2y); director and cttools read the same column and
   * understand the same two formats. Old 40-hex SHA-1 values are still accepted and are rewritten as
   * bcrypt on the next successful login.
   */
