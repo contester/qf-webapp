@@ -51,7 +51,7 @@ case class DisplayTeam(team: Team, school: School, login: String, password: Stri
 case class DisplaySchool(id: Int, name: String)
 
 case class AdminPrintAttempt(id: Long, kind: String, created: DateTime, requestedBy: Option[String], printer: String,
-                             status: String, pagesPrinted: Int, error: String, detail: String)
+                             status: String, pagesPrinted: Int, renderPages: Option[Int], error: String, detail: String)
 
 case class AdminPrintJob(id: Long, contestID: Int, team: org.stingray.contester.dbmodel.Team, filename: String, arrived: DateTime,
                          printed: Option[DateTime], computerName: String, pages: Int, error: String,
@@ -493,9 +493,12 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     import org.stingray.contester.dbmodel.SlickModel._
 
     val jobsAndAttempts = db.run(locatedPrintJobsByContest(contestID).result).flatMap { jobs =>
-      db.run(dbPrintAttempts.filter(_.jobId inSet jobs.map(_.id)).sortBy(_.id.desc).result).map { attempts =>
-        (jobs, attempts.groupBy(_.jobId).mapValues(_.map { a =>
-          AdminPrintAttempt(a.id.get, a.kind, a.created, a.requestedBy, a.printer, a.status, a.pagesPrinted, a.error, a.detail)
+      val q = dbPrintAttempts.filter(_.jobId inSet jobs.map(_.id)).sortBy(_.id.desc)
+        .joinLeft(dbPrintRenders).on(_.renderId === _.id)
+        .map { case (a, r) => (a, r.map(_.pages)) }
+      db.run(q.result).map { attempts =>
+        (jobs, attempts.groupBy(_._1.jobId).mapValues(_.map { case (a, renderPages) =>
+          AdminPrintAttempt(a.id.get, a.kind, a.created, a.requestedBy, a.printer, a.status, a.pagesPrinted, renderPages, a.error, a.detail)
         }))
       }
     }

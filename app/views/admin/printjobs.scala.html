@@ -88,7 +88,7 @@
                             <td>@a.requestedBy.getOrElse("")</td>
                             <td>@a.printer</td>
                             <td>@a.status</td>
-                            <td>@a.pagesPrinted</td>
+                            <td>@if(a.pagesPrinted > 0) { @a.pagesPrinted@a.renderPages.map(n => " of " + n) } else { @a.renderPages.map(n => n.toString + " (not reported)") }</td>
                             <td>@a.error @if(PrintAttempts.mayStillPrint(a.error)) { <strong>(the job may still print)</strong> } @a.detail</td>
                         </tr>
                         }
