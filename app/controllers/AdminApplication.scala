@@ -50,8 +50,12 @@ case class DisplayTeam(team: Team, school: School, login: String, password: Stri
 
 case class DisplaySchool(id: Int, name: String)
 
+case class AdminPrintAttempt(id: Long, kind: String, created: DateTime, requestedBy: Option[String], printer: String,
+                             status: String, pagesPrinted: Int, error: String, detail: String)
+
 case class AdminPrintJob(id: Long, contestID: Int, team: org.stingray.contester.dbmodel.Team, filename: String, arrived: DateTime,
-                         printed: Option[DateTime], computerName: String, pages: Int, error: String)
+                         printed: Option[DateTime], computerName: String, pages: Int, error: String,
+                         attempts: Seq[AdminPrintAttempt])
 
 case class SubmitIdLite(id: Int)
 object SubmitIdLite {
@@ -488,13 +492,20 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     import org.stingray.contester.dbmodel.MyPostgresProfile.api._
     import org.stingray.contester.dbmodel.SlickModel._
 
-    db.run(
-      locatedPrintJobsByContest(contestID).result)
-    .zip(statusActorModel.teamClient.getTeams(contestID)).map {
-      case (jobs, teams) =>
+    val jobsAndAttempts = db.run(locatedPrintJobsByContest(contestID).result).flatMap { jobs =>
+      db.run(dbPrintAttempts.filter(_.jobId inSet jobs.map(_.id)).sortBy(_.id.desc).result).map { attempts =>
+        (jobs, attempts.groupBy(_.jobId).mapValues(_.map { a =>
+          AdminPrintAttempt(a.id.get, a.kind, a.created, a.requestedBy, a.printer, a.status, a.pagesPrinted, a.error, a.detail)
+        }))
+      }
+    }
+
+    jobsAndAttempts.zip(statusActorModel.teamClient.getTeams(contestID)).map {
+      case ((jobs, attempts), teams) =>
         jobs.flatMap { src =>
           teams.get(src.team).map { team =>
-            AdminPrintJob(src.id, src.contest, team, src.filename, src.arrived, src.printed, src.computerName, src.pages, src.error)
+            AdminPrintJob(src.id, src.contest, team, src.filename, src.arrived, src.printed, src.computerName, src.pages, src.error,
+              attempts.getOrElse(src.id, Seq.empty))
           }
         }
     }

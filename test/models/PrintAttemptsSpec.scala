@@ -66,4 +66,11 @@ class PrintAttemptsSpec extends AnyFunSuite {
   test("RENDERED whose render has no payload is ignored") {
     assert(decide(AttemptState(Status.Queued, hasRender = false), rendered(Some(BinaryJob(jobId = "a-1")))) == Ignore)
   }
+
+  test("a timeout means the job may still print, other errors don't") {
+    assert(mayStillPrint("print job 9 did not finish in time; status: paused, pages printed 0 of 3"))
+    assert(!mayStillPrint("print job never appeared in the print queue"))
+    assert(!mayStillPrint("not sending job to \"p\": printer status: offline"))
+    assert(!mayStillPrint(""))
+  }
 }

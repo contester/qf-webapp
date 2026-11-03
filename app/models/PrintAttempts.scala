@@ -36,6 +36,9 @@ object PrintAttempts {
   case class AttachRender(render: BinaryJob, advanceStatus: Boolean) extends Action
   case class Finish(printed: Boolean) extends Action
 
+  /** The agent gives up on a job that is still in the Windows queue; a printer coming back may print it later. */
+  def mayStillPrint(error: String): Boolean = error.contains("did not finish in time")
+
   def decide(state: AttemptState, report: PrintJobReport): Action =
     report.stage match {
       case PrintJobReport.Stage.RENDERED =>

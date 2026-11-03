@@ -1,5 +1,7 @@
 @(jobs: Seq[AdminPrintJob], targets: Seq[PrintTarget], contest: SelectedContest, admin: Admin)(implicit request: RequestHeader, messages: Messages)
 
+@import models.PrintAttempts
+
 @adminmain(tab = "print", contest=contest) {
 
 @request.flash.get("success").map { message =>
@@ -59,6 +61,7 @@
                     </a>
                     <ul class="dropdown-menu">
                         <li><a href="javascript:void(0)" onclick="btn('@controllers.routes.AdminApplication.reprintJob(s.id)', 'printjob-@{s.id}')">Reprint</a></li>
+                        <li><a href="javascript:void(0)" onclick="btn('@controllers.routes.AdminApplication.rerenderJob(s.id)', 'printjob-@{s.id}')">Re-render and print</a></li>
                     </ul>
                 </div>
                 </td>
@@ -70,6 +73,30 @@
                 <td>@s.pages</td>
                 <td>@s.error</td>
             </tr>
+            @if(s.attempts.nonEmpty) {
+            <tr>
+                <td></td>
+                <td colspan="8">
+                    <table class="table table-condensed table-bordered" style="margin-bottom: 0">
+                        <thead><tr><th>Attempt</th><th>Kind</th><th>Created</th><th>By</th><th>Printer</th><th>Status</th><th>Pages</th><th>Error / detail</th></tr></thead>
+                        <tbody>
+                        @for(a <- s.attempts) {
+                        <tr @if(a.status == "printed"){ class="success" }else if(a.status == "failed"){ class="danger" }>
+                            <td>@a.id</td>
+                            <td>@a.kind</td>
+                            <td>@a.created</td>
+                            <td>@a.requestedBy.getOrElse("")</td>
+                            <td>@a.printer</td>
+                            <td>@a.status</td>
+                            <td>@a.pagesPrinted</td>
+                            <td>@a.error @if(PrintAttempts.mayStillPrint(a.error)) { <strong>(the job may still print)</strong> } @a.detail</td>
+                        </tr>
+                        }
+                        </tbody>
+                    </table>
+                </td>
+            </tr>
+            }
             }
             </tbody>
         </table>
