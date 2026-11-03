@@ -706,12 +706,23 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
                 Future.successful(displayEditTeam(Some(formWithErrors), team, schools, contest))
               },
               data => {
-                val updateTeam = if (data.teamName != team.name || data.schoolID != team.school) {
-                  db.run(SlickModel.teams.filter(_.id === team.id).map(x => (x.name, x.school)).update((data.teamName, data.schoolID)))
-                } else Future.successful(None)
+                // teams (school, num) is unique: moving a team into a school that already has that number would violate it
+                val taken = if (data.schoolID != team.school) db.run(
+                  SlickModel.teams.filter(x => x.school === data.schoolID && x.num === team.num && x.id =!= team.id).exists.result)
+                else Future.successful(false)
 
-                updateTeam.map { v =>
-                  Redirect(routes.AdminApplication.editTeam(contestID, teamID))
+                taken.flatMap {
+                  case true =>
+                    val msg = s"That school already has a team number ${team.num}"
+                    Future.successful(displayEditTeam(Some(editTeamForm.fill(data).withError("schoolID", msg)), team, schools, contest))
+                  case false =>
+                    val updateTeam = if (data.teamName != team.name || data.schoolID != team.school) {
+                      db.run(SlickModel.teams.filter(_.id === team.id).map(x => (x.name, x.school)).update((data.teamName, data.schoolID)))
+                    } else Future.successful(0)
+
+                    updateTeam.map { _ =>
+                      Redirect(routes.AdminApplication.editTeam(contestID, teamID))
+                    }
                 }
               },
             )
