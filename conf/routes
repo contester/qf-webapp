@@ -62,6 +62,7 @@ GET /admin/logout controllers.AdminAuthForms.logout
 GET /admin/feed/:contestId controllers.AdminApplication.feed(contestId: Int)
 
 GET /admin/:contestID/printJobs controllers.AdminApplication.listPrintJobs(contestID: Int)
+POST /admin/:contestID/printJobs/inject controllers.AdminApplication.injectPrintJob(contestID: Int)
 
 GET /admin/:contestId/postNewWaiterForm controllers.AdminApplication.postNewWaiterTaskForm(contestId: Int)
 POST /admin/:contestId/postWaiterTask controllers.AdminApplication.postWaiterTask(contestId: Int, id: Option[Int])

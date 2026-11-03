@@ -1,6 +1,42 @@
-@(jobs: Seq[AdminPrintJob], contest: SelectedContest, admin: Admin)(implicit request: RequestHeader, messages: Messages)
+@(jobs: Seq[AdminPrintJob], targets: Seq[PrintTarget], contest: SelectedContest, admin: Admin)(implicit request: RequestHeader, messages: Messages)
 
 @adminmain(tab = "print", contest=contest) {
+
+@request.flash.get("success").map { message =>
+<div class="alert alert-success" role="alert">@message</div>
+}
+@request.flash.get("error").map { message =>
+<div class="alert alert-danger" role="alert">@message</div>
+}
+
+@if(admin.canModify(contest.contest.id)) {
+<div class="panel panel-warning">
+    <div class="panel-heading"><h3 class="panel-title">Test print</h3></div>
+    <div class="panel-body">
+        <form class="form-inline" method="post" enctype="multipart/form-data" action="@routes.AdminApplication.injectPrintJob(contest.contest.id)">
+            @helper.CSRF.formField
+            <div class="form-group">
+                <label for="inject-computer">Computer</label>
+                <select id="inject-computer" name="computer" class="form-control" required>
+                    <option value="">Pick a computer...</option>
+                    @for((area, comps) <- targets.groupBy(_.area).toSeq.sortBy(_._1)) {
+                    <optgroup label="@area@comps.headOption.map(_.printer).filter(_.nonEmpty).map(p => " - " + p).getOrElse(" - no printer")">
+                        @for(c <- comps) {
+                        <option value="@c.addr" @if(c.printer.trim.isEmpty) { disabled }>@c.name (@c.addr)</option>
+                        }
+                    </optgroup>
+                    }
+                </select>
+            </div>
+            <div class="form-group" style="margin-left: 1em">
+                <input type="file" name="file" required/>
+            </div>
+            <button type="submit" class="btn btn-primary" style="margin-left: 1em"><span class="glyphicon glyphicon-print"></span> Print</button>
+            <p class="help-block">Text files only (printed as source code). Attributed to the contest's first jury team.</p>
+        </form>
+    </div>
+</div>
+}
 
 <div class="panel panel-success">
     <div class="panel-heading"><h3 class="panel-title">Print jobs</h3></div>

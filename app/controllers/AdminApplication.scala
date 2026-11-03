@@ -11,6 +11,7 @@ import com.mohiva.play.silhouette.api.{Authorization, Silhouette}
 import com.mohiva.play.silhouette.impl.authenticators.SessionAuthenticator
 import com.spingo.op_rabbit.Message
 import models._
+import org.apache.commons.io.FileUtils
 import org.stingray.contester.dbmodel.{Clarification, Problem, School}
 import org.stingray.contester.dbmodel.SlickModel.{Team, teams}
 import play.api.data.Form
@@ -40,6 +41,7 @@ case class ContestDescription(id: Int)
 
 case class EditTeam(schoolID: Int, teamName: String, teamNum: Option[Int])
 
+case class PrintTarget(addr: String, name: String, area: String, printer: String)
 case class ServiceTeamsStatus(kind: InitialImportTools.ServiceTeamKind, schoolId: Option[Int], teams: Int)
 
 case class EditSchool(shortName: String, fullName: String)
@@ -498,14 +500,62 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }
 
+  /** All known computers with their area and the area's printer (may be empty), for the test print form. */
+  private def printTargets: Future[Seq[PrintTarget]] = {
+    import org.stingray.contester.dbmodel.MyPostgresProfile.api._
+    val q = (for {
+      c <- SlickModel.compLocations
+      a <- SlickModel.areas if a.id === c.location
+    } yield (c.id, c.name, a.name, a.printer)).sortBy(x => (x._3, x._2))
+    db.run(q.result).map(_.map(x => PrintTarget(x._1.address, x._2, x._3, x._4)))
+  }
+
+  /** The first (lowest id) jury team taking part in the contest. */
+  private def firstJuryTeam(contestID: Int): Future[Option[Int]] = {
+    import org.stingray.contester.dbmodel.MyPostgresProfile.api._
+    val q = (for {
+      s <- SlickModel.schools if s.fullName === InitialImportTools.JurySchoolFullName
+      t <- SlickModel.teams if t.school === s.id
+      p <- SlickModel.participants if (p.team === t.id && p.contest === contestID)
+    } yield t.id).sorted.take(1)
+    db.run(q.result.headOption)
+  }
+
   def listPrintJobs(contestID: Int)= silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
     getSelectedContests(contestID, request.identity)
       .zip(getPrintJobs(contestID))
+      .zip(printTargets)
       .map {
-        case (contest, jobs) =>
-          Ok(html.admin.printjobs(jobs, contest, request.identity))
+        case ((contest, jobs), targets) =>
+          Ok(html.admin.printjobs(jobs, targets, contest, request.identity))
       }
 
+  }
+
+  /** Test print: queues an uploaded file as a print job from the chosen computer, attributed to the contest's first jury team. */
+  def injectPrintJob(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID))(parse.multipartFormData).async { implicit request =>
+    val back = Redirect(routes.AdminApplication.listPrintJobs(contestID))
+    val computer = request.body.dataParts.get("computer").flatMap(_.headOption).getOrElse("")
+    request.body.file("file").filter(_.filename.nonEmpty) match {
+      case None => Future.successful(back.flashing("error" -> "Pick a file to print"))
+      case Some(file) =>
+        printTargets.zip(firstJuryTeam(contestID)).flatMap {
+          case (targets, teamOpt) =>
+            (targets.find(_.addr == computer), teamOpt) match {
+              case (None, _) => Future.successful(back.flashing("error" -> "Pick a computer"))
+              case (Some(t), _) if t.printer.trim.isEmpty =>
+                Future.successful(back.flashing("error" -> s"Area ${t.area} has no printer set"))
+              case (_, None) =>
+                Future.successful(back.flashing("error" -> "This contest has no jury team; add one on the misc page"))
+              case (Some(t), Some(team)) =>
+                val bytes = FileUtils.readFileToByteArray(file.ref.path.toFile)
+                printingModel.insertAndPrintJob(contestID, team, file.filename, bytes, t.addr).map {
+                  case true => back.flashing("success" -> s"Queued ${file.filename} for ${t.name} (${t.area}, ${t.printer})")
+                  case false => back.flashing("error" -> "Job saved but could not be queued; see the log")
+                }
+            }
+        }
+    }
   }
 
   def reprintJob(printJobID: Long) = silhouette.SecuredAction.async { implicit request =>
