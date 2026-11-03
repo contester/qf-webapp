@@ -135,11 +135,15 @@ object PasswordSheet {
   private def width(font: PDType0Font, text: String, size: Float): Float =
     font.getStringWidth(text) / 1000f * size
 
+  /** True if the font can encode this Unicode code point (PDType0Font.hasGlyph takes a glyph code, not Unicode). */
+  private def canEncode(font: PDType0Font, cp: Int): Boolean =
+    try { font.encode(new String(Character.toChars(cp))); true }
+    catch { case _: IllegalArgumentException => false }
+
   /** Replaces control characters and characters the font has no glyph for. */
   private[models] def sanitize(text: String, font: PDType0Font): String =
     text.codePoints().toArray.map { cp =>
-      val ok = !Character.isISOControl(cp) && font.hasGlyph(cp)
-      new String(Character.toChars(if (ok) cp else '?'.toInt))
+      new String(Character.toChars(if (!Character.isISOControl(cp) && canEncode(font, cp)) cp else '?'.toInt))
     }.mkString
 
   /** Greedy word wrap; a word longer than the width is broken by characters. */

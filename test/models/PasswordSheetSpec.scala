@@ -53,6 +53,17 @@ class PasswordSheetSpec extends AnyFunSuite {
     assert(text.contains("Chuvash State University"))
   }
 
+  test("numero sign is not turned into a question mark") {
+    val d = Loader.loadPDF(PasswordSheet.render(Seq(card("Школа №5", 0, "Команда №1: Иванов", 30)), cards))
+    val text = try new PDFTextStripper().getText(d) finally d.close()
+    assert(!text.contains("?"))
+    assert(text.contains("Школа №5") && text.contains("Команда №1: Иванов"))
+    // characters the font really lacks still become '?'
+    val d2 = Loader.loadPDF(PasswordSheet.render(Seq(card("A\u4e2dB", 0, "n", 31)), cards))
+    val text2 = try new PDFTextStripper().getText(d2) finally d2.close()
+    assert(text2.contains("A?B"))
+  }
+
   test("writes a sample for eyeballing") {
     val out = Paths.get("target", "test-password-sheet.pdf")
     Files.write(out, PasswordSheet.render(cards, cards))
