@@ -161,15 +161,11 @@ class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: Sta
       case Some(LegacyJobRef(jobId)) =>
         db.run(dbPrintAttempts.filter(_.jobId === jobId).map(_.id).max.result).flatMap {
           case Some(latest) => applyReport(latest, r)
-          case None => updateJobSummary(jobId, r) // a job from before attempts existed
+          case None =>
+            logger.warn(s"Ignoring print report for job $jobId: it has no attempts")
+            Future.successful(0)
         }
     }
-  }
-
-  private def updateJobSummary(jobId: Long, r: PrintJobReport): Future[Int] = {
-    if (r.errorMessage.nonEmpty) announcePrintError(jobId, r.errorMessage)
-    val procTime = new DateTime(r.timestampSeconds * 1000)
-    db.run(dbPrintJobs.filter(_.id === jobId).map(x => (x.printed, x.error, x.pages)).update((Some(procTime), r.errorMessage, r.numPages.toInt)))
   }
 
   private def applyReport(attemptId: Long, r: PrintJobReport): Future[Int] = {
@@ -203,10 +199,6 @@ class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: Sta
                 Some(r.spoolerJobId.toLong).filter(_ != 0), r.errorMessage, r.detail))
             latest <- dbPrintAttempts.filter(_.jobId === a.jobId).map(_.id).max.result
             isLatest = latest.contains(attemptId)
-            _ <- if (isLatest)
-              dbPrintJobs.filter(_.id === a.jobId).map(x => (x.printed, x.error, x.pages))
-                .update((Some(procTime), r.errorMessage, r.numPages.toInt))
-            else DBIO.successful(0)
           } yield (n, if (isLatest && r.errorMessage.nonEmpty) Some((a.jobId, r.errorMessage)) else None)
       }
     }
@@ -217,8 +209,10 @@ class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: Sta
   }
 
   def printJobsForTeam(contest:Int, team: Int) =
-    db.run(dbPrintJobs.filter(x => ((x.contest === contest) && (x.team === team)))
-      .map(x => (x.filename, x.arrived, x.printed.isDefined, x.pages, x.error =!= "")).sortBy(_._2.desc).result).map(_.map(PrintEntry.tupled))
+    db.run((for {
+      j <- dbPrintJobs if j.contest === contest && j.team === team
+      s <- dbPrintJobStates if s.jobId === j.id
+    } yield (j.filename, j.arrived, s.finished.isDefined, s.pages, s.error =!= "")).sortBy(_._2.desc).result).map(_.map(PrintEntry.tupled))
 }
 
 object ClarificationModel extends Logging {

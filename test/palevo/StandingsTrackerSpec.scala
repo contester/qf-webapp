@@ -7,7 +7,7 @@ import org.stingray.contester.dbmodel.{Contest, LocalTeam}
 
 class StandingsTrackerSpec extends AnyFunSuite {
   private val now = new DateTime(2026, 11, 1, 12, 0)
-  private val contest = Contest(1, "C", now, now.plusHours(4), now.plusHours(5), now.plusHours(6), "", "en", schoolMode = false)
+  private val contest = Contest(1, "C", now, now.plusHours(4), now.plusHours(5), now.plusHours(6), None, "en", schoolMode = false)
 
   private def team(id: Int, notRated: Boolean = false) =
     LocalTeam(id, 1, s"School$id", s"S$id", 0, "", notRated, noPrint = false, disabled = false)

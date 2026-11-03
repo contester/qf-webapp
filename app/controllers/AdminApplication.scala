@@ -68,7 +68,7 @@ object SubmitTicketLite {
 }
 
 case class EditContest(name: String, schoolMode: Boolean, startTime: DateTime, freezeTime: DateTime, endTime: DateTime,
-                       exposeTime: DateTime, polygonID: String, language: String)
+                       exposeTime: DateTime, polygonID: Option[String], language: String)
 
 case class EditAdmin(username: String, password: String, spectator: String, administrator: String,
                      locations: String, unrestricted: String)
@@ -749,7 +749,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
       "freezeTime" -> nscalaDateTime,
       "endTime" -> nscalaDateTime,
       "exposeTime" -> nscalaDateTime,
-      "polygonID" -> text,
+      "polygonID" -> optional(text).transform[Option[String]](_.map(_.trim).filter(_.nonEmpty), identity),
       "language" -> text
     )(EditContest.apply)(EditContest.unapply)
   }

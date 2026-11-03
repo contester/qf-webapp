@@ -9,7 +9,7 @@ class ContestPhaseTrackerSpec extends AnyFunSuite {
 
   // starts 10:00, freezes 14:00, ends 15:00
   private def contest(id: Int = 1, freeze: DateTime = t(14), end: DateTime = t(15)) =
-    Contest(id, s"C$id", t(10), freeze, end, t(16), "", "en", schoolMode = false)
+    Contest(id, s"C$id", t(10), freeze, end, t(16), None, "en", schoolMode = false)
 
   private def types(es: Seq[PalevoEvent]) = es.map(_.eventType)
 

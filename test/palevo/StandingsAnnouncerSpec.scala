@@ -8,7 +8,7 @@ import org.stingray.contester.dbmodel.{Contest, LocalTeam}
 class StandingsAnnouncerSpec extends AnyFunSuite {
   private val start = new DateTime(2026, 11, 1, 10, 0)
   // starts 10:00, freezes 14:00, ends 15:00, exposed 16:00
-  private val contest = Contest(1, "C", start, start.plusHours(4), start.plusHours(5), start.plusHours(6), "", "en", schoolMode = false)
+  private val contest = Contest(1, "C", start, start.plusHours(4), start.plusHours(5), start.plusHours(6), None, "en", schoolMode = false)
   private val beforeFreeze = start.plusHours(2)
   private val duringFreeze = start.plusHours(4).plusMinutes(30)
   private val afterExpose = start.plusHours(7)
