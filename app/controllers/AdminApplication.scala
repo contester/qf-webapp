@@ -30,7 +30,8 @@ import views.html
 
 import scala.concurrent.{ExecutionContext, Future}
 
-case class RejudgeProblem(problem: String)
+/** all: rejudge every submit of the problem, not just the outdated ones. */
+case class RejudgeProblem(problem: String, all: Boolean)
 case class PostClarification(problem: String, text: String, hidden: Boolean)
 case class ClarificationResponse(answer: String)
 
@@ -152,7 +153,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
 
   val rejudgeProblemForm = Form {
-    mapping("problem" -> nonEmptyText)(RejudgeProblem.apply)(RejudgeProblem.unapply)
+    mapping("problem" -> nonEmptyText, "all" -> default(boolean, false))(RejudgeProblem.apply)(RejudgeProblem.unapply)
   }
 
   def rejudgePage(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request =>
@@ -163,7 +164,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
   /**
    * Rejudges the finished submits of one problem whose last testing is not against the problem's current
-   * URL. The URL is recomputed here, not taken from the page, so a stale page cannot rejudge to an old revision.
+   * URL, or with `all` every submit of the problem. The URL is recomputed here, not taken from the page, so a stale page cannot rejudge to an old revision.
    */
   def rejudgeProblem(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request =>
     val back = Redirect(routes.AdminApplication.rejudgePage(contestId))
@@ -174,11 +175,13 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
           case None =>
             Future.successful(back.flashing("error" -> s"Problem ${data.problem}: no revision loaded"))
           case Some(url) =>
-            AdminSubmits.rejudgePlan(db, contestId, data.problem, url).map { plan =>
-              plan.outdated.foreach { case (id, _) =>
+            val ids = if (data.all) AdminSubmits.allSubmitIds(db, contestId, data.problem)
+              else AdminSubmits.rejudgePlan(db, contestId, data.problem, url).map(_.outdated.map(_._1))
+            ids.map { ids =>
+              ids.foreach { id =>
                 rabbitMq ! Message.queue(SubmitMessage(id), queue = "contester.submitrequests")
               }
-              back.flashing("success" -> s"${plan.outdated.size} submits of problem ${data.problem}")
+              back.flashing("success" -> s"${ids.size} ${if (data.all) "(all) " else ""}submits of problem ${data.problem}")
             }
         }
       }

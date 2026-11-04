@@ -112,11 +112,14 @@ class AdminSubmitsDbSpec extends AnyFunSuite {
     val st13 = await(AdminSubmits.revisionStatus(db, 13))
     assert(st13.map(_.problem) == ('A' to 'M').map(_.toString))
     assert(st13.head == ProblemRevisionStatus("A", Some("https://polygon.codeforces.com/p2inazR/afrolov/abc-jumps?revision=2"), 0, 1, 0,
-      Seq("https://polygon.codeforces.com/p2inazR/afrolov/abc-jumps?revision=1" -> 1)))
-    assert(st13.tail.forall(x => x.atLatest == 0 && x.outdated == 0 && x.inProgress == 0 && x.latestURL.isDefined))
+      Seq("https://polygon.codeforces.com/p2inazR/afrolov/abc-jumps?revision=1" -> 1), 1))
+    assert(st13.tail.forall(x => x.atLatest == 0 && x.outdated == 0 && x.inProgress == 0 && x.total == 0 && x.latestURL.isDefined))
     // contest 14: already at the newest
     val st14 = await(AdminSubmits.revisionStatus(db, 14))
     assert(st14.map(x => (x.problem, x.atLatest, x.outdated, x.inProgress)) == Seq(("A", 9, 0, 0), ("B", 0, 0, 0), ("C", 0, 0, 0)))
+    assert(st14.map(_.total) == Seq(9, 0, 0))
+    assert(await(AdminSubmits.allSubmitIds(db, 14, "A")) == (1L to 9L))
+    assert(await(AdminSubmits.allSubmitIds(db, 14, "B")).isEmpty)
     // the plan the button acts on rejudges exactly the outdated ones
     val plan = await(AdminSubmits.rejudgePlan(db, 13, "A", st13.head.latestURL.get))
     assert(plan.outdated.map(_._1) == Seq(10L))

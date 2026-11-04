@@ -38,9 +38,10 @@ case class RejudgePlan(outdated: Seq[(Long, String)], inProgress: Int, current: 
  * @param outdated finished submits tested against anything else: an older revision, or another problem
  * @param inProgress submits at anything else that are being tested right now
  * @param others what the outdated and in-progress submits were tested against, with counts
+ * @param total all submits of the problem, tested or not
  */
 case class ProblemRevisionStatus(problem: String, latestURL: Option[String], atLatest: Int, outdated: Int, inProgress: Int,
-                                 others: Seq[(String, Int)])
+                                 others: Seq[(String, Int)], total: Int)
 
 object AdminSubmits {
   import org.stingray.contester.dbmodel.MyPostgresProfile.api._
@@ -194,17 +195,24 @@ object AdminSubmits {
     val counts = sql"""select s.problem, t.problem_url, t.finish_time is not null, count(*)::int
               from submits s join testings t on t.id = s.testing_id
              where s.contest = $contest group by 1, 2, 3""".as[(String, String, Boolean, Int)]
-    defined.zip(counts).map { case (problems, countRows) =>
+    val totals = sql"select problem, count(*)::int from submits where contest = $contest group by 1".as[(String, Int)]
+    defined.zip(counts).zip(totals).map { case ((problems, countRows), totalRows) =>
+      val totalMap = totalRows.toMap
       problems.map { case (problem, base, rev) =>
         val url = rev.map(r => s"$base?revision=$r")
         val (cur, other) = countRows.filter(_._1 == problem).partition(r => url.contains(r._2))
         ProblemRevisionStatus(problem, url, cur.map(_._4).sum,
           other.filter(_._3).map(_._4).sum, other.filterNot(_._3).map(_._4).sum,
-          other.groupBy(_._2).map { case (u, rs) => u -> rs.map(_._4).sum }.toSeq.sortBy(_._1))
+          other.groupBy(_._2).map { case (u, rs) => u -> rs.map(_._4).sum }.toSeq.sortBy(_._1),
+          totalMap.getOrElse(problem, 0))
       }
     }
   }
 
   def revisionStatus(db: JdbcBackend#DatabaseDef, contest: Int)(implicit ec: ExecutionContext): Future[Seq[ProblemRevisionStatus]] =
     db.run(revisionStatusAction(contest))
+
+  /** Every submit of the problem in the contest, tested or not. */
+  def allSubmitIds(db: JdbcBackend#DatabaseDef, contest: Int, problem: String)(implicit ec: ExecutionContext): Future[Seq[Long]] =
+    db.run(SlickModel.submits.filter(s => s.contest === contest && s.problem === problem).map(_.id).sorted.result)
 }

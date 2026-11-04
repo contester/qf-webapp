@@ -31,12 +31,18 @@
                 <td>@st.atLatest</td><td>@st.outdated</td><td>@st.inProgress</td>
                 <td>@for((u, n) <- st.others) { @short(u) ×@n }</td>
                 <td>
-                @if(st.outdated > 0 && st.latestURL.isDefined) {
+                @if(st.latestURL.isDefined && (st.outdated > 0 || st.total > 0)) {
                     @helper.form(action = controllers.routes.AdminApplication.rejudgeProblem(contest.contest.id), 'style -> "display:inline") {
                         @helper.CSRF.formField
                         <input type="hidden" name="problem" value="@st.problem"/>
+                        @if(st.outdated > 0) {
                         <button type="submit" class="btn btn-primary btn-xs"
-                                onclick="return confirm('Rejudge @st.outdated submits of problem @st.problem?')">Rejudge @st.outdated</button>
+                                onclick="return confirm('Rejudge @st.outdated outdated submits of problem @st.problem?')">Rejudge @st.outdated</button>
+                        }
+                        @if(st.total > 0) {
+                        <button type="submit" name="all" value="true" class="btn btn-danger btn-xs"
+                                onclick="return confirm('Rejudge ALL @st.total submits of problem @st.problem, including those already at the current revision@if(st.inProgress > 0){ and the @st.inProgress being tested now}?')">Rejudge all @st.total</button>
+                        }
                     }
                 }
                 </td>
