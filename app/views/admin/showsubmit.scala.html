@@ -1,5 +1,7 @@
 @(sub: SubmitDetails, contest: SelectedContest, outputs: Map[Int, ResultAssets], runs: Seq[RunSummary], viewed: Option[Long])(implicit request: RequestHeader, messages: Messages)
 
+@fmt(d: org.joda.time.DateTime) = @{d.withZone(org.joda.time.DateTimeZone.getDefault).toString("yyyy-MM-dd HH:mm:ss.SSS")}
+
 @panel(name: String, style: String = "default", style2: String = "")(content: Html) = {
 <div class="panel panel-@style">
     <div class="panel-heading"><h3 class="panel-title">@name</h3>
@@ -35,10 +37,10 @@
 @panel("Попытка") {
     @defining(sub.fsub.submit.submitId) { subId =>
         <p>Задача @subId.problem.id</p>
-        <p>Тестинг (результаты берутся из него): @viewed.map(_.toString).getOrElse("нет")
+        <p>Тестинг: @viewed.map(_.toString).getOrElse("нет")@for(t <- viewed; r <- runs.find(_.testingId == t)) { (@r.problemURL)}
             @if(viewed != sub.fsub.submit.testingId.map(_.toLong)) { <b>— это не текущий прогон</b>, <a href="@routes.AdminApplication.showSubmit(subId.contestId, subId.id, None)">к текущему</a> }</p>
         @defining(subId.arrived) { arrived =>
-            <p>По часам: @{arrived.timestamp}, по контесту: @arrived.asString,
+            <p>По часам: @fmt(arrived.timestamp), по контесту: @arrived.asString,
                 @if(arrived.afterFreeze){после}else{до} заморозки</p>
         }
     <a href="@routes.AdminApplication.downloadArchiveSubmit(subId.contestId, subId.id)">Download</a>
@@ -53,7 +55,7 @@
     @for(r <- runs) {
     <tr @if(r.testingId == viewed.getOrElse(-1L)){class="info"}>
         <td><a href="@routes.AdminApplication.showSubmit(sub.fsub.submit.submitId.contestId, sub.fsub.submit.submitId.id, Some(r.testingId))">@r.testingId</a>@if(r.current){ (текущий)}</td>
-        <td>@r.started</td><td>@r.finished.getOrElse("")</td><td>@r.problemURL</td>
+        <td>@fmt(r.started)</td><td>@r.finished.map(fmt(_))</td><td>@r.problemURL</td>
         <td @if(r.success){class="success"}>@r.verdict</td><td>@r.stats.timeMs</td><td>@r.stats.memory</td>
     </tr>
     }
