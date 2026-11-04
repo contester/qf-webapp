@@ -1,35 +1,40 @@
-@(formData: Form[RejudgeProblem], contest: SelectedContest, problems: Seq[String], status: Seq[ProblemRevisionStatus], plan: Option[RejudgePlan])(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@(contest: SelectedContest, status: Seq[ProblemRevisionStatus])(implicit flash: Flash, messages: Messages, request: RequestHeader)
 
-@import helper.Implicits._
-@import b3.vertical.fieldConstructor
+@short(url: String) = @{
+    val path = url.split('?').head.split('/').last
+    val rev = url.split("revision=").drop(1).headOption.map(" r" + _).getOrElse("")
+    path + rev
+}
 
 @adminmain(tab = "rejudge", contest = contest) {
 
 @flash.get("success").map { message =>
-<div class="alert alert-success" role="alert">
-    Rejudge queued: @message
-</div>
+<div class="alert alert-success" role="alert">Rejudge queued: @message</div>
+}
+@flash.get("error").map { message =>
+<div class="alert alert-danger" role="alert">@message</div>
 }
 
 <div class="panel panel-success">
-    <div class="panel-heading"><h3 class="panel-title">Submits against the newest revision of each problem</h3></div>
+    <div class="panel-heading"><h3 class="panel-title">Submits against each problem's current definition</h3></div>
     <div class="panel-body">
-        <p>The newest revision is the highest one the director has loaded. Submits still being tested are not counted as outdated.</p>
+        <p>A submit is outdated when its last testing is not against the problem the contest definition has now, at
+            the newest revision the director has loaded: an older revision, or a different problem altogether.
+            Submits still being tested are not counted as outdated.</p>
         <table class="table table-condensed">
-            <thead><tr><th>Problem</th><th>Newest revision</th><th>At newest</th><th>Outdated</th><th>Being tested</th><th></th></tr></thead>
+            <thead><tr><th>Problem</th><th>Current</th><th>At current</th><th>Outdated</th><th>Being tested</th><th>Tested against</th><th></th></tr></thead>
             <tbody>
             @for(st <- status) {
             <tr @if(st.outdated > 0){class="warning"}>
                 <td>@st.problem</td>
-                <td>@st.latestURL.map(_.split("revision=").last).getOrElse("unknown")</td>
+                <td>@st.latestURL.map(short(_)).getOrElse("not loaded")</td>
                 <td>@st.atLatest</td><td>@st.outdated</td><td>@st.inProgress</td>
+                <td>@for((u, n) <- st.others) { @short(u) ×@n }</td>
                 <td>
-                @for(url <- st.latestURL; if st.outdated > 0) {
-                    @helper.form(action = controllers.routes.AdminApplication.rejudgeRange(contest.contest.id), 'style -> "display:inline") {
+                @if(st.outdated > 0 && st.latestURL.isDefined) {
+                    @helper.form(action = controllers.routes.AdminApplication.rejudgeProblem(contest.contest.id), 'style -> "display:inline") {
                         @helper.CSRF.formField
                         <input type="hidden" name="problem" value="@st.problem"/>
-                        <input type="hidden" name="url" value="@url"/>
-                        <input type="hidden" name="action" value="rejudge"/>
                         <button type="submit" class="btn btn-primary btn-xs"
                                 onclick="return confirm('Rejudge @st.outdated submits of problem @st.problem?')">Rejudge @st.outdated</button>
                     }
@@ -39,55 +44,7 @@
             }
             </tbody>
         </table>
-        @if(status.isEmpty) { <p class="text-muted">No judged submits yet.</p> }
-    </div>
-</div>
-
-<div class="panel panel-default">
-    <div class="panel-heading"><h3 class="panel-title">Rejudge to a specific problem URL</h3></div>
-    <div class="panel-body">
-        <p>Rejudges every finished submit of the problem whose last testing used a different problem URL.
-            Submits that are still being tested are left alone.</p>
-        @b3.horizontal.formCSRF(controllers.routes.AdminApplication.rejudgeRange(contest.contest.id), "col-md-2", "col-md-10") { implicit fc =>
-        @formData.globalError.map { error =>
-        <div class="alert alert-danger" role="alert">
-            <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
-            <span class="sr-only">Error:</span>
-            @error.message
-        </div>
-        }
-
-        @b3.select(formData("problem"), options = problems.map(p => p -> p), '_label -> "Problem")
-        @b3.text(formData("url"), '_label -> "Problem URL", '_help -> "As shown on a submit page, with ?revision=N")
-        @b3.free() {
-            <button type="submit" name="action" value="preview" class="btn btn-default">Preview</button>
-            @if(plan.exists(_.outdated.nonEmpty)) {
-            <button type="submit" name="action" value="rejudge" class="btn btn-primary"
-                    onclick="return confirm('Rejudge @{plan.map(_.outdated.size).getOrElse(0)} submits?')">
-                <span class="glyphicon glyphicon-ok"></span> Rejudge @plan.map(_.outdated.size) submits</button>
-            }
-        }
-        }
-
-        @for(p <- plan) {
-        <hr/>
-        @if(p.current == 0) {
-        <div class="alert alert-warning" role="alert">
-            No submit of this problem was tested at this URL. Check it for typos before rejudging.
-        </div>
-        }
-        <p><b>@p.outdated.size</b> to rejudge, <b>@p.current</b> already at this URL@if(p.inProgress > 0){, <b>@p.inProgress</b> still being tested (skipped)}.</p>
-        @if(p.outdated.nonEmpty) {
-        <table class="table table-condensed">
-            <thead><tr><th>Last testing used</th><th>Submits</th></tr></thead>
-            <tbody>
-            @for((url, ids) <- p.outdated.groupBy(_._2).toSeq.sortBy(_._1)) {
-            <tr><td>@url</td><td>@ids.size</td></tr>
-            }
-            </tbody>
-        </table>
-        }
-        }
+        @if(status.isEmpty) { <p class="text-muted">The contest has no problems loaded from Polygon.</p> }
     </div>
 </div>
 }

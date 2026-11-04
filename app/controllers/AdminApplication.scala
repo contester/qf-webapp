@@ -30,8 +30,7 @@ import views.html
 
 import scala.concurrent.{ExecutionContext, Future}
 
-/** action: "rejudge" queues the submits, anything else only previews them. */
-case class RejudgeProblem(problem: String, url: String, action: Option[String])
+case class RejudgeProblem(problem: String)
 case class PostClarification(problem: String, text: String, hidden: Boolean)
 case class ClarificationResponse(answer: String)
 
@@ -153,42 +152,34 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
 
   val rejudgeProblemForm = Form {
-    mapping(
-      "problem" -> nonEmptyText,
-      "url" -> nonEmptyText.transform[String](_.trim, identity).verifying("error.required", _.nonEmpty),
-      "action" -> optional(text)
-    )(RejudgeProblem.apply)(RejudgeProblem.unapply)
+    mapping("problem" -> nonEmptyText)(RejudgeProblem.apply)(RejudgeProblem.unapply)
   }
 
-  private def contestProblems(contestId: Int) =
-    db.run(SlickModel.problems.filter(_.contestID === contestId).map(_.id).sorted.result)
-
   def rejudgePage(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request =>
-    getSelectedContests(contestId, request.identity).zip(contestProblems(contestId))
-      .zip(AdminSubmits.revisionStatus(db, contestId)).map { case ((contest, problems), status) =>
-      Ok(html.admin.rejudge(rejudgeProblemForm, contest, problems, status, None))
+    getSelectedContests(contestId, request.identity).zip(AdminSubmits.revisionStatus(db, contestId)).map { case (contest, status) =>
+      Ok(html.admin.rejudge(contest, status))
     }
   }
 
-  /** Previews, or with action=rejudge queues, the submits of one problem whose last testing used another problem URL. */
-  def rejudgeRange(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request =>
+  /**
+   * Rejudges the finished submits of one problem whose last testing is not against the problem's current
+   * URL. The URL is recomputed here, not taken from the page, so a stale page cannot rejudge to an old revision.
+   */
+  def rejudgeProblem(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request =>
+    val back = Redirect(routes.AdminApplication.rejudgePage(contestId))
     rejudgeProblemForm.bindFromRequest.fold(
-      formWithErrors => getSelectedContests(contestId, request.identity).zip(contestProblems(contestId))
-        .zip(AdminSubmits.revisionStatus(db, contestId)).map {
-        case ((contest, problems), status) => BadRequest(html.admin.rejudge(formWithErrors, contest, problems, status, None))
-      },
-      data => AdminSubmits.rejudgePlan(db, contestId, data.problem, data.url).flatMap { plan =>
-        if (data.action.contains("rejudge")) {
-          plan.outdated.foreach { case (id, _) =>
-            rabbitMq ! Message.queue(SubmitMessage(id), queue = "contester.submitrequests")
-          }
-          Future.successful(Redirect(routes.AdminApplication.rejudgePage(contestId)).flashing(
-            "success" -> s"${plan.outdated.size} submits of problem ${data.problem}"))
-        } else {
-          getSelectedContests(contestId, request.identity).zip(contestProblems(contestId))
-            .zip(AdminSubmits.revisionStatus(db, contestId)).map { case ((contest, problems), status) =>
-            Ok(html.admin.rejudge(rejudgeProblemForm.fill(data), contest, problems, status, Some(plan)))
-          }
+      _ => Future.successful(back.flashing("error" -> "No problem given")),
+      data => AdminSubmits.revisionStatus(db, contestId).flatMap { status =>
+        status.find(_.problem == data.problem).flatMap(_.latestURL) match {
+          case None =>
+            Future.successful(back.flashing("error" -> s"Problem ${data.problem}: no revision loaded"))
+          case Some(url) =>
+            AdminSubmits.rejudgePlan(db, contestId, data.problem, url).map { plan =>
+              plan.outdated.foreach { case (id, _) =>
+                rabbitMq ! Message.queue(SubmitMessage(id), queue = "contester.submitrequests")
+              }
+              back.flashing("success" -> s"${plan.outdated.size} submits of problem ${data.problem}")
+            }
         }
       }
     )

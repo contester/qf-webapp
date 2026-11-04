@@ -34,7 +34,7 @@ GET /admin/submits/:contestId controllers.AdminApplication.submits(contestId: In
 GET /admin/monitor/:contestId controllers.AdminApplication.monitor(contestId: Int)
 
 GET /admin/rejudge/:contestId controllers.AdminApplication.rejudgePage(contestId: Int)
-POST /admin/rejudgeRange/:contestId controllers.AdminApplication.rejudgeRange(contestId: Int)
+POST /admin/rejudgeProblem/:contestId controllers.AdminApplication.rejudgeProblem(contestId: Int)
 
 + nocsrf
 POST /admin/rejudgeSubmit/:submitId controllers.AdminApplication.rejudgeSubmit(submitId: Int)

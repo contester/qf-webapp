@@ -106,16 +106,37 @@ class AdminSubmitsDbSpec extends AnyFunSuite {
     assert(await(AdminSubmits.rejudgePlan(db, 13, "A", "x")).outdated.map(_._1) == Seq(10L))
   }
 
-  test("revision status compares each problem with the newest cached revision") {
+  test("revision status compares each problem with the contest definition and the newest cached revision") {
     assume(url.isDefined)
-    // contest 13: judged at revision 1, the cache has 2
+    // contest 13: judged at revision 1, the cache has 2; other problems have no submits
     val st13 = await(AdminSubmits.revisionStatus(db, 13))
-    assert(st13 == Seq(ProblemRevisionStatus("A", Some("https://polygon.codeforces.com/p2inazR/afrolov/abc-jumps?revision=2"), 0, 1, 0)))
+    assert(st13.map(_.problem) == ('A' to 'M').map(_.toString))
+    assert(st13.head == ProblemRevisionStatus("A", Some("https://polygon.codeforces.com/p2inazR/afrolov/abc-jumps?revision=2"), 0, 1, 0,
+      Seq("https://polygon.codeforces.com/p2inazR/afrolov/abc-jumps?revision=1" -> 1)))
+    assert(st13.tail.forall(x => x.atLatest == 0 && x.outdated == 0 && x.inProgress == 0 && x.latestURL.isDefined))
     // contest 14: already at the newest
     val st14 = await(AdminSubmits.revisionStatus(db, 14))
-    assert(st14.map(x => (x.problem, x.atLatest, x.outdated, x.inProgress)) == Seq(("A", 9, 0, 0)))
-    // the plan the table's button posts rejudges exactly the outdated ones
+    assert(st14.map(x => (x.problem, x.atLatest, x.outdated, x.inProgress)) == Seq(("A", 9, 0, 0), ("B", 0, 0, 0), ("C", 0, 0, 0)))
+    // the plan the button acts on rejudges exactly the outdated ones
     val plan = await(AdminSubmits.rejudgePlan(db, 13, "A", st13.head.latestURL.get))
     assert(plan.outdated.map(_._1) == Seq(10L))
+  }
+
+  test("problems swapped in the contest definition: submits tested against the other problem are outdated") {
+    import org.stingray.contester.dbmodel.MyPostgresProfile.api._
+    assume(url.isDefined)
+    case object Rollback extends Exception
+    // Contest 12's five A submits were tested against a-plus-b. Pretend the sheet said that problem is B:
+    // relabel them in a transaction (rolled back) and the table must flag B, not A.
+    val check = (sqlu"update submits set problem = 'B' where contest = 12 and problem = 'A'" >>
+      AdminSubmits.revisionStatusAction(12)).flatMap { st =>
+      assert(st.find(_.problem == "A").exists(x => x.outdated == 0 && x.atLatest == 0))
+      val b = st.find(_.problem == "B").get
+      assert(b.outdated == 5 && b.atLatest == 0)
+      assert(b.others == Seq("https://polygon.codeforces.com/p2Eoyci/afrolov/a-plus-b-testcases?revision=23" -> 5))
+      DBIO.failed(Rollback)
+    }.transactionally
+    intercept[Rollback.type](await(db.run(check)))
+    assert(await(AdminSubmits.revisionStatus(db, 12)).find(_.problem == "A").get.atLatest == 5)
   }
 }

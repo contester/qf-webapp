@@ -31,13 +31,16 @@ case class RunSummary(testingId: Long, started: DateTime, finished: Option[DateT
 case class RejudgePlan(outdated: Seq[(Long, String)], inProgress: Int, current: Int)
 
 /**
- * How a problem's submits stand against the newest revision the director has loaded.
- * @param latestURL problem URL with the newest known revision, None if the cache has nothing for the problem
- * @param atLatest submits whose last testing already used it
- * @param outdated finished submits tested at some other revision
- * @param inProgress submits at another revision that are being tested right now
+ * How a problem's submits stand against what the contest definition says the problem is now.
+ * @param latestURL the problem's URL in the contest definition with the newest cached revision;
+ *                  None while the director has no revision of it cached
+ * @param atLatest submits whose last testing used exactly that URL (same problem, same revision)
+ * @param outdated finished submits tested against anything else: an older revision, or another problem
+ * @param inProgress submits at anything else that are being tested right now
+ * @param others what the outdated and in-progress submits were tested against, with counts
  */
-case class ProblemRevisionStatus(problem: String, latestURL: Option[String], atLatest: Int, outdated: Int, inProgress: Int)
+case class ProblemRevisionStatus(problem: String, latestURL: Option[String], atLatest: Int, outdated: Int, inProgress: Int,
+                                 others: Seq[(String, Int)])
 
 object AdminSubmits {
   import org.stingray.contester.dbmodel.MyPostgresProfile.api._
@@ -175,29 +178,33 @@ object AdminSubmits {
     }
 
   /**
-   * Per problem of the contest that has judged submits: where its submits stand against the newest cached revision.
-   * The problem's base URL is its last testing's problem_url minus the revision, which is also the key of
-   * polygon_problem_cache.
+   * Every problem of the contest definition (polygon_contest_cache, by the contest's polygon_id) against its
+   * newest cached revision (polygon_problem_cache), with where the contest's submits were actually tested.
+   * Rolling back inside a transaction is possible because this is a plain DBIO.
    */
-  def revisionStatus(db: JdbcBackend#DatabaseDef, contest: Int)(implicit ec: ExecutionContext): Future[Seq[ProblemRevisionStatus]] = {
-    // The cache lookup must run once per problem, after the distinct, not once per submit.
-    val latest = sql"""select l.problem, l.base,
-                   (select max(c.problem_revision) from polygon_problem_cache c where c.problem_source_base_url = l.base)
-              from (select distinct on (s.problem) s.problem, split_part(t.problem_url, '?revision=', 1) as base
-                      from submits s join testings t on t.id = s.testing_id
-                     where s.contest = $contest
-                     order by s.problem, t.id desc) l""".as[(String, String, Option[Long])]
+  def revisionStatusAction(contest: Int)(implicit ec: ExecutionContext): DBIO[Seq[ProblemRevisionStatus]] = {
+    val defined = sql"""select upper(x.idx), x.url,
+                   (select max(k.problem_revision) from polygon_problem_cache k where k.problem_source_base_url = x.url)
+              from contests c
+              join polygon_contest_cache pc on pc.source_url = c.polygon_id,
+                   xmltable('/contest/problems/problem' passing pc.contest_xml
+                            columns idx text path '@index', url text path '@url') x
+             where c.id = $contest
+             order by 1""".as[(String, String, Option[Long])]
     val counts = sql"""select s.problem, t.problem_url, t.finish_time is not null, count(*)::int
               from submits s join testings t on t.id = s.testing_id
              where s.contest = $contest group by 1, 2, 3""".as[(String, String, Boolean, Int)]
-    db.run(latest.zip(counts)).map { case (latestRows, countRows) =>
-      latestRows.sortBy(_._1).map { case (problem, base, rev) =>
+    defined.zip(counts).map { case (problems, countRows) =>
+      problems.map { case (problem, base, rev) =>
         val url = rev.map(r => s"$base?revision=$r")
-        val mine = countRows.filter(_._1 == problem)
-        val (cur, other) = mine.partition(r => url.contains(r._2))
+        val (cur, other) = countRows.filter(_._1 == problem).partition(r => url.contains(r._2))
         ProblemRevisionStatus(problem, url, cur.map(_._4).sum,
-          other.filter(_._3).map(_._4).sum, other.filterNot(_._3).map(_._4).sum)
+          other.filter(_._3).map(_._4).sum, other.filterNot(_._3).map(_._4).sum,
+          other.groupBy(_._2).map { case (u, rs) => u -> rs.map(_._4).sum }.toSeq.sortBy(_._1))
       }
     }
   }
+
+  def revisionStatus(db: JdbcBackend#DatabaseDef, contest: Int)(implicit ec: ExecutionContext): Future[Seq[ProblemRevisionStatus]] =
+    db.run(revisionStatusAction(contest))
 }
