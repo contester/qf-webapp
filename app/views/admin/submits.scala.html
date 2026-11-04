@@ -1,19 +1,41 @@
 @import org.stingray.contester.dbmodel._
-@(submits: Seq[FullyDescribedSubmit], teams: Map[Int, Team], contest: SelectedContest, admin: Admin)(implicit request: RequestHeader, messages: Messages)
+@(page: AdminSubmitPage, teams: Map[Int, Team], contest: SelectedContest, admin: Admin, teamFilter: Option[Int])(implicit request: RequestHeader, messages: Messages)
+@pager(page: AdminSubmitPage, cid: Int, teamFilter: Option[Int]) = {
+<ul class="pager">
+    @for(n <- page.newer) { <li class="previous"><a href="@routes.AdminApplication.submits(cid, teamFilter, None, Some(n))">&larr; Новее</a></li> }
+    @for(o <- page.older) { <li class="next"><a href="@routes.AdminApplication.submits(cid, teamFilter, Some(o), None)">Старее &rarr;</a></li> }
+</ul>
+}
+
 @adminmain(tab = "status", contest = contest) {
 @defining(admin.canModify(contest.contest.id)) { showRejudge =>
+@defining(contest.contest.id) { cid =>
+<form class="form-inline" method="get" action="@routes.AdminApplication.submits(cid, None, None, None)" style="margin-bottom: 10px">
+    <label for="team-filter">Команда:</label>
+    <select id="team-filter" name="team" class="form-control" onchange="this.form.submit()">
+        <option value="">Все</option>
+        @for((id, t) <- teams.toSeq.sortBy(_._2.teamFullName)) {
+        <option value="@id" @if(teamFilter.contains(id)){selected}>@t.teamFullName</option>
+        }
+    </select>
+    <noscript><button type="submit" class="btn btn-default">Показать</button></noscript>
+    @if(teamFilter.isDefined) { <a href="@routes.AdminApplication.submits(cid, None, None, None)">все команды</a> }
+</form>
+@pager(page, cid, teamFilter)
 <table id="submits" class="table table-hover table-bordered table-responsive">
     <thead>
     <tr><th id="lastSubmitId">ID</th>@if(showRejudge){<th>R</th>}<th>Время</th><th>Команда</th><th>Задача</th><th>Язык</th><th>Результат</th>
         <th>Баллы</th>
-        <th>Время работы</th><th>Память</th></tr>
+        <th>Время работы</th><th>Память</th><th>Прогоны</th></tr>
     </thead>
     <tbody>
-    @for(s <- submits) {
-    @submitrow(s, teams, showRejudge)
+    @for(s <- page.rows) {
+    @submitrow(s, teams, showRejudge, teamFilter.isEmpty)
     }
-
     </tbody>
 </table>
+@if(page.rows.isEmpty) { <p class="text-muted">Нет попыток.</p> }
+@pager(page, cid, teamFilter)
+}
 }
 }

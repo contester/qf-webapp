@@ -120,22 +120,6 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }
 
-  private def showSubs(contestId: Int, limit: Option[Int], account: Admin)(implicit request: RequestHeader, ec: ExecutionContext) =
-    getSelectedContests(contestId, account).zip(
-      statusActorModel.teamClient.getTeams(contestId)
-    ).zip(db.run(Submits.getContestSubmits(contestId))).flatMap {
-      case ((contest, teamMap), submitsx) =>
-        val canSeeAll = account.canSeeAll(contestId)
-        def canSeeSubmit(s: Submit) =
-          if (canSeeAll) true else !s.afterFreeze
-        val submits = submitsx.map(Submits.upliftSub(_)).filter(canSeeSubmit)
-        Submits.groupAndAnnotate(db, false, limit.map(submits.takeRight(_)).getOrElse(submits)).map { fullyDescribedSubmits =>
-          Ok(html.admin.submits(fullyDescribedSubmits, teamMap, contest, account))
-        }
-      case _ =>
-        Future.successful(Redirect(routes.AdminApplication.index))
-    }
-
   private def getAllContests(implicit ec: ExecutionContext) =
     Ask[StatusActor.AllContests](statusActorModel.statusActor, StatusActor.GetAllContests).map(_.contests)
 
@@ -172,7 +156,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
   def index = silhouette.SecuredAction.async { implicit request =>
-    Future.successful(Redirect(routes.AdminApplication.submits(request.identity.defaultContest)))
+    Future.successful(Redirect(routes.AdminApplication.submits(request.identity.defaultContest, None, None, None)))
   }
 
   private[this] val rangeRe = "(\\d*)\\.\\.(\\d*)".r
@@ -198,13 +182,16 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     } else com.google.common.collect.Range.singleton[java.lang.Long](item.toLong)
 
 
-  def submits(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
-    val lim = if (request.identity.canModify(contestId))
-      None
-    else
-      Some(100)
-    showSubs(contestId, lim, request.identity)
-  }
+  def submits(contestId: Int, team: Option[Int], before: Option[Long], after: Option[Long]) =
+    silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
+      val account = request.identity
+      getSelectedContests(contestId, account).zip(statusActorModel.teamClient.getTeams(contestId)).flatMap {
+        case (contest, teamMap) =>
+          AdminSubmits.page(db, contestId, team, before, after, account.canSeeAll(contestId)).map { page =>
+            Ok(html.admin.submits(page, teamMap, contest, account, team))
+          }
+      }
+    }
 
   val rejudgeSubmitRangeForm = Form {
     mapping("range" -> text)(RejudgeSubmitRange.apply)(RejudgeSubmitRange.unapply)
@@ -233,7 +220,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     rabbitMq ! Message.queue(SubmitMessage(submitId), queue = "contester.submitrequests")
     getSubmitCid(submitId).map { cids =>
       cids match {
-        case Some(contestId) => Redirect(routes.AdminApplication.submits(contestId))
+        case Some(contestId) => Redirect(routes.AdminApplication.submits(contestId, None, None, None))
         case None => Redirect(routes.AdminApplication.index)
       }
     }
@@ -252,17 +239,39 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
       case None => Future.successful(None)
     }
 
-  def showSubmit(contestId: Int, submitId: Int) = silhouette.SecuredAction(canSeeSubmit(submitId)).async { implicit request =>
+  /** The submit with the results of its current testing, or of the given earlier one (a run before a rejudge). */
+  private def getSubmitAtTesting(submitId: Int, testing: Option[Long]): Future[Option[(SubmitDetails, Option[Long])]] =
     getSubmitAndTesting(submitId).flatMap {
-      case Some((submit, testingOpt)) =>
-          testingOpt.map { testing =>
-            val problemId = testing._4
-              val phandle = PolygonURL(problemId)
-              Outputs.getAllAssets2(ws, fileserverBase, shortn, submit.fsub.submit.submitId.id, testing._1.toInt, submit.fsub.details.map(_.test), phandle)
-          }.getOrElse(Future.successful(Map[Int, ResultAssets]())).zip(
-          getSelectedContests(contestId, request.identity)).map {
-          case (outputs, contest) =>
-            Ok(html.admin.showsubmit(submit, contest, outputs))
+      case Some((submit, current)) =>
+        testing.filterNot(t => current.exists(_._1 == t)) match {
+          case None => Future.successful(Some((submit, current.map(_._1))))
+          case Some(other) =>
+            getTestingByID(other.toInt).flatMap {
+              case Some(t) if t._2 == submitId =>
+                Submits.loadSubmitDetails(db, other.toInt).map { details =>
+                  Some((submit.copy(fsub = submit.fsub.copy(details = details)), Some(other)))
+                }
+              case _ => Future.successful(None)
+            }
+        }
+      case None => Future.successful(None)
+    }
+
+  def showSubmit(contestId: Int, submitId: Int, testing: Option[Long]) = silhouette.SecuredAction(canSeeSubmit(submitId)).async { implicit request =>
+    getSubmitAtTesting(submitId, testing).flatMap {
+      case Some((submit, viewed)) =>
+        val outputsF = viewed.map { tid =>
+          getTestingByID(tid.toInt).flatMap {
+            case Some(t) =>
+              Outputs.getAllAssets2(ws, fileserverBase, shortn, submit.fsub.submit.submitId.id, tid.toInt,
+                submit.fsub.details.map(_.test), PolygonURL(t._4))
+            case None => Future.successful(Map[Int, ResultAssets]())
+          }
+        }.getOrElse(Future.successful(Map[Int, ResultAssets]()))
+        outputsF.zip(getSelectedContests(contestId, request.identity))
+          .zip(AdminSubmits.runHistory(db, submitId, submit.fsub.submit.testingId.map(_.toLong))).map {
+          case ((outputs, contest), runs) =>
+            Ok(html.admin.showsubmit(submit, contest, outputs, runs, viewed))
         }
       case None =>
         Future.successful(NotFound)

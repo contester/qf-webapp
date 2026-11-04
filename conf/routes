@@ -30,7 +30,7 @@ GET /logout controllers.AuthForms.logout
 
 GET /admin controllers.AdminApplication.index
 
-GET /admin/submits/:contestId controllers.AdminApplication.submits(contestId: Int)
+GET /admin/submits/:contestId controllers.AdminApplication.submits(contestId: Int, team: Option[Int] ?= None, before: Option[Long] ?= None, after: Option[Long] ?= None)
 GET /admin/monitor/:contestId controllers.AdminApplication.monitor(contestId: Int)
 
 GET /admin/rejudge/:contestId controllers.AdminApplication.rejudgePage(contestId: Int)
@@ -53,7 +53,7 @@ GET /admin/tasks/:contestId controllers.AdminApplication.tasks(contestId: Int)
 POST /admin/postAnswer/:clrId controllers.AdminApplication.postAnswer(clrId: Long)
 GET /admin/postAnswer/:clrId controllers.AdminApplication.postAnswerForm(clrId: Long)
 
-GET /admin/showsubmit/:contestId/:id controllers.AdminApplication.showSubmit(contestId: Int, id: Int)
+GET /admin/showsubmit/:contestId/:id controllers.AdminApplication.showSubmit(contestId: Int, id: Int, testing: Option[Long] ?= None)
 GET /admin/downloadSubmit/:contestId/:id controllers.AdminApplication.downloadArchiveSubmit(contestId: Int, id: Int)
 
 GET /admin/login controllers.AdminAuthForms.login

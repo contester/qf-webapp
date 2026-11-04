@@ -65,7 +65,8 @@ object SubmitResult extends Logging {
     )
   }
 
-  private def annotate2(schoolMode: Boolean, submit: Submit, details: Seq[ResultEntry]): SubmitResult =
+  /** The verdict from the submit and, for ACM mode, its last (message, test) result. */
+  def fromLast(schoolMode: Boolean, submit: Submit, last: Option[(String, Int)]): SubmitResult =
     if (!submit.finished)
       SubmitWaiting
     else if (submit.success)
@@ -75,10 +76,12 @@ object SubmitResult extends Logging {
     else if (schoolMode)
       SubmitPartialResult(submit.passed, submit.taken)
     else {
-      val lr = Submits.getTestingLastResult(details).map(x => (x.resultString, x.test)).getOrElse(("unknown", 0))
+      val lr = last.getOrElse(("unknown", 0))
       SubmitACMPartialResult(lr._1, Some(lr._2))
     }
 
+  private def annotate2(schoolMode: Boolean, submit: Submit, details: Seq[ResultEntry]): SubmitResult =
+    fromLast(schoolMode, submit, Submits.getTestingLastResult(details).map(x => (x.resultString, x.test)))
 
   def annotate(db: JdbcBackend#DatabaseDef, schoolMode: Boolean, submit: Submit)(implicit ec: ExecutionContext): Future[(SubmitResult, Seq[ResultEntry], SubmitStats)] =
     submit.testingId.map { tid =>

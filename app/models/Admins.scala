@@ -122,7 +122,7 @@ object AdminPermissions {
 object AdminNavlinkMatch {
   def apply(tab: String): Function[Int, play.api.mvc.Call] =
     tab match {
-      case "status" => routes.AdminApplication.submits(_)
+      case "status" => routes.AdminApplication.submits(_, None, None, None)
       case "monitor" => routes.AdminApplication.monitor(_)
       case "qanda" => routes.AdminApplication.showQandA(_)
       case "rejudge" => routes.AdminApplication.rejudgePage(_)
@@ -130,7 +130,7 @@ object AdminNavlinkMatch {
       case "print" => routes.AdminApplication.listPrintJobs(_)
       case "teams" => routes.AdminApplication.listTeams(_)
       case "contests" => routes.AdminApplication.showContestList(_)
-      case _ => routes.AdminApplication.submits(_)
+      case _ => routes.AdminApplication.submits(_, None, None, None)
     }
 }
 
