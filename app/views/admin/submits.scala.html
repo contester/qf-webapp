@@ -10,17 +10,9 @@
 @adminmain(tab = "status", contest = contest) {
 @defining(admin.canModify(contest.contest.id)) { showRejudge =>
 @defining(contest.contest.id) { cid =>
-<form class="form-inline" method="get" action="@routes.AdminApplication.submits(cid, None, None, None)" style="margin-bottom: 10px">
-    <label for="team-filter">Команда:</label>
-    <select id="team-filter" name="team" class="form-control" onchange="this.form.submit()">
-        <option value="">Все</option>
-        @for((id, t) <- teams.toSeq.sortBy(_._2.teamFullName)) {
-        <option value="@id" @if(teamFilter.contains(id)){selected}>@t.teamFullName</option>
-        }
-    </select>
-    <noscript><button type="submit" class="btn btn-default">Показать</button></noscript>
-    @if(teamFilter.isDefined) { <a href="@routes.AdminApplication.submits(cid, None, None, None)">все команды</a> }
-</form>
+@if(teamFilter.isDefined) {
+<p>Только одна команда: <a href="@routes.AdminApplication.submits(cid, None, None, None)">показать все команды</a></p>
+}
 @pager(page, cid, teamFilter)
 <table id="submits" class="table table-hover table-bordered table-responsive">
     <thead>
