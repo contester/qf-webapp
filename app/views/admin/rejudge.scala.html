@@ -1,4 +1,4 @@
-@(formData: Form[RejudgeProblem], contest: SelectedContest, problems: Seq[String], plan: Option[RejudgePlan])(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@(formData: Form[RejudgeProblem], contest: SelectedContest, problems: Seq[String], status: Seq[ProblemRevisionStatus], plan: Option[RejudgePlan])(implicit flash: Flash, messages: Messages, request: RequestHeader)
 
 @import helper.Implicits._
 @import b3.vertical.fieldConstructor
@@ -12,7 +12,39 @@
 }
 
 <div class="panel panel-success">
-    <div class="panel-heading"><h3 class="panel-title">Rejudge a problem to a new revision</h3></div>
+    <div class="panel-heading"><h3 class="panel-title">Submits against the newest revision of each problem</h3></div>
+    <div class="panel-body">
+        <p>The newest revision is the highest one the director has loaded. Submits still being tested are not counted as outdated.</p>
+        <table class="table table-condensed">
+            <thead><tr><th>Problem</th><th>Newest revision</th><th>At newest</th><th>Outdated</th><th>Being tested</th><th></th></tr></thead>
+            <tbody>
+            @for(st <- status) {
+            <tr @if(st.outdated > 0){class="warning"}>
+                <td>@st.problem</td>
+                <td>@st.latestURL.map(_.split("revision=").last).getOrElse("unknown")</td>
+                <td>@st.atLatest</td><td>@st.outdated</td><td>@st.inProgress</td>
+                <td>
+                @for(url <- st.latestURL; if st.outdated > 0) {
+                    @helper.form(action = controllers.routes.AdminApplication.rejudgeRange(contest.contest.id), 'style -> "display:inline") {
+                        @helper.CSRF.formField
+                        <input type="hidden" name="problem" value="@st.problem"/>
+                        <input type="hidden" name="url" value="@url"/>
+                        <input type="hidden" name="action" value="rejudge"/>
+                        <button type="submit" class="btn btn-primary btn-xs"
+                                onclick="return confirm('Rejudge @st.outdated submits of problem @st.problem?')">Rejudge @st.outdated</button>
+                    }
+                }
+                </td>
+            </tr>
+            }
+            </tbody>
+        </table>
+        @if(status.isEmpty) { <p class="text-muted">No judged submits yet.</p> }
+    </div>
+</div>
+
+<div class="panel panel-default">
+    <div class="panel-heading"><h3 class="panel-title">Rejudge to a specific problem URL</h3></div>
     <div class="panel-body">
         <p>Rejudges every finished submit of the problem whose last testing used a different problem URL.
             Submits that are still being tested are left alone.</p>

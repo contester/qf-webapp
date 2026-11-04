@@ -164,16 +164,18 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     db.run(SlickModel.problems.filter(_.contestID === contestId).map(_.id).sorted.result)
 
   def rejudgePage(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request =>
-    getSelectedContests(contestId, request.identity).zip(contestProblems(contestId)).map { case (contest, problems) =>
-      Ok(html.admin.rejudge(rejudgeProblemForm, contest, problems, None))
+    getSelectedContests(contestId, request.identity).zip(contestProblems(contestId))
+      .zip(AdminSubmits.revisionStatus(db, contestId)).map { case ((contest, problems), status) =>
+      Ok(html.admin.rejudge(rejudgeProblemForm, contest, problems, status, None))
     }
   }
 
   /** Previews, or with action=rejudge queues, the submits of one problem whose last testing used another problem URL. */
   def rejudgeRange(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request =>
     rejudgeProblemForm.bindFromRequest.fold(
-      formWithErrors => getSelectedContests(contestId, request.identity).zip(contestProblems(contestId)).map {
-        case (contest, problems) => BadRequest(html.admin.rejudge(formWithErrors, contest, problems, None))
+      formWithErrors => getSelectedContests(contestId, request.identity).zip(contestProblems(contestId))
+        .zip(AdminSubmits.revisionStatus(db, contestId)).map {
+        case ((contest, problems), status) => BadRequest(html.admin.rejudge(formWithErrors, contest, problems, status, None))
       },
       data => AdminSubmits.rejudgePlan(db, contestId, data.problem, data.url).flatMap { plan =>
         if (data.action.contains("rejudge")) {
@@ -183,8 +185,9 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
           Future.successful(Redirect(routes.AdminApplication.rejudgePage(contestId)).flashing(
             "success" -> s"${plan.outdated.size} submits of problem ${data.problem}"))
         } else {
-          getSelectedContests(contestId, request.identity).zip(contestProblems(contestId)).map { case (contest, problems) =>
-            Ok(html.admin.rejudge(rejudgeProblemForm.fill(data), contest, problems, Some(plan)))
+          getSelectedContests(contestId, request.identity).zip(contestProblems(contestId))
+            .zip(AdminSubmits.revisionStatus(db, contestId)).map { case ((contest, problems), status) =>
+            Ok(html.admin.rejudge(rejudgeProblemForm.fill(data), contest, problems, status, Some(plan)))
           }
         }
       }

@@ -105,4 +105,17 @@ class AdminSubmitsDbSpec extends AnyFunSuite {
     assert(await(AdminSubmits.rejudgePlan(db, 14, "B", known)).outdated.isEmpty)
     assert(await(AdminSubmits.rejudgePlan(db, 13, "A", "x")).outdated.map(_._1) == Seq(10L))
   }
+
+  test("revision status compares each problem with the newest cached revision") {
+    assume(url.isDefined)
+    // contest 13: judged at revision 1, the cache has 2
+    val st13 = await(AdminSubmits.revisionStatus(db, 13))
+    assert(st13 == Seq(ProblemRevisionStatus("A", Some("https://polygon.codeforces.com/p2inazR/afrolov/abc-jumps?revision=2"), 0, 1, 0)))
+    // contest 14: already at the newest
+    val st14 = await(AdminSubmits.revisionStatus(db, 14))
+    assert(st14.map(x => (x.problem, x.atLatest, x.outdated, x.inProgress)) == Seq(("A", 9, 0, 0)))
+    // the plan the table's button posts rejudges exactly the outdated ones
+    val plan = await(AdminSubmits.rejudgePlan(db, 13, "A", st13.head.latestURL.get))
+    assert(plan.outdated.map(_._1) == Seq(10L))
+  }
 }
