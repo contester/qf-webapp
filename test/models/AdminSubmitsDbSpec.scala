@@ -93,4 +93,16 @@ class AdminSubmitsDbSpec extends AnyFunSuite {
     assert(runs.map(_.testingId) == runs.map(_.testingId).sorted.reverse && runs.size == 2)
     assert(runs.count(_.current) == 1 && runs.find(_.current).get.testingId == 10)
   }
+
+  test("rejudge plan splits a problem's submits by the URL of their last testing") {
+    assume(url.isDefined)
+    val known = "https://polygon.codeforces.com/p/mmirzayanov/masquerade?revision=37"
+    val same = await(AdminSubmits.rejudgePlan(db, 14, "A", known))
+    assert(same.outdated.isEmpty && same.current == 9 && same.inProgress == 0)
+    val newer = await(AdminSubmits.rejudgePlan(db, 14, "A", known.replace("37", "38")))
+    assert(newer.outdated.map(_._1) == (1L to 9L) && newer.current == 0 && newer.outdated.forall(_._2 == known))
+    // other problems and contests are untouched
+    assert(await(AdminSubmits.rejudgePlan(db, 14, "B", known)).outdated.isEmpty)
+    assert(await(AdminSubmits.rejudgePlan(db, 13, "A", "x")).outdated.map(_._1) == Seq(10L))
+  }
 }

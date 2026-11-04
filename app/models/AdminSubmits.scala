@@ -22,6 +22,14 @@ case class RunAggregate(testingId: Long, lastTest: Int, lastCode: Int, allOk: Bo
 case class RunSummary(testingId: Long, started: DateTime, finished: Option[DateTime], problemURL: String,
                       verdict: String, success: Boolean, stats: SubmitStats, current: Boolean)
 
+/**
+ * What rejudging a problem to a given problem URL (with revision) would do.
+ * @param outdated finished submits whose last testing used another URL, with that URL
+ * @param inProgress submits that would qualify but are still being tested (left alone)
+ * @param current submits whose last testing already used the URL
+ */
+case class RejudgePlan(outdated: Seq[(Long, String)], inProgress: Int, current: Int)
+
 object AdminSubmits {
   import org.stingray.contester.dbmodel.MyPostgresProfile.api._
   import org.stingray.contester.dbmodel.SlickModel.UpliftedSubmit
@@ -145,4 +153,15 @@ object AdminSubmits {
         }
       }
     })
+
+  /** Submits of the problem in the contest, split by whether their last testing used `problemURL`. */
+  def rejudgePlan(db: JdbcBackend#DatabaseDef, contest: Int, problem: String, problemURL: String)(implicit ec: ExecutionContext): Future[RejudgePlan] =
+    db.run((for {
+      s <- SlickModel.submits if s.contest === contest && s.problem === problem
+      t <- SlickModel.testings if t.id === s.testingID
+    } yield (s.id, t.problemURL, t.finishTime.isDefined)).sortBy(_._1).result).map { rows =>
+      val (current, other) = rows.partition(_._2 == problemURL)
+      val (done, running) = other.partition(_._3)
+      RejudgePlan(done.map(r => (r._1, r._2)), running.size, current.size)
+    }
 }

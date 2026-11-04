@@ -1,4 +1,4 @@
-@(formRange: Form[RejudgeSubmitRange], contest: SelectedContest)(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@(formData: Form[RejudgeProblem], contest: SelectedContest, problems: Seq[String], plan: Option[RejudgePlan])(implicit flash: Flash, messages: Messages, request: RequestHeader)
 
 @import helper.Implicits._
 @import b3.vertical.fieldConstructor
@@ -7,16 +7,17 @@
 
 @flash.get("success").map { message =>
 <div class="alert alert-success" role="alert">
-    Rejudged: @message
+    Rejudge queued: @message
 </div>
 }
 
 <div class="panel panel-success">
-    <div class="panel-heading"><h3 class="panel-title">Rejudge</h3></div>
+    <div class="panel-heading"><h3 class="panel-title">Rejudge a problem to a new revision</h3></div>
     <div class="panel-body">
-        @b3.horizontal.formCSRF(controllers.routes.AdminApplication.rejudgeRange(contest.contest.id), "col-md-2", "col-md-10",
-        'enctype -> "multipart/form-data") { implicit fc =>
-        @formRange.globalError.map { error =>
+        <p>Rejudges every finished submit of the problem whose last testing used a different problem URL.
+            Submits that are still being tested are left alone.</p>
+        @b3.horizontal.formCSRF(controllers.routes.AdminApplication.rejudgeRange(contest.contest.id), "col-md-2", "col-md-10") { implicit fc =>
+        @formData.globalError.map { error =>
         <div class="alert alert-danger" role="alert">
             <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
             <span class="sr-only">Error:</span>
@@ -24,8 +25,36 @@
         </div>
         }
 
-        @b3.text(formRange("range"), '_label -> "Submits")
-        @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Rejudge}
+        @b3.select(formData("problem"), options = problems.map(p => p -> p), '_label -> "Problem")
+        @b3.text(formData("url"), '_label -> "Problem URL", '_help -> "As shown on a submit page, with ?revision=N")
+        @b3.free() {
+            <button type="submit" name="action" value="preview" class="btn btn-default">Preview</button>
+            @if(plan.exists(_.outdated.nonEmpty)) {
+            <button type="submit" name="action" value="rejudge" class="btn btn-primary"
+                    onclick="return confirm('Rejudge @{plan.map(_.outdated.size).getOrElse(0)} submits?')">
+                <span class="glyphicon glyphicon-ok"></span> Rejudge @plan.map(_.outdated.size) submits</button>
+            }
+        }
+        }
+
+        @for(p <- plan) {
+        <hr/>
+        @if(p.current == 0) {
+        <div class="alert alert-warning" role="alert">
+            No submit of this problem was tested at this URL. Check it for typos before rejudging.
+        </div>
+        }
+        <p><b>@p.outdated.size</b> to rejudge, <b>@p.current</b> already at this URL@if(p.inProgress > 0){, <b>@p.inProgress</b> still being tested (skipped)}.</p>
+        @if(p.outdated.nonEmpty) {
+        <table class="table table-condensed">
+            <thead><tr><th>Last testing used</th><th>Submits</th></tr></thead>
+            <tbody>
+            @for((url, ids) <- p.outdated.groupBy(_._2).toSeq.sortBy(_._1)) {
+            <tr><td>@url</td><td>@ids.size</td></tr>
+            }
+            </tbody>
+        </table>
+        }
         }
     </div>
 </div>

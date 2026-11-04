@@ -5,7 +5,6 @@ import actors.{StatusActor, WaiterActor}
 import akka.NotUsed
 import akka.stream.scaladsl.{Merge, Source}
 import com.github.nscala_time.time.Imports._
-import com.google.common.collect.ImmutableRangeSet
 import com.mohiva.play.silhouette.api.actions.SecuredRequest
 import com.mohiva.play.silhouette.api.{Authorization, Silhouette}
 import com.mohiva.play.silhouette.impl.authenticators.SessionAuthenticator
@@ -31,7 +30,8 @@ import views.html
 
 import scala.concurrent.{ExecutionContext, Future}
 
-case class RejudgeSubmitRange(range: String)
+/** action: "rejudge" queues the submits, anything else only previews them. */
+case class RejudgeProblem(problem: String, url: String, action: Option[String])
 case class PostClarification(problem: String, text: String, hidden: Boolean)
 case class ClarificationResponse(answer: String)
 
@@ -102,24 +102,6 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   private[this] def getSubmitCid(submitId: Long)(implicit ec: ExecutionContext): Future[Option[Int]] =
     db.run(SlickModel.submits.filter(_.id === submitId).take(1).map(_.contest).result.headOption)
 
-  private[this] def rejudgeRangeEx(range: String, account: Admin)(implicit ec: ExecutionContext): Future[Seq[Long]] = {
-    val checks = {
-      val builder = ImmutableRangeSet.builder[java.lang.Long]()
-      range.split(',').map(parseItem).foreach(builder.add)
-      builder.build()
-    }
-    db.run(SlickModel.submits.map(x => (x.id, x.contest)).sortBy(_._1).result).map { submits =>
-      val filtered = submits.filter { id =>
-        checks.contains(id._1) && account.canModify(id._2)
-      }
-
-      for (id <- filtered) {
-        rabbitMq ! Message.queue(SubmitMessage(id._1), queue = "contester.submitrequests")
-      }
-      filtered.map(_._1)
-    }
-  }
-
   private def getAllContests(implicit ec: ExecutionContext) =
     Ask[StatusActor.AllContests](statusActorModel.statusActor, StatusActor.GetAllContests).map(_.contests)
 
@@ -159,29 +141,6 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     Future.successful(Redirect(routes.AdminApplication.submits(request.identity.defaultContest, None, None, None)))
   }
 
-  private[this] val rangeRe = "(\\d*)\\.\\.(\\d*)".r
-
-  private[this] def parseItem(item: String): com.google.common.collect.Range[java.lang.Long] =
-    if (item.contains("..")) {
-      item match {
-        case rangeRe(left, right) =>
-          if (left.isEmpty) {
-            if (right.isEmpty) {
-              com.google.common.collect.Range.all[java.lang.Long]()
-            } else {
-              com.google.common.collect.Range.atMost[java.lang.Long](right.toLong)
-            }
-          } else {
-            if (right.isEmpty) {
-              com.google.common.collect.Range.atLeast[java.lang.Long](left.toLong)
-            } else {
-              com.google.common.collect.Range.closed[java.lang.Long](left.toLong, right.toLong)
-            }
-          }
-      }
-    } else com.google.common.collect.Range.singleton[java.lang.Long](item.toLong)
-
-
   def submits(contestId: Int, team: Option[Int], before: Option[Long], after: Option[Long]) =
     silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
       val account = request.identity
@@ -193,25 +152,41 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
       }
     }
 
-  val rejudgeSubmitRangeForm = Form {
-    mapping("range" -> text)(RejudgeSubmitRange.apply)(RejudgeSubmitRange.unapply)
+  val rejudgeProblemForm = Form {
+    mapping(
+      "problem" -> nonEmptyText,
+      "url" -> nonEmptyText.transform[String](_.trim, identity).verifying("error.required", _.nonEmpty),
+      "action" -> optional(text)
+    )(RejudgeProblem.apply)(RejudgeProblem.unapply)
   }
 
+  private def contestProblems(contestId: Int) =
+    db.run(SlickModel.problems.filter(_.contestID === contestId).map(_.id).sorted.result)
+
   def rejudgePage(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request =>
-    getSelectedContests(contestId, request.identity).map { contest =>
-      Ok(html.admin.rejudge(rejudgeSubmitRangeForm, contest))
+    getSelectedContests(contestId, request.identity).zip(contestProblems(contestId)).map { case (contest, problems) =>
+      Ok(html.admin.rejudge(rejudgeProblemForm, contest, problems, None))
     }
   }
 
-  def rejudgeRange(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestId))(parse.multipartFormData).async { implicit request =>
-    rejudgeSubmitRangeForm.bindFromRequest.fold(
-      formWithErrors => getSelectedContests(contestId, request.identity).map { contest =>
-        BadRequest(html.admin.rejudge(formWithErrors, contest))
+  /** Previews, or with action=rejudge queues, the submits of one problem whose last testing used another problem URL. */
+  def rejudgeRange(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request =>
+    rejudgeProblemForm.bindFromRequest.fold(
+      formWithErrors => getSelectedContests(contestId, request.identity).zip(contestProblems(contestId)).map {
+        case (contest, problems) => BadRequest(html.admin.rejudge(formWithErrors, contest, problems, None))
       },
-      data => rejudgeRangeEx(data.range, request.identity).map { rejudged =>
-        Redirect(routes.AdminApplication.rejudgePage(contestId)).flashing(
-          "success" -> s"${rejudged.length} submits"
-        )
+      data => AdminSubmits.rejudgePlan(db, contestId, data.problem, data.url).flatMap { plan =>
+        if (data.action.contains("rejudge")) {
+          plan.outdated.foreach { case (id, _) =>
+            rabbitMq ! Message.queue(SubmitMessage(id), queue = "contester.submitrequests")
+          }
+          Future.successful(Redirect(routes.AdminApplication.rejudgePage(contestId)).flashing(
+            "success" -> s"${plan.outdated.size} submits of problem ${data.problem}"))
+        } else {
+          getSelectedContests(contestId, request.identity).zip(contestProblems(contestId)).map { case (contest, problems) =>
+            Ok(html.admin.rejudge(rejudgeProblemForm.fill(data), contest, problems, Some(plan)))
+          }
+        }
       }
     )
   }
