@@ -216,14 +216,10 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     )
   }
 
-  def rejudgeSubmit(submitId: Int) = silhouette.SecuredAction(canRejudgeSubmit(submitId)).async { implicit request =>
+  // Called from the status page via ajax, which has nothing to do with a response body.
+  def rejudgeSubmit(submitId: Int) = silhouette.SecuredAction(canRejudgeSubmit(submitId)) { implicit request =>
     rabbitMq ! Message.queue(SubmitMessage(submitId), queue = "contester.submitrequests")
-    getSubmitCid(submitId).map { cids =>
-      cids match {
-        case Some(contestId) => Redirect(routes.AdminApplication.submits(contestId, None, None, None))
-        case None => Redirect(routes.AdminApplication.index)
-      }
-    }
+    NoContent
   }
 
   private def getTestingByID(testingID: Int) =

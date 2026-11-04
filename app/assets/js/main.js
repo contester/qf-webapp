@@ -131,6 +131,9 @@ function btnDelete(target, btnid, rowid) {
 }
 
 function rejudgePost(target, btnid) {
+    if (!window.confirm('Rejudge submit ' + btnid + '?')) {
+        return;
+    }
     $('#result-' + btnid).html('...');
     return btn(target, 'rejudge-' + btnid);
 }
