@@ -243,7 +243,13 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
         add('submit', function(obj) {
             var tr = $('#result-' + obj.submitId);
             if (tr.length) {
-                tr.html(obj.result.message);
+                tr.toggleClass('success', !!obj.result.success);
+                var href = tr.closest('tr').find('th a').attr('href');
+                if (href) {
+                    tr.empty().append($('<a>').attr('href', href).text(obj.result.message));
+                } else {
+                    tr.text(obj.result.message);
+                }
             } else {
                 $('#submits > tbody').prepend('<tr><th scope="row">' + obj.submitId + '</th></tr>');
             }
@@ -322,7 +328,7 @@ function listenOnAdmin(path, iconbase) {
         add('submit', function(obj) {
             var tr = $('#result-' + obj.submitId);
             if (tr.length) {
-                tr.html(obj.result.message);
+                tr.toggleClass('success', !!obj.result.success).text(obj.result.message);
             } else {
                 $('#lastSubmitId').html('<b>' + obj.submitId + '</b>');
             }
