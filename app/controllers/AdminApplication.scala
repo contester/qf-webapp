@@ -1029,8 +1029,10 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   private val areaPrinterForm = Form(single("printer" -> text))
 
   def areasPage(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
-    getSelectedContests(contestID, request.identity).zip(db.run(SlickModel.areas.sortBy(_.id).result)).map {
-      case (contest, areas) => Ok(html.admin.areas(areas, contest))
+    getSelectedContests(contestID, request.identity)
+      .zip(db.run(SlickModel.areas.sortBy(_.id).result))
+      .zip(AgentPrinterList.all(db)).map {
+      case ((contest, areas), printers) => Ok(html.admin.areas(areas, printers, contest))
     }
   }
 

@@ -1,4 +1,4 @@
-@(areas: Seq[org.stingray.contester.dbmodel.Area], contest: SelectedContest)(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@(areas: Seq[org.stingray.contester.dbmodel.Area], printers: Seq[org.stingray.contester.dbmodel.SlickModel.AgentPrinter], contest: SelectedContest)(implicit flash: Flash, messages: Messages, request: RequestHeader)
 @import helper.Implicits._
 @adminmain(tab = "", contest=contest) {
 @flash.get("success").map { message =>
@@ -23,6 +23,14 @@
                     @helper.form(controllers.routes.AdminApplication.postEditArea(contest.contest.id, a.id), 'class -> "form-inline") {
                         @helper.CSRF.formField
                         <input type="text" class="form-control input-sm" name="printer" value="@a.printer">
+                        @if(printers.nonEmpty) {
+                        <select class="form-control input-sm" onchange="if (this.value) { this.form.printer.value = this.value; }">
+                            <option value="">pick a printer...</option>
+                            @for(p <- printers) {
+                            <option value="@p.unc">@p.unc (@p.agent, seen @p.seen.toString("yyyy-MM-dd HH:mm"))</option>
+                            }
+                        </select>
+                        }
                         <button type="submit" class="btn btn-sm btn-primary">Save</button>
                     }
                 </td>

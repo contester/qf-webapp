@@ -6,7 +6,7 @@ import com.google.protobuf.ByteString
 import com.spingo.op_rabbit.Message
 import play.api.Logging
 import play.api.libs.json.JsValue
-import protos.Tickets.{BinaryJob, Computer, IdName, PrintJob, PrintJobReport}
+import protos.Tickets.{BinaryJob, Computer, IdName, PrintJob, PrintJobReport, PrinterList}
 import slick.basic.DatabaseConfig
 import slick.jdbc.{JdbcBackend, JdbcProfile}
 
@@ -150,6 +150,8 @@ class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: Sta
     }
     f.failed.foreach(e => logger.warn(s"palevo: cannot announce print error for job $jobId: $e"))
   }
+
+  def processPrinterList(list: PrinterList): Future[Int] = AgentPrinterList.replace(db, list)
 
   def processPrintJobReport(r: PrintJobReport): Future[Int] = {
     import PrintAttempts._
