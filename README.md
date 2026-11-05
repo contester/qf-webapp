@@ -44,6 +44,11 @@ Editing a team (not rated, name, school, number) updates the team list in memory
 rebuilds the boards and sends every stream a whole `board` event; no waiting for the cross-check. Editing a school
 is not covered: it shows up at the next cross-check.
 
+Editing a contest (the edit form, or moving it earlier or later) tells the status actor and the live monitor the new
+row at once. The live monitor still re-reads the contests every 5 minutes (`LiveTimings.contestPoll`), only to find
+contests that were added or changed in the database behind the application's back; such a change can take that long to
+show. A poll that read the database before an edit was sent is ignored for that contest.
+
 Between freeze_time and expose_time a submit that arrived after the freeze is shown as `?` on the freezing board
 (a contest with freeze_time >= end_time has no freeze). A `?` also appears on every board for a submit that is not
 judged yet. A team sees the real result of its own cells, but not its rank, the solved and penalty columns or any

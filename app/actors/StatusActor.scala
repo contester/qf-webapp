@@ -28,6 +28,8 @@ object StatusActor {
   case object Tick
   case object RefreshTick
   case class NewMultiContestState(cs: Iterable[Contest])
+  /** A contest row was changed by the application; it is applied at once instead of at the next Tick. */
+  case class ContestChanged(c: Contest)
   case class Ack(loggedInTeam: LoggedInTeam, msgid: Int)
   case class JoinAdmin(c: Int)
   case class JoinUser(contest: Int, team: Int)
@@ -385,6 +387,8 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
         }
       }
     }
+
+    case ContestChanged(c) => self ! NewMultiContestState(Seq(c))
 
     case Tick => {
       db.run(SlickModel.allContests.result).map { contests =>

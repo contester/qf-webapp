@@ -60,6 +60,8 @@ trait LiveActorFixtures { this: TestKit =>
                         render: (Contest, LiveBoard) => String = (c, b) => s"${c.id}:${b.rows.size}") {
     val clock = new FakeClock(now)
     @volatile var contestRows: Seq[Contest] = rows
+    // A poll reads the rows when it starts but only answers when this is completed; a test holds a poll back with it.
+    @volatile var pollGate: Future[Unit] = Future.successful(())
     @volatile var data: Map[Int, ContestData] =
       rows.map(c => c.id -> ContestData(problems, teams, subs.getOrElse(c.id, Nil))).toMap ++ overrideData
     // Loads wait for this; a test replaces it to hold a later load back.
@@ -87,7 +89,7 @@ trait LiveActorFixtures { this: TestKit =>
       }
     }
 
-    val actor: ActorRef = system.actorOf(LiveMonitorActor.propsWith(cfg, staticDir, () => Future.successful(contestRows),
+    val actor: ActorRef = system.actorOf(LiveMonitorActor.propsWith(cfg, staticDir, () => { val read = contestRows; pollGate.map(_ => read)(ExecutionContext.global) },
       loader, (c: Contest, b: LiveBoard) => { rendered.incrementAndGet(); render(c, b) },
       palevoSink, clock, timings))
 

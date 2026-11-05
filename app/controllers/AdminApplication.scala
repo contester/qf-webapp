@@ -814,13 +814,18 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
               data => {
                 val upd = SlickModel.getContestByIDToResync(ceditID)
                     .update((data.name, data.schoolMode, data.startTime, data.freezeTime, data.endTime, data.exposeTime, data.polygonID, data.language))
-                db.run(upd).map { v =>
+                db.run(upd).flatMap(_ => announceContestChanged(ceditID)).map { _ =>
                   Redirect(routes.AdminApplication.editContest(contestID, ceditID))
                 }
               },
             )
     }
   }
+
+  /** Tells the status actor and the live monitor what the contest row is now; the database stays the truth. */
+  private def announceContestChanged(contestID: Int): Future[Unit] =
+    db.run(SlickModel.getContestByID(contestID).result.headOption).map(_.foreach(statusActorModel.contestChanged))
+      .recover { case e => logger.warn(s"cannot announce the change of contest $contestID: $e") }
 
   private val shiftContestForm = Form(single("minutes" -> number))
 
@@ -840,11 +845,12 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
                 .update((t.start, t.freeze, t.end, t.expose)).map(_ => Right(minutes))
           }
         }.transactionally
-        db.run(action).map {
-          case Left(error) => back.flashing("error" -> error)
-          case Right(m) =>
+        db.run(action).flatMap {
+          case Left(error) => Future.successful(back.flashing("error" -> error))
+          case Right(m) => announceContestChanged(ceditID).map { _ =>
             logger.info(s"${request.identity} shifted contest $ceditID by $m minutes")
             back.flashing("success" -> (if (m > 0) s"Contest moved $m minutes later" else s"Contest moved ${-m} minutes earlier"))
+          }
         }
       }
     )
@@ -946,7 +952,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
           .update((c.name, c.schoolMode, now, c.freezeTime, c.endTime, c.exposeTime, c.polygonID, c.language))
       })
     }
-    db.run(action.transactionally).map { _ =>
+    db.run(action.transactionally).flatMap(_ => Future.traverse(1 to 10)(i => announceContestChanged(i + 10))).map { _ =>
       Redirect(routes.AdminApplication.miscForms(contestID))
     }
   }

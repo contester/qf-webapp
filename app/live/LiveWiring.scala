@@ -40,5 +40,8 @@ object LiveWiring {
 
     override def teamChanged(contest: Int, team: org.stingray.contester.dbmodel.Team): Unit =
       guard(_.teamChanged(contest, team))
+
+    override def contestChanged(contest: org.stingray.contester.dbmodel.Contest): Unit =
+      guard(_.contestChanged(contest))
   }
 }

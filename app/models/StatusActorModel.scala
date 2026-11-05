@@ -27,4 +27,11 @@ class StatusActorModel (dbConfig: DatabaseConfig[JdbcProfile], system: ActorSyst
 
   def getContest(contest: Int)(implicit timeout: akka.util.Timeout, ec: ExecutionContext): Future[Option[Contest]] =
     Ask[GetSingleContestResult](statusActor, StatusActor.GetSingleContest(contest)).map(_.c)
+
+  /** A contest row was changed through the application: the status actor and the live monitor learn of it at once. */
+  def contestChanged(c: Contest): Unit = {
+    statusActor ! StatusActor.ContestChanged(c)
+    scala.util.Try(liveHooks.contestChanged(c))
+    ()
+  }
 }

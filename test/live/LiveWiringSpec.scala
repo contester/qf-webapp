@@ -2,7 +2,7 @@ package live
 
 import akka.actor.ActorRef
 import org.joda.time.DateTime
-import org.stingray.contester.dbmodel.{LocalTeam, Team}
+import org.stingray.contester.dbmodel.{Contest, LocalTeam, Team}
 import org.scalatest.funsuite.AnyFunSuite
 
 import scala.concurrent.duration._
@@ -46,6 +46,7 @@ class LiveWiringSpec extends AnyFunSuite {
         calls += s"finished $contest $id $compiled $passed $taken"
       override def rejudged(id: Int): Unit = calls += s"rejudged $id"
       override def teamChanged(contest: Int, team: Team): Unit = calls += s"team $contest ${team.id}"
+      override def contestChanged(contest: Contest): Unit = calls += s"contest ${contest.id}"
     }
     val hooks = LiveWiring.deferred { resolved += 1; target }
     assert(resolved == 0)
@@ -53,8 +54,9 @@ class LiveWiringSpec extends AnyFunSuite {
     hooks.finished(1, 5, compiled = true, 3, 100)
     hooks.rejudged(5)
     hooks.teamChanged(1, LocalTeam(7, 1, "School", "S", 0, "", notRated = false, noPrint = false, disabled = false))
+    hooks.contestChanged(Contest(3, "c", new DateTime(0), new DateTime(0), new DateTime(0), new DateTime(0), None, "ru", schoolMode = false))
     assert(resolved == 1)
-    assert(calls == Seq("arrived 1 5", "finished 1 5 true 3 100", "rejudged 5", "team 1 7"))
+    assert(calls == Seq("arrived 1 5", "finished 1 5 true 3 100", "rejudged 5", "team 1 7", "contest 3"))
   }
 
   test("deferred hooks swallow an exception from resolving or calling the target") {
@@ -63,5 +65,6 @@ class LiveWiringSpec extends AnyFunSuite {
     hooks.finished(1, 5, compiled = true, 3, 100)
     hooks.rejudged(5)
     hooks.teamChanged(1, LocalTeam(7, 1, "School", "S", 0, "", notRated = false, noPrint = false, disabled = false))
+    hooks.contestChanged(Contest(3, "c", new DateTime(0), new DateTime(0), new DateTime(0), new DateTime(0), None, "ru", schoolMode = false))
   }
 }

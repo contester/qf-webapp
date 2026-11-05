@@ -27,6 +27,8 @@ object LiveMonitorActor {
   case class RejudgeRequested(id: Int)
   /** A team's details in a contest changed (not rated, name, school, number); `team` is the whole new value. */
   case class TeamChanged(contest: Int, team: Team)
+  /** A contest row was changed (times, name, ...) by the application; `contest` is the whole new row. */
+  case class ContestChanged(contest: Contest)
 
   // Each join is answered with a Source[Event, NotUsed] whose first element is the `board` event,
   // or with Status.Failure when the contest is unknown (or, for JoinPublic, not public).
@@ -70,7 +72,9 @@ object LiveMonitorActor {
 
   case class LiveTimings(tick: FiniteDuration = 1.second,
                          staticCheck: FiniteDuration = 1.second,
-                         contestPoll: FiniteDuration = 10.seconds,
+                         // Only a safety net for contests changed in the database behind the application's back; edits made through it
+                         // arrive as ContestChanged.
+                         contestPoll: FiniteDuration = 5.minutes,
                          reloadGap: FiniteDuration = 5.seconds,
                          ping: FiniteDuration = 30.seconds,
                          startupRetry: FiniteDuration = 10.seconds,
@@ -113,7 +117,7 @@ object LiveMonitorActor {
   private case class Loaded(contest: Int, result: Try[ContestData])
   private case class Added(contest: Contest, result: Try[ContestData])
   private case class RejudgeContest(id: Int, result: Try[Option[Int]])
-  private case class ContestsPolled(contests: Seq[Contest])
+  private case class ContestsPolled(contests: Seq[Contest], generation: Long)
   private case class StartReload(contest: Int)
   private case class Register(contest: Int, viewer: Viewer, queue: BoundedSourceQueue[Event])
   private case class Unregister(contest: Int, queue: BoundedSourceQueue[Event])
@@ -178,6 +182,10 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
   }
 
   private val contests = mutable.Map.empty[Int, ContestState]
+  // Counts polls started and contest changes received. A poll answers with the number it started under, and
+  // is not believed about a contest that was changed after that: its read of the database may predate the change.
+  private var generation = 0L
+  private val changedAt = mutable.Map.empty[Int, Long]
   private val adding = mutable.Set.empty[Int]
   private val subscribers = mutable.Map.empty[Int, mutable.Map[BoundedSourceQueue[Event], Viewer]]
   // Submit id -> monotonic millis of its rejudge request, until its finish arrives or the entry expires.
@@ -309,14 +317,21 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
     case Loaded(cid, result) => contests.get(cid).foreach(st => loaded(cid, st, result))
 
     case PollContests =>
+      generation += 1
+      val started = generation
       Future.fromTry(Try(contestRows())).flatten.onComplete {
-        case Success(cs) => self ! ContestsPolled(cs)
+        case Success(cs) => self ! ContestsPolled(cs, started)
         case Failure(e) => log.warning(s"live monitor: cannot poll contests: $e")
       }
 
     case RejudgeContest(id, result) => rejudgeContest(id, result)
 
-    case ContestsPolled(cs) => cs.foreach(contestRow)
+    case ContestsPolled(cs, started) => cs.filterNot(c => changedAt.get(c.id).exists(_ > started)).foreach(contestRow)
+
+    case ContestChanged(c) =>
+      generation += 1
+      changedAt.put(c.id, generation)
+      contestRow(c)
 
     case Added(c, result) =>
       adding -= c.id

@@ -252,6 +252,39 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     f.stop()
   }
 
+  test("a contest change that is sent reaches the live state at once, without a poll") {
+    val late = rec(81, 1, "A", t0.plusHours(3), ok)
+    val f = new Fixture(t0.plusHours(3).plusMinutes(30), subs = Map(1 -> Seq(late)))
+    val p = f.subscribe(JoinPublic(1))
+    assert(cellT(next(p, "board"), 1, "A") == "ok")
+    f.actor ! ContestChanged(contest(freeze = t0.plusHours(2)))
+    assert(cellT(next(p, "board"), 1, "A") == "pend")
+    assert(f.loads.get == 1)
+    f.stop()
+  }
+
+  test("a poll that read the database before a contest change was sent does not undo it") {
+    val late = rec(81, 1, "A", t0.plusHours(3), ok)
+    val f = new Fixture(t0.plusHours(3).plusMinutes(30), subs = Map(1 -> Seq(late)))
+    val p = f.subscribe(JoinPublic(1))
+    assert(cellT(next(p, "board"), 1, "A") == "ok")
+    val gate = scala.concurrent.Promise[Unit]()
+    f.pollGate = gate.future
+    f.actor ! PollContests // reads the old row, answers later
+    f.actor ! ContestChanged(contest(freeze = t0.plusHours(2)))
+    assert(cellT(next(p, "board"), 1, "A") == "pend")
+    gate.success(())
+    f.barrier()
+    Thread.sleep(200)
+    assert(cellT(next(f.subscribe(JoinPublic(1)), "board"), 1, "A") == "pend")
+    // a poll that starts after the change is believed again (here the row went back to the old freeze)
+    f.pollGate = Future.successful(())
+    f.actor ! PollContests
+    assert(cellT(next(p, "board"), 1, "A") == "ok")
+    assert(f.loads.get == 1)
+    f.stop()
+  }
+
   test("an unknown submit id reloads the contest once and is then applied; still unknown is ignored") {
     val f = new Fixture(running)
     val p = f.subscribe(JoinAdmin(1, real = true))

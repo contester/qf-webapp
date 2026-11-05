@@ -12,6 +12,8 @@ trait LiveHooks {
   def rejudged(id: Int): Unit
   /** A team's details in one contest changed; `team` is the whole new value. */
   def teamChanged(contest: Int, team: org.stingray.contester.dbmodel.Team): Unit
+  /** A contest row was changed by the application; `contest` is the whole new row. */
+  def contestChanged(contest: org.stingray.contester.dbmodel.Contest): Unit
 }
 
 object NoopLiveHooks extends LiveHooks {
@@ -19,6 +21,7 @@ object NoopLiveHooks extends LiveHooks {
   override def finished(contest: Int, id: Int, compiled: Boolean, passed: Int, taken: Int): Unit = ()
   override def rejudged(id: Int): Unit = ()
   override def teamChanged(contest: Int, team: org.stingray.contester.dbmodel.Team): Unit = ()
+  override def contestChanged(contest: org.stingray.contester.dbmodel.Contest): Unit = ()
 }
 
 class ActorLiveHooks(ref: ActorRef) extends LiveHooks {
@@ -36,4 +39,7 @@ class ActorLiveHooks(ref: ActorRef) extends LiveHooks {
 
   override def teamChanged(contest: Int, team: org.stingray.contester.dbmodel.Team): Unit =
     tell(LiveMonitorActor.TeamChanged(contest, team))
+
+  override def contestChanged(contest: org.stingray.contester.dbmodel.Contest): Unit =
+    tell(LiveMonitorActor.ContestChanged(contest))
 }
