@@ -61,6 +61,8 @@ object LiveMonitorActor {
                          reloadGap: FiniteDuration = 5.seconds,
                          ping: FiniteDuration = 30.seconds,
                          startupRetry: FiniteDuration = 10.seconds,
+                         // How long a rejudge may stay in flight (its finish not yet heard) before the database wins.
+                         rejudgeMaxAge: FiniteDuration = 30.minutes,
                          connectionBuffer: Int = 1024,
                          scheduled: Boolean = true)
 
@@ -159,7 +161,8 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
   private val contests = mutable.Map.empty[Int, ContestState]
   private val adding = mutable.Set.empty[Int]
   private val subscribers = mutable.Map.empty[Int, mutable.Map[BoundedSourceQueue[Event], Viewer]]
-  private val rejudging = mutable.Set.empty[Int]
+  // Submit id -> monotonic millis of its rejudge request, until its finish arrives or the entry expires.
+  private val rejudging = mutable.Map.empty[Int, Long]
   private val standings = new StandingsAnnouncer
 
   override def preStart(): Unit = {
@@ -207,14 +210,29 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
         timers.startTimerWithFixedDelay(CrossCheck, CrossCheck, cfg.crosscheckInterval)
     }
 
-  /** Adds a freshly loaded contest; its first palevo observation only records state. */
-  private def add(c: Contest, d: ContestData, now: DateTime): Unit = {
-    val st = new ContestState(new LiveContest(c, d.problems, d.teams, d.submits, now), new StaticThrottle(cfg.staticInterval))
-    contests(c.id) = st
-    guarded(c.id, st) {
-      observePalevo(st)
-      st.throttle.markDirty(clock.millis())
+  /**
+    * Adds a freshly loaded contest; its first palevo observation only records state. A contest whose data cannot be
+    * built is skipped (the others keep working) and retried on the next contest poll.
+    */
+  private def add(c: Contest, d: ContestData, now: DateTime): Unit =
+    Try(new LiveContest(c, d.problems, d.teams, d.submits, now)) match {
+      case Success(lc) =>
+        val st = new ContestState(lc, new StaticThrottle(cfg.staticInterval))
+        contests(c.id) = st
+        guarded(c.id, st) {
+          observePalevo(st)
+          st.throttle.markDirty(clock.millis())
+        }
+      case Failure(e) =>
+        log.error(e, s"live monitor: cannot build contest ${c.id}; will retry on the next contest poll")
     }
+
+  private def youngRejudge(id: Int, ms: Long): Boolean =
+    rejudging.get(id).exists(t => ms - t < timings.rejudgeMaxAge.toMillis)
+
+  private def expireRejudges(): Unit = {
+    val ms = clock.millis()
+    rejudging.keys.toList.foreach(id => if (!youngRejudge(id, ms)) rejudging -= id)
   }
 
   def running: Receive = {
@@ -235,6 +253,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
     case Unregister(cid, q) => unregister(cid, q)
 
     case Tick =>
+      expireRejudges()
       val now = clock.now()
       contests.foreach { case (cid, st) =>
         Try(st.live.onTick(now)) match {
@@ -311,7 +330,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       case Success(Some(d)) =>
         st.loading.foreach(l => l.applied :+= ev)
         ev match {
-          case EvRejudge(id, _) => rejudging += id
+          case EvRejudge(id, _) => rejudging(id) = clock.millis()
           case _ =>
         }
         changed(cid, st, d)
@@ -338,7 +357,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
     found match {
       case Some((cid, st, Success(Some(d)))) =>
         st.loading.foreach(l => l.applied :+= EvRejudge(id))
-        rejudging += id
+        rejudging(id) = clock.millis()
         changed(cid, st, d)
       case Some((cid, st, Failure(e))) => failed(cid, st, e)
       case _ =>
@@ -378,23 +397,38 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
     result match {
       case Failure(e) =>
         log.warning(s"live monitor: contest $cid: ${l.reason} load failed: $e")
-        // Keep the events for the next load (cross-check or reload); the contest stays dirty if it was.
-        st.waiting = l.waiting ++ st.waiting
+        retryLater(cid, st, l)
       case Success(data) =>
-        rebuild(cid, st, l, data)
-        // Unknown ids that this load was for: apply once, never reload for them again.
-        l.waiting.foreach(ev => applyEvent(cid, st, ev, mayReload = false))
-        // Unknown ids that came in while it ran: the new state may know them; otherwise reload again.
-        val again = st.waiting
-        st.waiting = Vector.empty
-        again.foreach(ev => applyEvent(cid, st, ev, mayReload = true))
+        if (rebuild(cid, st, l, data)) {
+          // Unknown ids that this load was for: apply once, never reload for them again.
+          l.waiting.foreach(ev => applyEvent(cid, st, ev, mayReload = false))
+          // Unknown ids that came in while it ran: the new state may know them; otherwise reload again.
+          val again = st.waiting
+          st.waiting = Vector.empty
+          again.foreach(ev => applyEvent(cid, st, ev, mayReload = true))
+        } else retryLater(cid, st, l)
     }
   }
 
-  private def rebuild(cid: Int, st: ContestState, l: Load, data: ContestData): Unit = {
+  /**
+    * The load did not produce a new state: keep its events for the next load and, when something is waiting for it
+    * (queued unknown ids or a dirty contest), ask for a reload (rate-limited). A plain cross-check that failed just
+    * waits for the next cross-check.
+    */
+  private def retryLater(cid: Int, st: ContestState, l: Load): Unit = {
+    st.waiting = l.waiting ++ st.waiting
+    if (st.dirty || st.waiting.nonEmpty) requestReload(cid, st)
+  }
+
+  /** Builds the state from the database data and replaces the live one; false when it could not be built. */
+  private def rebuild(cid: Int, st: ContestState, l: Load, data: ContestData): Boolean = {
     val now = clock.now()
-    // A submit with a rejudge in flight is pending in memory whatever the database says until it finishes.
-    val subs = data.submits.map(s => if (rejudging(s.id)) s.copy(state = live.Pending) else s)
+    // While a rejudge runs the database still holds the old result (`tested` stays true), so a recent in-flight
+    // rejudge keeps its pending state: it is neither reported as a mismatch nor reverted. An entry older than
+    // rejudgeMaxAge is taken to have lost its finish: it is dropped and the database state wins.
+    expireRejudges()
+    val ms = clock.millis()
+    val subs = data.submits.map(s => if (youngRejudge(s.id, ms)) s.copy(state = live.Pending) else s)
     val result = Try {
       val fresh = st.live.rebuilt(data.problems, data.teams, subs, now)
       l.applied.foreach { ev =>
@@ -406,6 +440,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       case Failure(e) =>
         log.error(e, s"live monitor: contest $cid: rebuild failed")
         st.dirty = true
+        false
       case Success(fresh) =>
         val old = st.live
         val diffs = old.differences(fresh)
@@ -419,6 +454,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
         if (diffs.nonEmpty || wasDirty)
           changed(cid, st, Delta(Seq(WholeOut(fresh.board(Freezing))), Seq(WholeOut(fresh.board(Real))), Nil),
             freezingChanged = old.board(Freezing) != fresh.board(Freezing))
+        true
     }
   }
 

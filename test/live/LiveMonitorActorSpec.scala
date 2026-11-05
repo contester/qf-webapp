@@ -56,7 +56,7 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
   private val defaultCfg = LiveMonitorConfig(enabled = true, staticInterval = 30.seconds,
     crosscheckInterval = 60.seconds, publicContests = (1 to 10).toSet, publicMaxConnections = 1000)
 
-  private val timings = LiveTimings(scheduled = false, reloadGap = Duration.Zero, ping = 1.hour)
+  private val defaultTimings = LiveTimings(scheduled = false, reloadGap = Duration.Zero, ping = 1.hour)
 
   private class FakeClock(@volatile var at: DateTime) extends LiveClock {
     @volatile var ms: Long = 0L
@@ -81,18 +81,23 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
                         cfg: LiveMonitorConfig = defaultCfg,
                         staticDir: Option[File] = None,
                         palevoSink: PalevoSink = palevo.NoopPalevoSink,
-                        gate: Future[Unit] = Future.successful(())) {
+                        gate: Future[Unit] = Future.successful(()),
+                        timings: LiveTimings = defaultTimings,
+                        overrideData: Map[Int, ContestData] = Map.empty) {
     val clock = new FakeClock(now)
     @volatile var contestRows: Seq[Contest] = rows
     @volatile var data: Map[Int, ContestData] =
-      rows.map(c => c.id -> ContestData(problems, teams, subs.getOrElse(c.id, Nil))).toMap
+      rows.map(c => c.id -> ContestData(problems, teams, subs.getOrElse(c.id, Nil))).toMap ++ overrideData
     val loads = new AtomicInteger
+    // Number of upcoming loads that fail.
+    val failLoads = new AtomicInteger
     val rendered = new AtomicInteger
 
     private val loader = new ContestLoader {
       override def load(c: Contest)(implicit ec: ExecutionContext): Future[ContestData] = {
         loads.incrementAndGet()
-        gate.map(_ => data(c.id))
+        if (failLoads.getAndUpdate(n => (n - 1).max(0)) > 0) Future.failed(new RuntimeException("injected load failure"))
+        else gate.map(_ => data(c.id))
       }
     }
 
@@ -353,6 +358,85 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     f.barrier()
     Thread.sleep(200)
     assert(f.loads.get == 3)
+    f.stop()
+  }
+
+  // Constructor throws: a team that is null.
+  private val badData = ContestData(problems, Seq(null), Nil)
+
+  test("a contest whose data cannot be built is skipped and retried; the others keep working") {
+    var f: Fixture = null
+    EventFilter[NullPointerException](occurrences = 1).intercept {
+      f = new Fixture(running, rows = Seq(contest(), contest(2)), overrideData = Map(2 -> badData))
+      f.barrier()
+    }
+    next(f.subscribe(JoinPublic(1)), "board")
+    val probe = TestProbe()
+    probe.send(f.actor, JoinAdmin(2, real = true))
+    probe.expectMsgType[akka.actor.Status.Failure](5.seconds)
+
+    f.data = f.data + (2 -> ContestData(problems, teams, Nil))
+    f.actor ! PollContests
+    awaitCond({
+      probe.send(f.actor, JoinAdmin(2, real = true))
+      probe.expectMsgType[AnyRef](5.seconds).isInstanceOf[Source[_, _]]
+    }, 5.seconds)
+    f.stop()
+  }
+
+  test("a failed reload is retried and its unknown id is then applied (no cross-check)") {
+    val f = new Fixture(running, cfg = defaultCfg.copy(crosscheckInterval = Duration.Zero))
+    val p = f.subscribe(JoinAdmin(1, real = true))
+    next(p, "board")
+    f.data = Map(1 -> ContestData(problems, teams, Seq(rec(95, 2, "C", running))))
+    f.failLoads.set(1)
+    EventFilter.warning(pattern = "load failed", occurrences = 1).intercept {
+      f.actor ! Finished(1, 95, compiled = true, 3, 3)
+    }
+    next(p, "board")
+    assert((next(p, "row") \ "row" \ "cells" \ "C" \ "t").as[String] == "ok")
+    assert(f.loads.get == 3)
+    // Not ignored: a rejudge of it is applied.
+    f.actor ! RejudgeRequested(95)
+    assert((next(p, "row") \ "row" \ "cells" \ "C" \ "t").as[String] == "pend")
+    f.stop()
+  }
+
+  test("a failed rebuild is retried and does not ignore the waiting id") {
+    val f = new Fixture(running, timings = defaultTimings.copy(reloadGap = 1.second))
+    val p = f.subscribe(JoinAdmin(1, real = true))
+    next(p, "board")
+    f.data = Map(1 -> badData)
+    EventFilter[NullPointerException](occurrences = 1).intercept {
+      f.actor ! Finished(1, 96, compiled = true, 3, 3)
+    }
+    f.data = Map(1 -> ContestData(problems, teams, Seq(rec(96, 3, "B", running))))
+    next(p, "board")
+    assert((next(p, "row") \ "row" \ "cells" \ "B" \ "t").as[String] == "ok")
+    f.stop()
+  }
+
+  test("a rejudge whose finish is lost heals at the first cross-check after the age limit") {
+    val solved = rec(97, 1, "A", t0.plusMinutes(30), ok)
+    val f = new Fixture(running, subs = Map(1 -> Seq(solved)), timings = defaultTimings.copy(rejudgeMaxAge = 10.seconds))
+    val real = f.subscribe(JoinAdmin(1, real = true))
+    next(real, "board")
+    f.actor ! RejudgeRequested(97)
+    assert((next(real, "row") \ "row" \ "cells" \ "A" \ "t").as[String] == "pend")
+
+    f.clock.ms = 5000
+    EventFilter.warning(pattern = "cross-check", occurrences = 0).intercept {
+      f.actor ! CrossCheck
+      awaitCond(f.loads.get == 2, 5.seconds)
+      real.expectNoMessage(500.millis)
+    }
+    assert(cellT(next(f.subscribe(JoinAdmin(1, real = true)), "board"), 1, "A") == "pend")
+
+    f.clock.ms = 10000
+    EventFilter.warning(pattern = "cross-check.*contest 1", occurrences = 1).intercept {
+      f.actor ! CrossCheck
+    }
+    assert(cellT(next(real, "board"), 1, "A") == "ok")
     f.stop()
   }
 
