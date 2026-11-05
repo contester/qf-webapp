@@ -41,12 +41,13 @@ class LiveContest(initial: Contest, problems: Seq[String], teams: Seq[Team], sub
   def rules: FreezeRules = currentRules
   def records: Seq[SubmitRec] = byId.values.toSeq.sortBy(_.id)
 
+  // A repeated arrival (e.g. a late message after the row was loaded for an early finish) is ignored:
+  // the stored record and its state win.
   def onArrived(rec: SubmitRec, now: DateTime): Delta =
-    if (!accepts(rec)) Delta.empty
+    if (!accepts(rec) || byId.contains(rec.id)) Delta.empty
     else {
-      val touched = byId.get(rec.id).map(old => remove(old)).toSeq
       insert(rec)
-      applyCells(touched :+ (rec.team -> rec.problem), now)
+      applyCells(Seq(rec.team -> rec.problem), now)
     }
 
   def onFinished(id: Int, compiled: Boolean, passed: Int, taken: Int, now: DateTime): Option[Delta] =
@@ -80,14 +81,6 @@ class LiveContest(initial: Contest, problems: Seq[String], teams: Seq[Team], sub
     val key = (r.team, r.problem)
     byCell(key) = (byCell.getOrElse(key, Vector.empty).filterNot(_.id == r.id) :+ r)
       .sortBy(x => (x.arrivedAt.getMillis, x.id))
-  }
-
-  private[this] def remove(r: SubmitRec): (Int, String) = {
-    byId -= r.id
-    val key = (r.team, r.problem)
-    val rest = byCell.getOrElse(key, Vector.empty).filterNot(_.id == r.id)
-    if (rest.isEmpty) byCell -= key else byCell(key) = rest
-    key
   }
 
   private[this] def setState(id: Int, state: SubmitState, now: DateTime): Option[Delta] =

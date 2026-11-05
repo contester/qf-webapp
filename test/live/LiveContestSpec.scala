@@ -105,6 +105,38 @@ class LiveContestSpec extends AnyFunSuite {
     assert(cellOn(lc, Real, 1, "A") == Failed(1))
   }
 
+  test("a repeated arrival keeps the finished state and emits nothing") {
+    val now = start.plusHours(1)
+    val lc = fresh(now)
+    lc.onArrived(rec(1, 1, "A", now), now)
+    lc.onFinished(1, ok.compiled, ok.passed, ok.taken, now)
+    val before = (lc.board(Freezing), lc.board(Real))
+    assert(lc.onArrived(rec(1, 1, "A", now), now) == emptyDelta)
+    assert(lc.onArrived(rec(1, 2, "B", now), now) == emptyDelta)
+    assert((lc.board(Freezing), lc.board(Real)) == before)
+    assert(lc.records == Seq(rec(1, 1, "A", now).copy(state = ok)))
+    assert(cellOn(lc, Real, 1, "A") == Solved(1, 3600))
+  }
+
+  test("finish before arrival: replayed row then the late arrival ends finished") {
+    val now = start.plusHours(1)
+    // replay as a loaded Done row
+    val a = fresh(now)
+    assert(a.onFinished(1, fail.compiled, fail.passed, fail.taken, now).isEmpty)
+    a.onArrived(rec(1, 1, "A", now).copy(state = fail), now)
+    assert(a.onArrived(rec(1, 1, "A", now), now) == emptyDelta)
+    assert(a.records.map(_.state) == Seq(fail))
+    assert(cellOn(a, Real, 1, "A") == Failed(1))
+    // replay as onArrived + onFinished
+    val b = fresh(now)
+    assert(b.onFinished(1, ok.compiled, ok.passed, ok.taken, now).isEmpty)
+    b.onArrived(rec(1, 1, "A", now), now)
+    b.onFinished(1, ok.compiled, ok.passed, ok.taken, now)
+    assert(b.onArrived(rec(1, 1, "A", now), now) == emptyDelta)
+    assert(b.records.map(_.state) == Seq(ok))
+    assert(cellOn(b, Real, 1, "A") == Solved(1, 3600))
+  }
+
   test("unknown id gives None; unknown team gives an empty delta") {
     val now = start.plusHours(1)
     val lc = fresh(now)
