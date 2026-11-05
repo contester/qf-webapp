@@ -68,11 +68,37 @@ function formatSeconds(s) {
         e.norm = Date.now();
         e.startTime = new Date(e.norm + e.startTimeDelta);
         e.endTime = new Date(e.norm + e.endTimeDelta);
+        if (e.freezeTimeDelta !== undefined && e.exposeTimeDelta !== undefined) {
+            e.freezeTime = new Date(e.norm + e.freezeTimeDelta);
+            e.exposeTime = new Date(e.norm + e.exposeTimeDelta);
+        }
 
         e.prevState = countdownState.contest ? countdownState.contest.state : null;
         countdownState.contest = e;
 
         intervalUpdateContestTimes(iconbase, admin);
+        startFrozenUpdate();
+    }
+
+    // The "scoreboard is frozen" line follows the clock between the freeze and the expose time; this keeps running
+    // after the contest is over (the countdown above stops then), up to the expose time.
+    function updateFrozen() {
+        var c = countdownState.contest;
+        if (!c || !c.freezeTime || !c.exposeTime) return;
+        var now = Date.now();
+        var frozen = c.freezeTime < c.endTime && now >= c.freezeTime && now < c.exposeTime;
+        if (frozen) $("#contest-frozen").show(); else $("#contest-frozen").hide();
+        if (now >= c.exposeTime && countdownState.frozenInterval) {
+            clearInterval(countdownState.frozenInterval);
+            countdownState.frozenInterval = null;
+        }
+    }
+
+    function startFrozenUpdate() {
+        updateFrozen();
+        if (!countdownState.frozenInterval && countdownState.contest.freezeTime) {
+            countdownState.frozenInterval = setInterval(updateFrozen, 1000);
+        }
     }
 
     function intervalUpdateContestTimes(iconbase, admin) {
@@ -123,9 +149,10 @@ function formatSeconds(s) {
 // The public live monitor has no feed to deliver the `contest` event: the page gives the start and end as
 // milliseconds from now (computed when the page was rendered) and the same countdown runs, without notifications
 // or the reload that team pages do when the contest starts (the monitor stream brings the board by itself).
-function publicContestTimer(startTimeDelta, endTimeDelta) {
+function publicContestTimer(startTimeDelta, endTimeDelta, freezeTimeDelta, exposeTimeDelta) {
     countdownState.quiet = true;
-    updateContestTimes({name: '', startTimeDelta: startTimeDelta, endTimeDelta: endTimeDelta}, '', true);
+    updateContestTimes({name: '', startTimeDelta: startTimeDelta, endTimeDelta: endTimeDelta,
+        freezeTimeDelta: freezeTimeDelta, exposeTimeDelta: exposeTimeDelta}, '', true);
 }
 
 function btn(target, btnid) {

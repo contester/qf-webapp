@@ -5,7 +5,7 @@
 @pageScripts = {
 @livescript(eventsPath, 0)
 <script type="text/javascript">
-    $(function() { publicContestTimer(@{contest.startTime.getMillis - System.currentTimeMillis}, @{contest.endTime.getMillis - System.currentTimeMillis}); });
+    $(function() { publicContestTimer(@{contest.startTime.getMillis - System.currentTimeMillis}, @{contest.endTime.getMillis - System.currentTimeMillis}, @{contest.freezeTime.getMillis - System.currentTimeMillis}, @{contest.exposeTime.getMillis - System.currentTimeMillis}); });
 </script>
 }
 @base(contest.name, scripts = pageScripts) {
