@@ -17,6 +17,7 @@ POST /ackMessage controllers.Application.ackMessage
 
 GET /monitor controllers.Application.monitorDefault
 GET /monitor/ controllers.Application.monitorDefault
+GET /monitor/events controllers.Application.monitorEvents
 
 GET /submit controllers.Application.submit
 POST /submit controllers.Application.submitPost
@@ -32,6 +33,9 @@ GET /admin controllers.AdminApplication.index
 
 GET /admin/submits/:contestId controllers.AdminApplication.submits(contestId: Int, team: Option[Int] ?= None, before: Option[Long] ?= None, after: Option[Long] ?= None)
 GET /admin/monitor/:contestId controllers.AdminApplication.monitor(contestId: Int)
+GET /admin/monitor/:contestId/events controllers.AdminApplication.monitorEvents(contestId: Int)
+GET /public/monitor/:contestId controllers.PublicMonitor.page(contestId: Int)
+GET /public/monitor/:contestId/events controllers.PublicMonitor.events(contestId: Int)
 
 GET /admin/rejudge/:contestId controllers.AdminApplication.rejudgePage(contestId: Int)
 POST /admin/rejudgeProblem/:contestId controllers.AdminApplication.rejudgeProblem(contestId: Int)

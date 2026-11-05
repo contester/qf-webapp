@@ -1,0 +1,31 @@
+@import org.stingray.contester.dbmodel._
+@(contest: Contest, board: live.LiveBoard)(implicit messages: Messages)
+@* Static monitor file written by the live monitor (StaticRender): works without JavaScript and without qf,
+   reloads itself every 60 s. Before the start it shows no table, like the old monitortable. *@
+<html>
+<head>
+    <title>@contest.name</title>
+    <link rel="stylesheet" type="text/css" href="//fonts.googleapis.com/css?family=Roboto:300,400,500,700">
+    <link rel="stylesheet" type="text/css" href="//fonts.googleapis.com/icon?family=Material+Icons">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.4.0/css/font-awesome.min.css">
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+    <script src="//maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
+    <link href="//cdn.jsdelivr.net/bootstrap.material-design/0.5.10/css/bootstrap-material-design.min.css" rel="stylesheet">
+    <link href="//cdn.jsdelivr.net/bootstrap.material-design/0.5.10/css/ripples.min.css" rel="stylesheet">
+    <script src="//cdn.jsdelivr.net/bootstrap.material-design/0.5.10/js/ripples.min.js"></script>
+    <script src="//cdn.jsdelivr.net/bootstrap.material-design/0.5.10/js/material.min.js"></script>
+    <script type="text/javascript">
+    $(function() {
+    $.material.init();
+    setTimeout(function() { location.reload() }, 60000);
+    });
+    </script>
+</head><body><div class="container">
+    <h3>@contest.name</h3>
+    @contestinfoshort(contest)
+
+    <div class="well">
+    @if(contest.started) {@livetable(board, 0)}
+    </div>
+</div></body></html>

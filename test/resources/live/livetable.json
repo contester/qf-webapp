@@ -1,0 +1,6 @@
+{"problems":["A","B","C","D"],"solved":{"A":1,"B":0,"C":0,"D":0},"rows":[
+{"team":1,"school":"Lyceum & Co #2","name":"<Alpha>","rank":"1","solved":1,"penalty":41,
+ "cells":{"A":{"t":"ok","s":"+1","at":"00:21"},"B":{"t":"fail","s":"-2"},"C":{"t":"pend","s":"?"},"D":{"t":"empty","s":""}}},
+{"team":2,"school":"School 2","name":"Beta's","rank":"*","solved":0,"penalty":0,
+ "cells":{"A":{"t":"pend","s":"?1"},"B":{"t":"empty","s":""},"C":{"t":"empty","s":""},"D":{"t":"empty","s":""}}}
+]}

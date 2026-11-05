@@ -1,0 +1,7 @@
+@import org.stingray.contester.dbmodel._
+@(contest: Contest)(implicit messages: Messages)
+@* Shell of a live monitor page: main.js liveMonitor() fills #live-monitor from the first `board` event,
+   using the column labels from the data attributes. See livetable.scala.html for the markup. *@
+<h3>@contest.name</h3>
+@contestinfoshort(contest)
+<div class="well" id="live-monitor" data-label-rank="@messages("label.rank")" data-label-team="@messages("label.team")" data-label-penalty="@messages("label.penalty")"></div>

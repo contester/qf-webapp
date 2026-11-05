@@ -140,6 +140,9 @@ class MyComponents(context: ApplicationLoader.Context)
 
   lazy val liveHooks: live.LiveHooks = liveBuilt.hooks
   lazy val liveMonitor: Option[ActorRef] = liveBuilt.monitor
+  lazy val liveMonitorRef: live.LiveMonitorRef = live.LiveMonitorRef(liveMonitor)
+  lazy val liveContestLookup: live.LiveContestLookup =
+    live.LiveContestLookup(id => statusActorModel.getContest(id)(akka.util.Timeout(5, java.util.concurrent.TimeUnit.SECONDS), executionContext))
 
   lazy val monitorModel = wire[Monitor]
   lazy val rabbitModel = wire[RabbitMqModel]
@@ -154,6 +157,7 @@ class MyComponents(context: ApplicationLoader.Context)
   lazy val sseController = wire[_root_.controllers.ServerSideEval]
   lazy val printingController = wire[_root_.controllers.Printing]
   lazy val adminController = wire[_root_.controllers.AdminApplication]
+  lazy val publicMonitorController = wire[_root_.controllers.PublicMonitor]
 
   lazy val authFormsController = wire[_root_.controllers.AuthForms]
   lazy val adminAuthFormsController = wire[_root_.controllers.AdminAuthForms]

@@ -1,0 +1,8 @@
+@import org.stingray.contester.dbmodel._
+@(contest: Contest, eventsPath: String)(implicit messages: Messages)
+@* The public live monitor: no navbar, no session, no auto-reload. *@
+@base(contest.name, scripts = livescript(eventsPath, 0)) {
+<div class="container">
+@liveshell(contest)
+</div>
+}

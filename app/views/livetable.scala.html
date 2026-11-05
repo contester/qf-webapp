@@ -1,0 +1,26 @@
+@(board: live.LiveBoard, currentTeam: Int)(implicit messages: Messages)
+@*
+  Live table markup contract. liveTableHtml() in app/assets/js/main.js builds the SAME string from a `board`
+  event; test/resources/live/livetable.html pins it (views.LiveTableSpec, test/js/livetable-check.js).
+  - <table class="table table-hover table-bordered table-responsive"><thead><tr>, then
+    <th>rank</th><th>ID</th><th>team</th><th>=</th><th>penalty</th>, then per problem P with N solves:
+    <th style="text-align: center;">P<div style="font-size: 65%;">(N)</div></th>, with "color:#ccc;" after
+    "65%;" when N is 0; then </tr></thead><tbody> and a newline.
+  - One line per row, in board order, each followed by a newline:
+    <tr data-team="ID"> (class="info" added for the current team) <th scope="row">RANK</th> (* if not rated)
+    <td>ID</td><td>SCHOOL<br/><small>TEAM NAME</small></td><td>SOLVED</td><td>PENALTY</td>, then per problem
+    <td class="text-center">CELL</td>, then </tr>.
+  - CELL: solved <span class="text-success"><strong>+X</strong></span><br/><span class="text-info"><small>HH:MM</small></span>;
+    failed <span class="text-muted">-X</span>; pending <span class="text-warning">?X</span>; empty: nothing.
+  - Then </tbody></table>. Text is HTML-escaped (& < > " ').
+*@
+@cell(c: live.LiveCell) = {@c match {
+case live.LiveCell.Solved(_, s) => {<span class="text-success"><strong>@c.text</strong></span><br/><span class="text-info"><small>@SecondsToTimeStr(s)</small></span>}
+case live.LiveCell.Failed(_) => {<span class="text-muted">@c.text</span>}
+case live.LiveCell.Pending(_) => {<span class="text-warning">@c.text</span>}
+case _ => {}
+}}
+@count(p: String) = @{board.solvedCounts.getOrElse(p, 0)}
+<table class="table table-hover table-bordered table-responsive"><thead><tr><th>@messages("label.rank")</th><th>ID</th><th>@messages("label.team")</th><th>=</th><th>@messages("label.penalty")</th>@for(p <- board.problems) {<th style="text-align: center;">@p<div style="font-size: 65%;@if(count(p) == 0){color:#ccc;}">(@count(p))</div></th>}</tr></thead><tbody>
+@for(r <- board.rows) {<tr data-team="@r.team.id"@if(r.team.id == currentTeam){ class="info"}><th scope="row">@if(r.rank == 0){*}else{@r.rank}</th><td>@r.team.id</td><td>@r.team.schoolFullNameWithNum<br/><small>@r.team.teamName</small></td><td>@r.score.solved</td><td>@r.score.penalty</td>@for(p <- board.problems) {<td class="text-center">@cell(r.cells.getOrElse(p, live.LiveCell.Empty))</td>}</tr>
+}</tbody></table>

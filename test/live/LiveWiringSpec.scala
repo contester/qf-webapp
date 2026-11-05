@@ -59,10 +59,4 @@ class LiveWiringSpec extends AnyFunSuite {
     hooks.finished(1, 5, compiled = true, 3, 100)
     hooks.rejudged(5)
   }
-
-  test("StaticRender is a stub until the views exist") {
-    assertThrows[NotImplementedError] {
-      StaticRender.render(null, LiveBoard(Nil, Vector.empty, Map.empty))(null)
-    }
-  }
 }

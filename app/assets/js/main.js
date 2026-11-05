@@ -349,3 +349,125 @@ function listenOnAdmin(path, iconbase) {
 
     return listenV2(path, setup, setConnectedBadge);
 }
+// Live monitor. The markup must match app/views/livetable.scala.html exactly (contract documented there,
+// pinned by test/resources/live/livetable.html; check with `node test/js/livetable-check.js`).
+function liveEsc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
+}
+
+// Rank 0 (not rated) shows as *; board/row JSON already carries "*" or the number as a string.
+function liveRankText(rank) {
+    return (rank === 0 || rank === '*') ? '*' : String(rank);
+}
+
+function liveCellHtml(c) {
+    if (!c) return '';
+    switch (c.t) {
+    case 'ok':
+        return '<span class="text-success"><strong>' + liveEsc(c.s) + '</strong></span><br/>' +
+            '<span class="text-info"><small>' + liveEsc(c.at) + '</small></span>';
+    case 'fail':
+        return '<span class="text-muted">' + liveEsc(c.s) + '</span>';
+    case 'pend':
+        return '<span class="text-warning">' + liveEsc(c.s) + '</span>';
+    default:
+        return '';
+    }
+}
+
+// All problem cells of a row; a problem absent from `cells` is empty.
+function liveCellsHtml(problems, cells) {
+    var h = '';
+    for (var i = 0; i < problems.length; i++) {
+        h += '<td class="text-center">' + liveCellHtml(cells ? cells[problems[i]] : null) + '</td>';
+    }
+    return h;
+}
+
+function liveCountHtml(problem, n) {
+    return '<th style="text-align: center;">' + liveEsc(problem) + '<div style="font-size: 65%;' +
+        (n ? '' : 'color:#ccc;') + '">(' + n + ')</div></th>';
+}
+
+function liveRowHtml(problems, row, currentTeamId) {
+    return '<tr data-team="' + row.team + '"' + (row.team === currentTeamId ? ' class="info"' : '') + '>' +
+        '<th scope="row">' + liveEsc(liveRankText(row.rank)) + '</th><td>' + row.team + '</td>' +
+        '<td>' + liveEsc(row.school) + '<br/><small>' + liveEsc(row.name) + '</small></td>' +
+        '<td>' + row.solved + '</td><td>' + row.penalty + '</td>' + liveCellsHtml(problems, row.cells) + '</tr>';
+}
+
+function liveTableHtml(board, labels, currentTeamId) {
+    var h = '<table class="table table-hover table-bordered table-responsive"><thead><tr>' +
+        '<th>' + liveEsc(labels.rank) + '</th><th>ID</th><th>' + liveEsc(labels.team) + '</th><th>=</th>' +
+        '<th>' + liveEsc(labels.penalty) + '</th>';
+    for (var i = 0; i < board.problems.length; i++) {
+        h += liveCountHtml(board.problems[i], board.solved[board.problems[i]] || 0);
+    }
+    h += '</tr></thead><tbody>\n';
+    for (var j = 0; j < board.rows.length; j++) {
+        h += liveRowHtml(board.problems, board.rows[j], currentTeamId) + '\n';
+    }
+    return h + '</tbody></table>';
+}
+
+// Fills containerSelector from the live stream at eventsPath; currentTeamId (0 for none) gets the `info` row.
+function liveMonitor(eventsPath, containerSelector, currentTeamId) {
+    var box = $(containerSelector);
+    var labels = {
+        rank: box.attr('data-label-rank') || '',
+        team: box.attr('data-label-team') || '',
+        penalty: box.attr('data-label-penalty') || ''
+    };
+    var problems = [];
+    var FIXED_COLUMNS = 5; // rank, ID, team, solved, penalty
+
+    var body = function() { return box.find('tbody').first(); };
+
+    var setup = function(add) {
+        add('board', function(b) {
+            problems = b.problems;
+            if (!b.problems.length && !b.rows.length) {
+                box.empty(); // before the start: no table, like the old monitor
+            } else {
+                box.html(liveTableHtml(b, labels, currentTeamId));
+            }
+        });
+
+        add('row', function(e) {
+            var tbody = body();
+            if (!tbody.length) return;
+            tbody.children('tr[data-team="' + e.team + '"]').remove();
+            var tr = $(liveRowHtml(problems, e.row, currentTeamId));
+            var rows = tbody.children('tr');
+            if (e.pos < rows.length) {
+                rows.eq(e.pos).before(tr);
+            } else {
+                tbody.append(tr);
+            }
+            rows = tbody.children('tr');
+            for (var i = 0; i < e.ranks.length; i++) {
+                rows.eq(e.rankFrom + i).children('th').first().text(liveRankText(e.ranks[i]));
+            }
+            var head = box.find('thead tr').first().children('th');
+            $.each(e.solved, function(p, n) {
+                var k = problems.indexOf(p);
+                if (k >= 0) head.eq(FIXED_COLUMNS + k).replaceWith(liveCountHtml(p, n));
+            });
+        });
+
+        add('cells', function(e) {
+            var tr = body().children('tr[data-team="' + e.team + '"]');
+            if (!tr.length) return;
+            tr.children('td.text-center').remove();
+            tr.append(liveCellsHtml(problems, e.cells));
+        });
+    };
+
+    // The navbar badge does not exist on the public page.
+    var badge = function(state) {
+        if ($('#connected1').length) setConnectedBadge(state);
+    };
+
+    return listenV2(eventsPath, setup, badge);
+}

@@ -39,7 +39,9 @@ class Application (cc: ControllerComponents,
                             rabbitMqModel: RabbitMqModel,
                             statusActorModel: StatusActorModel,
                             configuration: Configuration,
-                            liveHooks: live.LiveHooks) extends AbstractController(cc) with I18nSupport with Logging {
+                            liveHooks: live.LiveHooks,
+                            liveConfig: live.LiveMonitorConfig,
+                            liveMonitor: live.LiveMonitorRef) extends AbstractController(cc) with I18nSupport with Logging {
 
   private val db = dbConfig.db
   import org.stingray.contester.dbmodel.MyPostgresProfile.api._
@@ -58,10 +60,18 @@ class Application (cc: ControllerComponents,
   import scala.concurrent.ExecutionContext.Implicits.global
 
   def monitorDefault = silhouette.SecuredAction.async { implicit request =>
-    monitorModel.getMonitor(request.identity.contest.id, overrideFreeze = false).map {
+    if (liveConfig.enabled)
+      Future.successful(Ok(html.livemonitor(request.identity.contest, request.identity)))
+    else monitorModel.getMonitor(request.identity.contest.id, overrideFreeze = false).map {
       case Some(x) => Ok(html.loggedinmonitor(x.contest, x.status, request.identity))
       case None => NotFound
     }
+  }
+
+  // The team's live stream: the freezing board with the team's own row overlay.
+  def monitorEvents = silhouette.SecuredAction.async { implicit request =>
+    LiveStreams.stream(liveMonitor.ref.filter(_ => liveConfig.enabled),
+      actors.LiveMonitorActor.JoinTeam(request.identity.contest.id, request.identity.team.id))
   }
 
   private[this] def getSubmits(team: LoggedInTeam) = {

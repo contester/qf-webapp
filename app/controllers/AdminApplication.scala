@@ -82,7 +82,9 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
                                   configuration: Configuration,
                         externalDatabases: ExternalDatabases,
                                   ws: WSClient,
-                        liveHooks: live.LiveHooks) extends AbstractController(cc)  with I18nSupport with Logging {
+                        liveHooks: live.LiveHooks,
+                        liveConfig: live.LiveMonitorConfig,
+                        liveMonitor: live.LiveMonitorRef) extends AbstractController(cc)  with I18nSupport with Logging {
 
   implicit val ec = defaultExecutionContext
 
@@ -117,11 +119,19 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     Ask[WaiterActor.Snapshot](statusActorModel.waiterActor, WaiterActor.GetSnapshot(perm)).map(_.tasks)
 
   def monitor(id: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(id)).async { implicit request =>
-    getSelectedContests(id, request.identity).zip(monitorModel.getMonitor(id, request.identity.canSeeAll(id))).map {
+    if (liveConfig.enabled)
+      getSelectedContests(id, request.identity).map(contest => Ok(html.admin.livemonitor(contest)))
+    else getSelectedContests(id, request.identity).zip(monitorModel.getMonitor(id, request.identity.canSeeAll(id))).map {
       case (contest, Some(status)) =>
         Ok(html.admin.monitor(contest, status.status))
       case (_, None) => NotFound
     }
+  }
+
+  // The real board for accounts that can see everything, otherwise the freezing board.
+  def monitorEvents(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
+    LiveStreams.stream(liveMonitor.ref.filter(_ => liveConfig.enabled),
+      actors.LiveMonitorActor.JoinAdmin(contestId, real = request.identity.canSeeAll(contestId)))
   }
 
 
