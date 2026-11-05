@@ -7,6 +7,26 @@
     @message
 </div>
 }
+@flash.get("error").map { message =>
+<div class="alert alert-danger" role="alert">@message</div>
+}
+<div class="panel panel-warning">
+    <div class="panel-heading"><h3 class="panel-title">Move the contest</h3></div>
+    <div class="panel-body">
+        <p>Moves start, freeze, end and expose time together. Only before the contest has started.</p>
+        @helper.form(controllers.routes.AdminApplication.postShiftContest(contest.contest.id, cd.id), 'class -> "form-inline") {
+            @helper.CSRF.formField
+            <button type="submit" name="minutes" value="-5" class="btn btn-default">5 min earlier</button>
+            <button type="submit" name="minutes" value="5" class="btn btn-default">5 min later</button>
+        }
+        <br>
+        @helper.form(controllers.routes.AdminApplication.postShiftContest(contest.contest.id, cd.id), 'class -> "form-inline") {
+            @helper.CSRF.formField
+            <input type="number" name="minutes" class="form-control" style="width: 6em" placeholder="min" min="-240" max="240" step="1" required>
+            <button type="submit" class="btn btn-default">Move by this many minutes (negative: earlier)</button>
+        }
+    </div>
+</div>
 <div class="panel panel-success">
     <div class="panel-heading"><h3 class="panel-title">@messages("heading.editContest")</h3></div>
     <div class="panel-body">

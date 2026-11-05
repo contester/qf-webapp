@@ -822,6 +822,34 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }
 
+  private val shiftContestForm = Form(single("minutes" -> number))
+
+  /** Moves all four times of a contest that has not started by some minutes (negative: earlier). */
+  def postShiftContest(contestID: Int, ceditID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(ceditID)).async { implicit request =>
+    import com.github.tototoshi.slick.PostgresJodaSupport._
+    val back = Redirect(routes.AdminApplication.editContest(contestID, ceditID))
+    shiftContestForm.bindFromRequest.fold(
+      _ => Future.successful(back.flashing("error" -> "Shift must be a number of minutes")),
+      minutes => {
+        val action = SlickModel.getContestByID(ceditID).result.headOption.flatMap {
+          case None => slick.dbio.DBIO.successful(Left("No such contest"))
+          case Some(c) => ContestShift.shift(c, minutes, DateTime.now) match {
+            case Left(error) => slick.dbio.DBIO.successful(Left(error))
+            case Right(t) =>
+              SlickModel.contests.filter(_.id === ceditID).map(x => (x.startTime, x.freezeTime, x.endTime, x.exposeTime))
+                .update((t.start, t.freeze, t.end, t.expose)).map(_ => Right(minutes))
+          }
+        }.transactionally
+        db.run(action).map {
+          case Left(error) => back.flashing("error" -> error)
+          case Right(m) =>
+            logger.info(s"${request.identity} shifted contest $ceditID by $m minutes")
+            back.flashing("success" -> (if (m > 0) s"Contest moved $m minutes later" else s"Contest moved ${-m} minutes earlier"))
+        }
+      }
+    )
+  }
+
   def showImportedTeamList(contestID: Int, school: Boolean) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
     getSelectedContests(contestID, request.identity).flatMap { contest =>
       val sdb = if (school) externalDatabases.schoolWeb.db else externalDatabases.studentWeb.db
