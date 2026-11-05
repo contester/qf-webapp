@@ -106,7 +106,7 @@ function formatSeconds(s) {
                         countdownState.interval = null;
                     }
             }
-            if (countdownState.contest.prevState && notify) {
+            if (countdownState.contest.prevState && notify && !countdownState.quiet) {
                 notifyMe(countdownState.contest.name, iconbase, "Соревнование " + notify);
             }
             if (countdownState.contest.prevState == "before" && countdownState.contest.state == "running" && !admin) {
@@ -119,6 +119,14 @@ function formatSeconds(s) {
         }
         countdownState.contest.prevState = countdownState.contest.state;
     }
+
+// The public live monitor has no feed to deliver the `contest` event: the page gives the start and end as
+// milliseconds from now (computed when the page was rendered) and the same countdown runs, without notifications
+// or the reload that team pages do when the contest starts (the monitor stream brings the board by itself).
+function publicContestTimer(startTimeDelta, endTimeDelta) {
+    countdownState.quiet = true;
+    updateContestTimes({name: '', startTimeDelta: startTimeDelta, endTimeDelta: endTimeDelta}, '', true);
+}
 
 function btn(target, btnid) {
     var b = $('#' + btnid);

@@ -1,7 +1,14 @@
 @import org.stingray.contester.dbmodel._
 @(contest: Contest, eventsPath: String, initial: Option[live.LiveBoard])(implicit messages: Messages)
-@* The public live monitor: no navbar, no session, no auto-reload. *@
-@base(contest.name, scripts = livescript(eventsPath, 0)) {
+@* The public live monitor: no navbar, no session, no auto-reload. It has no feed either, so the countdown is
+   started from the start and end given here as milliseconds from now. *@
+@pageScripts = {
+@livescript(eventsPath, 0)
+<script type="text/javascript">
+    $(function() { publicContestTimer(@{contest.startTime.getMillis - System.currentTimeMillis}, @{contest.endTime.getMillis - System.currentTimeMillis}); });
+</script>
+}
+@base(contest.name, scripts = pageScripts) {
 <div class="container">
 @liveshell(contest, initial, 0)
 </div>

@@ -122,6 +122,8 @@ class LiveMonitorControllerSpec extends TestKit(ActorSystem("LiveMonitorControll
     val body = await(r.body.consumeData).utf8String
     assert(body.contains("/public/monitor/1/events"))
     assert(body.contains("liveMonitor("))
+    // No feed on this page: the countdown is started from the page itself.
+    assert(body.contains("publicContestTimer("))
     assert(!body.contains("location.reload"))
     // The live monitor did not answer the snapshot in time: the shell is served empty and the stream fills it.
     assert(!body.contains("<table"))
