@@ -21,7 +21,8 @@ class LiveContest(initial: Contest, problems: Seq[String], teams: Seq[Team], sub
   private[this] var currentRules: FreezeRules = FreezeRules.of(initial)
   private[this] var lastNow: DateTime = now
 
-  private[this] val teamById: Map[Int, Team] = teams.map(t => t.id -> t).toMap
+  private[this] var teamList: Vector[Team] = teams.toVector
+  private[this] var teamById: Map[Int, Team] = teams.map(t => t.id -> t).toMap
   private[this] val problemSet: Set[String] = problems.toSet
 
   private[this] val byId = mutable.Map.empty[Int, SubmitRec]
@@ -61,6 +62,17 @@ class LiveContest(initial: Contest, problems: Seq[String], teams: Seq[Team], sub
       lastNow = now
       None
     }
+
+  /**
+    * A team's details changed (not rated, name, school, number): replace it, or add a team new to the contest, and
+    * rebuild both boards, since the flag and the name change the order and the ranks.
+    */
+  def onTeamChanged(team: Team, now: DateTime): Delta = {
+    val i = teamList.indexWhere(_.id == team.id)
+    teamList = if (i >= 0) teamList.updated(i, team) else teamList :+ team
+    teamById += team.id -> team
+    rebuildAll(now)
+  }
 
   def onContest(c: Contest, now: DateTime): Delta = {
     current = c
@@ -104,7 +116,7 @@ class LiveContest(initial: Contest, problems: Seq[String], teams: Seq[Team], sub
     }.toMap
 
   private[this] def buildBoard(kind: BoardKind, now: DateTime): LiveBoard =
-    LiveBoard.build(problems, teams, teams.map(t => t.id -> teamCells(t.id, kind, now)).toMap)
+    LiveBoard.build(problems, teamList, teamList.map(t => t.id -> teamCells(t.id, kind, now)).toMap)
 
   // True when now and the last seen instant lie on different sides of start, freeze or expose.
   private[this] def crossed(now: DateTime): Boolean =

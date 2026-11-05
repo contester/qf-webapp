@@ -37,5 +37,8 @@ object LiveWiring {
       guard(_.finished(contest, id, compiled, passed, taken))
 
     override def rejudged(id: Int): Unit = guard(_.rejudged(id))
+
+    override def teamChanged(contest: Int, team: org.stingray.contester.dbmodel.Team): Unit =
+      guard(_.teamChanged(contest, team))
   }
 }

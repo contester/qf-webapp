@@ -40,6 +40,10 @@ Each page already contains the table, rendered on the server from the same board
 shows up before the stream connects); the stream then replaces it. If the live monitor does not answer within a
 second the page is served with an empty box and the stream fills it. These pages are sent `Cache-Control: no-store`.
 
+Editing a team (not rated, name, school, number) updates the team list in memory and tells the live monitor, which
+rebuilds the boards and sends every stream a whole `board` event; no waiting for the cross-check. Editing a school
+is not covered: it shows up at the next cross-check.
+
 Between freeze_time and expose_time a submit that arrived after the freeze is shown as `?` on the freezing board
 (a contest with freeze_time >= end_time has no freeze). A `?` also appears on every board for a submit that is not
 judged yet. A team sees the real result of its own cells, but not its rank, the solved and penalty columns or any

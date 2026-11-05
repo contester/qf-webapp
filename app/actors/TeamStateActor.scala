@@ -12,6 +12,8 @@ object TeamStateActor {
 
   case class GetTeam(contest: Int, team: Int)
   case class GetTeams(contest: Int)
+  /** Replaces (or adds) a team in its contest right away; the periodic refresh keeps it in line with the database. */
+  case class PutTeam(team: LocalTeam)
 
   def props(db: JdbcBackend#DatabaseDef) = Props(new TeamStateActor(db))
 }
@@ -54,6 +56,8 @@ class TeamStateActor(db: JdbcBackend#DatabaseDef) extends AnyStateActor[TeamStat
   override def initialized: Receive = {
     case Refresh => doRefresh()
     case State(m) => setState(m)
+    case PutTeam(team) =>
+      teams = teams.updated(team.contest, teams.getOrElse(team.contest, Map.empty[Int, LocalTeam]) + (team.id -> team))
     case GetTeam(contest, team) => {
       sender() ! teams.get(contest).flatMap(_.get(team))
     }

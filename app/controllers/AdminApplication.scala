@@ -725,8 +725,16 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
                         .map(_.notRated).update(data.notRated))
                     } else Future.successful(0)
 
-                    updateTeam.zip(updateRated).map { _ =>
-                      Redirect(routes.AdminApplication.editTeam(contestID, teamID))
+                    updateTeam.zip(updateRated).flatMap { case (a, b) =>
+                      // The new details of the team in every contest it takes part in go to the team list and the live monitor.
+                      (if (a + b > 0) db.run(SlickModel.localTeamQuery.filter(_.teamId === teamID).result) else Future.successful(Seq.empty))
+                        .map { updated =>
+                          updated.foreach { t =>
+                            statusActorModel.teamClient.put(t)
+                            Try(liveHooks.teamChanged(t.contest, t))
+                          }
+                          Redirect(routes.AdminApplication.editTeam(contestID, teamID))
+                        }
                     }
                 }
               },

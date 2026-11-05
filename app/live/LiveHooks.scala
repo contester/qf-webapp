@@ -10,12 +10,15 @@ trait LiveHooks {
   def submitArrived(contest: Int, rec: SubmitRec): Unit
   def finished(contest: Int, id: Int, compiled: Boolean, passed: Int, taken: Int): Unit
   def rejudged(id: Int): Unit
+  /** A team's details in one contest changed; `team` is the whole new value. */
+  def teamChanged(contest: Int, team: org.stingray.contester.dbmodel.Team): Unit
 }
 
 object NoopLiveHooks extends LiveHooks {
   override def submitArrived(contest: Int, rec: SubmitRec): Unit = ()
   override def finished(contest: Int, id: Int, compiled: Boolean, passed: Int, taken: Int): Unit = ()
   override def rejudged(id: Int): Unit = ()
+  override def teamChanged(contest: Int, team: org.stingray.contester.dbmodel.Team): Unit = ()
 }
 
 class ActorLiveHooks(ref: ActorRef) extends LiveHooks {
@@ -30,4 +33,7 @@ class ActorLiveHooks(ref: ActorRef) extends LiveHooks {
     tell(LiveMonitorActor.Finished(contest, id, compiled, passed, taken))
 
   override def rejudged(id: Int): Unit = tell(LiveMonitorActor.RejudgeRequested(id))
+
+  override def teamChanged(contest: Int, team: org.stingray.contester.dbmodel.Team): Unit =
+    tell(LiveMonitorActor.TeamChanged(contest, team))
 }

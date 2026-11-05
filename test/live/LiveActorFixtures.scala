@@ -62,6 +62,8 @@ trait LiveActorFixtures { this: TestKit =>
     @volatile var contestRows: Seq[Contest] = rows
     @volatile var data: Map[Int, ContestData] =
       rows.map(c => c.id -> ContestData(problems, teams, subs.getOrElse(c.id, Nil))).toMap ++ overrideData
+    // Loads wait for this; a test replaces it to hold a later load back.
+    @volatile var loadGate: Future[Unit] = gate
     val loads = new AtomicInteger
     // Number of upcoming loads that fail.
     val failLoads = new AtomicInteger
@@ -75,7 +77,7 @@ trait LiveActorFixtures { this: TestKit =>
       override def load(c: Contest)(implicit ec: ExecutionContext): Future[ContestData] = {
         loads.incrementAndGet()
         if (failLoads.getAndUpdate(n => (n - 1).max(0)) > 0) Future.failed(new RuntimeException("injected load failure"))
-        else gate.map(_ => data(c.id))
+        else loadGate.map(_ => data(c.id))
       }
 
       override def contestOf(id: Int)(implicit ec: ExecutionContext): Future[Option[Int]] = {

@@ -2,6 +2,7 @@ package live
 
 import akka.actor.ActorRef
 import org.joda.time.DateTime
+import org.stingray.contester.dbmodel.{LocalTeam, Team}
 import org.scalatest.funsuite.AnyFunSuite
 
 import scala.concurrent.duration._
@@ -33,6 +34,7 @@ class LiveWiringSpec extends AnyFunSuite {
     hooks.submitArrived(1, SubmitRec(1, 2, "A", new DateTime(0), 0, Pending))
     hooks.finished(1, 1, compiled = true, 3, 100)
     hooks.rejudged(1)
+    hooks.teamChanged(1, LocalTeam(2, 1, "School", "S", 0, "", notRated = true, noPrint = false, disabled = false))
   }
 
   test("deferred hooks resolve their target only on first use and forward every call") {
@@ -43,14 +45,16 @@ class LiveWiringSpec extends AnyFunSuite {
       override def finished(contest: Int, id: Int, compiled: Boolean, passed: Int, taken: Int): Unit =
         calls += s"finished $contest $id $compiled $passed $taken"
       override def rejudged(id: Int): Unit = calls += s"rejudged $id"
+      override def teamChanged(contest: Int, team: Team): Unit = calls += s"team $contest ${team.id}"
     }
     val hooks = LiveWiring.deferred { resolved += 1; target }
     assert(resolved == 0)
     hooks.submitArrived(1, SubmitRec(5, 2, "A", new DateTime(0), 0, Pending))
     hooks.finished(1, 5, compiled = true, 3, 100)
     hooks.rejudged(5)
+    hooks.teamChanged(1, LocalTeam(7, 1, "School", "S", 0, "", notRated = false, noPrint = false, disabled = false))
     assert(resolved == 1)
-    assert(calls == Seq("arrived 1 5", "finished 1 5 true 3 100", "rejudged 5"))
+    assert(calls == Seq("arrived 1 5", "finished 1 5 true 3 100", "rejudged 5", "team 1 7"))
   }
 
   test("deferred hooks swallow an exception from resolving or calling the target") {
@@ -58,5 +62,6 @@ class LiveWiringSpec extends AnyFunSuite {
     hooks.submitArrived(1, SubmitRec(5, 2, "A", new DateTime(0), 0, Pending))
     hooks.finished(1, 5, compiled = true, 3, 100)
     hooks.rejudged(5)
+    hooks.teamChanged(1, LocalTeam(7, 1, "School", "S", 0, "", notRated = false, noPrint = false, disabled = false))
   }
 }

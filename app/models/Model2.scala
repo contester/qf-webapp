@@ -11,6 +11,8 @@ class TeamClient(teamActor: ActorRef) {
   def getTeam(contest: Int, team: Int)(implicit timeout: akka.util.Timeout): Future[Option[LocalTeam]] =
     (teamActor ? TeamStateActor.GetTeam(contest, team)).mapTo[Option[LocalTeam]]
 
+  def put(team: LocalTeam): Unit = teamActor ! TeamStateActor.PutTeam(team)
+
   def getTeams(contest: Int)(implicit timeout: akka.util.Timeout): Future[Map[Int, LocalTeam]] =
     (teamActor ? TeamStateActor.GetTeams(contest)).mapTo[Map[Int, LocalTeam]]
 }

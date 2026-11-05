@@ -25,6 +25,8 @@ object LiveMonitorActor {
   case class Arrived(contest: Int, rec: SubmitRec)
   case class Finished(contest: Int, id: Int, compiled: Boolean, passed: Int, taken: Int)
   case class RejudgeRequested(id: Int)
+  /** A team's details in a contest changed (not rated, name, school, number); `team` is the whole new value. */
+  case class TeamChanged(contest: Int, team: Team)
 
   // Each join is answered with a Source[Event, NotUsed] whose first element is the `board` event,
   // or with Status.Failure when the contest is unknown (or, for JoinPublic, not public).
@@ -159,6 +161,8 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
   private class Load(val reason: String, val waiting: Vector[Ev]) {
     // Events applied to the live state while this load runs; replayed onto the rebuilt state.
     var applied: Vector[Ev] = Vector.empty
+    // Team changes that came in while this load ran; its team list may predate them.
+    var teamChanges: Vector[Team] = Vector.empty
   }
 
   private class ContestState(var live: LiveContest, val throttle: StaticThrottle) {
@@ -258,6 +262,8 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       withContest(cid, "finish")(st => applyEvent(cid, st, EvFinished(id, compiled, passed, taken), mayReload = true))
 
     case RejudgeRequested(id) => rejudge(id)
+
+    case TeamChanged(cid, team) => withContest(cid, "team change")(st => teamChanged(cid, st, team))
 
     case j: Join => viewerOf(j) match {
       case Some((cid, viewer)) => join(cid, viewer)
@@ -392,6 +398,14 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
     }
   }
 
+  private def teamChanged(cid: Int, st: ContestState, team: Team): Unit = {
+    st.loading.foreach(l => l.teamChanges :+= team)
+    Try(st.live.onTeamChanged(team, clock.now())) match {
+      case Success(d) => changed(cid, st, d)
+      case Failure(e) => failed(cid, st, e)
+    }
+  }
+
   private def rejudge(id: Int): Unit = {
     val now = clock.now()
     val found = contests.iterator.map { case (cid, st) => (cid, st, Try(st.live.onRejudge(id, now))) }
@@ -492,6 +506,8 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       l.applied.foreach { ev =>
         Try(applyTo(fresh, ev, now)).failed.foreach(e => log.warning(s"live monitor: contest $cid: replay of $ev failed: $e"))
       }
+      l.teamChanges.foreach(t => Try(fresh.onTeamChanged(t, now)).failed.foreach(e =>
+        log.warning(s"live monitor: contest $cid: replay of the change of team ${t.id} failed: $e")))
       fresh
     }
     result match {
