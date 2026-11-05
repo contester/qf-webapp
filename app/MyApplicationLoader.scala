@@ -6,9 +6,12 @@ import com.mohiva.play.silhouette.api.util.Clock
 import com.mohiva.play.silhouette.crypto.{JcaCrypter, JcaCrypterSettings}
 import com.mohiva.play.silhouette.impl.authenticators.{SessionAuthenticator, SessionAuthenticatorService, SessionAuthenticatorSettings}
 import com.mohiva.play.silhouette.impl.util.{DefaultFingerprintGenerator, SecureRandomIDGenerator}
+import akka.actor.ActorRef
 import info.faljse.SDNotify.SDNotify
+import java.io.File
 import models._
 import play.api._
+import play.api.i18n.{Lang, MessagesImpl}
 import play.api.db.slick.{DbName, SlickComponents}
 import play.api.libs.ws.ahc.AhcWSComponents
 import play.api.mvc.{BodyParsers, DefaultSessionCookieBaker}
@@ -121,9 +124,27 @@ class MyComponents(context: ApplicationLoader.Context)
 
   lazy val palevoSink: palevo.PalevoSink = palevo.PalevoSink.fromConfig(configuration, wsClient, actorSystem)(executionContext)
 
+  // Live monitor. When monitor.disable_new_monitor = true nothing below is constructed beyond the config and the
+  // no-op hooks, and Monitor starts the old MonitorActor as before.
+  lazy val liveConfig: live.LiveMonitorConfig = live.LiveMonitorConfig(configuration)
+
+  private lazy val liveBuilt: live.LiveWiring.Built = live.LiveWiring.build(liveConfig, () => {
+    import org.stingray.contester.dbmodel.MyPostgresProfile.api._
+    val messages = MessagesImpl(Lang("en"), messagesApi)
+    actorSystem.actorOf(actors.LiveMonitorActor.props(
+      dbConfig.db, liveConfig, configuration.getOptional[String]("monitor.static_location").map(new File(_)),
+      statusActorModel.teamClient, statusActorModel.problemClient,
+      () => dbConfig.db.run(org.stingray.contester.dbmodel.SlickModel.allContests.result),
+      (c, b) => live.StaticRender.render(c, b)(messages), palevoSink), "live-monitor-actor")
+  })
+
+  lazy val liveHooks: live.LiveHooks = liveBuilt.hooks
+  lazy val liveMonitor: Option[ActorRef] = liveBuilt.monitor
+
   lazy val monitorModel = wire[Monitor]
   lazy val rabbitModel = wire[RabbitMqModel]
-  lazy val statusActorModel = wire[StatusActorModel]
+  // Deferred: the live monitor itself needs statusActorModel's team and problem clients.
+  lazy val statusActorModel = new StatusActorModel(dbConfig, actorSystem, palevoSink, live.LiveWiring.deferred(liveHooks))
   lazy val printingModel = wire[PrintingModel]
 
   val subscriptionsModel = wire[SubscriptionsModel]
@@ -140,4 +161,7 @@ class MyComponents(context: ApplicationLoader.Context)
   lazy val iPrefix: String = "/"
 
   lazy val router: Router = wire[_root_.router.Routes]
+
+  // Start the live monitor (when enabled) with the application, not on the first event.
+  liveMonitor
 }

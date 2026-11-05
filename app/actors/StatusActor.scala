@@ -20,8 +20,9 @@ import scala.concurrent.Future
 import scala.util.{Success, Try}
 
 object StatusActor {
-  def props(db: JdbcBackend#DatabaseDef, palevo: PalevoSink, teamLookup: (Int, Int) => Future[Option[org.stingray.contester.dbmodel.LocalTeam]]) =
-    Props(classOf[StatusActor], db, palevo, teamLookup)
+  def props(db: JdbcBackend#DatabaseDef, palevo: PalevoSink, teamLookup: (Int, Int) => Future[Option[org.stingray.contester.dbmodel.LocalTeam]],
+            liveHooks: live.LiveHooks) =
+    Props(classOf[StatusActor], db, palevo, teamLookup, liveHooks)
 
   case object Init
   case object Tick
@@ -75,7 +76,8 @@ object StatusActor {
 }
 
 class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
-                  teamLookup: (Int, Int) => Future[Option[org.stingray.contester.dbmodel.LocalTeam]]) extends Actor with Stash with Logging {
+                  teamLookup: (Int, Int) => Future[Option[org.stingray.contester.dbmodel.LocalTeam]],
+                  liveHooks: live.LiveHooks) extends Actor with Stash with Logging {
   import StatusActor._
   import context.dispatcher
 
@@ -302,6 +304,9 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
       SubmitResult.annotateFinished2(db, finished).map { annotated =>
         self ! annotated
       }
+
+      // Fire-and-forget; the hooks never throw, the Try is a second guard so the ack below is always sent.
+      Try(liveHooks.finished(finished.submit.contest, finished.submit.id, finished.compiled, finished.passed, finished.taken))
 
       sender() ! {}
     }

@@ -29,6 +29,7 @@ import utils.{Ask, PolygonURL}
 import views.html
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 
 /** all: rejudge every submit of the problem, not just the outdated ones. */
 case class RejudgeProblem(problem: String, all: Boolean)
@@ -80,7 +81,8 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
                         printingModel: PrintingModel,
                                   configuration: Configuration,
                         externalDatabases: ExternalDatabases,
-                                  ws: WSClient) extends AbstractController(cc)  with I18nSupport with Logging {
+                                  ws: WSClient,
+                        liveHooks: live.LiveHooks) extends AbstractController(cc)  with I18nSupport with Logging {
 
   implicit val ec = defaultExecutionContext
 
@@ -180,6 +182,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
             ids.map { ids =>
               ids.foreach { id =>
                 rabbitMq ! Message.queue(SubmitMessage(id), queue = "contester.submitrequests")
+                Try(liveHooks.rejudged(id.toInt))
               }
               back.flashing("success" -> s"${ids.size} ${if (data.all) "(all) " else ""}submits of problem ${data.problem}")
             }
@@ -191,6 +194,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   // Called from the status page via ajax, which has nothing to do with a response body.
   def rejudgeSubmit(submitId: Int) = silhouette.SecuredAction(canRejudgeSubmit(submitId)) { implicit request =>
     rabbitMq ! Message.queue(SubmitMessage(submitId), queue = "contester.submitrequests")
+    Try(liveHooks.rejudged(submitId))
     NoContent
   }
 

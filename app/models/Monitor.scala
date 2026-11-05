@@ -1,7 +1,7 @@
 package models
 
 import actors.MonitorActor
-import akka.actor.ActorSystem
+import akka.actor.{ActorRef, ActorSystem}
 import models.Foo.RankedRow
 import org.stingray.contester.dbmodel.{Contest, Problem, Team}
 import org.stingray.qf.actors.{ProblemStateActor, TeamStateActor}
@@ -182,12 +182,17 @@ case class StoredContestStatus(contest: Contest, frozen: AnyStatus, exposed: Any
 }
 
 class Monitor(dbConfig: DatabaseConfig[JdbcProfile], system: ActorSystem, configuration: Configuration,
-              messagesApi: MessagesApi, statusActorModel: StatusActorModel, palevoSink: palevo.PalevoSink) {
+              messagesApi: MessagesApi, statusActorModel: StatusActorModel, palevoSink: palevo.PalevoSink,
+              liveConfig: live.LiveMonitorConfig) {
   private val db = dbConfig.db
 
-  private[this] val monitorActor = system.actorOf(MonitorActor.props(
-    db, configuration.getOptional[String]("monitor.static_location"),
-    statusActorModel.teamClient, statusActorModel.problemClient, messagesApi, palevoSink), "monitor-actor")
+  // Not started when the live monitor is on: it writes the static files and feeds palevo instead.
+  private[this] val monitorActor: Option[ActorRef] =
+    if (live.LiveWiring.startOldMonitor(liveConfig))
+      Some(system.actorOf(MonitorActor.props(
+        db, configuration.getOptional[String]("monitor.static_location"),
+        statusActorModel.teamClient, statusActorModel.problemClient, messagesApi, palevoSink), "monitor-actor"))
+    else None
 
   private implicit val monitorTimeout: akka.util.Timeout = {
     import scala.concurrent.duration._
@@ -195,7 +200,11 @@ class Monitor(dbConfig: DatabaseConfig[JdbcProfile], system: ActorSystem, config
   }
 
   def getMonitor(id: Int, overrideFreeze: Boolean)(implicit ec: ExecutionContext): Future[Option[ContestMonitor]] = {
-    Ask[Option[StoredContestStatus]](monitorActor, MonitorActor.Get(id))
-      .map(_.map(_.monitor(overrideFreeze)))
+    monitorActor match {
+      case Some(actor) =>
+        Ask[Option[StoredContestStatus]](actor, MonitorActor.Get(id))
+          .map(_.map(_.monitor(overrideFreeze)))
+      case None => Future.successful(None)
+    }
   }
 }

@@ -38,7 +38,8 @@ class Application (cc: ControllerComponents,
                              monitorModel: Monitor,
                             rabbitMqModel: RabbitMqModel,
                             statusActorModel: StatusActorModel,
-                            configuration: Configuration) extends AbstractController(cc) with I18nSupport with Logging {
+                            configuration: Configuration,
+                            liveHooks: live.LiveHooks) extends AbstractController(cc) with I18nSupport with Logging {
 
   private val db = dbConfig.db
   import org.stingray.contester.dbmodel.MyPostgresProfile.api._
@@ -102,8 +103,15 @@ class Application (cc: ControllerComponents,
   }
 
   private[this] def submitInsertQuery(contestId: Int, teamId: Int, problemId: String, srcLang: Int, source: Array[Byte], remoteAddr: String) = {
-    (SlickModel.submits.map(x => (x.contest, x.team, x.problem, x.language, x.source)) returning(SlickModel.submits.map(_.id))) += (contestId, teamId, problemId, srcLang, source)
+    (SlickModel.submits.map(x => (x.contest, x.team, x.problem, x.language, x.source)) returning(SlickModel.submits.map(x => (x.id, x.arrived)))) += (contestId, teamId, problemId, srcLang, source)
   }
+
+  // Tells the live monitor about a new submit; the arrival time is the one the database assigned. Never throws.
+  private[this] def liveArrived(team: LoggedInTeam, id: Int, problem: String, arrivedAt: org.joda.time.DateTime): Unit =
+    Try {
+      val seconds = org.joda.time.Seconds.secondsBetween(team.contest.startTime, arrivedAt).getSeconds
+      liveHooks.submitArrived(team.contest.id, live.SubmitRec(id, team.team.id, problem, arrivedAt, seconds, live.Pending))
+    }.failed.foreach(e => logger.warn(s"live monitor: submit $id arrival not sent", e))
 
   import com.spingo.op_rabbit.PlayJsonSupport._
 
@@ -124,8 +132,9 @@ class Application (cc: ControllerComponents,
               Future.successful(Some(parsed.withGlobalError("Contest is not running")))
             } else {
               db.run(submitInsertQuery(request.identity.contest.id, request.identity.team.id, submitData.problem,
-                submitData.compiler, solutionBytes, request.remoteAddress)).map { wat =>
+                submitData.compiler, solutionBytes, request.remoteAddress)).map { case (wat, arrivedAt) =>
                 logger.info(s"Inserted submit id: $wat")
+                liveArrived(request.identity, wat.toInt, submitData.problem, arrivedAt)
                 rabbitMq ! Message.queue(SubmitMessage(wat.toInt), queue = "contester.submitrequests")
                 None
               }
