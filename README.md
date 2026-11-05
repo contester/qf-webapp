@@ -43,6 +43,9 @@ other team. At expose_time the public and team boards become the real board; `ca
 
 Rollback: set `monitor.disable_new_monitor = true` and restart qf. No live actor is created, the hooks do
 nothing, and the old monitor (palevo and static files) starts again. Remove the key and restart to go back.
+With the live monitor on, a malformed `static_interval`, `crosscheck_interval`, `public_contests` or
+`public_max_connections` stops qf at boot (fail-fast).
+`monitor.disable_new_monitor = true` ignores all the other live keys, so it always works as the rollback switch.
 
 ## TODO
 

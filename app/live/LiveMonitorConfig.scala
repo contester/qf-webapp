@@ -12,11 +12,20 @@ case class LiveMonitorConfig(
   publicMaxConnections: Int)
 
 object LiveMonitorConfig {
+  private val disabledDefaults = LiveMonitorConfig(
+    enabled = false, staticInterval = 30.seconds, crosscheckInterval = 60.seconds,
+    publicContests = (1 to 10).toSet, publicMaxConnections = 1000)
+
+  /**
+   * With `monitor.disable_new_monitor = true` only that flag is read, so a malformed live key can never stop the
+   * rollback switch from working. When enabled, every live key is parsed strictly: a bad value fails boot.
+   */
   def apply(c: Configuration): LiveMonitorConfig =
-    LiveMonitorConfig(
-      enabled = !c.getOptional[Boolean]("monitor.disable_new_monitor").getOrElse(false),
-      staticInterval = c.getOptional[FiniteDuration]("monitor.static_interval").getOrElse(30.seconds),
-      crosscheckInterval = c.getOptional[FiniteDuration]("monitor.crosscheck_interval").getOrElse(60.seconds),
-      publicContests = c.getOptional[Seq[Int]]("monitor.public_contests").map(_.toSet).getOrElse((1 to 10).toSet),
-      publicMaxConnections = c.getOptional[Int]("monitor.public_max_connections").getOrElse(1000))
+    if (c.getOptional[Boolean]("monitor.disable_new_monitor").getOrElse(false)) disabledDefaults
+    else LiveMonitorConfig(
+      enabled = true,
+      staticInterval = c.getOptional[FiniteDuration]("monitor.static_interval").getOrElse(disabledDefaults.staticInterval),
+      crosscheckInterval = c.getOptional[FiniteDuration]("monitor.crosscheck_interval").getOrElse(disabledDefaults.crosscheckInterval),
+      publicContests = c.getOptional[Seq[Int]]("monitor.public_contests").map(_.toSet).getOrElse(disabledDefaults.publicContests),
+      publicMaxConnections = c.getOptional[Int]("monitor.public_max_connections").getOrElse(disabledDefaults.publicMaxConnections))
 }

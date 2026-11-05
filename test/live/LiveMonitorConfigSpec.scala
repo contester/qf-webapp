@@ -29,4 +29,21 @@ class LiveMonitorConfigSpec extends AnyFunSuite {
   test("crosscheck_interval 0s means disabled") {
     assert(cfg("monitor.crosscheck_interval = 0s").crosscheckInterval == Duration.Zero)
   }
+
+  private val garbage =
+    """monitor.static_interval = "banana"
+      |monitor.crosscheck_interval = "x"
+      |monitor.public_contests = "nope"
+      |monitor.public_max_connections = "many"
+      |""".stripMargin
+
+  test("disable_new_monitor = true ignores malformed live keys and returns the defaults") {
+    val c = cfg("monitor.disable_new_monitor = true\n" + garbage)
+    assert(c == LiveMonitorConfig(enabled = false, 30.seconds, 60.seconds, (1 to 10).toSet, 1000))
+  }
+
+  test("enabled: a malformed live key fails fast") {
+    for (line <- garbage.linesIterator.filter(_.nonEmpty))
+      assertThrows[RuntimeException](cfg("monitor.disable_new_monitor = false\n" + line))
+  }
 }
