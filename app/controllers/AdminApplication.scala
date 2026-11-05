@@ -120,7 +120,11 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
   def monitor(id: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(id)).async { implicit request =>
     if (liveConfig.enabled)
-      getSelectedContests(id, request.identity).map(contest => Ok(html.admin.livemonitor(contest)))
+      getSelectedContests(id, request.identity).flatMap { contest =>
+        LiveStreams.snapshot(liveMonitor.ref, LiveStreams.adminJoin(id, request.identity.canSeeAll(id))).map { initial =>
+          Ok(html.admin.livemonitor(contest, initial)).withHeaders(LiveStreams.pageHeaders: _*)
+        }
+      }
     else getSelectedContests(id, request.identity).zip(monitorModel.getMonitor(id, request.identity.canSeeAll(id))).map {
       case (contest, Some(status)) =>
         Ok(html.admin.monitor(contest, status.status))

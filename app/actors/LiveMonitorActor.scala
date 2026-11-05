@@ -28,9 +28,16 @@ object LiveMonitorActor {
 
   // Each join is answered with a Source[Event, NotUsed] whose first element is the `board` event,
   // or with Status.Failure when the contest is unknown (or, for JoinPublic, not public).
-  case class JoinPublic(contest: Int)
-  case class JoinTeam(contest: Int, team: Int)
-  case class JoinAdmin(contest: Int, real: Boolean)
+  sealed trait Join
+  case class JoinPublic(contest: Int) extends Join
+  case class JoinTeam(contest: Int, team: Int) extends Join
+  case class JoinAdmin(contest: Int, real: Boolean) extends Join
+
+  /**
+    * The board a join would start with, as a LiveBoard (for server-side rendering of the page), answered with
+    * Status.Failure like the join. A team's own row shows its real cells, with the frozen rank and score.
+    */
+  case class Snapshot(join: Join)
 
   // Timer messages; public so tests can drive them with timers switched off.
   case object Tick
@@ -252,10 +259,20 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
 
     case RejudgeRequested(id) => rejudge(id)
 
-    case JoinPublic(cid) =>
-      if (cfg.publicContests(cid)) join(cid, PublicViewer) else sender() ! Status.Failure(notFound(cid))
-    case JoinTeam(cid, team) => join(cid, TeamViewer(team))
-    case JoinAdmin(cid, real) => join(cid, if (real) AdminRealViewer else AdminFreezingViewer)
+    case j: Join => viewerOf(j) match {
+      case Some((cid, viewer)) => join(cid, viewer)
+      case None => sender() ! Status.Failure(notFound(j))
+    }
+
+    case Snapshot(j) =>
+      val board = viewerOf(j).flatMap { case (cid, viewer) =>
+        contests.get(cid).map(st => Try(snapshotBoard(st, viewer)))
+      }
+      sender() ! (board match {
+        case Some(Success(b)) => b
+        case Some(Failure(e)) => Status.Failure(e)
+        case None => Status.Failure(notFound(j))
+      })
 
     case Register(cid, viewer, q) => register(cid, viewer, q)
     case Unregister(cid, q) => unregister(cid, q)
@@ -304,6 +321,21 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
   }
 
   private def notFound(cid: Int) = new NoSuchElementException(s"live monitor: no contest $cid")
+
+  private def contestOf(j: Join): Int = j match {
+    case JoinPublic(c) => c
+    case JoinTeam(c, _) => c
+    case JoinAdmin(c, _) => c
+  }
+
+  private def notFound(j: Join): NoSuchElementException = notFound(contestOf(j))
+
+  /** The contest and viewer of a join; None when it is not allowed (a contest that is not public). */
+  private def viewerOf(j: Join): Option[(Int, Viewer)] = j match {
+    case JoinPublic(cid) => if (cfg.publicContests(cid)) Some(cid -> PublicViewer) else None
+    case JoinTeam(cid, team) => Some(cid -> TeamViewer(team))
+    case JoinAdmin(cid, real) => Some(cid -> (if (real) AdminRealViewer else AdminFreezingViewer))
+  }
 
   private def withContest(cid: Int, what: String)(f: ContestState => Unit): Unit =
     contests.get(cid) match {
@@ -563,16 +595,29 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       sender() ! src
     }
 
-  private def snapshot(st: ContestState, viewer: Viewer): Event = {
+  /** The board a viewer starts with, and the real cells of its own row to show instead of the frozen ones. */
+  private def snapshotParts(st: ContestState, viewer: Viewer): (LiveBoard, Option[(Int, Map[String, LiveCell])]) = {
     val lc = st.live
     val now = clock.now()
     viewer match {
-      case AdminRealViewer => boardEvent(lc.board(Real))
-      case AdminFreezingViewer => boardEvent(lc.board(Freezing))
-      case PublicViewer => if (started(lc, now)) boardEvent(lc.board(Freezing)) else boardEvent(emptyBoard)
+      case AdminRealViewer => (lc.board(Real), None)
+      case AdminFreezingViewer => (lc.board(Freezing), None)
+      case PublicViewer => (if (started(lc, now)) lc.board(Freezing) else emptyBoard, None)
       case TeamViewer(t) =>
-        if (!started(lc, now)) boardEvent(emptyBoard)
-        else boardEvent(lc.board(Freezing), if (freezeActive(lc, now)) Some(t -> realCells(lc, t)) else None)
+        if (!started(lc, now)) (emptyBoard, None)
+        else (lc.board(Freezing), if (freezeActive(lc, now)) Some(t -> realCells(lc, t)) else None)
+    }
+  }
+
+  private def snapshot(st: ContestState, viewer: Viewer): Event = {
+    val (b, own) = snapshotParts(st, viewer)
+    boardEvent(b, own)
+  }
+
+  private def snapshotBoard(st: ContestState, viewer: Viewer): LiveBoard = {
+    val (b, own) = snapshotParts(st, viewer)
+    own.fold(b) { case (team, cells) =>
+      b.copy(rows = b.rows.map(r => if (r.team.id == team) r.copy(cells = cells) else r))
     }
   }
 

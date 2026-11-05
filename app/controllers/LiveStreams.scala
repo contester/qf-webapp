@@ -14,6 +14,7 @@ import scala.concurrent.{ExecutionContext, Future}
 /** Joins a live monitor stream and turns it into an SSE response; shared by the team, admin and public routes. */
 object LiveStreams extends Results {
   private val askTimeout = 3.seconds
+  private val snapshotTimeout = 1.second
 
   // So a reverse proxy neither caches nor buffers the stream.
   val streamHeaders: Seq[(String, String)] = Seq(HeaderNames.CACHE_CONTROL -> "no-cache", "X-Accel-Buffering" -> "no")
@@ -24,6 +25,20 @@ object LiveStreams extends Results {
       case _: NoSuchElementException => Left(NotFound)
       case _: AskTimeoutException => Left(ServiceUnavailable)
     }
+
+  /**
+    * The board the viewer's stream will start with, to render into the page. None (an empty shell, filled by the
+    * stream) when the live monitor is off, slow, still starting or does not know the contest.
+    */
+  def snapshot(ref: Option[ActorRef], join: actors.LiveMonitorActor.Join)(implicit ec: ExecutionContext): Future[Option[live.LiveBoard]] =
+    ref match {
+      case None => Future.successful(None)
+      case Some(r) =>
+        r.ask(actors.LiveMonitorActor.Snapshot(join))(snapshotTimeout).mapTo[live.LiveBoard].map(Option(_)).recover { case _ => None }
+    }
+
+  /** The page is a snapshot of a moving board; nothing may cache it. */
+  val pageHeaders: Seq[(String, String)] = Seq(HeaderNames.CACHE_CONTROL -> "no-store")
 
   /** Only an account that can see everything gets the real board; every other admin gets the freezing one. */
   def adminJoin(contestId: Int, canSeeAll: Boolean): actors.LiveMonitorActor.JoinAdmin =

@@ -36,6 +36,10 @@ Three audiences, each page with an `/events` stream next to it:
 - `/public/monitor/:id`: anyone. The freezing board (identical to the static file); it is empty before the contest
   starts and becomes the real board at expose_time.
 
+Each page already contains the table, rendered on the server from the same board its stream starts with (so it
+shows up before the stream connects); the stream then replaces it. If the live monitor does not answer within a
+second the page is served with an empty box and the stream fills it. These pages are sent `Cache-Control: no-store`.
+
 Between freeze_time and expose_time a submit that arrived after the freeze is shown as `?` on the freezing board
 (a contest with freeze_time >= end_time has no freeze). A `?` also appears on every board for a submit that is not
 judged yet. A team sees the real result of its own cells, but not its rank, the solved and penalty columns or any

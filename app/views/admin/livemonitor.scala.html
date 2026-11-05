@@ -1,5 +1,5 @@
-@(contest: SelectedContest)(implicit request: RequestHeader, messages: Messages)
+@(contest: SelectedContest, initial: Option[live.LiveBoard])(implicit request: RequestHeader, messages: Messages)
 @* The admin live monitor (real or freezing board, chosen by the server). *@
 @adminmain(tab = "monitor", contest = contest, scripts = livescript(routes.AdminApplication.monitorEvents(contest.contest.id).url, 0)) {
-@liveshell(contest.contest)
+@liveshell(contest.contest, initial, 0)
 }

@@ -123,6 +123,28 @@ class LiveMonitorControllerSpec extends TestKit(ActorSystem("LiveMonitorControll
     assert(body.contains("/public/monitor/1/events"))
     assert(body.contains("liveMonitor("))
     assert(!body.contains("location.reload"))
+    // The live monitor did not answer the snapshot in time: the shell is served empty and the stream fills it.
+    assert(!body.contains("<table"))
+    assert(r.header.headers.get("Cache-Control").contains("no-store"))
+  }
+
+  test("public page: renders the snapshot board into the page when the live monitor answers") {
+    val probe = TestProbe()
+    val board = live.LiveBoard.build(Seq("A"), Seq(org.stingray.contester.dbmodel.LocalTeam(7, 1, "School07", "S7", 0, "", notRated = false, noPrint = false, disabled = false)), Map.empty)
+    probe.setAutoPilot((sender: ActorRef, msg: Any) => {
+      msg match {
+        case actors.LiveMonitorActor.Snapshot(JoinPublic(1)) => sender ! board
+        case _ =>
+      }
+      TestActor.KeepRunning
+    })
+    val c = controller(Some(probe))
+    val r = run(c, c.page(1), "/public/monitor/1")
+    assert(r.header.status == 200)
+    val body = await(r.body.consumeData).utf8String
+    assert(body.contains("""<tr data-team="7""""))
+    assert(body.contains("liveMonitor("))
+    assert(r.header.headers.get("Cache-Control").contains("no-store"))
   }
 
   test("public stream: the (max + 1)-th concurrent stream gets 503; a finished stream frees its slot") {

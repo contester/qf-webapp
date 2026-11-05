@@ -1,6 +1,6 @@
 @import org.stingray.contester.dbmodel._
-@(contest: Contest, loggedIn: LoggedInTeam)(implicit request: RequestHeader, messages: Messages)
+@(contest: Contest, loggedIn: LoggedInTeam, initial: Option[live.LiveBoard])(implicit request: RequestHeader, messages: Messages)
 @* The team's live monitor. *@
 @main(loggedIn, tab = "monitor", scripts = livescript(routes.Application.monitorEvents.url, loggedIn.team.id)) {
-@liveshell(contest)
+@liveshell(contest, initial, loggedIn.team.id)
 }

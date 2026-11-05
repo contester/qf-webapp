@@ -61,7 +61,9 @@ class Application (cc: ControllerComponents,
 
   def monitorDefault = silhouette.SecuredAction.async { implicit request =>
     if (liveConfig.enabled)
-      Future.successful(Ok(html.livemonitor(request.identity.contest, request.identity)))
+      LiveStreams.snapshot(liveMonitor.ref, actors.LiveMonitorActor.JoinTeam(request.identity.contest.id, request.identity.team.id)).map { initial =>
+        Ok(html.livemonitor(request.identity.contest, request.identity, initial)).withHeaders(LiveStreams.pageHeaders: _*)
+      }
     else monitorModel.getMonitor(request.identity.contest.id, overrideFreeze = false).map {
       case Some(x) => Ok(html.loggedinmonitor(x.contest, x.status, request.identity))
       case None => NotFound

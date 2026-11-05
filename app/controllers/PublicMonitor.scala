@@ -28,9 +28,13 @@ class PublicMonitor(cc: ControllerComponents, liveConfig: LiveMonitorConfig, liv
       case None => Future.successful(NotFound)
       case Some(_) =>
         val messages = messagesApi.preferred(request.acceptLanguages)
-        contests.get(contestId).map {
-          case Some(contest) => Ok(html.publiclive(contest, routes.PublicMonitor.events(contestId).url)(messages))
-          case None => NotFound
+        contests.get(contestId).flatMap {
+          case Some(contest) =>
+            LiveStreams.snapshot(liveFor(contestId), actors.LiveMonitorActor.JoinPublic(contestId)).map { initial =>
+              Ok(html.publiclive(contest, routes.PublicMonitor.events(contestId).url, initial)(messages))
+                .withHeaders(LiveStreams.pageHeaders: _*)
+            }
+          case None => Future.successful(NotFound)
         }
     }
   }
