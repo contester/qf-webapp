@@ -88,4 +88,5 @@ label.shortName=Short name
 label.fullName=Full name
 label.teamName=Team name
 label.teamNum=Team number
+label.notRated=Not rated in this contest (out of competition)
 label.pages=Pages

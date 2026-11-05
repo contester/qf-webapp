@@ -40,7 +40,7 @@ case class PostWaiterTask(message: String, rooms: String)
 
 case class ContestDescription(id: Int)
 
-case class EditTeam(schoolID: Int, teamName: String, teamNum: Option[Int])
+case class EditTeam(schoolID: Int, teamName: String, teamNum: Option[Int], notRated: Boolean = false)
 
 case class PrintTarget(addr: String, name: String, area: String, printer: String)
 case class ServiceTeamsStatus(kind: InitialImportTools.ServiceTeamKind, schoolId: Option[Int], teams: Int)
@@ -631,27 +631,31 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   private val editTeamForm = Form {
     mapping("schoolID" -> number,
     "teamName" -> text,
-    "teamNum" -> optional(number)
+    "teamNum" -> optional(number),
+    "notRated" -> boolean
     )(EditTeam.apply)(EditTeam.unapply)
   }
 
-  private def displayEditTeam(form: Option[Form[EditTeam]], team: SlickModel.Team, schools: Seq[DisplaySchool], contest: SelectedContest)(implicit request: RequestHeader, ec: ExecutionContext) = {
+  private def displayEditTeam(form: Option[Form[EditTeam]], team: SlickModel.Team, schools: Seq[DisplaySchool], contest: SelectedContest,
+                              participant: Option[SlickModel.Participant])(implicit request: RequestHeader, ec: ExecutionContext) = {
     Ok(html.admin.editteam(form.getOrElse(
-      editTeamForm.fill(EditTeam(team.school, team.name, if (team.num!=0) Some(team.num) else None))), team.id, schools.map(x => x.id.toString -> x.name), contest))
+      editTeamForm.fill(EditTeam(team.school, team.name, if (team.num!=0) Some(team.num) else None,
+        participant.exists(_.notRated)))), team.id, schools.map(x => x.id.toString -> x.name), contest, participant.isDefined))
   }
 
   private def forEditTeam(request: SecuredRequest[AdminEnv, AnyContent], contestID: Int, teamID: Int) =
     getSelectedContests(contestID, request.identity)
-      .zip(db.run(SlickModel.teams.filter(_.id === teamID).result.headOption zip SlickModel.schools.sortBy(_.fullName).result)).map {
-      case (contest, (teamOpt, schools)) =>
+      .zip(db.run(SlickModel.teams.filter(_.id === teamID).result.headOption zip SlickModel.schools.sortBy(_.fullName).result zip
+        SlickModel.participants.filter(x => x.contest === contestID && x.team === teamID).result.headOption)).map {
+      case (contest, ((teamOpt, schools), participant)) =>
         teamOpt match {
-          case Some(team) => Some((contest, team, schools.map(x => DisplaySchool(x.id, x.fullName))))
+          case Some(team) => Some((contest, team, schools.map(x => DisplaySchool(x.id, x.fullName)), participant))
           case None => None
     }}
 
   def editTeam(contestID: Int, teamID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
     forEditTeam(request, contestID, teamID).map {
-      case Some((contest, team, schools)) => displayEditTeam(None, team, schools, contest)
+      case Some((contest, team, schools, participant)) => displayEditTeam(None, team, schools, contest, participant)
       case None => NotFound
     }
   }
@@ -691,10 +695,10 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
   def postEditTeam(contestID: Int, teamID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
     forEditTeam(request, contestID, teamID).flatMap {
-      case Some((contest, team, schools)) =>
+      case Some((contest, team, schools, participant)) =>
             editTeamForm.bindFromRequest.fold(
               formWithErrors => {
-                Future.successful(displayEditTeam(Some(formWithErrors), team, schools, contest))
+                Future.successful(displayEditTeam(Some(formWithErrors), team, schools, contest, participant))
               },
               data => {
                 // teams (school, num) is unique: moving a team into a school that already has that number would violate it
@@ -705,13 +709,19 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
                 taken.flatMap {
                   case true =>
                     val msg = s"That school already has a team number ${team.num}"
-                    Future.successful(displayEditTeam(Some(editTeamForm.fill(data).withError("schoolID", msg)), team, schools, contest))
+                    Future.successful(displayEditTeam(Some(editTeamForm.fill(data).withError("schoolID", msg)), team, schools, contest, participant))
                   case false =>
                     val updateTeam = if (data.teamName != team.name || data.schoolID != team.school) {
                       db.run(SlickModel.teams.filter(_.id === team.id).map(x => (x.name, x.school)).update((data.teamName, data.schoolID)))
                     } else Future.successful(0)
 
-                    updateTeam.map { _ =>
+                    // Only this contest's participation changes; a team that does not take part has nothing to switch.
+                    val updateRated = if (participant.exists(_.notRated != data.notRated)) {
+                      db.run(SlickModel.participants.filter(x => x.contest === contestID && x.team === teamID)
+                        .map(_.notRated).update(data.notRated))
+                    } else Future.successful(0)
+
+                    updateTeam.zip(updateRated).map { _ =>
                       Redirect(routes.AdminApplication.editTeam(contestID, teamID))
                     }
                 }
