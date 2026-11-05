@@ -55,27 +55,32 @@ object Foo {
     override def anyCells: Map[String, ProblemCell] = cells
   }
 
-  private type RankState[ScoreType, CellType <: ProblemCell] = (Seq[RankedRow[ScoreType, CellType]], Int)
+  def rowLess[S](a: (Team, S), b: (Team, S))(implicit ord: Ordering[S]): Boolean =
+    ord.compare(a._2, b._2) match {
+      case c if c < 0 => true
+      case c if c > 0 => false
+      case _ =>
+        if ((!a._1.notRated) && b._1.notRated) true
+        else if (a._1.notRated && !b._1.notRated) false
+        else a._1.teamFullName < b._1.teamFullName
+    }
 
-  private def pullRank[ScoreType, CellType <: ProblemCell](state: RankState[ScoreType, CellType], next: MonitorRow[ScoreType, CellType]): RankState[ScoreType, CellType] = {
-    val position = state._2
-
-    val nextR =
-      if (next.team.notRated)
-        (0, position)
-      else state._1.lastOption.map { lastRanked =>
-        if (lastRanked.score == next.score)
-          (lastRanked.rank, position + 1)
-        else
-          (position + 1, position + 1)
-      }.getOrElse((1, 1))
-
-    (state._1 :+ RankedRow(nextR._1, next.team, next.score, next.cells), nextR._2)
+  // Ranks for rows already sorted by rowLess: ties share a rank, the next rank skips; not rated is 0.
+  def ranks[S](sorted: Seq[(Team, S)]): Seq[Int] = {
+    var position = 0
+    var last: Option[(Int, S)] = None
+    sorted.map { case (team, score) =>
+      val r =
+        if (team.notRated) 0
+        else {
+          val shared = last.collect { case (lr, ls) if ls == score => lr }
+          position += 1
+          shared.getOrElse(position)
+        }
+      last = Some((r, score))
+      r
+    }
   }
-
-
-  private def rank[ScoreType, CellType <: ProblemCell](rows: Seq[MonitorRow[ScoreType, CellType]]): Seq[RankedRow[ScoreType, CellType]] =
-    rows.foldLeft((Seq[RankedRow[ScoreType, CellType]](), 0))(pullRank)._1
 
   private case class SomeRow[ScoreType, CellType](team: Team, score: ScoreType,
                                                   cells: Map[String, CellType]) extends MonitorRow[ScoreType, CellType]
@@ -98,19 +103,12 @@ object Foo {
       val score = getScore(cells.values.toSeq)
 
       SomeRow(team, score, cells)
-    }.sortWith((a: SomeRow[ScoreType, CellType], b: SomeRow[ScoreType, CellType]) => {
-      a.score.compare(b.score) match {
-        case -1 => true
-        case 1 => false
-        case 0 => {
-          if ((!a.team.notRated) && b.team.notRated) { true }
-          else if (a.team.notRated && !b.team.notRated) { false }
-          else (a.team.teamFullName < b.team.teamFullName)
-        }
-      }
-    })
+    }
 
-    Foo.rank(teamRows)
+    val sorted = teamRows.sortWith((a, b) => rowLess((a.team, a.score), (b.team, b.score)))
+    sorted.zip(ranks(sorted.map(r => (r.team, r.score)))).map {
+      case (r, rank) => RankedRow(rank, r.team, r.score, r.cells)
+    }
   }
 
 
