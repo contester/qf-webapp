@@ -241,17 +241,29 @@ function listenV2(path, setup, state) {
 function listenOnEvents(path, iconbase, ackMessagePath) {
     var setup = function(add) {
         add('submit', function(obj) {
-            var tr = $('#result-' + obj.submitId);
-            if (tr.length) {
-                tr.toggleClass('success', !!obj.result.success);
-                var href = tr.closest('tr').find('th a').attr('href');
-                if (href) {
-                    tr.empty().append($('<a>').attr('href', href).text(obj.result.message));
-                } else {
-                    tr.text(obj.result.message);
-                }
+            if (obj.rows && obj.rows.length) {
+                // Server-rendered rows: this attempt and the later ones whose score may have changed.
+                obj.rows.forEach(function(row) {
+                    var old = $('#result-' + row.id).closest('tr');
+                    if (old.length) {
+                        old.replaceWith(row.html);
+                    } else {
+                        $('#submits > tbody').prepend(row.html);
+                    }
+                });
             } else {
-                $('#submits > tbody').prepend('<tr><th scope="row">' + obj.submitId + '</th></tr>');
+                var tr = $('#result-' + obj.submitId);
+                if (tr.length) {
+                    tr.toggleClass('success', !!obj.result.success);
+                    var href = tr.closest('tr').find('th a').attr('href');
+                    if (href) {
+                        tr.empty().append($('<a>').attr('href', href).text(obj.result.message));
+                    } else {
+                        tr.text(obj.result.message);
+                    }
+                } else {
+                    $('#submits > tbody').prepend('<tr><th scope="row">' + obj.submitId + '</th></tr>');
+                }
             }
 
             if (ackMessagePath) {

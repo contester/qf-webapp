@@ -135,6 +135,31 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
       self ! m2
     }
 
+  /**
+    * The result of a finished testing together with the rendered rows of the team's attempts on that problem: a
+    * rejudge of an earlier attempt changes the score and the attempt number of the later ones. If the rows cannot be
+    * built, or the database does not show this testing yet, the result alone is sent.
+    */
+  private def annotateFinished(finished: FinishedTesting): Future[AnnoSubmit] = {
+    val sub = finished.submit
+    val plus = if (sub.schoolMode) "" else "+"
+    Submits.teamProblemSubmits(db, sub.schoolMode, sub.contest, sub.team, sub.problem).flatMap { described =>
+      val rows = described.map(d => SubmitRow(d.submit.submitId.id, views.html.singlesubmit(d, plus).body))
+      described.find(_.submit.submitId.id == sub.id).filter(_.submit.testingId.contains(finished.testingId)) match {
+        case Some(mine) if !(mine.details.isEmpty && !sub.schoolMode && finished.compiled && !mine.result.success) =>
+          Future.successful(AnnoSubmit(sub.id, sub.contest, sub.team, sub.problem, mine.result, rows))
+        case Some(_) =>
+          SubmitResult.annotateFinished2(db, finished).map(_.copy(rows = rows))
+        case None =>
+          SubmitResult.annotateFinished2(db, finished)
+      }
+    }.recoverWith {
+      case e =>
+        logger.error(s"rendering rows for submit ${sub.id}: $e")
+        SubmitResult.annotateFinished2(db, finished)
+    }
+  }
+
   private def loadAll() = {
     val f =
       db.run(
@@ -301,7 +326,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
     case finished: FinishedTesting => {
       logger.info(s"received finished: $finished")
 
-      SubmitResult.annotateFinished2(db, finished).map { annotated =>
+      annotateFinished(finished).foreach { annotated =>
         self ! annotated
       }
 

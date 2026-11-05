@@ -252,6 +252,33 @@ object Submits {
     }).map(_.flatten.toSeq.sortBy(-_.submit.submitId.arrived.seconds))
 
 
+  /**
+    * A team's attempts on one problem, described like the rows of the team's submit list. Two queries however many
+    * attempts there are: the submits, and the per-test results of all of them in one go (without the tester output).
+    */
+  def teamProblemSubmits(db: JdbcBackend#DatabaseDef, schoolMode: Boolean, contest: Int, team: Int, problem: String)
+                        (implicit ec: ExecutionContext): Future[Seq[FullyDescribedSubmit]] =
+    db.run(getContestTeamProblemSubmits(contest, team, problem)).flatMap { rows =>
+      val submits = rows.map(upliftSub).sortBy(_.submitId.arrived.seconds)
+      val scored = (if (schoolMode) scoreGrouped[SchoolCell](submits, SchoolCell.empty, SchoolScorer)
+        else scoreGrouped(submits, ACMCell.empty, ACMScorer))._2
+      val testingIds = submits.flatMap(_.testingId.map(_.toLong)).distinct
+      val results =
+        if (testingIds.isEmpty) Future.successful(Map.empty[Long, Seq[ResultEntry]])
+        else db.run(SlickModel.results.filter(_.testingID inSet testingIds).sortBy(_.testID)
+          .map(x => (x.testingID, x.testID, x.resultCode, x.timeMs, x.memoryBytes)).result).map(_.map {
+          case (tid, test, code, time, memory) => ResultEntry(tid, test, code, time, memory, 0, 0, Array.empty, Array.empty)
+        }.groupBy(_.testingID))
+      results.map { byTesting =>
+        indexGrouped(scored).map {
+          case ((submit, optScore), index) =>
+            val details = submit.testingId.flatMap(t => byTesting.get(t.toLong)).getOrElse(Nil)
+            FullyDescribedSubmit(submit, index, optScore, SubmitResult.annotate2(schoolMode, submit, details),
+              getTestingStats(details), details)
+        }
+      }
+    }
+
   import scala.language.implicitConversions
 
   implicit def o2f[A](o: Option[Future[A]])(implicit ec: ExecutionContext): Future[Option[A]] =

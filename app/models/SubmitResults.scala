@@ -6,13 +6,22 @@ import org.stingray.contester.dbmodel.{Memory, TimeMs}
 import play.api.{Logger, Logging}
 import play.api.i18n.Messages
 import play.api.libs.EventSource.{EventDataExtractor, EventNameExtractor}
-import play.api.libs.json.{JsValue, Json, Writes}
+import play.api.libs.json.{JsValue, Json, OWrites, Writes}
 import slick.jdbc.{GetResult, JdbcBackend}
 import slick.lifted.MappedTo
 
 import scala.concurrent.{ExecutionContext, Future}
 
-case class AnnoSubmit(submitId: Int, contest: Int, team: Int, problem: String, result: SubmitResult)
+/** A rendered row of the team's submit table, ready to be put in place of the row with the same id. */
+case class SubmitRow(id: Int, html: String)
+
+object SubmitRow {
+  implicit val writesSubmitRow: OWrites[SubmitRow] = Json.writes[SubmitRow]
+}
+
+/** `rows` are the team's attempts on the problem that changed with this result; empty when they could not be built. */
+case class AnnoSubmit(submitId: Int, contest: Int, team: Int, problem: String, result: SubmitResult,
+                      rows: Seq[SubmitRow] = Nil)
 
 trait SubmitResult {
   def success: Boolean
@@ -80,7 +89,7 @@ object SubmitResult extends Logging {
       SubmitACMPartialResult(lr._1, Some(lr._2))
     }
 
-  private def annotate2(schoolMode: Boolean, submit: Submit, details: Seq[ResultEntry]): SubmitResult =
+  private[models] def annotate2(schoolMode: Boolean, submit: Submit, details: Seq[ResultEntry]): SubmitResult =
     fromLast(schoolMode, submit, Submits.getTestingLastResult(details).map(x => (x.resultString, x.test)))
 
   def annotate(db: JdbcBackend#DatabaseDef, schoolMode: Boolean, submit: Submit)(implicit ec: ExecutionContext): Future[(SubmitResult, Seq[ResultEntry], SubmitStats)] =
