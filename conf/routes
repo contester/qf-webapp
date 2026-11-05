@@ -32,6 +32,8 @@ GET /logout controllers.AuthForms.logout
 GET /admin controllers.AdminApplication.index
 
 GET /admin/submits/:contestId controllers.AdminApplication.submits(contestId: Int, team: Option[Int] ?= None, before: Option[Long] ?= None, after: Option[Long] ?= None)
+GET /admin/customtests/:contestId controllers.AdminApplication.customTests(contestId: Int, team: Option[Int] ?= None, before: Option[Long] ?= None, after: Option[Long] ?= None)
+GET /admin/customtest/:contestId/:id controllers.AdminApplication.showCustomTest(contestId: Int, id: Long)
 GET /admin/monitor/:contestId controllers.AdminApplication.monitor(contestId: Int)
 GET /admin/monitor/:contestId/events controllers.AdminApplication.monitorEvents(contestId: Int)
 GET /public/monitor/:contestId controllers.PublicMonitor.page(contestId: Int)

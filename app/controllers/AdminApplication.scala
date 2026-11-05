@@ -168,6 +168,27 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
       }
     }
 
+  def customTests(contestId: Int, team: Option[Int], before: Option[Long], after: Option[Long]) =
+    silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
+      getSelectedContests(contestId, request.identity).zip(statusActorModel.teamClient.getTeams(contestId)).flatMap {
+        case (contest, teamMap) =>
+          AdminCustomTests.page(db, contestId, team, before, after).map { page =>
+            Ok(html.admin.customtests(page, teamMap, contest, team))
+          }
+      }
+    }
+
+  def showCustomTest(contestId: Int, id: Long) =
+    silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
+      AdminCustomTests.get(db, contestId, id).flatMap {
+        case Some(ev) =>
+          getSelectedContests(contestId, request.identity).zip(statusActorModel.teamClient.getTeams(contestId)).map {
+            case (contest, teamMap) => Ok(html.admin.showcustomtest(ev, teamMap.get(ev.team), contest))
+          }
+        case None => Future.successful(NotFound)
+      }
+    }
+
   val rejudgeProblemForm = Form {
     mapping("problem" -> nonEmptyText, "all" -> default(boolean, false))(RejudgeProblem.apply)(RejudgeProblem.unapply)
   }

@@ -1,0 +1,27 @@
+@import org.stingray.contester.dbmodel._
+@(ev: EvalEntry, team: Option[Team], contest: SelectedContest)(implicit request: RequestHeader, messages: Messages)
+@fmt(d: org.joda.time.DateTime) = @{d.withZone(org.joda.time.DateTimeZone.getDefault).toString("yyyy-MM-dd HH:mm:ss.SSS")}
+
+@panel(name: String)(value: String) = {
+<div class="panel panel-default">
+    <div class="panel-heading"><h3 class="panel-title">@name (@{value.length} симв.)</h3></div>
+    <div class="panel-body nopadding"><pre class="nopadding">@value</pre></div>
+</div>
+}
+
+@adminmain(tab = "customtests", contest = contest) {
+<div class="panel panel-default">
+    <div class="panel-heading"><h3 class="panel-title">Custom test @ev.id</h3></div>
+    <div class="panel-body">
+        <p><b>Команда:</b> <a href="@routes.AdminApplication.customTests(ev.contest, Some(ev.team), None, None)">@team.map(_.teamFullName).getOrElse("Team " + ev.team)</a>,
+            <b>язык:</b> @ev.languageName</p>
+        <p><b>Отправлено:</b> @fmt(ev.arrived), <b>завершено:</b> @ev.finishTime.map(fmt).getOrElse("ещё нет")</p>
+        <p><b>Результат:</b> @if(ev.finishTime.isEmpty){<i>выполняется</i>}else{@messages(s"status.${ev.resultCode}")},
+            <b>время:</b> @ev.timex, <b>память:</b> @ev.memory, <b>код возврата:</b> @ev.returnCode</p>
+        <p><a href="@routes.AdminApplication.customTests(ev.contest, None, None, None)">&larr; все custom tests</a></p>
+    </div>
+</div>
+@panel("Исходник")(AdminCustomTests.sourceText(ev))
+@panel("Вход")(AdminCustomTests.inputText(ev))
+@panel("Выход / сообщение компилятора / stderr")(AdminCustomTests.outputText(ev))
+}

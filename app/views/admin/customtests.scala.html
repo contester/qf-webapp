@@ -1,0 +1,38 @@
+@import org.stingray.contester.dbmodel._
+@(page: AdminCustomPage, teams: Map[Int, Team], contest: SelectedContest, teamFilter: Option[Int])(implicit request: RequestHeader, messages: Messages)
+@pager(cid: Int) = {
+<ul class="pager">
+    @for(n <- page.newer) { <li class="previous"><a href="@routes.AdminApplication.customTests(cid, teamFilter, None, Some(n))">&larr; Новее</a></li> }
+    @for(o <- page.older) { <li class="next"><a href="@routes.AdminApplication.customTests(cid, teamFilter, Some(o), None)">Старее &rarr;</a></li> }
+</ul>
+}
+@fmt(d: org.joda.time.DateTime) = @{d.withZone(org.joda.time.DateTimeZone.getDefault).toString("yyyy-MM-dd HH:mm:ss")}
+
+@adminmain(tab = "customtests", contest = contest) {
+@defining(contest.contest.id) { cid =>
+@if(teamFilter.isDefined) {
+<p>Только одна команда: <a href="@routes.AdminApplication.customTests(cid, None, None, None)">показать все команды</a></p>
+}
+@pager(cid)
+<table id="customtests" class="table table-hover table-bordered table-responsive">
+    <thead>
+    <tr><th>ID</th><th>Отправлено</th><th>Завершено</th><th>Команда</th><th>Язык</th><th>Результат</th>
+        <th>Время работы</th><th>Память</th><th>Код возврата</th><th>Исходник, б</th><th>Вход, б</th><th>Выход, б</th></tr>
+    </thead>
+    <tbody>
+    @for(s <- page.rows) {
+    <tr><th scope="row"><a href="@routes.AdminApplication.showCustomTest(cid, s.id)">@s.id</a></th>
+        <td>@fmt(s.arrived)</td>
+        <td>@s.finished.map(fmt).getOrElse("")</td>
+        <td>@defining(teams.get(s.team).map(_.teamFullName).getOrElse("Team " + s.team)) { name =>@if(teamFilter.isEmpty){<a href="@routes.AdminApplication.customTests(cid, Some(s.team), None, None)">@name</a>}else{@name}}</td>
+        <td>@s.language</td>
+        <td @if(s.resultCode == 10) { class="success" }>@if(s.running){<i>выполняется</i>}else{@messages(s"status.${s.resultCode}")}</td>
+        <td>@s.timeMs</td><td>@s.memory</td><td>@s.returnCode</td>
+        <td>@s.sourceSize</td><td>@s.inputSize</td><td>@s.outputSize</td></tr>
+    }
+    </tbody>
+</table>
+@if(page.rows.isEmpty) { <p class="text-muted">Нет custom tests.</p> }
+@pager(cid)
+}
+}

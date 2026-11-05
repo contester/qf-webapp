@@ -123,6 +123,7 @@ object AdminNavlinkMatch {
   def apply(tab: String): Function[Int, play.api.mvc.Call] =
     tab match {
       case "status" => routes.AdminApplication.submits(_, None, None, None)
+      case "customtests" => routes.AdminApplication.customTests(_, None, None, None)
       case "monitor" => routes.AdminApplication.monitor(_)
       case "qanda" => routes.AdminApplication.showQandA(_)
       case "rejudge" => routes.AdminApplication.rejudgePage(_)
