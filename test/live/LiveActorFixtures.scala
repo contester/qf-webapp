@@ -66,12 +66,22 @@ trait LiveActorFixtures { this: TestKit =>
     // Number of upcoming loads that fail.
     val failLoads = new AtomicInteger
     val rendered = new AtomicInteger
+    // Submit id -> owning contest for the contestOf lookup; a missing id is "no such submit". lookupFails: the lookup throws.
+    @volatile var owners: Map[Int, Int] = Map.empty
+    @volatile var lookupFails = false
+    val lookups = new AtomicInteger
 
     private val loader = new ContestLoader {
       override def load(c: Contest)(implicit ec: ExecutionContext): Future[ContestData] = {
         loads.incrementAndGet()
         if (failLoads.getAndUpdate(n => (n - 1).max(0)) > 0) Future.failed(new RuntimeException("injected load failure"))
         else gate.map(_ => data(c.id))
+      }
+
+      override def contestOf(id: Int)(implicit ec: ExecutionContext): Future[Option[Int]] = {
+        lookups.incrementAndGet()
+        if (lookupFails) Future.failed(new RuntimeException("injected lookup failure"))
+        else Future.successful(owners.get(id))
       }
     }
 

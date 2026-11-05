@@ -328,6 +328,49 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     f.stop()
   }
 
+  test("a rejudge of a submit no contest knows reloads only the contest the database names") {
+    val f = new Fixture(running, rows = Seq(contest(), contest(2)))
+    val p = f.subscribe(JoinAdmin(1, real = true))
+    next(p, "board")
+    val solved = rec(61, 1, "A", t0.plusMinutes(30), ok)
+    f.data = f.data + (1 -> ContestData(problems, teams, Seq(solved)))
+    f.owners = Map(61 -> 1)
+    val loadsBefore = f.loads.get
+    f.actor ! RejudgeRequested(61)
+    next(p, "board")
+    assert((next(p, "row") \ "row" \ "cells" \ "A" \ "t").as[String] == "pend")
+    assert(f.loads.get == loadsBefore + 1)
+    assert(f.lookups.get == 1)
+    f.stop()
+  }
+
+  test("a rejudge of a submit that is not in the database is ignored without reloading") {
+    val f = new Fixture(running)
+    f.barrier()
+    val loadsBefore = f.loads.get
+    EventFilter.warning(pattern = "not in the database", occurrences = 1).intercept {
+      f.actor ! RejudgeRequested(62)
+      awaitCond(f.lookups.get == 1, 5.seconds)
+    }
+    f.actor ! RejudgeRequested(62)
+    f.barrier()
+    assert(f.loads.get == loadsBefore)
+    assert(f.lookups.get == 1)
+    f.stop()
+  }
+
+  test("when the lookup fails a rejudge falls back to reloading every contest") {
+    val f = new Fixture(running, rows = Seq(contest(), contest(2)))
+    f.barrier()
+    f.lookupFails = true
+    val loadsBefore = f.loads.get
+    EventFilter.warning(pattern = "cannot find the contest of submit 63", occurrences = 1).intercept {
+      f.actor ! RejudgeRequested(63)
+      awaitCond(f.loads.get == loadsBefore + 2, 5.seconds)
+    }
+    f.stop()
+  }
+
   test("a rejudge whose finish is lost heals at the first cross-check after the age limit") {
     val solved = rec(97, 1, "A", t0.plusMinutes(30), ok)
     val f = new Fixture(running, subs = Map(1 -> Seq(solved)), timings = defaultTimings.copy(rejudgeMaxAge = 10.seconds))

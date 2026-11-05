@@ -42,6 +42,10 @@ object LiveMonitorActor {
 
   trait ContestLoader {
     def load(contest: Contest)(implicit ec: ExecutionContext): Future[ContestData]
+
+    /** The contest a submit belongs to, None if there is no such submit. A failure makes callers fall back to reloading every contest. */
+    def contestOf(submitId: Int)(implicit ec: ExecutionContext): Future[Option[Int]] =
+      Future.failed(new UnsupportedOperationException("contestOf"))
   }
 
   /** Wall clock for the boards and palevo; monotonic milliseconds for the static throttle and reload rate limit. */
@@ -79,6 +83,9 @@ object LiveMonitorActor {
           ContestData(problems.map(_.id), teams.values.toSeq,
             submits.map(s => SubmitRec.fromSubmit(Submits.upliftSub(s))))
         }
+
+    override def contestOf(submitId: Int)(implicit ec: ExecutionContext): Future[Option[Int]] =
+      db.run(Submits.contestOfSubmit(submitId))
   }
 
   def props(db: JdbcBackend#DatabaseDef, cfg: LiveMonitorConfig, staticLocation: Option[File],
@@ -96,6 +103,7 @@ object LiveMonitorActor {
   private case class Started(result: Try[Seq[(Contest, Try[ContestData])]])
   private case class Loaded(contest: Int, result: Try[ContestData])
   private case class Added(contest: Contest, result: Try[ContestData])
+  private case class RejudgeContest(id: Int, result: Try[Option[Int]])
   private case class ContestsPolled(contests: Seq[Contest])
   private case class StartReload(contest: Int)
   private case class Register(contest: Int, viewer: Viewer, queue: BoundedSourceQueue[Event])
@@ -283,6 +291,8 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
         case Failure(e) => log.warning(s"live monitor: cannot poll contests: $e")
       }
 
+    case RejudgeContest(id, result) => rejudgeContest(id, result)
+
     case ContestsPolled(cs) => cs.foreach(contestRow)
 
     case Added(c, result) =>
@@ -363,15 +373,31 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       case _ =>
         if (contests.values.forall(_.ignored(id))) log.debug(s"live monitor: ignoring rejudge of submit $id")
         else {
-          log.warning(s"live monitor: rejudge of unknown submit $id; reloading every contest")
-          contests.foreach { case (cid, st) =>
-            if (!st.ignored(id)) {
-              st.waiting :+= EvRejudge(id, quiet = true)
-              requestReload(cid, st)
-            }
-          }
+          // No contest knows it: ask the database which contest owns it and reload only that one.
+          Future.fromTry(Try(loader.contestOf(id))).flatten.onComplete(r => self ! RejudgeContest(id, r))
         }
     }
+  }
+
+  private def rejudgeContest(id: Int, result: Try[Option[Int]]): Unit = result match {
+    case Success(Some(cid)) =>
+      contests.get(cid) match {
+        case Some(st) =>
+          st.waiting :+= EvRejudge(id)
+          requestReload(cid, st)
+        case None => log.warning(s"live monitor: rejudge of submit $id, which belongs to unloaded contest $cid; ignored")
+      }
+    case Success(None) =>
+      log.warning(s"live monitor: rejudge of submit $id, which is not in the database; ignored")
+      contests.values.foreach(_.ignored += id)
+    case Failure(e) =>
+      log.warning(s"live monitor: cannot find the contest of submit $id ($e); reloading every contest")
+      contests.foreach { case (cid, st) =>
+        if (!st.ignored(id)) {
+          st.waiting :+= EvRejudge(id, quiet = true)
+          requestReload(cid, st)
+        }
+      }
   }
 
   private def requestReload(cid: Int, st: ContestState): Unit =

@@ -205,6 +205,10 @@ object Submits {
     SlickModel.submits0ByContest(contest.toInt).result
   }
 
+  /** The contest of a submit; None if there is no such submit. */
+  def contestOfSubmit(submitId: Int) =
+    SlickModel.submits.filter(_.id === submitId.toLong).map(_.contest).result.headOption
+
   def getContestTeamSubmits(contest: Int, team: Int) = {
     SlickModel.submits0ByContestTeam(contest, team).result
   }
