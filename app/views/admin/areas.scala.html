@@ -27,7 +27,7 @@
                         <select class="form-control input-sm" onchange="if (this.value) { this.form.printer.value = this.value; }">
                             <option value="">pick a printer...</option>
                             @for(p <- printers) {
-                            <option value="@p.unc">@p.unc (@p.agent, seen @p.seen.toString("yyyy-MM-dd HH:mm"))</option>
+                            <option value="@p.unc">@p.unc (@p.agent, seen @utils.ShortTime.format(p.seen))</option>
                             }
                         </select>
                         }

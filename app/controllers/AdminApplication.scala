@@ -863,7 +863,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
             case Left(error) => Future.successful(back.flashing("error" -> error))
             case Right((newStart, delta)) => announceContestChanged(ceditID).map { _ =>
               logger.info(s"${request.identity} moved contest $ceditID by ${delta.getStandardSeconds} s, start is now $newStart")
-              back.flashing("success" -> s"Contest moved ${ContestShift.describe(delta)}; it starts at ${newStart.toString("yyyy-MM-dd HH:mm:ss")}")
+              back.flashing("success" -> s"Contest moved ${ContestShift.describe(delta)}; it starts at ${utils.ShortTime.format(newStart)}")
             }
           }
       }

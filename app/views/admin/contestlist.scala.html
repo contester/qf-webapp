@@ -17,10 +17,10 @@
                 <th scope="row"><a href="@routes.AdminApplication.editContest(contest.contest.id, s.id)">@s.id</a></th>
                 <td><a href="@routes.AdminApplication.editContest(contest.contest.id, s.id)">@s.name</a></td>
                 <td>@s.schoolMode</td>
-                <td>@s.startTime</td>
-                <td>@s.freezeTime</td>
-                <td>@s.endTime</td>
-                <td>@s.exposeTime</td>
+                <td>@utils.ShortTime.format(s.startTime)</td>
+                <td>@utils.ShortTime.format(s.freezeTime)</td>
+                <td>@utils.ShortTime.format(s.endTime)</td>
+                <td>@utils.ShortTime.format(s.exposeTime)</td>
                 <td>@s.polygonID.getOrElse("")</td>
                 <td>@s.language</td>
             </tr>
