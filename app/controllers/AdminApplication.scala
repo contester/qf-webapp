@@ -827,31 +827,45 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     db.run(SlickModel.getContestByID(contestID).result.headOption).map(_.foreach(statusActorModel.contestChanged))
       .recover { case e => logger.warn(s"cannot announce the change of contest $contestID: $e") }
 
-  private val shiftContestForm = Form(single("minutes" -> number))
+  // Exactly one of: `minutes` (the quick buttons) or `start` (the new start time).
+  private val shiftContestForm = Form(tuple("minutes" -> optional(number), "start" -> optional(nscalaDateTime)))
 
-  /** Moves all four times of a contest that has not started by some minutes (negative: earlier). */
+  /**
+   * Moves all four times of a contest that has not started: by some minutes (negative: earlier), or so that it
+   * starts at a given time.
+   */
   def postShiftContest(contestID: Int, ceditID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(ceditID)).async { implicit request =>
     import com.github.tototoshi.slick.PostgresJodaSupport._
     val back = Redirect(routes.AdminApplication.editContest(contestID, ceditID))
     shiftContestForm.bindFromRequest.fold(
-      _ => Future.successful(back.flashing("error" -> "Shift must be a number of minutes")),
-      minutes => {
-        val action = SlickModel.getContestByID(ceditID).result.headOption.flatMap {
-          case None => slick.dbio.DBIO.successful(Left("No such contest"))
-          case Some(c) => ContestShift.shift(c, minutes, DateTime.now) match {
-            case Left(error) => slick.dbio.DBIO.successful(Left(error))
-            case Right(t) =>
-              SlickModel.contests.filter(_.id === ceditID).map(x => (x.startTime, x.freezeTime, x.endTime, x.exposeTime))
-                .update((t.start, t.freeze, t.end, t.expose)).map(_ => Right(minutes))
+      _ => Future.successful(back.flashing("error" -> "Give a number of minutes or a start time")),
+      {
+        case (None, None) | (Some(_), Some(_)) =>
+          Future.successful(back.flashing("error" -> "Give a number of minutes or a start time"))
+        case (minutes, start) =>
+          val action = SlickModel.getContestByID(ceditID).result.headOption.flatMap {
+            case None => slick.dbio.DBIO.successful(Left("No such contest"))
+            case Some(c) =>
+              val now = DateTime.now
+              val moved = start match {
+                case Some(s) => ContestShift.startAt(c, s, now)
+                case None => ContestShift.shift(c, org.joda.time.Duration.standardMinutes(minutes.get), now)
+              }
+              moved match {
+                case Left(error) => slick.dbio.DBIO.successful(Left(error))
+                case Right(t) =>
+                  SlickModel.contests.filter(_.id === ceditID).map(x => (x.startTime, x.freezeTime, x.endTime, x.exposeTime))
+                    .update((t.start, t.freeze, t.end, t.expose))
+                    .map(_ => Right((t.start, new org.joda.time.Duration(c.startTime, t.start))))
+              }
+          }.transactionally
+          db.run(action).flatMap {
+            case Left(error) => Future.successful(back.flashing("error" -> error))
+            case Right((newStart, delta)) => announceContestChanged(ceditID).map { _ =>
+              logger.info(s"${request.identity} moved contest $ceditID by ${delta.getStandardSeconds} s, start is now $newStart")
+              back.flashing("success" -> s"Contest moved ${ContestShift.describe(delta)}; it starts at ${newStart.toString("yyyy-MM-dd HH:mm:ss")}")
+            }
           }
-        }.transactionally
-        db.run(action).flatMap {
-          case Left(error) => Future.successful(back.flashing("error" -> error))
-          case Right(m) => announceContestChanged(ceditID).map { _ =>
-            logger.info(s"${request.identity} shifted contest $ceditID by $m minutes")
-            back.flashing("success" -> (if (m > 0) s"Contest moved $m minutes later" else s"Contest moved ${-m} minutes earlier"))
-          }
-        }
       }
     )
   }
