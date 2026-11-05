@@ -105,6 +105,24 @@ class LiveBoardSpec extends AnyFunSuite {
     assert(ch2.get.solved == Map("B" -> 1))
   }
 
+  test("not rated leaders do not take rank 1 from the first rated team") {
+    val teams = Seq(team(1, notRated = true), team(2, notRated = true), team(3), team(4), team(5))
+    val cells = Map(
+      1 -> Map("A" -> solved(100), "B" -> solved(100)), 2 -> Map("A" -> solved(100), "B" -> solved(100)),
+      3 -> Map("A" -> solved(600)), 4 -> Map("A" -> solved(600)), 5 -> Map("A" -> solved(900)))
+    val b = LiveBoard.build(problems, teams, cells)
+    assert(b.rows.map(r => (r.team.id, r.rank)) == Seq((1, 0), (2, 0), (3, 1), (4, 1), (5, 3)))
+    // The same through incremental updates.
+    val (e, _) = LiveBoard.build(problems, teams, Map.empty).update(team(3), cells(3))
+    val (e2, _) = e.update(team(1, notRated = true), cells(1))
+    assert(e2.rows.map(r => (r.team.id, r.rank)).filter(_._1 != 2).take(2) == Seq((1, 0), (3, 1)))
+  }
+
+  test("a rated team tied in score with the not rated team before it is not given rank 0") {
+    val s = Seq((team(1, notRated = true), 1), (team(2), 1), (team(3), 1), (team(4), 2))
+    assert(Foo.ranks(s) == Seq(0, 1, 1, 3))
+  }
+
   test("Foo.ranks matches rank rule directly") {
     val s = Seq((team(1), 1), (team(2), 1), (team(3, notRated = true), 1), (team(4), 2))
     assert(Foo.ranks(s) == Seq(1, 1, 0, 3))

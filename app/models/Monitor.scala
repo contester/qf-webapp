@@ -77,7 +77,7 @@ object Foo {
           position += 1
           shared.getOrElse(position)
         }
-      last = Some((r, score))
+      if (!team.notRated) last = Some((r, score))
       r
     }
   }
