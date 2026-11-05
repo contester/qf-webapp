@@ -12,16 +12,26 @@ import slick.lifted.MappedTo
 
 import scala.concurrent.{ExecutionContext, Future}
 
+case class AnnoSubmit(submitId: Int, contest: Int, team: Int, problem: String, result: SubmitResult)
+
 /** A rendered row of the team's submit table, ready to be put in place of the row with the same id. */
 case class SubmitRow(id: Int, html: String)
 
-object SubmitRow {
-  implicit val writesSubmitRow: OWrites[SubmitRow] = Json.writes[SubmitRow]
-}
+/**
+  * The team's attempts on a problem that a finished testing changed: that attempt and the later ones. Only for the
+  * pages that are open (never stored), a page loaded later renders the table anew.
+  */
+case class SubmitRows(contest: Int, team: Int, rows: Seq[SubmitRow])
 
-/** `rows` are the team's attempts on the problem that changed with this result; empty when they could not be built. */
-case class AnnoSubmit(submitId: Int, contest: Int, team: Int, problem: String, result: SubmitResult,
-                      rows: Seq[SubmitRow] = Nil)
+object SubmitRows {
+  implicit val writesSubmitRow: OWrites[SubmitRow] = Json.writes[SubmitRow]
+  implicit val writesSubmitRows: OWrites[SubmitRows] = Json.writes[SubmitRows]
+
+  implicit val eventNameExtractor = EventNameExtractor[SubmitRows](_ => Some("submitRows"))
+  implicit val eventDataExtractor = EventDataExtractor[SubmitRows] { c =>
+    Json.stringify(Json.toJson(c))
+  }
+}
 
 trait SubmitResult {
   def success: Boolean

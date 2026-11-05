@@ -111,6 +111,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
   private[this] val (msg2Out, msg2Channel) = Concur.broadcast[Message2]()
   private[this] val unacked = mutable.Map[(Int, Int), mutable.Map[Int, Message2]]()
   private[this] val (sub2Out, sub2Chan) = Concur.broadcast[AnnoSubmit]()
+  private[this] val (rowsOut, rowsChan) = Concur.broadcast[SubmitRows]()
   private[this] val pendingClarificationRequests = mutable.Map[Long, mutable.Set[Long]]().withDefaultValue(mutable.Set[Long]())
   private[this] val (clr2Out, clr2Chan) = Concur.broadcast[ClarificationRequestState]()
   private[this] val (clrPostOut, clrPostChannel) = Concur.broadcast[ClarificationPosted]()
@@ -136,27 +137,30 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
     }
 
   /**
-    * The result of a finished testing together with the rendered rows of the team's attempts on that problem: a
-    * rejudge of an earlier attempt changes the score and the attempt number of the later ones. If the rows cannot be
+    * The result of a finished testing together with the rendered rows of this attempt and the later ones on that
+    * problem: a rejudge of an earlier attempt changes the score of the later ones. If the rows cannot be
     * built, or the database does not show this testing yet, the result alone is sent.
     */
-  private def annotateFinished(finished: FinishedTesting): Future[AnnoSubmit] = {
+  private def annotateFinished(finished: FinishedTesting): Future[(AnnoSubmit, Seq[SubmitRow])] = {
     val sub = finished.submit
     val plus = if (sub.schoolMode) "" else "+"
     Submits.teamProblemSubmits(db, sub.schoolMode, sub.contest, sub.team, sub.problem).flatMap { described =>
-      val rows = described.map(d => SubmitRow(d.submit.submitId.id, views.html.singlesubmit(d, plus).body))
       described.find(_.submit.submitId.id == sub.id).filter(_.submit.testingId.contains(finished.testingId)) match {
-        case Some(mine) if !(mine.details.isEmpty && !sub.schoolMode && finished.compiled && !mine.result.success) =>
-          Future.successful(AnnoSubmit(sub.id, sub.contest, sub.team, sub.problem, mine.result, rows))
-        case Some(_) =>
-          SubmitResult.annotateFinished2(db, finished).map(_.copy(rows = rows))
+        case Some(mine) =>
+          // Scoring runs forward, so only this attempt and the later ones can have changed.
+          val rows = described.filter(_.index >= mine.index)
+            .map(d => SubmitRow(d.submit.submitId.id, views.html.singlesubmit(d, plus).body))
+          if (mine.details.isEmpty && !sub.schoolMode && finished.compiled && !mine.result.success)
+            SubmitResult.annotateFinished2(db, finished).map(_ -> rows)
+          else
+            Future.successful(AnnoSubmit(sub.id, sub.contest, sub.team, sub.problem, mine.result) -> rows)
         case None =>
-          SubmitResult.annotateFinished2(db, finished)
+          SubmitResult.annotateFinished2(db, finished).map(_ -> Nil)
       }
     }.recoverWith {
       case e =>
         logger.error(s"rendering rows for submit ${sub.id}: $e")
-        SubmitResult.annotateFinished2(db, finished)
+        SubmitResult.annotateFinished2(db, finished).map(_ -> Nil)
     }
   }
 
@@ -326,8 +330,10 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
     case finished: FinishedTesting => {
       logger.info(s"received finished: $finished")
 
-      annotateFinished(finished).foreach { annotated =>
-        self ! annotated
+      annotateFinished(finished).foreach {
+        case (annotated, rows) =>
+          if (rows.nonEmpty) self ! SubmitRows(annotated.contest, annotated.team, rows)
+          self ! annotated
       }
 
       // Fire-and-forget; the hooks never throw, the Try is a second guard so the ack below is always sent.
@@ -351,6 +357,8 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
     case GetSingleContest(id) => {
       sender() ! Success(GetSingleContestResult(contestStates.get(id)))
     }
+
+    case rows: SubmitRows => rowsChan.offer(rows)
 
     case annotated: AnnoSubmit => {
       logger.debug(s"received annotated: $annotated")
@@ -428,6 +436,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
         Source.single(ClarificationState(contest, team, unseen)) via EventSource.flow,
         clrPostOut.filter(_.contest == contest) via EventSource.flow,
         msg2Out.filter(p => p.contest == contest && p.team == team) via EventSource.flow,
+        rowsOut.filter(p => p.contest == contest && p.team == team) via EventSource.flow,
         Source.tick(tickDuration, tickDuration, userPing)
       )(Merge(_))
 

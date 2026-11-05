@@ -240,30 +240,31 @@ function listenV2(path, setup, state) {
 
 function listenOnEvents(path, iconbase, ackMessagePath) {
     var setup = function(add) {
-        add('submit', function(obj) {
-            if (obj.rows && obj.rows.length) {
-                // Server-rendered rows: this attempt and the later ones whose score may have changed.
-                obj.rows.forEach(function(row) {
-                    var old = $('#result-' + row.id).closest('tr');
-                    if (old.length) {
-                        old.replaceWith(row.html);
-                    } else {
-                        $('#submits > tbody').prepend(row.html);
-                    }
-                });
-            } else {
-                var tr = $('#result-' + obj.submitId);
-                if (tr.length) {
-                    tr.toggleClass('success', !!obj.result.success);
-                    var href = tr.closest('tr').find('th a').attr('href');
-                    if (href) {
-                        tr.empty().append($('<a>').attr('href', href).text(obj.result.message));
-                    } else {
-                        tr.text(obj.result.message);
-                    }
+        // Server-rendered rows (not stored): the finished attempt and the later ones, whose score may have changed.
+        add('submitRows', function(obj) {
+            obj.rows.forEach(function(row) {
+                var old = $('#result-' + row.id).closest('tr');
+                if (old.length) {
+                    old.replaceWith(row.html);
                 } else {
-                    $('#submits > tbody').prepend('<tr><th scope="row">' + obj.submitId + '</th></tr>');
+                    $('#submits > tbody').prepend(row.html);
                 }
+            });
+        });
+
+        // The popup event (stored until acked). Also keeps the verdict cell right if the rows did not come.
+        add('submit', function(obj) {
+            var tr = $('#result-' + obj.submitId);
+            if (tr.length) {
+                tr.toggleClass('success', !!obj.result.success);
+                var href = tr.closest('tr').find('th a').attr('href');
+                if (href) {
+                    tr.empty().append($('<a>').attr('href', href).text(obj.result.message));
+                } else {
+                    tr.text(obj.result.message);
+                }
+            } else {
+                $('#submits > tbody').prepend('<tr><th scope="row">' + obj.submitId + '</th><td id="result-' + obj.submitId + '"></td></tr>');
             }
 
             if (ackMessagePath) {
