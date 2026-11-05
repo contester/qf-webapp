@@ -25,15 +25,21 @@ The scoreboard is pushed to browsers over server-sent events and replaces the po
     monitor.public_max_connections = 1000
     monitor.static_location = "/path"    # directory for the static pages; unset = no static files
 
+Static files are written only for contests with id < 11 (hardcoded, independent of `monitor.public_contests`).
+With the live monitor on, the live actor feeds palevo's standings events; with it off, the old monitor does.
+
 Three audiences, each page with an `/events` stream next to it:
 
 - `/monitor` (and `/monitor/events`): a team, which sees its own cells.
-- `/admin/monitor/:id`: admins, with a switch between the frozen and the real board.
-- `/public/monitor/:id`: anyone, always the frozen board.
+- `/admin/monitor/:id`: admins. There is no switch: the server picks the stream. An admin with `canSeeAll` for the
+  contest gets the real board; other admins with spectate permission get the freezing board.
+- `/public/monitor/:id`: anyone. The freezing board (identical to the static file); it is empty before the contest
+  starts and becomes the real board at expose_time.
 
-Between freeze_time and expose_time a submit that arrived after the freeze is shown as `?` on the public and
-admin-frozen boards. A team sees the real result of its own cells, but its rank, the solved and penalty columns
-and every other team stay as on the public board. At expose_time all streams switch to the real board.
+Between freeze_time and expose_time a submit that arrived after the freeze is shown as `?` on the freezing board
+(a contest with freeze_time >= end_time has no freeze). A `?` also appears on every board for a submit that is not
+judged yet. A team sees the real result of its own cells, but not its rank, the solved and penalty columns or any
+other team. At expose_time the public and team boards become the real board; `canSeeAll` admins always see it.
 
 Rollback: set `monitor.disable_new_monitor = true` and restart qf. No live actor is created, the hooks do
 nothing, and the old monitor (palevo and static files) starts again. Remove the key and restart to go back.

@@ -25,6 +25,10 @@ object LiveStreams extends Results {
       case _: AskTimeoutException => Left(ServiceUnavailable)
     }
 
+  /** Only an account that can see everything gets the real board; every other admin gets the freezing one. */
+  def adminJoin(contestId: Int, canSeeAll: Boolean): actors.LiveMonitorActor.JoinAdmin =
+    actors.LiveMonitorActor.JoinAdmin(contestId, real = canSeeAll)
+
   def response(source: Source[Event, _]): Result =
     Ok.chunked(source).as(ContentTypes.EVENT_STREAM).withHeaders(streamHeaders: _*)
 

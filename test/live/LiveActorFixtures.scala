@@ -56,7 +56,8 @@ trait LiveActorFixtures { this: TestKit =>
                         palevoSink: PalevoSink = palevo.NoopPalevoSink,
                         gate: Future[Unit] = Future.successful(()),
                         timings: LiveTimings = defaultTimings,
-                        overrideData: Map[Int, ContestData] = Map.empty) {
+                        overrideData: Map[Int, ContestData] = Map.empty,
+                        render: (Contest, LiveBoard) => String = (c, b) => s"${c.id}:${b.rows.size}") {
     val clock = new FakeClock(now)
     @volatile var contestRows: Seq[Contest] = rows
     @volatile var data: Map[Int, ContestData] =
@@ -75,7 +76,7 @@ trait LiveActorFixtures { this: TestKit =>
     }
 
     val actor: ActorRef = system.actorOf(LiveMonitorActor.propsWith(cfg, staticDir, () => Future.successful(contestRows),
-      loader, (c: Contest, b: LiveBoard) => { rendered.incrementAndGet(); s"${c.id}:${b.rows.size}" },
+      loader, (c: Contest, b: LiveBoard) => { rendered.incrementAndGet(); render(c, b) },
       palevoSink, clock, timings))
 
     def join(m: Any): Source[Event, NotUsed] = {

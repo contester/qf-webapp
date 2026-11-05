@@ -131,7 +131,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   // The real board for accounts that can see everything, otherwise the freezing board.
   def monitorEvents(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
     LiveStreams.stream(liveMonitor.ref.filter(_ => liveConfig.enabled),
-      actors.LiveMonitorActor.JoinAdmin(contestId, real = request.identity.canSeeAll(contestId)))
+      LiveStreams.adminJoin(contestId, request.identity.canSeeAll(contestId)))
   }
 
 

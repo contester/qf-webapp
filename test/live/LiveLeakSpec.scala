@@ -234,6 +234,63 @@ class LiveLeakSpec extends TestKit(ActorSystem("LiveLeakSpec", ConfigFactory.par
     f.stop()
   }
 
+  test("the static file is the freezing board mid-freeze and never shows a real-only cell") {
+    val render = (_: org.stingray.contester.dbmodel.Contest, b: LiveBoard) => LiveJson.board(b).toString
+    seeds.foreach { s =>
+      val rnd = new Random(s)
+      val dir = java.nio.file.Files.createTempDirectory("live-leak-static").toFile
+      val model = new LiveContest(contest(), problems, teams, initial, frozen)
+      val f = new Fixture(frozen, subs = Map(1 -> initial), staticDir = Some(dir), render = render)
+      f.barrier()
+      val file = new java.io.File(dir, "1.html")
+      var reals = Vector(model.board(Real))
+      var frozens = Vector(model.board(Freezing))
+      var seen = Vector.empty[String]
+      var known = initial.map(_.id)
+      var nextId = 100
+      var at = t0.plusHours(3)
+      (1 to steps).foreach { _ =>
+        val roll = rnd.nextInt(10)
+        val d =
+          if (roll < 4) {
+            at = Seq(at.plusSeconds(60 + rnd.nextInt(600)), frozen).minBy(_.getMillis)
+            val r = rec(nextId, 1 + rnd.nextInt(3), problems(rnd.nextInt(3)), at)
+            nextId += 1
+            known :+= r.id
+            f.actor ! Arrived(1, r)
+            Some(model.onArrived(r, frozen))
+          } else if (roll < 8) {
+            val id = known(rnd.nextInt(known.size))
+            val passed = if (rnd.nextBoolean()) 3 else rnd.nextInt(3)
+            f.actor ! Finished(1, id, compiled = true, passed, 3)
+            model.onFinished(id, compiled = true, passed, 3, frozen)
+          } else {
+            val id = known(rnd.nextInt(known.size))
+            f.actor ! RejudgeRequested(id)
+            model.onRejudge(id, frozen)
+          }
+        reals :+= model.board(Real)
+        frozens :+= model.board(Freezing)
+        f.clock.ms += 31000
+        f.actor ! StaticCheck
+        f.barrier()
+        if (d.exists(_.freezing.nonEmpty) || file.exists()) {
+          assert(file.exists(), s"seed $s")
+          val text = new String(java.nio.file.Files.readAllBytes(file.toPath), "UTF-8")
+          assert(text == render(contest(), model.board(Freezing)), s"seed $s")
+          seen :+= text
+        }
+      }
+      val realOnly = shownBy(reals) -- shownBy(frozens)
+      assert(realOnly.nonEmpty, s"seed $s: some cell must exist only on the real board")
+      assert(seen.nonEmpty && seen.distinct.size > 3, s"seed $s: the file must have been rewritten")
+      seen.foreach(t => assert(cellsIn(Event(t, None, Some("board"))).toSet.intersect(realOnly).isEmpty, s"seed $s"))
+      f.stop()
+      dir.listFiles().foreach(_.delete())
+      dir.delete()
+    }
+  }
+
   test("kill switch: the config key leaves no live actor, no-op hooks, and starts the old monitor") {
     import play.api.Configuration
     def cfg(s: String) = LiveMonitorConfig(Configuration(ConfigFactory.parseString(s)))
