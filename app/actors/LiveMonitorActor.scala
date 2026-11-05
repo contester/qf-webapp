@@ -1,0 +1,575 @@
+package actors
+
+import java.io.File
+
+import akka.NotUsed
+import akka.actor.{Actor, ActorLogging, Props, Stash, Status, Timers}
+import akka.stream.scaladsl.Source
+import akka.stream.{BoundedSourceQueue, Materializer, QueueOfferResult}
+import live._
+import models.{ProblemClient, Submits}
+import org.joda.time.DateTime
+import org.stingray.contester.dbmodel.{Contest, Team}
+import org.stingray.qf.models.TeamClient
+import palevo.{PalevoSink, StandingsAnnouncer}
+import play.api.libs.EventSource.Event
+import slick.jdbc.JdbcBackend
+
+import scala.collection.mutable
+import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success, Try}
+
+object LiveMonitorActor {
+  // Events (fire-and-forget, see live.LiveHooks).
+  case class Arrived(contest: Int, rec: SubmitRec)
+  case class Finished(contest: Int, id: Int, compiled: Boolean, passed: Int, taken: Int)
+  case class RejudgeRequested(id: Int)
+
+  // Each join is answered with a Source[Event, NotUsed] whose first element is the `board` event,
+  // or with Status.Failure when the contest is unknown (or, for JoinPublic, not public).
+  case class JoinPublic(contest: Int)
+  case class JoinTeam(contest: Int, team: Int)
+  case class JoinAdmin(contest: Int, real: Boolean)
+
+  // Timer messages; public so tests can drive them with timers switched off.
+  case object Tick
+  case object StaticCheck
+  case object CrossCheck
+  case object PollContests
+
+  case class ContestData(problems: Seq[String], teams: Seq[Team], submits: Seq[SubmitRec])
+
+  trait ContestLoader {
+    def load(contest: Contest)(implicit ec: ExecutionContext): Future[ContestData]
+  }
+
+  /** Wall clock for the boards and palevo; monotonic milliseconds for the static throttle and reload rate limit. */
+  trait LiveClock {
+    def now(): DateTime
+    def millis(): Long
+  }
+
+  object SystemLiveClock extends LiveClock {
+    override def now(): DateTime = DateTime.now
+    override def millis(): Long = System.nanoTime() / 1000000
+  }
+
+  case class LiveTimings(tick: FiniteDuration = 1.second,
+                         staticCheck: FiniteDuration = 1.second,
+                         contestPoll: FiniteDuration = 10.seconds,
+                         reloadGap: FiniteDuration = 5.seconds,
+                         ping: FiniteDuration = 30.seconds,
+                         startupRetry: FiniteDuration = 10.seconds,
+                         connectionBuffer: Int = 1024,
+                         scheduled: Boolean = true)
+
+  /** Problems and teams from the state actors, all submits of the contest (finished or not) from the database. */
+  class DbContestLoader(db: JdbcBackend#DatabaseDef, teamClient: TeamClient, problemClient: ProblemClient)
+    extends ContestLoader {
+    private implicit val timeout: akka.util.Timeout = akka.util.Timeout(30.seconds)
+
+    override def load(contest: Contest)(implicit ec: ExecutionContext): Future[ContestData] =
+      problemClient.getProblems(contest.id)
+        .zip(teamClient.getTeams(contest.id))
+        .zip(db.run(Submits.getContestSubmits(contest.id)))
+        .map { case ((problems, teams), submits) =>
+          ContestData(problems.map(_.id), teams.values.toSeq,
+            submits.map(s => SubmitRec.fromSubmit(Submits.upliftSub(s))))
+        }
+  }
+
+  def props(db: JdbcBackend#DatabaseDef, cfg: LiveMonitorConfig, staticLocation: Option[File],
+            teamClient: TeamClient, problemClient: ProblemClient, contests: () => Future[Seq[Contest]],
+            renderStatic: (Contest, LiveBoard) => String, palevo: PalevoSink): Props =
+    propsWith(cfg, staticLocation, contests, new DbContestLoader(db, teamClient, problemClient), renderStatic, palevo,
+      SystemLiveClock, LiveTimings())
+
+  def propsWith(cfg: LiveMonitorConfig, staticLocation: Option[File], contests: () => Future[Seq[Contest]],
+                loader: ContestLoader, renderStatic: (Contest, LiveBoard) => String, palevo: PalevoSink,
+                clock: LiveClock, timings: LiveTimings): Props =
+    Props(new LiveMonitorActor(cfg, staticLocation, contests, loader, renderStatic, palevo, clock, timings))
+
+  private case object Start
+  private case class Started(result: Try[Seq[(Contest, Try[ContestData])]])
+  private case class Loaded(contest: Int, result: Try[ContestData])
+  private case class Added(contest: Contest, result: Try[ContestData])
+  private case class ContestsPolled(contests: Seq[Contest])
+  private case class StartReload(contest: Int)
+  private case class Register(contest: Int, viewer: Viewer, queue: BoundedSourceQueue[Event])
+  private case class Unregister(contest: Int, queue: BoundedSourceQueue[Event])
+
+  private sealed trait Viewer
+  private case object PublicViewer extends Viewer
+  private case object AdminFreezingViewer extends Viewer
+  private case object AdminRealViewer extends Viewer
+  private case class TeamViewer(team: Int) extends Viewer
+
+  private sealed trait Ev { def id: Int }
+  private case class EvArrived(rec: SubmitRec) extends Ev { def id: Int = rec.id }
+  private case class EvFinished(id: Int, compiled: Boolean, passed: Int, taken: Int) extends Ev
+  // quiet: one of many reloads looking for an id no contest knew; a miss is not worth a warning per contest.
+  private case class EvRejudge(id: Int, quiet: Boolean = false) extends Ev
+
+  private val pingEvent = Event("", None, Some("ping"))
+  private val emptyBoard = LiveBoard(Nil, Vector.empty, Map.empty)
+  private val crossCheckReason = "cross-check"
+}
+
+/**
+  * Owns one LiveContest per contest, applies submit events to it and streams the boards over SSE.
+  *
+  * Startup loads every contest before any event is handled (Stash). Each event is applied inside Try: a failure is
+  * logged and the contest is rebuilt from the database (rate-limited). The database is read only at startup, in the
+  * cross-check, for an event about a submit id the contest does not know, and after a failure.
+  *
+  * Streams are per-connection queues registered with this actor, so the first `board` event and the later updates
+  * come from the same ordered sequence and nothing is lost between the snapshot and the subscription.
+  */
+class LiveMonitorActor(cfg: LiveMonitorConfig,
+                       staticLocation: Option[File],
+                       contestRows: () => Future[Seq[Contest]],
+                       loader: LiveMonitorActor.ContestLoader,
+                       renderStatic: (Contest, LiveBoard) => String,
+                       palevoSink: PalevoSink,
+                       clock: LiveMonitorActor.LiveClock,
+                       timings: LiveMonitorActor.LiveTimings) extends Actor with Stash with Timers with ActorLogging {
+  import LiveMonitorActor._
+
+  private implicit val ec: ExecutionContext = context.dispatcher
+  private implicit val mat: Materializer = Materializer(context)
+
+  private class Load(val reason: String, val waiting: Vector[Ev]) {
+    // Events applied to the live state while this load runs; replayed onto the rebuilt state.
+    var applied: Vector[Ev] = Vector.empty
+  }
+
+  private class ContestState(var live: LiveContest, val throttle: StaticThrottle) {
+    var loading: Option[Load] = None
+    var reloadScheduled = false
+    var lastLoadStart: Option[Long] = None
+    // Events about ids the contest did not know, waiting for the next load.
+    var waiting: Vector[Ev] = Vector.empty
+    var dirty = false
+    var staticFailing = false
+    // Ids still unknown after a reload, or arrivals the contest does not accept: never reload for them again.
+    val ignored: mutable.Set[Int] = mutable.Set.empty
+  }
+
+  private val contests = mutable.Map.empty[Int, ContestState]
+  private val adding = mutable.Set.empty[Int]
+  private val subscribers = mutable.Map.empty[Int, mutable.Map[BoundedSourceQueue[Event], Viewer]]
+  private val rejudging = mutable.Set.empty[Int]
+  private val standings = new StandingsAnnouncer
+
+  override def preStart(): Unit = {
+    super.preStart()
+    self ! Start
+  }
+
+  override def postStop(): Unit = {
+    subscribers.values.foreach(_.keys.foreach(q => Try(q.complete())))
+    super.postStop()
+  }
+
+  private def safeLoad(c: Contest): Future[ContestData] =
+    Future.fromTry(Try(loader.load(c))).flatten
+
+  override def receive: Receive = {
+    case Start =>
+      Future.fromTry(Try(contestRows())).flatten.flatMap { cs =>
+        Future.sequence(cs.map(c => safeLoad(c).transform(r => Success(c -> r))))
+      }.onComplete(r => self ! Started(r))
+
+    case Started(Success(loaded)) =>
+      val now = clock.now()
+      loaded.foreach {
+        case (c, Success(d)) => add(c, d, now)
+        case (c, Failure(e)) => log.error(e, s"live monitor: cannot load contest ${c.id}; will retry on the next contest poll")
+      }
+      startTimers()
+      unstashAll()
+      context.become(running)
+
+    case Started(Failure(e)) =>
+      log.error(e, s"live monitor: cannot list contests; retrying in ${timings.startupRetry}")
+      timers.startSingleTimer(Start, Start, timings.startupRetry)
+
+    case _ => stash()
+  }
+
+  private def startTimers(): Unit =
+    if (timings.scheduled) {
+      timers.startTimerWithFixedDelay(Tick, Tick, timings.tick)
+      timers.startTimerWithFixedDelay(StaticCheck, StaticCheck, timings.staticCheck)
+      timers.startTimerWithFixedDelay(PollContests, PollContests, timings.contestPoll)
+      if (cfg.crosscheckInterval > Duration.Zero)
+        timers.startTimerWithFixedDelay(CrossCheck, CrossCheck, cfg.crosscheckInterval)
+    }
+
+  /** Adds a freshly loaded contest; its first palevo observation only records state. */
+  private def add(c: Contest, d: ContestData, now: DateTime): Unit = {
+    val st = new ContestState(new LiveContest(c, d.problems, d.teams, d.submits, now), new StaticThrottle(cfg.staticInterval))
+    contests(c.id) = st
+    guarded(c.id, st) {
+      observePalevo(st)
+      st.throttle.markDirty(clock.millis())
+    }
+  }
+
+  def running: Receive = {
+    case Arrived(cid, rec) => withContest(cid, "arrival")(st => applyEvent(cid, st, EvArrived(rec), mayReload = false))
+
+    case Finished(cid, id, compiled, passed, taken) =>
+      rejudging -= id
+      withContest(cid, "finish")(st => applyEvent(cid, st, EvFinished(id, compiled, passed, taken), mayReload = true))
+
+    case RejudgeRequested(id) => rejudge(id)
+
+    case JoinPublic(cid) =>
+      if (cfg.publicContests(cid)) join(cid, PublicViewer) else sender() ! Status.Failure(notFound(cid))
+    case JoinTeam(cid, team) => join(cid, TeamViewer(team))
+    case JoinAdmin(cid, real) => join(cid, if (real) AdminRealViewer else AdminFreezingViewer)
+
+    case Register(cid, viewer, q) => register(cid, viewer, q)
+    case Unregister(cid, q) => unregister(cid, q)
+
+    case Tick =>
+      val now = clock.now()
+      contests.foreach { case (cid, st) =>
+        Try(st.live.onTick(now)) match {
+          case Success(Some(d)) => changed(cid, st, d)
+          case Success(None) => ()
+          case Failure(e) => failed(cid, st, e)
+        }
+      }
+
+    case StaticCheck => writeStatic()
+
+    case CrossCheck =>
+      if (cfg.crosscheckInterval > Duration.Zero)
+        contests.foreach { case (cid, st) => if (st.loading.isEmpty) startLoad(cid, st, crossCheckReason) }
+
+    case StartReload(cid) =>
+      contests.get(cid).foreach { st =>
+        st.reloadScheduled = false
+        if (st.loading.isEmpty) startLoad(cid, st, "reload")
+      }
+
+    case Loaded(cid, result) => contests.get(cid).foreach(st => loaded(cid, st, result))
+
+    case PollContests =>
+      Future.fromTry(Try(contestRows())).flatten.onComplete {
+        case Success(cs) => self ! ContestsPolled(cs)
+        case Failure(e) => log.warning(s"live monitor: cannot poll contests: $e")
+      }
+
+    case ContestsPolled(cs) => cs.foreach(contestRow)
+
+    case Added(c, result) =>
+      adding -= c.id
+      result match {
+        case Success(d) => if (!contests.contains(c.id)) add(c, d, clock.now())
+        case Failure(e) => log.warning(s"live monitor: cannot load new contest ${c.id}: $e")
+      }
+  }
+
+  private def notFound(cid: Int) = new NoSuchElementException(s"live monitor: no contest $cid")
+
+  private def withContest(cid: Int, what: String)(f: ContestState => Unit): Unit =
+    contests.get(cid) match {
+      case Some(st) => f(st)
+      case None => log.warning(s"live monitor: $what for unknown contest $cid ignored")
+    }
+
+  /** Runs f; on an exception logs it and rebuilds the contest from the database. */
+  private def guarded(cid: Int, st: ContestState)(f: => Unit): Unit =
+    Try(f).failed.foreach(e => failed(cid, st, e))
+
+  private def failed(cid: Int, st: ContestState, e: Throwable): Unit = {
+    log.error(e, s"live monitor: contest $cid: event failed, rebuilding from the database")
+    st.dirty = true
+    requestReload(cid, st)
+  }
+
+  private def applyTo(lc: LiveContest, ev: Ev, now: DateTime): Option[Delta] = ev match {
+    case EvArrived(rec) => Some(lc.onArrived(rec, now))
+    case EvFinished(id, compiled, passed, taken) => lc.onFinished(id, compiled, passed, taken, now)
+    case EvRejudge(id, _) => lc.onRejudge(id, now)
+  }
+
+  private def accepts(lc: LiveContest, rec: SubmitRec): Boolean =
+    lc.board(Real).problems.contains(rec.problem) && lc.board(Real).rowOf(rec.team).isDefined
+
+  private def applyEvent(cid: Int, st: ContestState, ev: Ev, mayReload: Boolean): Unit = {
+    val now = clock.now()
+    ev match {
+      case EvArrived(rec) if !accepts(st.live, rec) => st.ignored += rec.id
+      case _ =>
+    }
+    Try(applyTo(st.live, ev, now)) match {
+      case Success(Some(d)) =>
+        st.loading.foreach(l => l.applied :+= ev)
+        ev match {
+          case EvRejudge(id, _) => rejudging += id
+          case _ =>
+        }
+        changed(cid, st, d)
+      case Success(None) =>
+        if (st.ignored(ev.id)) log.debug(s"live monitor: contest $cid: ignoring submit ${ev.id}")
+        else if (mayReload) {
+          st.waiting :+= ev
+          requestReload(cid, st)
+        } else {
+          ev match {
+            case EvRejudge(_, true) => ()
+            case _ => log.warning(s"live monitor: contest $cid: unknown submit ${ev.id} after reload, ignored")
+          }
+          st.ignored += ev.id
+        }
+      case Failure(e) => failed(cid, st, e)
+    }
+  }
+
+  private def rejudge(id: Int): Unit = {
+    val now = clock.now()
+    val found = contests.iterator.map { case (cid, st) => (cid, st, Try(st.live.onRejudge(id, now))) }
+      .find { case (_, _, r) => r != Success(None) }
+    found match {
+      case Some((cid, st, Success(Some(d)))) =>
+        st.loading.foreach(l => l.applied :+= EvRejudge(id))
+        rejudging += id
+        changed(cid, st, d)
+      case Some((cid, st, Failure(e))) => failed(cid, st, e)
+      case _ =>
+        if (contests.values.forall(_.ignored(id))) log.debug(s"live monitor: ignoring rejudge of submit $id")
+        else {
+          log.warning(s"live monitor: rejudge of unknown submit $id; reloading every contest")
+          contests.foreach { case (cid, st) =>
+            if (!st.ignored(id)) {
+              st.waiting :+= EvRejudge(id, quiet = true)
+              requestReload(cid, st)
+            }
+          }
+        }
+    }
+  }
+
+  private def requestReload(cid: Int, st: ContestState): Unit =
+    if (st.loading.isEmpty && !st.reloadScheduled) {
+      val wait = st.lastLoadStart.map(_ + timings.reloadGap.toMillis - clock.millis()).getOrElse(0L)
+      if (wait <= 0) startLoad(cid, st, "reload")
+      else {
+        st.reloadScheduled = true
+        timers.startSingleTimer(StartReload(cid), StartReload(cid), wait.millis)
+      }
+    }
+
+  private def startLoad(cid: Int, st: ContestState, reason: String): Unit = {
+    val l = new Load(reason, st.waiting)
+    st.waiting = Vector.empty
+    st.loading = Some(l)
+    st.lastLoadStart = Some(clock.millis())
+    safeLoad(st.live.contest).onComplete(r => self ! Loaded(cid, r))
+  }
+
+  private def loaded(cid: Int, st: ContestState, result: Try[ContestData]): Unit = st.loading.foreach { l =>
+    st.loading = None
+    result match {
+      case Failure(e) =>
+        log.warning(s"live monitor: contest $cid: ${l.reason} load failed: $e")
+        // Keep the events for the next load (cross-check or reload); the contest stays dirty if it was.
+        st.waiting = l.waiting ++ st.waiting
+      case Success(data) =>
+        rebuild(cid, st, l, data)
+        // Unknown ids that this load was for: apply once, never reload for them again.
+        l.waiting.foreach(ev => applyEvent(cid, st, ev, mayReload = false))
+        // Unknown ids that came in while it ran: the new state may know them; otherwise reload again.
+        val again = st.waiting
+        st.waiting = Vector.empty
+        again.foreach(ev => applyEvent(cid, st, ev, mayReload = true))
+    }
+  }
+
+  private def rebuild(cid: Int, st: ContestState, l: Load, data: ContestData): Unit = {
+    val now = clock.now()
+    // A submit with a rejudge in flight is pending in memory whatever the database says until it finishes.
+    val subs = data.submits.map(s => if (rejudging(s.id)) s.copy(state = live.Pending) else s)
+    val result = Try {
+      val fresh = st.live.rebuilt(data.problems, data.teams, subs, now)
+      l.applied.foreach { ev =>
+        Try(applyTo(fresh, ev, now)).failed.foreach(e => log.warning(s"live monitor: contest $cid: replay of $ev failed: $e"))
+      }
+      fresh
+    }
+    result match {
+      case Failure(e) =>
+        log.error(e, s"live monitor: contest $cid: rebuild failed")
+        st.dirty = true
+      case Success(fresh) =>
+        val old = st.live
+        val diffs = old.differences(fresh)
+        if (diffs.nonEmpty) {
+          val text = s"live monitor: ${l.reason} found differences in contest $cid: ${diffs.take(20).mkString("; ")}"
+          if (l.reason == crossCheckReason) log.warning(text) else log.info(text)
+        }
+        val wasDirty = st.dirty
+        st.live = fresh
+        st.dirty = false
+        if (diffs.nonEmpty || wasDirty)
+          changed(cid, st, Delta(Seq(WholeOut(fresh.board(Freezing))), Seq(WholeOut(fresh.board(Real))), Nil),
+            freezingChanged = old.board(Freezing) != fresh.board(Freezing))
+    }
+  }
+
+  private def contestRow(c: Contest): Unit = contests.get(c.id) match {
+    case Some(st) =>
+      if (st.live.contest != c) {
+        val before = st.live.board(Freezing)
+        Try(st.live.onContest(c, clock.now())) match {
+          case Success(d) => changed(c.id, st, d, freezingChanged = before != st.live.board(Freezing))
+          case Failure(e) => failed(c.id, st, e)
+        }
+      }
+    case None =>
+      if (!adding(c.id)) {
+        adding += c.id
+        safeLoad(c).onComplete(r => self ! Added(c, r))
+      }
+  }
+
+  /** After a change: stream it, mark the static file and feed palevo. */
+  private def changed(cid: Int, st: ContestState, d: Delta, freezingChanged: Boolean = true): Unit =
+    guarded(cid, st) {
+      publish(cid, st, d)
+      if (d.freezing.nonEmpty && freezingChanged) st.throttle.markDirty(clock.millis())
+      if (d.freezing.nonEmpty || d.real.nonEmpty) observePalevo(st)
+    }
+
+  private def observePalevo(st: ContestState): Unit = {
+    val lc = st.live
+    standings.observe(lc.contest, PalevoView.of(lc.board(Freezing)), PalevoView.of(lc.board(Real)), clock.now())
+      .foreach(palevoSink.send)
+  }
+
+  private def writeStatic(): Unit = for (dir <- staticLocation; (cid, st) <- contests if cid < 11) {
+    val ms = clock.millis()
+    if (st.throttle.due(ms))
+      Try(StaticFiles.write(dir, cid, renderStatic(st.live.contest, st.live.board(Freezing)))) match {
+        case Success(_) =>
+          st.throttle.written(ms)
+          st.staticFailing = false
+        case Failure(e) =>
+          // Stays dirty and is retried on the next check; log once per failure streak.
+          if (!st.staticFailing) log.error(e, s"live monitor: cannot write static file for contest $cid")
+          st.staticFailing = true
+      }
+  }
+
+  // ---- streams ----
+
+  private def started(lc: LiveContest, now: DateTime): Boolean = !now.isBefore(lc.contest.startTime)
+
+  private def freezeActive(lc: LiveContest, now: DateTime): Boolean = {
+    val r = lc.rules
+    r.freezeTime.isBefore(r.endTime) && !now.isBefore(r.freezeTime) && now.isBefore(r.exposeTime)
+  }
+
+  private def realCells(lc: LiveContest, team: Int): Map[String, LiveCell] =
+    lc.board(Real).rowOf(team).map(_.cells).getOrElse(Map.empty)
+
+  private def boardEvent(b: LiveBoard, own: Option[(Int, Map[String, LiveCell])] = None): Event =
+    LiveJson.event("board", LiveJson.board(b, own))
+
+  private def plainEvent(out: BoardOut): Event = out match {
+    case WholeOut(b) => boardEvent(b)
+    case RowOut(c) => LiveJson.event("row", LiveJson.row(c))
+  }
+
+  private def join(cid: Int, viewer: Viewer): Unit =
+    if (!contests.contains(cid)) sender() ! Status.Failure(notFound(cid))
+    else {
+      val me = self
+      val queueEc = ec
+      val src: Source[Event, NotUsed] = Source.queue[Event](timings.connectionBuffer)
+        .merge(Source.tick(timings.ping, timings.ping, pingEvent), eagerComplete = true)
+        .watchTermination() { (q, done) =>
+          me ! Register(cid, viewer, q)
+          done.onComplete(_ => me ! Unregister(cid, q))(queueEc)
+          NotUsed
+        }
+      sender() ! src
+    }
+
+  private def snapshot(st: ContestState, viewer: Viewer): Event = {
+    val lc = st.live
+    val now = clock.now()
+    viewer match {
+      case AdminRealViewer => boardEvent(lc.board(Real))
+      case AdminFreezingViewer => boardEvent(lc.board(Freezing))
+      case PublicViewer => if (started(lc, now)) boardEvent(lc.board(Freezing)) else boardEvent(emptyBoard)
+      case TeamViewer(t) =>
+        if (!started(lc, now)) boardEvent(emptyBoard)
+        else boardEvent(lc.board(Freezing), if (freezeActive(lc, now)) Some(t -> realCells(lc, t)) else None)
+    }
+  }
+
+  private def register(cid: Int, viewer: Viewer, q: BoundedSourceQueue[Event]): Unit =
+    contests.get(cid) match {
+      case Some(st) =>
+        val subs = subscribers.getOrElseUpdate(cid, mutable.Map.empty)
+        subs(q) = viewer
+        offer(cid, q, Try(snapshot(st, viewer)).getOrElse(boardEvent(emptyBoard)))
+      case None => q.complete()
+    }
+
+  private def unregister(cid: Int, q: BoundedSourceQueue[Event]): Unit =
+    subscribers.get(cid).foreach { subs =>
+      subs -= q
+      if (subs.isEmpty) subscribers -= cid
+    }
+
+  /** A connection that cannot keep up is closed; its browser reconnects and starts from a whole board. */
+  private def offer(cid: Int, q: BoundedSourceQueue[Event], e: Event): Unit =
+    q.offer(e) match {
+      case QueueOfferResult.Enqueued => ()
+      case QueueOfferResult.Dropped =>
+        log.warning(s"live monitor: contest $cid: slow connection closed")
+        q.complete()
+        unregister(cid, q)
+      case _ => unregister(cid, q)
+    }
+
+  private def publish(cid: Int, st: ContestState, d: Delta): Unit =
+    subscribers.get(cid).filter(_.nonEmpty).foreach { subs =>
+      val lc = st.live
+      val now = clock.now()
+      val isStarted = started(lc, now)
+      val overlay = freezeActive(lc, now)
+      lazy val plain = d.freezing.map(plainEvent)
+      lazy val gated = if (isStarted) plain else d.freezing.collect { case WholeOut(_) => boardEvent(emptyBoard) }
+      lazy val real = d.real.map(plainEvent)
+
+      def teamEvents(t: Int): Seq[Event] =
+        if (!isStarted || !overlay) gated
+        else {
+          val own = realCells(lc, t)
+          d.freezing.zip(plain).map {
+            case (WholeOut(b), _) => boardEvent(b, Some(t -> own))
+            case (RowOut(c), _) if c.team == t => LiveJson.event("row", LiveJson.row(c, Some(own)))
+            case (_, e) => e
+          } ++ d.ownCells.collect { case (`t`, cells) => LiveJson.event("cells", LiveJson.cells(t, cells)) }
+        }
+
+      subs.toList.foreach { case (q, viewer) =>
+        val events = viewer match {
+          case AdminRealViewer => real
+          case AdminFreezingViewer => plain
+          case PublicViewer => gated
+          case TeamViewer(t) => teamEvents(t)
+        }
+        events.foreach(offer(cid, q, _))
+      }
+    }
+
+}
