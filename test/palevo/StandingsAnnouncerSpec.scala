@@ -19,7 +19,7 @@ class StandingsAnnouncerSpec extends AnyFunSuite {
     Foo.RankedRow(rank, t, ACM.Score(solves.size, solves.values.sum / 60, 0),
       solves.map { case (p, sec) => p -> ACMCell(1, sec, fullSolution = true) })
 
-  private def status(rows: Foo.RankedRow[ACM.Score, ACMCell]*): AnyStatus = ACM.Status(Seq("A", "B"), rows)
+  private def status(rows: Foo.RankedRow[ACM.Score, ACMCell]*): StandingsView = StandingsView.of(ACM.Status(Seq("A", "B"), rows))
 
   private val nobody = status(row(1, team(1), Map()), row(1, team(2), Map()))
   private val t1A = status(row(1, team(1), Map("A" -> 600)), row(2, team(2), Map()))

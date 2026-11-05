@@ -96,7 +96,7 @@ class MonitorActor(db: JdbcBackend#DatabaseDef,
       monitors.put(st.contest.id, st)
       // Public events come from the pre-freeze status only (it cannot change after the freeze, so nothing leaks);
       // the jury additionally hears the real standings while the public scoreboard is frozen.
-      standings.observe(st.contest, st.frozen, st.exposed, org.joda.time.DateTime.now).foreach(palevo.send)
+      standings.observe(st.contest, _root_.palevo.StandingsView.of(st.frozen), _root_.palevo.StandingsView.of(st.exposed), org.joda.time.DateTime.now).foreach(palevo.send)
       if (st.contest.id <11) {
         for (location <- staticLocationFile) {
           val tmpFile = new File(location, s"${st.contest.id}.html.new")

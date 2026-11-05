@@ -1,6 +1,5 @@
 package palevo
 
-import models.{ACM, AnyStatus}
 import org.joda.time.DateTime
 import org.stingray.contester.dbmodel.Contest
 
@@ -19,25 +18,19 @@ final class StandingsTracker(audience: Audience = PublicAudience) {
 
   private val states = mutable.Map[Int, State]()
 
-  def observe(contest: Contest, status: AnyStatus, now: DateTime): Seq[PalevoEvent] = status match {
-    case acm: ACM.Status => observeAcm(contest, acm, now)
-    case _ => Nil
-  }
-
-  private def observeAcm(contest: Contest, status: ACM.Status, now: DateTime): Seq[PalevoEvent] = {
-    val rated = status.rows.filter(!_.team.notRated)
+  def observe(contest: Contest, view: StandingsView, now: DateTime): Seq[PalevoEvent] = {
+    val rated = view.rows.filter(!_.team.notRated)
     val solves = for {
       row <- rated
-      (problem, cell) <- row.cells.toSeq
-      if cell.fullSolution
-    } yield Solve(PTeam(row.team.id, row.team.teamFullName), problem, cell.arrivedSeconds)
+      (problem, seconds) <- row.solves.toSeq
+    } yield Solve(PTeam(row.team.id, row.team.teamFullName), problem, seconds)
 
     val firstByProblem: Map[String, Solve] =
       solves.groupBy(_.problem).map { case (p, ss) => p -> ss.minBy(s => (s.seconds, s.team.id)) }
 
-    val leaders = rated.filter(r => r.rank == 1 && r.score.solved >= 1)
+    val leaders = rated.filter(r => r.rank == 1 && r.solved >= 1)
     val currentLeader: Option[(PTeam, Int)] = leaders match {
-      case Seq(only) => Some((PTeam(only.team.id, only.team.teamFullName), only.score.solved))
+      case Seq(only) => Some((PTeam(only.team.id, only.team.teamFullName), only.solved))
       case _ => None
     }
 

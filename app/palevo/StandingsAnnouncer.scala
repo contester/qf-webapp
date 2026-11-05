@@ -1,6 +1,5 @@
 package palevo
 
-import models.AnyStatus
 import org.joda.time.DateTime
 import org.stingray.contester.dbmodel.Contest
 
@@ -15,7 +14,7 @@ final class StandingsAnnouncer {
   private val publicTracker = new StandingsTracker
   private val juryTracker = new StandingsTracker(JuryAudience)
 
-  def observe(contest: Contest, frozen: AnyStatus, exposed: AnyStatus, now: DateTime): Seq[PalevoEvent] = {
+  def observe(contest: Contest, frozen: StandingsView, exposed: StandingsView, now: DateTime): Seq[PalevoEvent] = {
     val publicEvents = publicTracker.observe(contest, frozen, now)
     val juryEvents = juryTracker.observe(contest, exposed, now)
     val live =

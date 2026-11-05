@@ -17,8 +17,8 @@ class StandingsTrackerSpec extends AnyFunSuite {
     Foo.RankedRow(rank, t, ACM.Score(solves.size, solves.values.sum / 60, 0),
       solves.map { case (p, sec) => p -> ACMCell(1, sec, fullSolution = true) })
 
-  private def status(rows: Foo.RankedRow[ACM.Score, ACMCell]*): AnyStatus =
-    ACM.Status(Seq("A", "B", "C"), rows)
+  private def status(rows: Foo.RankedRow[ACM.Score, ACMCell]*): StandingsView =
+    StandingsView.of(ACM.Status(Seq("A", "B", "C"), rows))
 
   private def types(es: Seq[PalevoEvent]) = es.map(_.eventType)
 
@@ -113,8 +113,8 @@ class StandingsTrackerSpec extends AnyFunSuite {
       def problems = Seq("A")
       def anyRows = Nil
     }
-    assert(tr.observe(contest, other, now).isEmpty)
-    assert(tr.observe(contest, other, now).isEmpty)
+    assert(tr.observe(contest, StandingsView.of(other), now).isEmpty)
+    assert(tr.observe(contest, StandingsView.of(other), now).isEmpty)
   }
 
   test("contests are tracked independently") {
