@@ -253,15 +253,29 @@ object Submits {
 
 
   /**
+    * One team's attempts on one problem, scored in arrival order and numbered, with the results of their testings.
+    * Pure, so a change to an earlier attempt (a rejudge) can be seen to change the scores of the later ones.
+    */
+  def describeAttempts(schoolMode: Boolean, attempts: Seq[Submit], resultsByTesting: Map[Long, Seq[ResultEntry]]): Seq[FullyDescribedSubmit] = {
+    val submits = attempts.sortBy(_.submitId.arrived.seconds)
+    val scored = (if (schoolMode) scoreGrouped[SchoolCell](submits, SchoolCell.empty, SchoolScorer)
+      else scoreGrouped(submits, ACMCell.empty, ACMScorer))._2
+    indexGrouped(scored).map {
+      case ((submit, optScore), index) =>
+        val details = submit.testingId.flatMap(t => resultsByTesting.get(t.toLong)).getOrElse(Nil)
+        FullyDescribedSubmit(submit, index, optScore, SubmitResult.annotate2(schoolMode, submit, details),
+          getTestingStats(details), details)
+    }
+  }
+
+  /**
     * A team's attempts on one problem, described like the rows of the team's submit list. Two queries however many
     * attempts there are: the submits, and the per-test results of all of them in one go (without the tester output).
     */
   def teamProblemSubmits(db: JdbcBackend#DatabaseDef, schoolMode: Boolean, contest: Int, team: Int, problem: String)
                         (implicit ec: ExecutionContext): Future[Seq[FullyDescribedSubmit]] =
     db.run(getContestTeamProblemSubmits(contest, team, problem)).flatMap { rows =>
-      val submits = rows.map(upliftSub).sortBy(_.submitId.arrived.seconds)
-      val scored = (if (schoolMode) scoreGrouped[SchoolCell](submits, SchoolCell.empty, SchoolScorer)
-        else scoreGrouped(submits, ACMCell.empty, ACMScorer))._2
+      val submits = rows.map(upliftSub)
       val testingIds = submits.flatMap(_.testingId.map(_.toLong)).distinct
       val results =
         if (testingIds.isEmpty) Future.successful(Map.empty[Long, Seq[ResultEntry]])
@@ -269,14 +283,7 @@ object Submits {
           .map(x => (x.testingID, x.testID, x.resultCode, x.timeMs, x.memoryBytes)).result).map(_.map {
           case (tid, test, code, time, memory) => ResultEntry(tid, test, code, time, memory, 0, 0, Array.empty, Array.empty)
         }.groupBy(_.testingID))
-      results.map { byTesting =>
-        indexGrouped(scored).map {
-          case ((submit, optScore), index) =>
-            val details = submit.testingId.flatMap(t => byTesting.get(t.toLong)).getOrElse(Nil)
-            FullyDescribedSubmit(submit, index, optScore, SubmitResult.annotate2(schoolMode, submit, details),
-              getTestingStats(details), details)
-        }
-      }
+      results.map(describeAttempts(schoolMode, submits, _))
     }
 
   import scala.language.implicitConversions
