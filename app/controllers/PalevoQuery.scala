@@ -4,8 +4,8 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 
 import org.joda.time.DateTime
-import org.stingray.contester.dbmodel.Contest
-import palevo.query.{ContestSelection, QueryConfig, QueryJson, QuerySource, Scope}
+import org.stingray.contester.dbmodel.{Contest, Team}
+import palevo.query.{ContestSelection, Matching, TeamNames, QueryConfig, QueryJson, QuerySource, Scope}
 import play.api.Logging
 import play.api.libs.json.{JsObject, Json}
 import play.api.mvc._
@@ -129,6 +129,67 @@ class PalevoQuery(cc: ControllerComponents, cfg: QueryConfig, source: QuerySourc
             }
           }
         }
+    }
+  }
+
+  /** GET /team?q=…|id=…: candidates among the board's teams and, when exactly one, its row and cells. */
+  def team = authed { request =>
+    val q = request.getQueryString("q")
+    val idParam = request.getQueryString("id").map(s => Try(s.trim.toInt).toOption)
+    if (q.isEmpty && idParam.isEmpty) badRequest("q or id is required")
+    else if (idParam.contains(None)) badRequest("id must be an integer")
+    else {
+      val wanted = idParam.flatten
+      withContests(request) { sel =>
+        Future.traverse(sel.contests) { case (c, base) =>
+          if (!started(c, sel.now)) Future.successful(base ++ Json.obj("candidates" -> Json.arr()))
+          else source.board(c.id, real = isJury(sel)).flatMap {
+            case None => Future.successful(base ++ Json.obj("candidates" -> Json.arr(), "note" -> "board unavailable"))
+            case Some(b) =>
+              val found = wanted match {
+                case Some(id) => b.rows.filter(_.team.id == id).take(1)
+                case None => Matching.rankTeams(q.getOrElse(""), b.rows)(r => teamNames(r.team))
+              }
+              val cands = Json.obj("candidates" -> found.map(candidate))
+              found match {
+                case Seq(row) => teamDetail(c, sel, b.problems, row).map(t => base ++ cands ++ Json.obj("team" -> t))
+                case _ => Future.successful(base ++ cands)
+              }
+          }
+        }
+      }
+    }
+  }
+
+  private def teamNames(t: Team) = TeamNames(t.schoolShortName, t.schoolFullName, t.teamNum, t.teamName)
+
+  private def candidate(r: live.LiveRow): JsObject =
+    Json.obj("id" -> r.team.id, "name" -> r.team.teamFullName, "school" -> r.team.schoolFullNameWithNum)
+
+  private def cellJson(cell: live.LiveCell): JsObject = cell match {
+    case live.LiveCell.Solved(a, secs) => Json.obj("state" -> "ok", "attempts" -> a, "minutes" -> secs / 60)
+    case live.LiveCell.Failed(a) => Json.obj("state" -> "fail", "attempts" -> a)
+    case live.LiveCell.Pending(f) => Json.obj("state" -> "pending", "attempts" -> f)
+    case live.LiveCell.Empty => Json.obj("state" -> "empty", "attempts" -> 0)
+  }
+
+  private def teamDetail(c: Contest, sel: Selection, problemIds: Seq[String], row: live.LiveRow): Future[JsObject] = {
+    val id = row.team.id
+    val submitF = source.lastSubmits(c.id, Seq(id))
+    // The room is a jury-only fact: for the public audience it is not even looked up.
+    val roomF = if (isJury(sel)) source.teamRooms(c.id, Seq(id)) else Future.successful(Map.empty[Int, String])
+    for {
+      submits <- submitF
+      rooms <- roomF
+    } yield {
+      val problems = JsObject(problemIds.map(p => p -> cellJson(row.cells.getOrElse(p, live.LiveCell.Empty))))
+      val last = submits.get(id).map { t =>
+        Json.obj("last_submit_at" -> QueryJson.iso(t),
+          "seconds_since_last_submit" -> math.max(0L, (sel.now.getMillis - t.getMillis) / 1000))
+      }.getOrElse(Json.obj())
+      val room = rooms.get(id).map(r => Json.obj("room" -> r)).getOrElse(Json.obj())
+      QueryJson.standingsRow(row) - "team" - "team_id" ++ Json.obj(
+        "id" -> id, "name" -> row.team.teamFullName, "problems" -> problems) ++ last ++ room
     }
   }
 
