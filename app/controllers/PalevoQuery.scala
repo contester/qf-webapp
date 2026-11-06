@@ -193,6 +193,63 @@ class PalevoQuery(cc: ControllerComponents, cfg: QueryConfig, source: QuerySourc
     }
   }
 
+  /** GET /problems?window=15m: per problem, board-derived counts plus recent arrivals and pending submits. */
+  def problems = authed { request =>
+    parseWindow(request.getQueryString("window")) match {
+      case Left(e) => badRequest(e)
+      case Right(minutes) =>
+        withContests(request) { sel =>
+          Future.traverse(sel.contests) { case (c, base) =>
+            if (!started(c, sel.now)) Future.successful(base)
+            else {
+              val boardF = source.board(c.id, real = isJury(sel))
+              val namesF = source.problemNames(c.id)
+              val recentF = optionalCounts("recentArrivals")(source.recentArrivals(c.id, sel.now.minusMinutes(minutes)))
+              val pendingF = optionalCounts("pendingCounts")(source.pendingCounts(c.id))
+              for {
+                board <- boardF
+                names <- namesF
+                recent <- recentF
+                pending <- pendingF
+              } yield {
+                val withWindow = base ++ Json.obj("window_minutes" -> minutes)
+                board match {
+                  case None => withWindow ++ Json.obj("problems" -> Json.arr(), "note" -> "board unavailable")
+                  case Some(b) =>
+                    withWindow ++ Json.obj("problems" -> b.problems.map { p =>
+                      val cells = b.rows.map(_.cells.getOrElse(p, live.LiveCell.Empty))
+                      val pname: String = names.getOrElse(p, p)
+                      val nrecent: Int = recent.getOrElse(p, 0)
+                      val npending: Int = pending.getOrElse(p, 0)
+                      Json.obj(
+                        "id" -> p,
+                        "name" -> pname,
+                        "solved" -> cells.count(_.isInstanceOf[live.LiveCell.Solved]),
+                        "teams_attempted" -> cells.count(_ != live.LiveCell.Empty),
+                        "attempts" -> cells.map {
+                          case live.LiveCell.Solved(a, _) => a
+                          case live.LiveCell.Failed(a) => a
+                          case live.LiveCell.Pending(f) => f
+                          case live.LiveCell.Empty => 0
+                        }.sum,
+                        "recent_submits" -> nrecent,
+                        "pending" -> npending)
+                    })
+                }
+              }
+            }
+          }
+        }
+    }
+  }
+
+  /** Activity counts are optional: a failed lookup degrades to no counts (logged) instead of failing the request. */
+  private def optionalCounts(what: String)(f: => Future[Map[String, Int]]): Future[Map[String, Int]] =
+    Try(f).fold(Future.failed, identity).recover { case NonFatal(e) =>
+      logger.warn(s"palevo query $what failed, answering zeros: ${e.getClass.getName}: ${e.getMessage}")
+      Map.empty[String, Int]
+    }
+
   // Temporary: removed once the real endpoints exist.
   def ping = authed { _ => Future.successful(Ok(Json.obj("ok" -> true))) }
 }
@@ -201,6 +258,17 @@ object PalevoQuery {
   /** What [[PalevoQuery.selecting]] hands an endpoint: the request time, the parsed scope and the selected contests
     * with their base JSON objects. */
   case class Selection(now: DateTime, scope: Scope, contests: Seq[(Contest, JsObject)])
+
+  val DefaultWindow = 15
+  val MaxWindow = 120
+
+  /** `window`: absent → 15; `<n>m` with n in 1..120; anything else is an error. */
+  def parseWindow(s: Option[String]): Either[String, Int] = s match {
+    case None => Right(DefaultWindow)
+    case Some(v) =>
+      val n = if (v.matches("[0-9]{1,4}m")) Some(v.dropRight(1).toInt).filter(x => x >= 1 && x <= MaxWindow) else None
+      n.toRight("window must be <n>m with n from 1 to 120")
+  }
 
   val DefaultTop = 10
   val MaxTop = 30

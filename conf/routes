@@ -44,6 +44,7 @@ GET /api/palevo/v1/ping controllers.PalevoQuery.ping
 GET /api/palevo/v1/contest controllers.PalevoQuery.contest
 GET /api/palevo/v1/standings controllers.PalevoQuery.standings
 GET /api/palevo/v1/team controllers.PalevoQuery.team
+GET /api/palevo/v1/problems controllers.PalevoQuery.problems
 
 GET /admin/rejudge/:contestId controllers.AdminApplication.rejudgePage(contestId: Int)
 POST /admin/rejudgeProblem/:contestId controllers.AdminApplication.rejudgeProblem(contestId: Int)
