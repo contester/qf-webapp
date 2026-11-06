@@ -124,6 +124,10 @@ class MyComponents(context: ApplicationLoader.Context)
 
   lazy val palevoSink: palevo.PalevoSink = palevo.PalevoSink.fromConfig(configuration, wsClient, actorSystem)(executionContext)
 
+  // Read-only query API for palevo's chat bot. The source is a placeholder until the endpoints exist.
+  lazy val queryConfig: palevo.query.QueryConfig = palevo.query.QueryConfig(configuration)
+  lazy val querySource: palevo.query.QuerySource = palevo.query.NoSource
+
   // Live monitor. When monitor.disable_new_monitor = true nothing below is constructed beyond the config and the
   // no-op hooks, and Monitor starts the old MonitorActor as before.
   lazy val liveConfig: live.LiveMonitorConfig = live.LiveMonitorConfig(configuration)
@@ -158,6 +162,7 @@ class MyComponents(context: ApplicationLoader.Context)
   lazy val printingController = wire[_root_.controllers.Printing]
   lazy val adminController = wire[_root_.controllers.AdminApplication]
   lazy val publicMonitorController = wire[_root_.controllers.PublicMonitor]
+  lazy val palevoQueryController = wire[_root_.controllers.PalevoQuery]
 
   lazy val authFormsController = wire[_root_.controllers.AuthForms]
   lazy val adminAuthFormsController = wire[_root_.controllers.AdminAuthForms]
