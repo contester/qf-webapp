@@ -55,6 +55,18 @@ class PalevoEventSpec extends AnyFunSuite {
     assert((k \ "data" \ "team").get == Json.obj("id" -> 7, "name" -> "Name"))
   }
 
+  test("printer_problem: jury, no contest, condition only while open") {
+    val open = PalevoEvent.toJson(PrinterProblem("""\\\\srv\\p1""", Seq("Hall A"), open = true, "out of paper", 2, ts))
+    assert((open \ "type").as[String] == "printer_problem")
+    assert((open \ "audience").as[String] == "jury")
+    assert((open \ "contest" \ "id").as[Int] == 0)
+    assert((open \ "data").get == Json.obj("printer" -> """\\\\srv\\p1""", "areas" -> Seq("Hall A"), "state" -> "open",
+      "condition" -> "out of paper", "waiting_jobs" -> 2))
+    val cleared = PalevoEvent.toJson(PrinterProblem("""\\\\srv\\p1""", Nil, open = false, "", 0, ts))
+    assert((cleared \ "data").get == Json.obj("printer" -> """\\\\srv\\p1""", "areas" -> Seq.empty[String], "state" -> "cleared"))
+    assert((open \ "id").as[String] != (cleared \ "id").as[String])
+  }
+
   test("type names and ids of the remaining events") {
     def tp(e: PalevoEvent) = ((PalevoEvent.toJson(e) \ "type").as[String], (PalevoEvent.toJson(e) \ "id").as[String])
     assert(tp(ContestStarted(c, ts)) == ("contest_started", "qf-contest_started-12"))

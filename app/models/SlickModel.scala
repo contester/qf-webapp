@@ -6,7 +6,7 @@ import com.google.protobuf.ByteString
 import com.spingo.op_rabbit.Message
 import play.api.Logging
 import play.api.libs.json.JsValue
-import protos.Tickets.{BinaryJob, Computer, IdName, PrintJob, PrintJobReport, PrinterList}
+import protos.Tickets.{BinaryJob, Computer, IdName, PrintJob, PrintJobReport, PrinterAlert, PrinterList}
 import slick.basic.DatabaseConfig
 import slick.jdbc.{JdbcBackend, JdbcProfile}
 
@@ -150,6 +150,23 @@ class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: Sta
     }
     f.failed.foreach(e => logger.warn(s"palevo: cannot announce print error for job $jobId: $e"))
   }
+
+  private val printerAlerts = new PrinterAlertState
+
+  /** Tells palevo that a printer cannot print, or can again. A repeated alert is dropped. */
+  def processPrinterAlert(a: PrinterAlert): Future[Unit] =
+    if (!printerAlerts.isNews(a)) Future.successful(())
+    else {
+      import palevo.EventBuilders
+      val now = DateTime.now
+      db.run(areas.filter(_.printer === a.printer).map(_.name).result).recover {
+        case e =>
+          logger.warn(s"palevo: cannot look up the areas of printer ${a.printer}: $e")
+          Nil
+      }.map { names =>
+        palevoSink.send(EventBuilders.printerProblem(a.printer, names, a.open, a.condition, a.waitingJobs, now))
+      }
+    }
 
   def processPrinterList(list: PrinterList): Future[Int] = AgentPrinterList.replace(db, list)
 

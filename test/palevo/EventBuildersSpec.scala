@@ -10,6 +10,11 @@ class EventBuildersSpec extends AnyFunSuite {
   private val c = PContest(12, "C")
   private val team = PTeam(7, "Name")
 
+  test("printerProblem sorts the areas") {
+    assert(EventBuilders.printerProblem("p", Seq("B", "A"), open = true, "jam", 1, now) ==
+      PrinterProblem("p", Seq("A", "B"), open = true, "jam", 1, now))
+  }
+
   test("clarificationRequested maps the request") {
     val req = ClarificationRequest(5, 12, 7, "B", "what?", "", now.minusMinutes(1), answered = false)
     assert(EventBuilders.clarificationRequested(req, c, team, now) ==

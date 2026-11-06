@@ -113,6 +113,17 @@ final case class NewLeader(contest: PContest, ts: DateTime, team: PTeam, solved:
   def data = Json.obj("team" -> PalevoEvent.team(team), "solved" -> solved)
 }
 
+/** A printer cannot print (open) or works again. About a printer, not a contest; only the jury hears it. */
+final case class PrinterProblem(printer: String, areas: Seq[String], open: Boolean, condition: String,
+                                waitingJobs: Int, ts: DateTime) extends PalevoEvent {
+  def id = s"qf-jury-printer-$printer-${ts.getMillis}-${if (open) "open" else "cleared"}"
+  def eventType = "printer_problem"
+  def contest = NoContest.value
+  override def audience: Audience = JuryAudience
+  def data = Json.obj("printer" -> printer, "areas" -> areas, "state" -> (if (open) "open" else "cleared")) ++
+    (if (open) Json.obj("condition" -> condition, "waiting_jobs" -> waitingJobs) else Json.obj())
+}
+
 final case class PrintError(jobId: Long, contest: PContest, ts: DateTime, team: Option[PTeam],
                             error: String) extends PalevoEvent {
   def id = s"qf-print-$jobId-${ts.getMillis}"

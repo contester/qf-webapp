@@ -4,7 +4,7 @@ import akka.actor.{ActorSystem, Props}
 import com.spingo.op_rabbit._
 import models.ContesterResults.{CustomTestResult, FinishedTesting}
 import play.api.{Configuration, Logger, Logging}
-import protos.Tickets.{PrintJobReport, PrinterList}
+import protos.Tickets.{PrintJobReport, PrinterAlert, PrinterList}
 
 import scala.concurrent.ExecutionContext
 
@@ -69,6 +69,18 @@ class SubscriptionsModel(rabbitMqModel: RabbitMqModel, statusActorModel: StatusA
         body(as[PrinterList]) { list =>
           logger.info(s"Received printer list from ${list.agent}: ${list.printers.size} printers")
           ack(printingModel.processPrinterList(list))
+        }
+      }
+    }
+  }
+
+  val printerAlerts = Subscription.run(rabbitMq) {
+    import Directives._
+    channel(qos = 1) {
+      consume(queue("contester.printeralerts")) {
+        body(as[PrinterAlert]) { alert =>
+          logger.info(s"Received printer alert from ${alert.agent}: ${alert.printer} open=${alert.open} ${alert.condition}")
+          ack(printingModel.processPrinterAlert(alert))
         }
       }
     }
