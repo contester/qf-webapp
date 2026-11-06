@@ -15,6 +15,9 @@ class ContestSelectionSpec extends AnyFunSuite {
     // freeze >= end: never
     assert(!ContestSelection.freezeInEffect(contest(1, -5, 2, 2, 10), now))
     assert(!ContestSelection.freezeInEffect(contest(1, -5, 3, 2, 10), now))
+    // freeze already passed but freeze >= end: still never
+    assert(!ContestSelection.freezeInEffect(contest(1, -5, -1, -1, 10), now))
+    assert(!ContestSelection.freezeInEffect(contest(1, -5, -1, -2, 10), now))
     // before freeze
     assert(!ContestSelection.freezeInEffect(contest(1, -5, 1, 3, 10), now))
     // in effect (during freeze and after end, before expose)
@@ -35,6 +38,9 @@ class ContestSelectionSpec extends AnyFunSuite {
     assert(ContestSelection.viewOf(inEffect, Jury, now) == LiveJury)
     assert(ContestSelection.viewOf(notInEffect, Public, now) == NoFreeze)
     assert(ContestSelection.viewOf(notInEffect, Jury, now) == NoFreeze)
+    val freezeNotBeforeEnd = contest(3, -5, -1, -1, 10)
+    assert(ContestSelection.viewOf(freezeNotBeforeEnd, Public, now) == NoFreeze)
+    assert(ContestSelection.viewOf(freezeNotBeforeEnd, Jury, now) == NoFreeze)
     assert(Seq(Frozen, LiveJury, NoFreeze).map(_.json) == Seq("frozen", "live-jury", "no-freeze"))
   }
 
