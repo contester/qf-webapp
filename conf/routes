@@ -41,6 +41,8 @@ GET /public/monitor/:contestId/events controllers.PublicMonitor.events(contestId
 
 # Read-only query API for palevo (bearer token; 404 when palevo.query.token is unset)
 GET /api/palevo/v1/ping controllers.PalevoQuery.ping
+GET /api/palevo/v1/contest controllers.PalevoQuery.contest
+GET /api/palevo/v1/standings controllers.PalevoQuery.standings
 
 GET /admin/rejudge/:contestId controllers.AdminApplication.rejudgePage(contestId: Int)
 POST /admin/rejudgeProblem/:contestId controllers.AdminApplication.rejudgeProblem(contestId: Int)
