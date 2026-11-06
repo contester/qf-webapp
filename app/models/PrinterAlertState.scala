@@ -17,4 +17,9 @@ class PrinterAlertState {
       news
     } else open.remove(key).isDefined
   }
+
+  /** The problems announced and not yet cleared, as (agent, printer, condition). */
+  def currentProblems: Seq[(String, String, String)] = synchronized {
+    open.toList.map { case ((agent, printer), condition) => (agent, printer, condition) }.sorted
+  }
 }

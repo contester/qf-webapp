@@ -36,4 +36,18 @@ class PrinterAlertStateSpec extends AnyFunSuite {
     assert(s.isNews(alert(open = false, printer = "p2")))
     assert(!s.isNews(alert(open = true, "jam")))
   }
+
+  test("currentProblems lists the open problems and drops a cleared one") {
+    val s = new PrinterAlertState
+    assert(s.currentProblems.isEmpty)
+    s.isNews(alert(open = true, "paper out"))
+    s.isNews(alert(open = true, "jam", printer = "p2", agent = "b"))
+    assert(s.currentProblems.toSet == Set(("a", "p1", "paper out"), ("b", "p2", "jam")))
+    s.isNews(alert(open = true, "door open"))
+    assert(s.currentProblems.toSet == Set(("a", "p1", "door open"), ("b", "p2", "jam")))
+    s.isNews(alert(open = false))
+    assert(s.currentProblems == Seq(("b", "p2", "jam")))
+    s.isNews(alert(open = false, printer = "p2", agent = "b"))
+    assert(s.currentProblems.isEmpty)
+  }
 }

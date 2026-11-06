@@ -153,6 +153,9 @@ class PrintingModel(dbConfig: DatabaseConfig[JdbcProfile], statusActorModel: Sta
 
   private val printerAlerts = new PrinterAlertState
 
+  /** The printer problems announced and not yet cleared, as (agent, printer, condition). */
+  def currentPrinterProblems: Seq[(String, String, String)] = printerAlerts.currentProblems
+
   /** Tells palevo that a printer cannot print, or can again. A repeated alert is dropped. */
   def processPrinterAlert(a: PrinterAlert): Future[Unit] =
     if (!printerAlerts.isNews(a)) Future.successful(())

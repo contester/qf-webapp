@@ -5,7 +5,7 @@ import akka.stream.Materializer
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuite
-import palevo.query.{NoSource, QueryConfig}
+import palevo.query.{FakeSource, QueryConfig}
 import play.api.Configuration
 import play.api.http.{DefaultFileMimeTypes, FileMimeTypesConfiguration}
 import play.api.i18n.{DefaultLangs, DefaultMessagesApi}
@@ -38,7 +38,7 @@ class PalevoQueryAuthSpec extends AnyFunSuite with BeforeAndAfterAll {
   private val token = "s3cret-token"
 
   private def controller(token: Option[String]) =
-    new PalevoQuery(cc, QueryConfig(token, (1 to 10).toSet), NoSource)
+    new PalevoQuery(cc, QueryConfig(token, (1 to 10).toSet), new FakeSource())
 
   private def get(path: String, headers: (String, String)*): Request[AnyContent] =
     RequestFactory.plain.createRequest(RemoteConnection("127.0.0.1", secure = false, None), "GET",
