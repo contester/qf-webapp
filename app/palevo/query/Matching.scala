@@ -9,7 +9,7 @@ object Matching {
 
   // Latin look-alikes folded to Cyrillic; applied to both queries and stored names.
   private val fold: Map[Int, Int] =
-    "acepxykmhtb".zip("асерхукмнтв").map { case (l, c) => l.toInt -> c.toInt }.toMap + ('ё'.toInt -> 'е'.toInt)
+    "aceopxykmhtb".zip("асеорхукмнтв").map { case (l, c) => l.toInt -> c.toInt }.toMap + ('ё'.toInt -> 'е'.toInt)
 
   def normalize(s: String): String = {
     val sb = new java.lang.StringBuilder

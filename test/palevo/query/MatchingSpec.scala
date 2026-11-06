@@ -30,6 +30,18 @@ class MatchingSpec extends AnyFunSuite {
     assert(Matching.teamScore("zzz", chees).isEmpty)
   }
 
+  test("latin o folds to cyrillic o") {
+    val t = TeamNames("МГУ", "x", 1, "Мoсква: Иванов")
+    assert(Matching.normalize("o") == "о")
+    assert(Matching.teamScore("Мoсква", t).isDefined) // Latin o in query
+    assert(Matching.teamScore("Москва", t) == Matching.teamScore("Мoсква", t))
+    assert(Matching.teamScore("Москва", TeamNames("МГУ", "x", 1, "Q: Мoсква")).isDefined)
+    assert(Matching.computerMatches("лo46", "ло46"))
+    assert(Matching.computerMatches("ло46", "лo46"))
+    assert(Matching.teamScore("cheesedom", chees).isDefined)
+    assert(Matching.teamScore("Sibiryakov", chees).isDefined)
+  }
+
   test("scores: exact > prefix > substring") {
     assert(Matching.teamScore("левина", sgu1) == Some(3))
     assert(Matching.teamScore("лев", sgu1) == Some(2))
