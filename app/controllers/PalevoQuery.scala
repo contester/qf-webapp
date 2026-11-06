@@ -311,8 +311,6 @@ class PalevoQuery(cc: ControllerComponents, cfg: QueryConfig, source: QuerySourc
     "id" -> j.id, "team" -> j.team, "computer" -> j.computer, "area" -> j.area, "printed" -> j.printed,
     "error" -> j.error, "pages" -> j.pages, "arrived" -> QueryJson.iso(j.arrived))
 
-  // Temporary: removed once the real endpoints exist.
-  def ping = authed { _ => Future.successful(Ok(Json.obj("ok" -> true))) }
 }
 
 object PalevoQuery {

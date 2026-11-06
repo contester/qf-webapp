@@ -3,7 +3,9 @@ package controllers
 import akka.actor.ActorSystem
 import akka.stream.Materializer
 import com.typesafe.config.ConfigFactory
+import org.joda.time.DateTime
 import org.scalatest.BeforeAndAfterAll
+import org.stingray.contester.dbmodel.Contest
 import org.scalatest.funsuite.AnyFunSuite
 import palevo.query.{FakeSource, QueryConfig}
 import play.api.Configuration
@@ -38,7 +40,8 @@ class PalevoQueryAuthSpec extends AnyFunSuite with BeforeAndAfterAll {
   private val token = "s3cret-token"
 
   private def controller(token: Option[String]) =
-    new PalevoQuery(cc, QueryConfig(token, (1 to 10).toSet), new FakeSource())
+    new PalevoQuery(cc, QueryConfig(token, (1 to 10).toSet), new FakeSource(contestList = Seq(Contest(1, "Contest 1", now.minusHours(2), now.minusHours(1), now.plusHours(1),
+      now.plusHours(2), None, "en", schoolMode = false))))
 
   private def get(path: String, headers: (String, String)*): Request[AnyContent] =
     RequestFactory.plain.createRequest(RemoteConnection("127.0.0.1", secure = false, None), "GET",
@@ -46,8 +49,16 @@ class PalevoQueryAuthSpec extends AnyFunSuite with BeforeAndAfterAll {
 
   private def await[T](f: Future[T]): T = Await.result(f, 5.seconds)
 
-  private def ping(c: PalevoQuery, headers: (String, String)*): Result =
-    await(c.ping(get("/api/palevo/v1/ping", headers: _*)))
+  private val now = DateTime.now
+
+  private def ping(c: PalevoQuery, headers: (String, String)*): Result = {
+    val path = "/api/palevo/v1/contest"
+    val q = Map("audience" -> Seq("public"), "contests" -> Seq("*"))
+    val r = RequestFactory.plain.createRequest(RemoteConnection("127.0.0.1", secure = false, None), "GET",
+      RequestTarget(path + "?audience=public&contests=*", path, q), "HTTP/1.1", Headers(headers: _*), TypedMap.empty,
+      AnyContentAsEmpty)
+    await(c.contest(r))
+  }
 
   private def body(r: Result): String = await(r.body.consumeData).utf8String
 
@@ -77,11 +88,11 @@ class PalevoQueryAuthSpec extends AnyFunSuite with BeforeAndAfterAll {
     assert(ping(c, "Authorization" -> token).header.status == 401)
   }
 
-  test("token set, correct bearer: 200 {\"ok\":true}") {
+  test("token set, correct bearer: 200 JSON") {
     val r = ping(controller(Some(token)), "Authorization" -> s"Bearer $token")
     assert(r.header.status == 200)
     assert(r.body.contentType.exists(_.startsWith("application/json")))
-    assert(Json.parse(body(r)) == Json.obj("ok" -> true))
+    assert((Json.parse(body(r)) \ "contests").as[Seq[play.api.libs.json.JsObject]].nonEmpty)
   }
 
   test("401 carries a JSON error and no token") {

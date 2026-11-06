@@ -8,10 +8,17 @@ duty IRC channel. Add to the application configuration:
 
     palevo.url = "http://127.0.0.1:8081/events"
     palevo.token = "..."   # the same value as PALEVO_TOKEN in palevo's /etc/sysconfig/palevo
+    palevo.query.token = "..."   # bearer token of the read-only query API; the value of PALEVO_QF_TOKEN in palevo
+    palevo.query.contests = [1,2,3,4,5,6,7,8,9,10]   # contests the query API may ever serve (default 1..10)
 
 If either key is missing the feature is off. Delivery is best effort (3 attempts, in order, one event at a
 time) and never affects contest operation. Scoreboard events are computed from the pre-freeze monitor only,
 so nothing is announced about the scoreboard after the freeze.
+
+`palevo.query.token` switches on the read-only query API under `/api/palevo/v1` that palevo's chat bot uses; when
+it is unset or blank every route answers 404. `palevo.query.contests` is the hard upper bound of the contests the
+API can ever show, whatever the request asks for (default 1 to 10, so contest 11 is never served). The contract
+is in [doc/palevo-query-api.md](doc/palevo-query-api.md).
 
 ## Live monitor
 

@@ -40,7 +40,6 @@ GET /public/monitor/:contestId controllers.PublicMonitor.page(contestId: Int)
 GET /public/monitor/:contestId/events controllers.PublicMonitor.events(contestId: Int)
 
 # Read-only query API for palevo (bearer token; 404 when palevo.query.token is unset)
-GET /api/palevo/v1/ping controllers.PalevoQuery.ping
 GET /api/palevo/v1/contest controllers.PalevoQuery.contest
 GET /api/palevo/v1/standings controllers.PalevoQuery.standings
 GET /api/palevo/v1/team controllers.PalevoQuery.team
