@@ -250,6 +250,67 @@ class PalevoQuery(cc: ControllerComponents, cfg: QueryConfig, source: QuerySourc
       Map.empty[String, Int]
     }
 
+  private val MaxComputers = 10
+  private val PrintJobLimit = 10
+
+  private val JuryOnly = Future.successful(Forbidden(QueryJson.error("jury only")))
+
+  /** GET /computers?q=…|area=…: jury only and global (no contest scope, `contests` optional but validated). */
+  def computers = authed { request =>
+    val q = request.getQueryString("q")
+    val area = request.getQueryString("area")
+    Scope.parse(request.getQueryString("audience"), request.getQueryString("contests").orElse(Some("*"))) match {
+      case Left(e) => badRequest(e)
+      case Right(scope) if scope.audience != palevo.query.Jury => JuryOnly
+      case Right(_) if q.isEmpty && area.isEmpty => badRequest("q or area is required")
+      case Right(_) =>
+        guarded(request.path) {
+          source.computers().map { all =>
+            val found = (q, area) match {
+              case (Some(text), _) => all.filter(c => Matching.computerMatches(text, c.name))
+              case (None, Some(a)) =>
+                val want = Matching.normalize(a)
+                all.filter(c => want.nonEmpty && Matching.normalize(c.area) == want)
+              case _ => Nil
+            }
+            val shown = found.sortBy(_.name).take(MaxComputers)
+            val ambiguous = shown.size > 1 && shown.map(_.area).distinct.size > 1
+            Ok(Json.obj("as_of" -> QueryJson.iso(now()),
+              "computers" -> shown.map(c => Json.obj("name" -> c.name, "area" -> c.area, "printer" -> c.printer)),
+              "ambiguous" -> ambiguous))
+          }
+        }
+    }
+  }
+
+  /** GET /printing?team=…&area=…: jury only; recent print jobs of the selected contests and global printer problems. */
+  def printing = authed { request =>
+    val teamParam = request.getQueryString("team").map(s => Try(s.trim.toInt).toOption)
+    val area = request.getQueryString("area").map(_.trim).filter(_.nonEmpty)
+    // Audience first, so that the public gets 403 before any other check or data access.
+    Scope.parse(request.getQueryString("audience"), request.getQueryString("contests")) match {
+      case Right(scope) if scope.audience != palevo.query.Jury => JuryOnly
+      case _ if teamParam.contains(None) => badRequest("team must be an integer")
+      case _ =>
+        selecting(request) { sel =>
+          Future.traverse(sel.contests) { case (c, base) =>
+            source.printJobs(Seq(c.id), teamParam.flatten, area, PrintJobLimit).map { js =>
+              base ++ Json.obj("print_jobs" -> js.map(printJob))
+            }
+          }.map { objs =>
+            val printers = source.printerProblems().map(p =>
+              Json.obj("agent" -> p.agent, "printer" -> p.printer, "condition" -> p.condition))
+            val body = Json.obj("as_of" -> QueryJson.iso(sel.now), "contests" -> objs, "printers" -> printers)
+            Ok(if (objs.isEmpty) body + ("note" -> Json.toJson("no contest")) else body)
+          }
+        }
+    }
+  }
+
+  private def printJob(j: palevo.query.PrintJobRow): JsObject = Json.obj(
+    "id" -> j.id, "team" -> j.team, "computer" -> j.computer, "area" -> j.area, "printed" -> j.printed,
+    "error" -> j.error, "pages" -> j.pages, "arrived" -> QueryJson.iso(j.arrived))
+
   // Temporary: removed once the real endpoints exist.
   def ping = authed { _ => Future.successful(Ok(Json.obj("ok" -> true))) }
 }
