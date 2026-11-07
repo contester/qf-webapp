@@ -46,7 +46,7 @@ object ContestWrites {
   }
 }
 
-case class SelectedContest(contest: Contest, contests: Seq[(Int, String)])
+case class SelectedContest(contest: Contest, contests: Seq[(Int, String)], canModify: Boolean = true)
 
 class ProblemClient(problemStateActor: ActorRef) {
   import akka.pattern.ask

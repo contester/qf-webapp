@@ -112,7 +112,8 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   private def getSelectedContests(contestId: Int, account: Admin)(implicit ec: ExecutionContext): Future[SelectedContest] =
     getAllContests.map(_.filter(c => account.canSpectate(c.id)).sortBy(_.id)).map { contests =>
       val cmap = contests.map(x => x.id -> x).toMap
-      SelectedContest(cmap.getOrElse(contestId, contests.head), cmap.mapValues(_.name).toSeq)
+      val selected = cmap.getOrElse(contestId, contests.head)
+      SelectedContest(selected, cmap.mapValues(_.name).toSeq, account.canModify(selected.id))
     }
 
   private def getAllWaiterTasks(perm: WaiterPermissions)(implicit ec: ExecutionContext) =
