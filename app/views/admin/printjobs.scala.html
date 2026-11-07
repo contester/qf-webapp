@@ -68,8 +68,8 @@
                 <td>@s.computerName</td>
                 <td>@s.team.teamFullName</td>
                 <td>@s.filename</td>
-                <td>@s.arrived</td>
-                <td>@s.printed</td>
+                <td>@utils.ShortTime.format(s.arrived)</td>
+                <td>@s.printed.map(utils.ShortTime.format)</td>
                 <td>@s.pages</td>
                 <td>@s.error</td>
             </tr>
@@ -84,7 +84,7 @@
                         <tr @if(a.status == "printed"){ class="success" }else if(a.status == "failed"){ class="danger" }>
                             <td>@a.id</td>
                             <td>@a.kind</td>
-                            <td>@a.created</td>
+                            <td>@utils.ShortTime.format(a.created)</td>
                             <td>@a.requestedBy.getOrElse("")</td>
                             <td>@a.printer</td>
                             <td>@a.status</td>
