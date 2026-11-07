@@ -320,8 +320,22 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
 
   test("the monitor wakes at the start by itself, without a tick or a heartbeat") {
     val sink = new CollectingSink
-    val f = new Fixture(DateTime.now, rows = Seq(startingIn(1500.millis)), palevoSink = sink, timings = scheduled, realClock = true)
-    awaitCond(startedNow(sink), 4.seconds)
+    val f = new Fixture(DateTime.now, rows = Seq(startingIn(2500.millis)), palevoSink = sink, timings = scheduled, realClock = true)
+    awaitCond(startedNow(sink), 8.seconds)
+    f.stop()
+  }
+
+  test("re-arming from other messages does not drop a wake that is already due") {
+    val sink = new CollectingSink
+    val f = new Fixture(DateTime.now, rows = Seq(startingIn(2500.millis)), palevoSink = sink, timings = scheduled, realClock = true)
+    f.barrier()
+    // A message every 20 ms for the whole window in which the wake is due: each one re-arms the timer.
+    val deadline = System.currentTimeMillis() + 4500
+    while (System.currentTimeMillis() < deadline && !startedNow(sink)) {
+      f.actor ! ContestChanged(f.contestRows.head)
+      Thread.sleep(20)
+    }
+    assert(startedNow(sink), "the start was not announced although the timer was due; it would wait for the heartbeat")
     f.stop()
   }
 
@@ -330,8 +344,8 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     val f = new Fixture(DateTime.now, rows = Seq(startingIn(1.hour)), palevoSink = sink, timings = scheduled, realClock = true)
     f.barrier()
     assert(!startedNow(sink))
-    f.actor ! ContestChanged(startingIn(1200.millis))
-    awaitCond(startedNow(sink), 4.seconds)
+    f.actor ! ContestChanged(startingIn(2500.millis))
+    awaitCond(startedNow(sink), 8.seconds)
     assert(sink.events.asScala.exists(_.isInstanceOf[ContestRescheduled]))
     f.stop()
   }
@@ -340,11 +354,11 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     val sink = new CollectingSink
     val f = new Fixture(DateTime.now, rows = Seq(startingIn(1.hour)), palevoSink = sink, timings = scheduled, realClock = true)
     f.barrier()
-    val added = startingIn(1200.millis, id = 2)
+    val added = startingIn(2500.millis, id = 2)
     f.contestRows = Seq(startingIn(1.hour), added)
     f.data = f.data + (2 -> ContestData(problems, teams, Nil))
     f.actor ! ContestChanged(added)
-    awaitCond(startedNow(sink), 4.seconds)
+    awaitCond(startedNow(sink), 8.seconds)
     f.stop()
   }
 

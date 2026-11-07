@@ -119,6 +119,7 @@ class LiveContest(initial: Contest, problems: Seq[String], teams: Seq[Team], sub
     LiveBoard.build(problems, teamList, teamList.map(t => t.id -> teamCells(t.id, kind, now)).toMap)
 
   // True when now and the last seen instant lie on different sides of start, freeze or expose.
+  // The live monitor wakes at these instants (ContestTimeTracker.nextDeadline lists them): keep the two in step.
   private[this] def crossed(now: DateTime): Boolean =
     Seq(current.startTime, current.freezeTime, current.exposeTime).exists(t => lastNow.isBefore(t) != now.isBefore(t))
 

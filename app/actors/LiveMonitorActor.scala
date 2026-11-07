@@ -114,10 +114,13 @@ object LiveMonitorActor {
                 clock: LiveClock, timings: LiveTimings, countdown: CountdownConfig = CountdownConfig.Default): Props =
     Props(new LiveMonitorActor(cfg, staticLocation, contests, loader, renderStatic, palevo, clock, timings, countdown))
 
-  /** How long to sleep until `deadline` (the earliest moment something can happen): a margin past it so the clock has
-    * reached it, at least 50 ms; the heartbeat when there is no deadline. */
+  /**
+    * How long to sleep until `deadline` (the earliest moment something can happen): a margin past it so the clock has
+    * reached it, at least 50 ms, and never longer than the heartbeat (the wake is re-armed from there; Akka's scheduler
+    * refuses delays of about 248 days and more). The heartbeat when there is no deadline.
+    */
   def wakeDelay(deadline: Option[DateTime], now: DateTime, heartbeat: FiniteDuration): FiniteDuration =
-    deadline.fold(heartbeat)(d => (d.getMillis - now.getMillis + 50).max(50L).millis)
+    deadline.fold(heartbeat)(d => (d.getMillis - now.getMillis + 50).max(50L).millis.min(heartbeat))
 
   private case object Start
   private case object WakeKey
@@ -200,6 +203,8 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
   // Submit id -> monotonic millis of its rejudge request, until its finish arrives or the entry expires.
   private val rejudging = mutable.Map.empty[Int, Long]
   private val standings = new StandingsAnnouncer
+  // The deadline the pending wake timer was armed for, if any.
+  private var armedFor: Option[DateTime] = None
   // Phase, countdown and reschedule events for palevo; when the live monitor is on, only this actor produces them.
   private val timeTracker = new ContestTimeTracker(countdown)
 
@@ -316,6 +321,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
           case Failure(e) => failed(cid, st, e)
         }
       }
+      armedFor = None // the wake that brought us here, or the heartbeat: the next one is chosen afresh
       rearm(now)
 
     case StaticCheck => writeStatic()
@@ -596,14 +602,21 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
 
   /**
     * Sleeps until the earliest moment something about the contests' times can happen: a phase, a board boundary, a
-    * countdown threshold. Called with the instant the last check used, so a deadline that passed during the check
-    * is not skipped. A reschedule or a new contest moves the deadlines, hence the calls after those.
+    * countdown threshold after `after`. A reschedule or a new contest moves the deadlines, hence the calls after those.
+    *
+    * A pending wake that is for an earlier or the same deadline is left alone: replacing a timer drops its message
+    * even when it is already due, and a stream of re-arms would postpone it for ever. At worst the pending wake is
+    * for a deadline that no longer exists; it fires, finds nothing, and the next check arms the right one.
     */
-  private def rearm(now: DateTime): Unit =
+  private def rearm(after: DateTime): Unit =
     if (timings.scheduled) {
-      val next = contests.values.flatMap(st => ContestTimeTracker.nextDeadline(st.live.contest, now, countdown))
+      val next = contests.values.flatMap(st => ContestTimeTracker.nextDeadline(st.live.contest, after, countdown))
         .reduceOption((a, b) => if (a.isBefore(b)) a else b)
-      timers.startSingleTimer(WakeKey, Tick, wakeDelay(next, now, timings.heartbeat))
+      val pendingIsEnough = armedFor.exists(a => next.forall(n => !a.isAfter(n)))
+      if (!pendingIsEnough) {
+        timers.startSingleTimer(WakeKey, Tick, wakeDelay(next, clock.now(), timings.heartbeat))
+        armedFor = next
+      }
     }
 
   /** Tells palevo what the contest's times did: a phase reached, a countdown threshold, a reschedule. Never throws. */
