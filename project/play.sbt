@@ -11,3 +11,6 @@ addSbtPlugin("com.typesafe.play" % "sbt-plugin" % "2.8.22")
 // addSbtPlugin("com.typesafe.sbt" % "sbt-rjs" % "1.0.9")
 
 // addSbtPlugin("com.typesafe.sbt" % "sbt-coffeescript" % "1.0.0")
+
+// Fingerprints the assets on stage/dist, so Assets.versioned gives URLs that change with the content.
+addSbtPlugin("com.typesafe.sbt" % "sbt-digest" % "1.1.4")

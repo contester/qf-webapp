@@ -24,6 +24,9 @@ scalacOptions ++= Seq(
 
 lazy val root = (project in file(".")).enablePlugins(PlayScala)
 
+// Digest the assets on stage/dist (Assets.versioned then serves fingerprinted, cacheable URLs).
+pipelineStages := Seq(digest)
+
 resolvers ++= Seq(
   Resolver.mavenLocal,
   Resolver.jcenterRepo,
