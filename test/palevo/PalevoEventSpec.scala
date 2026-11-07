@@ -21,7 +21,7 @@ class PalevoEventSpec extends AnyFunSuite {
 
   test("ts is rendered in UTC whatever the zone of the DateTime") {
     val local = ts.withZone(DateTimeZone.forOffsetHours(3))
-    assert((PalevoEvent.toJson(ContestStarted(c, local)) \ "ts").as[String] == "2026-11-01T12:34:56Z")
+    assert((PalevoEvent.toJson(ContestStarting(c, local)) \ "ts").as[String] == "2026-11-01T12:34:56Z")
   }
 
   test("task_created has no contest and carries rooms") {
@@ -69,14 +69,40 @@ class PalevoEventSpec extends AnyFunSuite {
 
   test("type names and ids of the remaining events") {
     def tp(e: PalevoEvent) = ((PalevoEvent.toJson(e) \ "type").as[String], (PalevoEvent.toJson(e) \ "id").as[String])
-    assert(tp(ContestStarted(c, ts)) == ("contest_started", "qf-contest_started-12"))
-    assert(tp(ContestFrozen(c, ts)) == ("contest_frozen", "qf-contest_frozen-12"))
-    assert(tp(ContestFinished(c, ts)) == ("contest_finished", "qf-contest_finished-12"))
+    assert(tp(ContestStarting(c, ts)) == ("contest_starting", "qf-contest_starting-12"))
+    assert(tp(ContestFreezing(c, ts)) == ("contest_freezing", "qf-contest_freezing-12"))
+    assert(tp(ContestEnding(c, ts)) == ("contest_ending", "qf-contest_ending-12"))
     assert(tp(FirstSolveContest(c, ts, team, "B", 60)) == ("first_solve_contest", "qf-first-contest-12"))
     assert(tp(NewLeader(c, ts, team, 3)) == ("new_leader", "qf-leader-12-7-3"))
-    assert((PalevoEvent.toJson(ContestStarted(c, ts)) \ "data").get == Json.obj())
+    assert((PalevoEvent.toJson(ContestStarting(c, ts)) \ "data").get == Json.obj())
     assert((PalevoEvent.toJson(NewLeader(c, ts, team, 3)) \ "data").get ==
       Json.obj("team" -> Json.obj("id" -> 7, "name" -> "Name"), "solved" -> 3))
+  }
+
+  test("phase events ahead carry in_minutes and at, and an id with both") {
+    val at = new DateTime(2026, 11, 1, 15, 30, DateTimeZone.UTC)
+    val e = ContestStarting(c, ts, inMinutes = 10, at = Some(at))
+    val j = PalevoEvent.toJson(e)
+    assert((j \ "type").as[String] == "contest_starting")
+    assert((j \ "id").as[String] == s"qf-contest_starting-12-in10-${at.getMillis}")
+    assert((j \ "data").get == Json.obj("in_minutes" -> 10, "at" -> "2026-11-01T15:30:00Z"))
+    assert((PalevoEvent.toJson(ContestEnding(c, ts, 5, Some(at))) \ "id").as[String] == s"qf-contest_ending-12-in5-${at.getMillis}")
+    assert((PalevoEvent.toJson(ContestFreezing(c, ts, 1, Some(at))) \ "data" \ "in_minutes").as[Int] == 1)
+  }
+
+  test("a phase event ahead without a target time is a programming error") {
+    assertThrows[IllegalArgumentException](ContestStarting(c, ts, inMinutes = 10))
+  }
+
+  test("contest_rescheduled lists changes with old and new in UTC") {
+    val old = new DateTime(2026, 11, 1, 14, 0, DateTimeZone.UTC)
+    val nw = new DateTime(2026, 11, 1, 15, 30, DateTimeZone.forOffsetHours(3)) // 12:30 UTC
+    val e = ContestRescheduled(c, ts, Seq(TimeChange("start", old, nw)))
+    val j = PalevoEvent.toJson(e)
+    assert((j \ "type").as[String] == "contest_rescheduled")
+    assert((j \ "id").as[String] == s"qf-contest_rescheduled-12-${ts.getMillis}")
+    assert((j \ "data").get == Json.parse(
+      """{"changes":[{"what":"start","old":"2026-11-01T14:00:00Z","new":"2026-11-01T12:30:00Z"}]}"""))
   }
 
   test("Cyrillic text survives UTF-8 serialization") {
@@ -101,7 +127,7 @@ class PalevoEventSpec extends AnyFunSuite {
   }
 
   test("public events carry no audience key") {
-    val events = Seq(ContestStarted(c, ts), FirstSolveProblem(c, ts, team, "B", 1), FirstSolveContest(c, ts, team, "B", 1),
+    val events = Seq(ContestStarting(c, ts), FirstSolveProblem(c, ts, team, "B", 1), FirstSolveContest(c, ts, team, "B", 1),
       NewLeader(c, ts, team, 1), ClarificationPosted(1, c, ts, updated = false, None, "t"))
     events.foreach { e =>
       assert((PalevoEvent.toJson(e) \ "audience").toOption.isEmpty, e.eventType)

@@ -12,7 +12,7 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.concurrent.duration._
 
 class PalevoSinkSpec extends AnyFunSuite {
-  private val event = ContestStarted(PContest(1, "C"), new DateTime(2026, 11, 1, 12, 0))
+  private val event = ContestStarting(PContest(1, "C"), new DateTime(2026, 11, 1, 12, 0))
 
   // Runs everything on the calling thread, so tests are deterministic.
   private val sameThread = new ExecutionContext {
@@ -90,7 +90,7 @@ class PalevoSinkSpec extends AnyFunSuite {
     NoopPalevoSink.send(event)
   }
 
-  private def ev(n: Int) = ContestStarted(PContest(n, s"C$n"), event.ts)
+  private def ev(n: Int) = ContestStarting(PContest(n, s"C$n"), event.ts)
 
   private def idOf(j: JsValue) = (j \ "id").as[String]
 

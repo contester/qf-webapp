@@ -6,7 +6,7 @@ import org.stingray.contester.dbmodel.Contest
 import scala.collection.mutable
 
 /**
-  * Turns the passage of time into contest_started / contest_frozen / contest_finished events. The first
+  * Turns the passage of time into contest_starting / contest_freezing / contest_ending events. The first
   * observation of a contest only records its phase, so restarting the application mid-contest does not
   * re-announce anything. Not thread-safe: call it from one actor.
   */
@@ -32,9 +32,9 @@ final class ContestPhaseTracker {
       case Some(prev) if phase > prev =>
         seen.put(c.id, phase)
         ((prev + 1) to phase).flatMap {
-          case Started => Some(ContestStarted(pc, now))
-          case Frozen if freezeEnabled(c) => Some(ContestFrozen(pc, now))
-          case Finished => Some(ContestFinished(pc, now))
+          case Started => Some(ContestStarting(pc, now))
+          case Frozen if freezeEnabled(c) => Some(ContestFreezing(pc, now))
+          case Finished => Some(ContestEnding(pc, now))
           case _ => None
         }
       case Some(_) => Nil

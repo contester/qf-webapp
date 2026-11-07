@@ -38,6 +38,9 @@ object PalevoEvent {
     case PublicAudience => Json.obj()
   })
 
+  /** The wire format of an instant: UTC, no millis. */
+  private[palevo] def iso(d: DateTime): String = tsFormat.print(d.withZone(DateTimeZone.UTC))
+
   private[palevo] def team(t: PTeam): JsValue = Json.toJson(t)
 
   /** Jury ids get a prefix so they can never collide with the public id of the same fact. */
@@ -74,22 +77,53 @@ final case class TaskCreated(taskId: Long, ts: DateTime, text: String, rooms: Se
   def data = Json.obj("text" -> text, "rooms" -> rooms)
 }
 
-final case class ContestStarted(contest: PContest, ts: DateTime) extends PalevoEvent {
-  def id = s"qf-contest_started-${contest.id}"
-  def eventType = "contest_started"
-  def data = Json.obj()
+/** Shared by the three phase events: `inMinutes == 0` means "now"; otherwise the event is about the moment `at`. */
+private[palevo] object PhaseEvent {
+  def id(eventType: String, contest: PContest, inMinutes: Int, at: Option[DateTime]): String =
+    if (inMinutes == 0) s"qf-$eventType-${contest.id}"
+    else s"qf-$eventType-${contest.id}-in$inMinutes-${at.get.getMillis}"
+
+  def data(inMinutes: Int, at: Option[DateTime]): JsObject =
+    if (inMinutes == 0) Json.obj()
+    else Json.obj("in_minutes" -> inMinutes, "at" -> PalevoEvent.iso(at.get))
+
+  def check(inMinutes: Int, at: Option[DateTime]): Unit =
+    require(inMinutes >= 0 && (inMinutes == 0 || at.isDefined), s"phase event in $inMinutes minutes needs a target time")
 }
 
-final case class ContestFrozen(contest: PContest, ts: DateTime) extends PalevoEvent {
-  def id = s"qf-contest_frozen-${contest.id}"
-  def eventType = "contest_frozen"
-  def data = Json.obj()
+final case class ContestStarting(contest: PContest, ts: DateTime, inMinutes: Int = 0,
+                                 at: Option[DateTime] = None) extends PalevoEvent {
+  PhaseEvent.check(inMinutes, at)
+  def id = PhaseEvent.id(eventType, contest, inMinutes, at)
+  def eventType = "contest_starting"
+  def data = PhaseEvent.data(inMinutes, at)
 }
 
-final case class ContestFinished(contest: PContest, ts: DateTime) extends PalevoEvent {
-  def id = s"qf-contest_finished-${contest.id}"
-  def eventType = "contest_finished"
-  def data = Json.obj()
+final case class ContestFreezing(contest: PContest, ts: DateTime, inMinutes: Int = 0,
+                                 at: Option[DateTime] = None) extends PalevoEvent {
+  PhaseEvent.check(inMinutes, at)
+  def id = PhaseEvent.id(eventType, contest, inMinutes, at)
+  def eventType = "contest_freezing"
+  def data = PhaseEvent.data(inMinutes, at)
+}
+
+final case class ContestEnding(contest: PContest, ts: DateTime, inMinutes: Int = 0,
+                               at: Option[DateTime] = None) extends PalevoEvent {
+  PhaseEvent.check(inMinutes, at)
+  def id = PhaseEvent.id(eventType, contest, inMinutes, at)
+  def eventType = "contest_ending"
+  def data = PhaseEvent.data(inMinutes, at)
+}
+
+/** One time of a contest that changed: `what` is "start", "freeze" or "end". */
+final case class TimeChange(what: String, from: DateTime, to: DateTime)
+
+/** The schedule of a contest was edited; one event per edit, listing every changed time. */
+final case class ContestRescheduled(contest: PContest, ts: DateTime, changes: Seq[TimeChange]) extends PalevoEvent {
+  def id = s"qf-contest_rescheduled-${contest.id}-${ts.getMillis}"
+  def eventType = "contest_rescheduled"
+  def data = Json.obj("changes" -> changes.map(c =>
+    Json.obj("what" -> c.what, "old" -> PalevoEvent.iso(c.from), "new" -> PalevoEvent.iso(c.to))))
 }
 
 final case class FirstSolveContest(contest: PContest, ts: DateTime, team: PTeam, problem: String,
