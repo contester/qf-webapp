@@ -88,6 +88,8 @@ function formatSeconds(s) {
         var now = Date.now();
         var frozen = c.freezeTime < c.endTime && now >= c.freezeTime && now < c.exposeTime;
         if (frozen) $("#contest-frozen").show(); else $("#contest-frozen").hide();
+        // The public page also dresses the board for the freeze (frozenstyle.scala.html).
+        if (countdownState.frostTheme) document.documentElement.classList.toggle('frozen-board', frozen);
         if (now >= c.exposeTime && countdownState.frozenInterval) {
             clearInterval(countdownState.frozenInterval);
             countdownState.frozenInterval = null;
@@ -151,6 +153,7 @@ function formatSeconds(s) {
 // or the reload that team pages do when the contest starts (the monitor stream brings the board by itself).
 function publicContestTimer(startTimeDelta, endTimeDelta, freezeTimeDelta, exposeTimeDelta) {
     countdownState.quiet = true;
+    countdownState.frostTheme = true;
     updateContestTimes({name: '', startTimeDelta: startTimeDelta, endTimeDelta: endTimeDelta,
         freezeTimeDelta: freezeTimeDelta, exposeTimeDelta: exposeTimeDelta}, '', true);
 }

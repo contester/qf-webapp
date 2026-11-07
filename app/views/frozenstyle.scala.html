@@ -1,0 +1,29 @@
+@* Look of a frozen public scoreboard: a slight blue tint and low-key snow, pure CSS. Active while <html> has the
+   frozen-board class (main.js updateFrozen on the live page, the server on the static file). *@
+<style>
+html.frozen-board { background: #e4eefa; }
+html.frozen-board body { background: transparent; }
+html.frozen-board .well { background: rgba(255, 255, 255, 0.55); }
+html.frozen-board body::before {
+    content: "";
+    position: fixed;
+    top: 0; right: 0; bottom: 0; left: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0.55;
+    background-image:
+        radial-gradient(circle at 20% 30%, #fff 1.5px, transparent 2.5px),
+        radial-gradient(circle at 70% 75%, #fff 1px, transparent 2px),
+        radial-gradient(circle at 40% 60%, #fff 2px, transparent 3px),
+        radial-gradient(circle at 85% 15%, #fff 1px, transparent 2px);
+    background-size: 137px 137px, 211px 211px, 293px 293px, 359px 359px;
+    animation: frozen-snow 60s linear infinite;
+}
+@@keyframes frozen-snow {
+    from { background-position: 0 0, 0 0, 0 0, 0 0; }
+    to { background-position: 0 685px, 0 844px, 0 879px, 0 1077px; }
+}
+@@media (prefers-reduced-motion: reduce) {
+    html.frozen-board body::before { animation: none; }
+}
+</style>

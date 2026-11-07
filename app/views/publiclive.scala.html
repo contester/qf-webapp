@@ -8,7 +8,7 @@
     $(function() { publicContestTimer(@{contest.startTime.getMillis - System.currentTimeMillis}, @{contest.endTime.getMillis - System.currentTimeMillis}, @{contest.freezeTime.getMillis - System.currentTimeMillis}, @{contest.exposeTime.getMillis - System.currentTimeMillis}); });
 </script>
 }
-@base(contest.name, scripts = pageScripts) {
+@base(contest.name, styles = frozenstyle(), scripts = pageScripts) {
 <div class="container">
 @liveshell(contest, initial, 0)
 </div>
