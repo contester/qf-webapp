@@ -1,12 +1,13 @@
 @* Look of a public scoreboard, pure CSS. Frozen: a very light blue card and table, and low-key snow over the page, while <html> has the
-   frozen-board class. Not started: a gray table, while <html> has the not-started class. Both classes are set
+   frozen-board class. Not started: a gray card and table, while <html> has the not-started class. Both classes are set
    by main.js on the live page and by the server on the static file. *@
 <style>
 html.not-started .container { filter: grayscale(1); }
+html.not-started .well { background-color: #e8e8e8; }
 html.not-started .well .table,
 html.not-started .well .table > thead > tr > th,
 html.not-started .well .table > tbody > tr > th,
-html.not-started .well .table > tbody > tr > td { background-color: #e8e8e8; }
+html.not-started .well .table > tbody > tr > td { background-color: #e8e8e8; border-color: #d3d3d3; }
 html.frozen-board .well { background-color: #f1f7fd; }
 html.frozen-board .well .table,
 html.frozen-board .well .table > thead > tr > th,
