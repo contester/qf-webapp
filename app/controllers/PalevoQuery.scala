@@ -332,7 +332,7 @@ class PalevoQuery(cc: ControllerComponents, cfg: QueryConfig, source: QuerySourc
 }
 
 object PalevoQuery {
-  /** What [[PalevoQuery.selecting]] hands an endpoint: the request time, the parsed scope and the selected contests
+  /** What `PalevoQuery#selecting` hands an endpoint: the request time, the parsed scope and the selected contests
     * with their base JSON objects. */
   case class Selection(now: DateTime, scope: Scope, contests: Seq[(Contest, JsObject)])
 
