@@ -30,6 +30,7 @@ object StatusActor {
   case class NewMultiContestState(cs: Iterable[Contest])
   /** A contest row was changed by the application; it is applied at once instead of at the next Tick. */
   case class ContestChanged(c: Contest)
+  private case class RescanResult(contests: Seq[Contest], startedAt: Long)
   case class Ack(loggedInTeam: LoggedInTeam, msgid: Int)
   case class JoinAdmin(c: Int)
   case class JoinUser(contest: Int, team: Int)
@@ -112,6 +113,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
   private[this] val (contestOut2, contestChannel2) = Concur.broadcast[Contest]()
   private[this] val contestStates = mutable.Map[Int, Contest]()
   private[this] val timeTracker = new ContestTimeTracker(countdown)
+  private[this] val rowGuard = new ContestRowGuard
   private[this] val (msg2Out, msg2Channel) = Concur.broadcast[Message2]()
   private[this] val unacked = mutable.Map[(Int, Int), mutable.Map[Int, Message2]]()
   private[this] val (sub2Out, sub2Chan) = Concur.broadcast[AnnoSubmit]()
@@ -390,13 +392,20 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
       }
     }
 
-    case ContestChanged(c) => self ! NewMultiContestState(Seq(c))
+    case ContestChanged(c) =>
+      rowGuard.changed(c.id)
+      self ! NewMultiContestState(Seq(c))
 
     case Tick => {
+      val started = rowGuard.beginRescan()
       db.run(SlickModel.allContests.result).map { contests =>
-        self ! NewMultiContestState(contests)
+        self ! RescanResult(contests, started)
       }
     }
+
+    // A rescan that read the table before an edit that has been applied since would put the old row back.
+    case RescanResult(contests, started) =>
+      self ! NewMultiContestState(contests.filter(c => rowGuard.believes(c.id, started)))
 
     case JoinAdmin(c: Int) => {
       import ContestWrites._
