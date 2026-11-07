@@ -6,7 +6,7 @@ import akka.stream.scaladsl.{BroadcastHub, Keep, Merge, Sink, Source}
 import akka.stream.{ActorMaterializer, OverflowStrategy}
 import models.ContesterResults.{CustomTestResult, FinishedTesting}
 import models._
-import palevo.{ContestPhaseTracker, EventBuilders, PContest, PalevoSink}
+import palevo.{ContestTimeTracker, EventBuilders, PContest, PalevoSink}
 import org.stingray.contester.dbmodel.{Clarification, Contest, MaxSeen, Message2}
 import play.api.{Logger, Logging}
 import play.api.libs.EventSource
@@ -109,7 +109,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
 
   private[this] val (contestOut2, contestChannel2) = Concur.broadcast[Contest]()
   private[this] val contestStates = mutable.Map[Int, Contest]()
-  private[this] val phaseTracker = new ContestPhaseTracker
+  private[this] val phaseTracker = new ContestTimeTracker
   private[this] val (msg2Out, msg2Channel) = Concur.broadcast[Message2]()
   private[this] val unacked = mutable.Map[(Int, Int), mutable.Map[Int, Message2]]()
   private[this] val (sub2Out, sub2Chan) = Concur.broadcast[AnnoSubmit]()
