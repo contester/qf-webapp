@@ -83,6 +83,8 @@ class PalevoQueryAuthSpec extends AnyFunSuite with BeforeAndAfterAll {
   test("token set, bearer of a different length: 401 without an exception") {
     val c = controller(Some(token))
     assert(callContest(c, "Authorization" -> s"Bearer ${token}x").header.status == 401)
+    assert(callContest(c, "Authorization" -> s"Bearer ${token.dropRight(1)}").header.status == 401)
+    assert(callContest(c, "Authorization" -> s"Bearer ${token * 50}").header.status == 401)
     assert(callContest(c, "Authorization" -> "Bearer ").header.status == 401)
     assert(callContest(c, "Authorization" -> "Bearer").header.status == 401)
     assert(callContest(c, "Authorization" -> token).header.status == 401)

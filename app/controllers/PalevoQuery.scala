@@ -24,7 +24,12 @@ class PalevoQuery(cc: ControllerComponents, cfg: QueryConfig, source: QuerySourc
 
   /** The clock; specs override it. */
   protected def now(): DateTime = DateTime.now
-  private val expected: Option[Array[Byte]] = cfg.token.map(_.getBytes(StandardCharsets.UTF_8))
+  /** SHA-256 of the token: both sides are compared as digests of the same length, so neither the content nor the
+    * length of the configured token leaks through timing. */
+  private def digest(s: String): Array[Byte] =
+    MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8))
+
+  private val expected: Option[Array[Byte]] = cfg.token.map(digest)
 
   private val BearerPrefix = "Bearer "
 
@@ -34,7 +39,7 @@ class PalevoQuery(cc: ControllerComponents, cfg: QueryConfig, source: QuerySourc
       case None => Some(NotFound)
       case Some(want) =>
         val given = request.headers.get(AUTHORIZATION).filter(_.startsWith(BearerPrefix))
-          .map(_.substring(BearerPrefix.length).getBytes(StandardCharsets.UTF_8))
+          .map(h => digest(h.substring(BearerPrefix.length)))
         if (given.exists(MessageDigest.isEqual(_, want))) None
         else Some(Unauthorized(Json.obj("error" -> "unauthorized")))
     }
@@ -97,7 +102,9 @@ class PalevoQuery(cc: ControllerComponents, cfg: QueryConfig, source: QuerySourc
 
   private def isJury(sel: Selection) = sel.scope.audience == palevo.query.Jury
 
-  /** GET /contest: times and, once started, the problem list. */
+  /** GET /contest: times and, once started, the problem list. The list comes from the audience's board; only for
+    * audience all does a missing board fall back to the stored problem names (the public monitor may refuse to
+    * show a contest, and the public must then not learn its problems either). */
   def contest = authed { request =>
     withContests(request) { sel =>
       Future.traverse(sel.contests) { case (c, base) =>
@@ -109,7 +116,11 @@ class PalevoQuery(cc: ControllerComponents, cfg: QueryConfig, source: QuerySourc
           for {
             board <- boardF
             names <- namesF
-          } yield withTimes ++ QueryJson.problems(board.map(_.problems).getOrElse(names.keys.toSeq.sorted), names)
+          } yield board.map(_.problems) match {
+            case Some(ps) => withTimes ++ QueryJson.problems(ps, names)
+            case None if isJury(sel) => withTimes ++ QueryJson.problems(names.keys.toSeq.sorted, names)
+            case None => withTimes ++ Json.obj("note" -> "board unavailable")
+          }
         }
       }
     }
@@ -148,7 +159,7 @@ class PalevoQuery(cc: ControllerComponents, cfg: QueryConfig, source: QuerySourc
             case Some(b) =>
               val found = wanted match {
                 case Some(id) => b.rows.filter(_.team.id == id).take(1)
-                case None => Matching.rankTeams(q.getOrElse(""), b.rows)(r => teamNames(r.team))
+                case None => resolveExact(Matching.rankTeamsScored(q.getOrElse(""), b.rows)(r => teamNames(r.team)))
               }
               val cands = Json.obj("candidates" -> found.map(candidate))
               found match {
@@ -163,8 +174,15 @@ class PalevoQuery(cc: ControllerComponents, cfg: QueryConfig, source: QuerySourc
 
   private def teamNames(t: Team) = TeamNames(t.schoolShortName, t.schoolFullName, t.teamNum, t.teamName)
 
+  /** A single top candidate with an exact match wins alone; otherwise all candidates stay (ambiguous when > 1). */
+  private def resolveExact[A](scored: Seq[(A, Int)]): Seq[A] = scored.filter(_._2 == Matching.Exact) match {
+    case Seq((only, _)) => Seq(only)
+    case _ => scored.map(_._1)
+  }
+
   private def candidate(r: live.LiveRow): JsObject =
-    Json.obj("id" -> r.team.id, "name" -> r.team.teamFullName, "school" -> r.team.schoolFullNameWithNum)
+    Json.obj("id" -> r.team.id, "name" -> r.team.teamFullName, "school_short" -> r.team.schoolShortName,
+      "num" -> r.team.teamNum)
 
   private def cellJson(cell: live.LiveCell): JsObject = cell match {
     case live.LiveCell.Solved(a, secs) => Json.obj("state" -> "ok", "attempts" -> a, "minutes" -> secs / 60)

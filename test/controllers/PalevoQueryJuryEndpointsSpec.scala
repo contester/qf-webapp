@@ -62,6 +62,8 @@ class PalevoQueryJuryEndpointsSpec extends AnyFunSuite with BeforeAndAfterAll {
 
   private class Ctl(source: QuerySource) extends PalevoQuery(cc, QueryConfig(Some(token), Set(1, 2)), source) {
     override protected def now(): DateTime = fixedNow
+    // The 500 test fails on purpose; keep its stack trace out of the test output.
+    override protected val logger: play.api.Logger = new play.api.Logger(org.slf4j.helpers.NOPLogger.NOP_LOGGER)
   }
 
   private def req(path: String, params: (String, String)*): Request[AnyContent] = {
@@ -120,7 +122,6 @@ class PalevoQueryJuryEndpointsSpec extends AnyFunSuite with BeforeAndAfterAll {
 
   test("/computers q=46 finds wi46 and lin46; ambiguous across areas") {
     val r = computers(fake(), jury :+ ("q" -> "46"): _*)
-    println(r.body)
     assert(r.status == 200, r.body)
     assert(names(r) == Seq("lin46", "wi46"))
     assert((r.json \ "ambiguous").as[Boolean])
@@ -175,7 +176,6 @@ class PalevoQueryJuryEndpointsSpec extends AnyFunSuite with BeforeAndAfterAll {
   test("/printing: printer problems and jobs of selected contests only") {
     val spy = new Spy(fake())
     val r = printing(spy, jury: _*)
-    println(r.body)
     assert(r.status == 200, r.body)
     val cs = (r.json \ "contests").as[Seq[JsObject]]
     assert(cs.map(c => (c \ "id").as[Int]) == Seq(1, 2))

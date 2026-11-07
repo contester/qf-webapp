@@ -135,7 +135,69 @@ class PalevoQueryTeamSpec extends AnyFunSuite with BeforeAndAfterAll {
     val c = r.only
     assert(ids(c).toSet == Set(11, 13) && ids(c).size == 2)
     assert((c \ "team").toOption.isEmpty)
-    assert((c \ "candidates").as[Seq[JsObject]].head.keys == Set("id", "name", "school"))
+    val cands = (c \ "candidates").as[Seq[JsObject]]
+    assert(cands.head.keys == Set("id", "name", "school_short", "num"))
+    val first = cands.find(x => (x \ "id").as[Int] == 11).get
+    assert((first \ "name").as[String] == sgu1.teamFullName)
+    assert((first \ "school_short").as[String] == "СГУ")
+    assert((first \ "num").as[Int] == 1)
+    assert((cands.find(x => (x \ "id").as[Int] == 13).get \ "num").as[Int] == 2)
+  }
+
+  // A school with ten-plus teams: СГУ1 is an exact match of #1 and a prefix of #10..#12.
+  private val sguMany = Seq(sgu1, sgu2) ++ Seq(10, 11, 12, 20).map(n => team(100 + n, "СГУ", n, s"T$n: Member$n"))
+  private def manyFake(teams: Seq[Team]) = {
+    val b = LiveBoard.build(problemIds, teams, Map.empty)
+    fake(frozen = Map(1 -> b), real = Map(1 -> b))
+  }
+
+  test("a unique exact match resolves even when other teams match by prefix") {
+    val src = manyFake(sguMany)
+    val one = teamReq(new Ctl(src), jury :+ ("q" -> "СГУ1"): _*)
+    assert(one.status == 200, one.body)
+    assert(ids(one.only) == Seq(11), one.body)
+    assert((one.only \ "team" \ "id").as[Int] == 11, one.body)
+    val ten = teamReq(new Ctl(src), jury :+ ("q" -> "СГУ10"): _*)
+    assert(ids(ten.only) == Seq(110) && (ten.only \ "team" \ "id").as[Int] == 110, ten.body)
+    val two = teamReq(new Ctl(src), pub :+ ("q" -> "СГУ2"): _*)
+    assert(ids(two.only) == Seq(13) && (two.only \ "team" \ "id").as[Int] == 13, two.body)
+    val twoAlone = teamReq(new Ctl(manyFake(Seq(sgu1, sgu2, msu1))), jury :+ ("q" -> "СГУ2"): _*)
+    assert(ids(twoAlone.only) == Seq(13) && (twoAlone.only \ "team" \ "id").as[Int] == 13, twoAlone.body)
+  }
+
+  test("several exact matches stay ambiguous") {
+    val r = teamReq(new Ctl(manyFake(sguMany)), jury :+ ("q" -> "СГУ"): _*)
+    assert(r.status == 200, r.body)
+    assert(ids(r.only).size == 5, r.body)
+    assert((r.only \ "team").toOption.isEmpty, r.body)
+  }
+
+  // Eight teams; the digit 1 occurs in several school+number keys, 46 in two, and no name is a bare number.
+  private val numbered = Seq(
+    team(31, "СГУ", 1, "Alpha: A"), team(32, "СГУ", 2, "Beta: B"), team(33, "МГУ", 1, "Gamma: C"),
+    team(34, "МГУ", 11, "Delta: D"), team(35, "ТГУ", 12, "Eps: E"), team(36, "ТГУ", 46, "Zeta: F"),
+    team(37, "КГУ", 46, "Eta: G"), team(38, "КГУ", 3, "Theta: H"), team(39, "ОмГУ", 21, "Iota: I"))
+
+  test("a bare number never matches every team and never guesses") {
+    val src = manyFake(numbered)
+    for (q <- Seq("1", "46")) {
+      val r = teamReq(new Ctl(src), jury :+ ("q" -> q): _*)
+      assert(r.status == 200, r.body)
+      val found = ids(r.only)
+      assert(found.size <= 5, s"q=$q ${r.body}")
+      assert(found.size < numbered.size, s"q=$q ${r.body}")
+      assert(found.size > 1, s"q=$q ${r.body}")
+      assert((r.only \ "team").toOption.isEmpty, s"q=$q ${r.body}")
+    }
+    assert(ids(teamReq(new Ctl(src), jury :+ ("q" -> "46"): _*).only).toSet == Set(36, 37))
+  }
+
+  test("a bare number resolves when it is exactly one team's own name") {
+    val named1 = team(40, "ЯГУ", 7, "1: Solo")
+    val r = teamReq(new Ctl(manyFake(numbered :+ named1)), jury :+ ("q" -> "1"): _*)
+    assert(r.status == 200, r.body)
+    assert(ids(r.only) == Seq(40), r.body)
+    assert((r.only \ "team" \ "id").as[Int] == 40, r.body)
   }
 
   test("id works and a non-integer id is 400; neither q nor id is 400") {

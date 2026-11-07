@@ -71,6 +71,8 @@ class PalevoQueryContestSpec extends AnyFunSuite with BeforeAndAfterAll {
   private class Ctl(source: QuerySource, allowed: Set[Int] = (1 to 10).toSet, tok: Option[String] = Some(token))
     extends PalevoQuery(cc, QueryConfig(tok, allowed), source) {
     override protected def now(): DateTime = fixedNow
+    // The 500 tests fail on purpose; keep their stack traces out of the test output.
+    override protected val logger: play.api.Logger = new play.api.Logger(org.slf4j.helpers.NOPLogger.NOP_LOGGER)
   }
 
   private def req(path: String, params: (String, String)*): Request[AnyContent] = {
@@ -175,9 +177,21 @@ class PalevoQueryContestSpec extends AnyFunSuite with BeforeAndAfterAll {
     assert((c \ "freeze").get == play.api.libs.json.JsNull)
   }
 
-  test("contest: no board falls back to the problem names, sorted by id") {
-    val c = contestReq(new Ctl(fake(Seq(plainRunning), problems = Map(2 -> Map("B" -> "Bb", "A" -> "Aa")))), pub: _*).only
+  test("contest, all: no board falls back to the problem names, sorted by id") {
+    val c = contestReq(new Ctl(fake(Seq(plainRunning), problems = Map(2 -> Map("B" -> "Bb", "A" -> "Aa")))), jury: _*).only
     assert((c \ "problems").get == Json.arr(Json.obj("id" -> "A", "name" -> "Aa"), Json.obj("id" -> "B", "name" -> "Bb")))
+    assert((c \ "note").toOption.isEmpty, c)
+  }
+
+  test("contest, public: no board means no problems and a note, never the problem names") {
+    for (running <- Seq(plainRunning, frozenRunning)) {
+      val src = fake(Seq(running), problems = Map(running.id -> Map("B" -> "Bb", "A" -> "Aa")))
+      val c = contestReq(new Ctl(src), pub: _*).only
+      assert((c \ "problems").toOption.isEmpty, c)
+      assert((c \ "note").as[String] == "board unavailable", c)
+      assert(!c.toString.contains("Aa") && !c.toString.contains("Bb"), c)
+      assert((c \ "start").isDefined && (c \ "remaining_seconds").isDefined, c)
+    }
   }
 
   test("contest: a board problem without a name gets its id as name") {

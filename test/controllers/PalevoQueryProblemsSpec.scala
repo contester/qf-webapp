@@ -71,6 +71,8 @@ class PalevoQueryProblemsSpec extends AnyFunSuite with BeforeAndAfterAll {
 
   private class Ctl(source: QuerySource) extends PalevoQuery(cc, QueryConfig(Some(token), (1 to 10).toSet), source) {
     override protected def now(): DateTime = fixedNow
+    // The degraded-counts tests fail lookups on purpose; keep their warnings out of the test output.
+    override protected val logger: play.api.Logger = new play.api.Logger(org.slf4j.helpers.NOPLogger.NOP_LOGGER)
   }
 
   private def req(path: String, params: (String, String)*): Request[AnyContent] = {

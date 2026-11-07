@@ -57,6 +57,40 @@ class MatchingSpec extends AnyFunSuite {
     assert(Matching.rankTeams("aaa", many)(x => x) == many.take(5))
   }
 
+  test("rankTeamsScored carries the scores, best first, and agrees with rankTeams") {
+    val s1 = TeamNames("СГУ", "x", 1, "A")
+    val s10 = TeamNames("СГУ", "x", 10, "B")
+    val s11 = TeamNames("СГУ", "x", 11, "C")
+    val s2 = TeamNames("СГУ", "x", 2, "D")
+    val items = Seq(s10, s2, s11, s1)
+    assert(Matching.rankTeamsScored("СГУ1", items)(x => x) == Seq(s1 -> 3, s10 -> 2, s11 -> 2))
+    assert(Matching.rankTeams("СГУ1", items)(x => x) == Seq(s1, s10, s11))
+    assert(Matching.rankTeamsScored("СГУ", items)(x => x).map(_._2) == Seq(3, 3, 3, 3))
+    assert(Matching.rankTeamsScored("zzz", items)(x => x).isEmpty)
+    val many = (1 to 9).map(i => TeamNames("S", "s", i, "n: aaa"))
+    assert(Matching.rankTeamsScored("aaa", many)(x => x) == many.take(5).map(_ -> 3))
+  }
+
+  test("normalize: composed and decomposed letters are equal") {
+    val composed = "й" // й
+    val decomposed = "й" // и + combining breve
+    assert(composed != decomposed)
+    assert(Matching.normalize(decomposed) == Matching.normalize(composed))
+    assert(Matching.normalize(decomposed) == "й")
+    val t = TeamNames("МГУ", "x", 1, "Q: Зуй")
+    assert(Matching.teamScore("Зу" + decomposed, t) == Some(3))
+    assert(Matching.normalize("Ё") == Matching.normalize("е"))
+  }
+
+  test("normalize does not depend on the default locale") {
+    val saved = java.util.Locale.getDefault
+    try {
+      java.util.Locale.setDefault(java.util.Locale.forLanguageTag("tr"))
+      assert(Matching.normalize("WI46") == Matching.normalize("wi46"))
+      assert(Matching.computerMatches("WI46", "wi46"))
+    } finally java.util.Locale.setDefault(saved)
+  }
+
   test("hostile input never throws or matches all") {
     for (q <- Seq("", "%", ".*", "((", "x" * 5000, "😀", "\\", "[")) {
       Matching.computerMatches(q, "wi46")
