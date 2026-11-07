@@ -306,6 +306,48 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     f.stop()
   }
 
+  // ---- deadline timers (the scheduled actor, on the system clock) ----
+
+  private val scheduled = LiveTimings(scheduled = true, reloadGap = Duration.Zero, ping = 1.hour, heartbeat = 1.hour)
+
+  private def startingIn(d: FiniteDuration, id: Int = 1): Contest = {
+    val start = DateTime.now.plusMillis(d.toMillis.toInt)
+    Contest(id, s"C$id", start, start.plusHours(4), start.plusHours(5), start.plusHours(6), None, "ru", schoolMode = false)
+  }
+
+  private def startedNow(sink: CollectingSink) =
+    sink.events.asScala.exists { case e: ContestStarting => e.inMinutes == 0; case _ => false }
+
+  test("the monitor wakes at the start by itself, without a tick or a heartbeat") {
+    val sink = new CollectingSink
+    val f = new Fixture(DateTime.now, rows = Seq(startingIn(1500.millis)), palevoSink = sink, timings = scheduled, realClock = true)
+    awaitCond(startedNow(sink), 4.seconds)
+    f.stop()
+  }
+
+  test("a contest change re-arms the timer for the new deadline") {
+    val sink = new CollectingSink
+    val f = new Fixture(DateTime.now, rows = Seq(startingIn(1.hour)), palevoSink = sink, timings = scheduled, realClock = true)
+    f.barrier()
+    assert(!startedNow(sink))
+    f.actor ! ContestChanged(startingIn(1200.millis))
+    awaitCond(startedNow(sink), 4.seconds)
+    assert(sink.events.asScala.exists(_.isInstanceOf[ContestRescheduled]))
+    f.stop()
+  }
+
+  test("a contest added later is watched by the timer too") {
+    val sink = new CollectingSink
+    val f = new Fixture(DateTime.now, rows = Seq(startingIn(1.hour)), palevoSink = sink, timings = scheduled, realClock = true)
+    f.barrier()
+    val added = startingIn(1200.millis, id = 2)
+    f.contestRows = Seq(startingIn(1.hour), added)
+    f.data = f.data + (2 -> ContestData(problems, teams, Nil))
+    f.actor ! ContestChanged(added)
+    awaitCond(startedNow(sink), 4.seconds)
+    f.stop()
+  }
+
   test("a changed contest row reaches the live state without reading submits") {
     val late = rec(81, 1, "A", t0.plusHours(3), ok)
     val now = t0.plusHours(3).plusMinutes(30)

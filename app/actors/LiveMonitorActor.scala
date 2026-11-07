@@ -70,7 +70,8 @@ object LiveMonitorActor {
     override def millis(): Long = System.nanoTime() / 1000000
   }
 
-  case class LiveTimings(tick: FiniteDuration = 1.second,
+  case class LiveTimings(// The monitor wakes at the next deadline (see rearm); this is the longest it sleeps, a safety net for clock jumps.
+                         heartbeat: FiniteDuration = 30.seconds,
                          staticCheck: FiniteDuration = 1.second,
                          // Only a safety net for contests changed in the database behind the application's back; edits made through it
                          // arrive as ContestChanged.
@@ -113,7 +114,13 @@ object LiveMonitorActor {
                 clock: LiveClock, timings: LiveTimings, countdown: CountdownConfig = CountdownConfig.Default): Props =
     Props(new LiveMonitorActor(cfg, staticLocation, contests, loader, renderStatic, palevo, clock, timings, countdown))
 
+  /** How long to sleep until `deadline` (the earliest moment something can happen): a margin past it so the clock has
+    * reached it, at least 50 ms; the heartbeat when there is no deadline. */
+  def wakeDelay(deadline: Option[DateTime], now: DateTime, heartbeat: FiniteDuration): FiniteDuration =
+    deadline.fold(heartbeat)(d => (d.getMillis - now.getMillis + 50).max(50L).millis)
+
   private case object Start
+  private case object WakeKey
   private case class Started(result: Try[Seq[(Contest, Try[ContestData])]])
   private case class Loaded(contest: Int, result: Try[ContestData])
   private case class Added(contest: Contest, result: Try[ContestData])
@@ -222,6 +229,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
         case (c, Failure(e)) => log.error(e, s"live monitor: cannot load contest ${c.id}; will retry on the next contest poll")
       }
       startTimers()
+      rearm(now)
       unstashAll()
       context.become(running)
 
@@ -234,7 +242,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
 
   private def startTimers(): Unit =
     if (timings.scheduled) {
-      timers.startTimerWithFixedDelay(Tick, Tick, timings.tick)
+      timers.startTimerWithFixedDelay(Tick, Tick, timings.heartbeat)
       timers.startTimerWithFixedDelay(StaticCheck, StaticCheck, timings.staticCheck)
       timers.startTimerWithFixedDelay(PollContests, PollContests, timings.contestPoll)
       if (cfg.crosscheckInterval > Duration.Zero)
@@ -296,6 +304,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
     case Register(cid, viewer, q) => register(cid, viewer, q)
     case Unregister(cid, q) => unregister(cid, q)
 
+    // The check against the clock: on the deadline timer, on the heartbeat, and from tests. Idempotent.
     case Tick =>
       expireRejudges()
       val now = clock.now()
@@ -307,6 +316,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
           case Failure(e) => failed(cid, st, e)
         }
       }
+      rearm(now)
 
     case StaticCheck => writeStatic()
 
@@ -332,17 +342,22 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
 
     case RejudgeContest(id, result) => rejudgeContest(id, result)
 
-    case ContestsPolled(cs, started) => cs.filterNot(c => changedAt.get(c.id).exists(_ > started)).foreach(contestRow)
+    case ContestsPolled(cs, started) =>
+      cs.filterNot(c => changedAt.get(c.id).exists(_ > started)).foreach(contestRow)
+      rearm(clock.now())
 
     case ContestChanged(c) =>
       generation += 1
       changedAt.put(c.id, generation)
       contestRow(c)
+      rearm(clock.now())
 
     case Added(c, result) =>
       adding -= c.id
       result match {
-        case Success(d) => if (!contests.contains(c.id)) add(c, d, clock.now())
+        case Success(d) =>
+          if (!contests.contains(c.id)) add(c, d, clock.now())
+          rearm(clock.now())
         case Failure(e) => log.warning(s"live monitor: cannot load new contest ${c.id}: $e")
       }
   }
@@ -577,6 +592,18 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       publish(cid, st, d)
       if (d.freezing.nonEmpty && freezingChanged) st.throttle.markDirty(clock.millis())
       if (d.freezing.nonEmpty || d.real.nonEmpty) observePalevo(st)
+    }
+
+  /**
+    * Sleeps until the earliest moment something about the contests' times can happen: a phase, a board boundary, a
+    * countdown threshold. Called with the instant the last check used, so a deadline that passed during the check
+    * is not skipped. A reschedule or a new contest moves the deadlines, hence the calls after those.
+    */
+  private def rearm(now: DateTime): Unit =
+    if (timings.scheduled) {
+      val next = contests.values.flatMap(st => ContestTimeTracker.nextDeadline(st.live.contest, now, countdown))
+        .reduceOption((a, b) => if (a.isBefore(b)) a else b)
+      timers.startSingleTimer(WakeKey, Tick, wakeDelay(next, now, timings.heartbeat))
     }
 
   /** Tells palevo what the contest's times did: a phase reached, a countdown threshold, a reschedule. Never throws. */
