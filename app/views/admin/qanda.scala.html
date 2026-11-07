@@ -16,8 +16,9 @@
     @for(s <- clarifications) {
         @defining(s.id.get) { id =>
         @defining(s"cl-row-$id") { rowid =>
-        <tr id="@rowid"><th scope="row"><a href="@routes.AdminApplication.postUpdateClarification(id)">@id</a></th>
+        <tr id="@rowid"><th scope="row">@if(contest.canModify) {<a href="@routes.AdminApplication.postUpdateClarification(id)">@id</a>} else {@id}</th>
             <td>
+                @if(contest.canModify) {
                 @defining(s"cl-button-$id") { btnid =>
                 <div class="btn-group btn-nomargin">
                 <a href="javascript:void(0)" class="btn btn-primary btn-xs btn-nomargin dropdown-toggle"
@@ -32,6 +33,7 @@
                 </ul>
             </div>
                 }
+                }
             </td>
             <td>@s.problem</td><td>@s.text</td><td>@LocalDateFormat(s.arrived)</td><td>@s.hidden</td></tr>
         }
@@ -39,7 +41,9 @@
     }
     </tbody>
 </table>
+        @if(contest.canModify) {
         <a href="@routes.AdminApplication.postNewClarification(contest.contest.id)" class="btn btn-primary">Добавить уточнение</a>
+        }
     </div>
 </div>
 
@@ -53,7 +57,7 @@
     </thead>
     <tbody>
     @for(s <- clReqs) {
-    <tr><th scope="row"><a href="@routes.AdminApplication.postAnswerForm(s.id)">@s.id</a></th>
+    <tr><th scope="row">@if(contest.canModify) {<a href="@routes.AdminApplication.postAnswerForm(s.id)">@s.id</a>} else {@s.id}</th>
         <td>@s.contest</td><td>@s.team</td>
         <td>@s.problem</td><td>@s.request</td><td>@LocalDateFormat(s.arrived)</td><td>@s.getAnswer</td><td>@s.answered</td></tr>
     }

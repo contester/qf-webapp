@@ -26,7 +26,7 @@
                 <th scope="row">@s.team.id</th>
                 <td>@s.school.fullName</td>
                 <td>@s.team.num</td>
-                <td><a href="@routes.AdminApplication.editTeam(contest.contest.id, s.team.id)">@s.team.name</a></td>
+                <td>@if(contest.canModify) {<a href="@routes.AdminApplication.editTeam(contest.contest.id, s.team.id)">@s.team.name</a>} else {@s.team.name}</td>
                 @if(withPasswords) {
                 <td>@s.login</td>
                 <td>@s.password <a href="@routes.AdminApplication.passwordSheet(contest.contest.id, None, Some(s.team.id))" title="Password sheet (PDF)"><span class="glyphicon glyphicon-print"></span></a></td>
@@ -50,7 +50,7 @@
             <tbody>
             @for(s <- schools) {
             <tr id="@s.id">
-                <th scope="row"><a href="@routes.AdminApplication.editSchool(contest.contest.id, s.id)">@s.id</a></th>
+                <th scope="row">@if(contest.canModify) {<a href="@routes.AdminApplication.editSchool(contest.contest.id, s.id)">@s.id</a>} else {@s.id}</th>
                 <td>@s.name
                     @if(withPasswords) {
                     <a href="@routes.AdminApplication.passwordSheet(contest.contest.id, Some(s.id), None)" title="Password sheet for this school (PDF)"><span class="glyphicon glyphicon-print"></span></a>

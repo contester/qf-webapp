@@ -14,8 +14,14 @@
             <tbody>
             @for(s <- contests) {
             <tr id="@s.id">
+                @* The editor needs modify rights on the contest being edited. *@
+                @if(admin.canModify(s.id)) {
                 <th scope="row"><a href="@routes.AdminApplication.editContest(contest.contest.id, s.id)">@s.id</a></th>
                 <td><a href="@routes.AdminApplication.editContest(contest.contest.id, s.id)">@s.name</a></td>
+                } else {
+                <th scope="row">@s.id</th>
+                <td>@s.name</td>
+                }
                 <td>@s.schoolMode</td>
                 <td>@utils.ShortTime.format(s.startTime)</td>
                 <td>@utils.ShortTime.format(s.freezeTime)</td>
