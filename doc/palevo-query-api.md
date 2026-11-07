@@ -66,8 +66,8 @@ in `palevo.query.contests` but not in `monitor.public_contests`).
 
 ### Errors
 
-`{"error": "<short English text>"}` with status 400 (bad parameter), 401, 403 (`jury only`), 500
-(`internal error`; details are only logged). Disabled API: 404, empty body.
+`{"error": "<short English text>"}` with status 400 (bad parameter), 401, 500 (`internal error`; details are
+only logged). Disabled API: 404, empty body.
 
 ## Endpoints
 
@@ -171,9 +171,10 @@ How the counts add up in this example (public, frozen board): problem A has Alph
 (1) and Beta `ok` on the first try (1), so `attempts` is 2; problem B has Gamma `fail` with 2 failed submits, so
 `attempts` is 2 and `teams_attempted` is 1.
 
-### GET /computers?q=TEXT or area=NAME (jury only)
+### GET /computers?q=TEXT or area=NAME
 
-`audience=all` required, otherwise 403 `jury only` (no data is touched). **Global**: not tied to a contest; the
+Both audiences; `audience` is required and the answer is the same for `public` and `all` (a computer row has no
+address, only `name`, `area` and `printer`). **Global**: not tied to a contest; the
 `contests` parameter is optional (validated if given) and the response has no `contests` array. `q` needs at least one digit: its digits are compared with the computer name's trailing digits (leading zeros
 ignored) and its letters are a prefix of the name's letters; a `q` without digits returns no computers, not a 400.
 `area` is compared after normalisation (ignores case, spaces and punctuation, folds look-alike letters). When both
@@ -181,31 +182,49 @@ are given, `q` wins. Neither: 400. At most **10**
 computers, sorted by name. `ambiguous` is true when several computers are returned and they belong to more than
 one area.
 
-    GET /computers?audience=all&q=46
+    GET /computers?audience=public&q=46
 
     {"as_of":"2026-11-06T12:00:00Z","computers":[{"name":"lin46","area":"Linux room","printer":"HP-2"},
     {"name":"wi46","area":"Windows room","printer":"HP-1"}],"ambiguous":true}
 
-### GET /printing?team=N&area=NAME (jury only)
+### GET /printing?team=N&area=NAME
 
-`audience=all` required, otherwise 403 `jury only` (checked first, nothing is read). Per selected contest the
+Both audiences, contest-bound with the usual selection. Per selected contest the
 `print_jobs` (newest first, at most 10; `team` and `area` filter, `area` ignoring case; a non-integer `team` is
 400), plus the global `printers` list of unresolved printer problems. Job fields: `id`, `team`, `computer`
 (name, or address when not in the location table), `area` (empty when unknown), `printed`, `error`, `pages`,
 `arrived`. State comes from the job's latest attempt (`print_job_state`): `printed` is true only for status
 `printed`; **false can mean queued or failed**, and `error` is non-empty only when it failed. With no selectable
-contest the answer carries `"note": "no contest"`.
+contest the answer carries `"note": "no contest"`. Printer entries: `agent` (the print agent that reported the
+problem), `printer`, `condition`.
+
+For `audience=public` the same jobs and printers are returned, minimised: printer entries carry only `printer` and
+`condition` (**no `agent`**), and a job's `computer` is **never a raw address**: a job from a computer missing from
+the location table (whose `computer` would be its IPv4 or IPv6 address) has `"computer": ""` (its `area` is
+already empty). All other job fields are as for `all`.
 
     GET /printing?audience=all&contests=*
 
     {"as_of":"2026-11-06T12:00:00Z","contests":[{"id":1,"name":"Contest 1","status":"running","view":"live-jury",
     "print_jobs":[{"id":1,"team":11,"computer":"wi46","area":"Windows room","printed":true,"error":"",
-    "pages":3,"arrived":"2026-11-06T11:55:00Z"}]}],
+    "pages":3,"arrived":"2026-11-06T11:55:00Z"},{"id":3,"team":12,"computer":"10.20.30.40","area":"",
+    "printed":false,"error":"","pages":1,"arrived":"2026-11-06T11:54:00Z"},{"id":4,"team":13,"computer":"fe80::1",
+    "area":"","printed":false,"error":"jam","pages":2,"arrived":"2026-11-06T11:53:00Z"}]}],
     "printers":[{"agent":"agent1","printer":"HP-1","condition":"paper out"}]}
+
+    GET /printing?audience=public&contests=*
+
+    {"as_of":"2026-11-06T12:00:00Z","contests":[{"id":1,"name":"Contest 1","status":"running","view":"frozen",
+    "print_jobs":[{"id":1,"team":11,"computer":"wi46","area":"Windows room","printed":true,"error":"",
+    "pages":3,"arrived":"2026-11-06T11:55:00Z"},{"id":3,"team":12,"computer":"","area":"","printed":false,
+    "error":"","pages":1,"arrived":"2026-11-06T11:54:00Z"},{"id":4,"team":13,"computer":"","area":"",
+    "printed":false,"error":"jam","pages":2,"arrived":"2026-11-06T11:53:00Z"}]}],
+    "printers":[{"printer":"HP-1","condition":"paper out"}]}
 
 ## Jury-only data
 
-The keys `room`, `computers`, `printers` and `print_jobs` appear only for `audience=all`; `/computers` and
-`/printing` answer 403 to `audience=public`. `view` `live-jury` and the real board (including teams, problems
+The key `room` (in `/team`) appears only for `audience=all`, and for `public` the room is not even looked up.
+`/computers` and `/printing` answer both audiences, but a `public` response never carries a print agent (`agent`)
+or a computer's raw address (see `/printing`). `view` `live-jury` and the real board (including teams, problems
 and results hidden by the freeze) are likewise `all` only. The test `PalevoQueryLeakSpec` checks this for every
 endpoint, audience and freeze state.
