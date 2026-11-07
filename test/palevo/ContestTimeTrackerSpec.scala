@@ -275,5 +275,38 @@ class ContestTimeTrackerSpec extends AnyFunSuite {
     assert(resched(tr.observe(moved(contest(1), start = t(11)), t(8, 1))).size == 1)
     assert(tr.observe(contest(2), t(8, 2)).isEmpty) // first sight
   }
+
+  // ---- next deadline ----
+
+  private def next(c: org.stingray.contester.dbmodel.Contest, now: DateTime, cd: CountdownConfig = CountdownConfig.Default) =
+    ContestTimeTracker.nextDeadline(c, now, cd)
+
+  test("nextDeadline walks through the start countdown, then the start") {
+    assert(next(contest(), t(8)) == Some(t(9)))
+    assert(next(contest(), t(9)) == Some(t(9, 30))) // strictly after now
+    assert(next(contest(), t(9, 58)) == Some(t(9, 59)))
+    assert(next(contest(), ts(9, 59, 30)) == Some(t(10)))
+  }
+
+  test("nextDeadline during the contest: freeze, then the end countdown, then the end and the expose time") {
+    assert(next(contest(), t(10)) == Some(t(14))) // freeze comes before end - 20 min
+    assert(next(contest(), t(14)) == Some(t(14, 40)))
+    assert(next(contest(), t(14, 59)) == Some(t(15)))
+    assert(next(contest(), t(15)) == Some(t(16)))
+    assert(next(contest(), t(16)).isEmpty)
+  }
+
+  test("nextDeadline for a contest above the bound or with the countdown off has only the schedule") {
+    assert(next(contest(11), t(8)) == Some(t(10)))
+    assert(next(contest(), t(8), CountdownConfig(Nil, Nil)) == Some(t(10)))
+    assert(next(contest(), t(10), CountdownConfig(Nil, Nil)) == Some(t(14)))
+  }
+
+  test("nextDeadline keeps the freeze time even when freezing is disabled (the board rebuilds there)") {
+    val c = contest(freeze = t(15), end = t(15))
+    assert(next(c, t(14, 59), CountdownConfig(Nil, Nil)) == Some(t(15)))
+    val late = contest(freeze = t(17), end = t(15)) // freeze after end: disabled, but a boundary of the board
+    assert(next(late, t(16, 30), CountdownConfig(Nil, Nil)) == Some(t(17)))
+  }
 }
 

@@ -8,6 +8,19 @@ import scala.collection.mutable
 object ContestTimeTracker {
   /** Countdowns and reschedules are announced only for contests up to this id; the ones above are test copies. */
   val MaxAnnouncedContest = 10
+
+  /**
+    * The earliest instant after `now` at which something about the contest's times can happen: its start, freeze, end
+    * or expose time (the freeze time counts even when freezing is off: the boards rebuild there), and, for contests
+    * that get countdowns, each countdown threshold. A pure function of the row; whether a threshold has already
+    * fired is not looked at, since waking early is harmless.
+    */
+  def nextDeadline(c: Contest, now: DateTime, countdown: CountdownConfig = CountdownConfig.Default): Option[DateTime] = {
+    val thresholds =
+      if (c.id > MaxAnnouncedContest) Nil
+      else countdown.start.map(m => c.startTime.minusMinutes(m)) ++ countdown.end.map(m => c.endTime.minusMinutes(m))
+    (Seq(c.startTime, c.freezeTime, c.endTime, c.exposeTime) ++ thresholds).filter(_.isAfter(now)).sortBy(_.getMillis).headOption
+  }
 }
 
 /**
