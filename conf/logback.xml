@@ -33,6 +33,8 @@
 
   <logger name="play" level="DEBUG" />
   <logger name="application" level="DEBUG" />
+  <!-- Shaded async-http-client (play-ws) logs connection pool stats at DEBUG on every request -->
+  <logger name="play.shaded.ahc" level="INFO" />
 
 <!--  <logger name="slick" level="TRACE" additivity="false">-->
 <!--    <appender-ref ref="SLICK"/>-->
