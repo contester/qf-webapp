@@ -260,6 +260,15 @@ class LiveContestSpec extends AnyFunSuite {
     val now = start.plusHours(1)
     val lc = new LiveContest(contest, problems, teams ++ Seq(jury, coach), Nil, now)
     assert(!lc.publicBoard.rows.exists(_.team.id == 8) && lc.publicBoard.rows.exists(_.team.id == 9))
+    // A jury team that is rated stays on the public board.
+    val rated = jury.copy(id = 7, notRated = false)
+    val withRated = new LiveContest(contest, problems, teams ++ Seq(jury, coach, rated), Nil, now)
+    assert(withRated.publicBoard.rows.exists(_.team.id == 7) && !withRated.publicBoard.rows.exists(_.team.id == 8))
+    // Rating it later puts it on, un-rating takes it off.
+    val lc2 = new LiveContest(contest, problems, teams ++ Seq(jury), Nil, now)
+    assert(lc2.onTeamChanged(jury.copy(notRated = false), now).public.nonEmpty && lc2.publicBoard.rows.exists(_.team.id == 8))
+    lc2.onTeamChanged(jury, now)
+    assert(!lc2.publicBoard.rows.exists(_.team.id == 8))
     assert(lc.board(Freezing).rows.exists(_.team.id == 8))
 
     val dj = lc.onArrived(rec(1, 8, "A", now), now)

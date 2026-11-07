@@ -36,7 +36,7 @@ class LiveContest(initial: Contest, problems: Seq[String], teams: Seq[Team], sub
   private[this] var realBoard: LiveBoard = buildBoard(Real, now)
   private[this] var pubBoard: LiveBoard = buildPublic(now)
 
-  /** What the public sees: the freezing board without the contest jury teams (coach teams stay). */
+  /** What the public sees: the freezing board without the not-rated contest jury teams (coach teams stay). */
   def publicBoard: LiveBoard = pubBoard
 
   def board(kind: BoardKind): LiveBoard = kind match {
@@ -126,7 +126,7 @@ class LiveContest(initial: Contest, problems: Seq[String], teams: Seq[Team], sub
     LiveBoard.build(problems, teamList, teamList.map(t => t.id -> teamCells(t.id, kind, now)).toMap)
 
   private[this] def buildPublic(now: DateTime): LiveBoard = {
-    val shown = teamList.filterNot(LiveContest.isJury)
+    val shown = teamList.filterNot(LiveContest.hiddenFromPublic)
     LiveBoard.build(problems, shown, shown.map(t => t.id -> teamCells(t.id, Freezing, now)).toMap)
   }
 
@@ -165,7 +165,7 @@ class LiveContest(initial: Contest, problems: Seq[String], teams: Seq[Team], sub
         }
       val (nf, fo) = step(Freezing, freezingBoard)
       val (nr, ro) = step(Real, realBoard)
-      val (np, po) = step(Freezing, pubBoard, teamIds.filterNot(tid => LiveContest.isJury(teamById(tid))))
+      val (np, po) = step(Freezing, pubBoard, teamIds.filterNot(tid => LiveContest.hiddenFromPublic(teamById(tid))))
       freezingBoard = nf
       realBoard = nr
       pubBoard = np
@@ -182,8 +182,9 @@ class LiveContest(initial: Contest, problems: Seq[String], teams: Seq[Team], sub
 }
 
 object LiveContest {
-  /** The contest jury teams (see InitialImportTools.addServiceTeams); coach teams are not. */
-  def isJury(t: Team): Boolean = t.schoolFullName == models.InitialImportTools.JurySchoolFullName
+  /** The contest jury teams (see InitialImportTools.addServiceTeams) that are not rated; coach teams and rated jury teams are shown. */
+  def hiddenFromPublic(t: Team): Boolean =
+    t.schoolFullName == models.InitialImportTools.JurySchoolFullName && t.notRated
 
   private[live] def boardDifferences(kind: BoardKind, a: LiveBoard, b: LiveBoard): Seq[String] = {
     val header =
