@@ -17,7 +17,7 @@ import org.scalatest.funsuite.AnyFunSuiteLike
 import org.stingray.contester.dbmodel.{Contest, LocalTeam, Team}
 import palevo.{ContestRescheduled, ContestStarting, FirstSolveContest, PalevoEvent, PalevoSink, TimeChange}
 import play.api.libs.EventSource.Event
-import play.api.libs.json.{JsValue, Json}
+import play.api.libs.json.{JsObject, JsValue, Json}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
@@ -81,20 +81,26 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     f.stop()
   }
 
-  test("before start the public and team boards are empty; the start tick sends the whole board") {
-    val f = new Fixture(t0.minusMinutes(5))
+  test("before start the public, team and freezing admin boards list the teams without problems; the start tick sends the whole board") {
+    val f = new Fixture(t0.minusMinutes(5), subs = Map(1 -> Seq(rec(1, 1, "A", t0.minusMinutes(10), ok))))
     val pub = f.subscribe(JoinPublic(1))
     val tm = f.subscribe(JoinTeam(1, 2))
     val adm = f.subscribe(JoinAdmin(1, real = false))
-    val empty = LiveJson.board(LiveBoard(Nil, Vector.empty, Map.empty))
-    assert(next(pub, "board") == empty)
-    assert(next(tm, "board") == empty)
-    assert((next(adm, "board") \ "rows").as[Seq[JsValue]].size == 3)
+    val real = f.subscribe(JoinAdmin(1, real = true))
+    def bare(js: JsValue) = {
+      assert((js \ "problems").as[Seq[String]].isEmpty)
+      val rows = (js \ "rows").as[Seq[JsValue]]
+      assert(rows.map(r => (r \ "team").as[Int]).toSet == Set(1, 2, 3))
+      assert(rows.forall(r => (r \ "cells").as[JsObject].fields.isEmpty))
+    }
+    Seq(pub, tm, adm).foreach(p => bare(next(p, "board")))
+    assert((next(real, "board") \ "problems").as[Seq[String]] == problems)
     f.clock.at = t0.plusSeconds(1)
     f.actor ! Tick
-    val b = next(pub, "board")
-    assert((b \ "rows").as[Seq[JsValue]].size == 3 && (b \ "problems").as[Seq[String]] == problems)
-    assert((next(tm, "board") \ "rows").as[Seq[JsValue]].size == 3)
+    for (p <- Seq(pub, tm, adm)) {
+      val b = next(p, "board")
+      assert((b \ "rows").as[Seq[JsValue]].size == 3 && (b \ "problems").as[Seq[String]] == problems)
+    }
     f.stop()
   }
 

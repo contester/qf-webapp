@@ -7,7 +7,7 @@ import akka.actor.{Actor, ActorLogging, Props, Stash, Status, Timers}
 import akka.stream.scaladsl.Source
 import akka.stream.{BoundedSourceQueue, Materializer, QueueOfferResult}
 import live._
-import models.{ProblemClient, Submits}
+import models.{ACM, ProblemClient, Submits}
 import org.joda.time.DateTime
 import org.stingray.contester.dbmodel.{Contest, Team}
 import org.stingray.qf.models.TeamClient
@@ -147,6 +147,10 @@ object LiveMonitorActor {
 
   private val pingEvent = Event("", None, Some("ping"))
   private val emptyBoard = LiveBoard(Nil, Vector.empty, Map.empty)
+
+  /** What a viewer without the real board sees before the start: the teams, in board order, and no problems. */
+  private[actors] def teamsOnly(b: LiveBoard): LiveBoard =
+    LiveBoard(Nil, b.rows.map(r => r.copy(score = ACM.Score(0, 0, 0), cells = Map.empty, rank = 1)), Map.empty)
   private val crossCheckReason = "cross-check"
 }
 
@@ -578,10 +582,11 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
     case Some(st) =>
       if (st.live.contest != c) {
         val before = st.live.board(Freezing)
+        val wasStarted = started(st.live, clock.now())
         Try(st.live.onContest(c, clock.now())) match {
           case Success(d) =>
             observeTime(c, clock.now())
-            changed(c.id, st, d, freezingChanged = before != st.live.board(Freezing))
+            changed(c.id, st, d, freezingChanged = before != st.live.board(Freezing) || wasStarted != started(st.live, clock.now()))
           case Failure(e) => failed(c.id, st, e)
         }
       }
@@ -637,7 +642,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
   private def writeStatic(): Unit = for (dir <- staticLocation; (cid, st) <- contests if cid < 11) {
     val ms = clock.millis()
     if (st.throttle.due(ms))
-      Try(StaticFiles.write(dir, cid, renderStatic(st.live.contest, st.live.board(Freezing)))) match {
+      Try(StaticFiles.write(dir, cid, renderStatic(st.live.contest, visibleBoard(st.live, clock.now())))) match {
         case Success(_) =>
           st.throttle.written(ms)
           st.staticFailing = false
@@ -684,15 +689,19 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
     }
 
   /** The board a viewer starts with, and the real cells of its own row to show instead of the frozen ones. */
+  /** The freezing board once the contest has started; the bare team list before. */
+  private def visibleBoard(lc: LiveContest, now: DateTime): LiveBoard =
+    if (started(lc, now)) lc.board(Freezing) else teamsOnly(lc.board(Freezing))
+
   private def snapshotParts(st: ContestState, viewer: Viewer): (LiveBoard, Option[(Int, Map[String, LiveCell])]) = {
     val lc = st.live
     val now = clock.now()
     viewer match {
       case AdminRealViewer => (lc.board(Real), None)
-      case AdminFreezingViewer => (lc.board(Freezing), None)
-      case PublicViewer => (if (started(lc, now)) lc.board(Freezing) else emptyBoard, None)
+      case AdminFreezingViewer => (visibleBoard(lc, now), None)
+      case PublicViewer => (visibleBoard(lc, now), None)
       case TeamViewer(t) =>
-        if (!started(lc, now)) (emptyBoard, None)
+        if (!started(lc, now)) (teamsOnly(lc.board(Freezing)), None)
         else (lc.board(Freezing), if (freezeActive(lc, now)) Some(t -> realCells(lc, t)) else None)
     }
   }
@@ -742,7 +751,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       val isStarted = started(lc, now)
       val overlay = freezeActive(lc, now)
       lazy val plain = d.freezing.map(plainEvent)
-      lazy val gated = if (isStarted) plain else d.freezing.collect { case WholeOut(_) => boardEvent(emptyBoard) }
+      lazy val gated = if (isStarted) plain else d.freezing.collect { case WholeOut(b) => boardEvent(teamsOnly(b)) }
       lazy val real = d.real.map(plainEvent)
 
       def teamEvents(t: Int): Seq[Event] =
@@ -759,7 +768,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       subs.toList.foreach { case (q, viewer) =>
         val events = viewer match {
           case AdminRealViewer => real
-          case AdminFreezingViewer => plain
+          case AdminFreezingViewer => gated
           case PublicViewer => gated
           case TeamViewer(t) => teamEvents(t)
         }
