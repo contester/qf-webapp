@@ -22,7 +22,8 @@ class FakeSource(
   rooms: Map[Int, Map[Int, String]] = Map.empty,
   computerList: Seq[ComputerRow] = Nil,
   jobs: Seq[PrintJobRow] = Nil,
-  printers: Seq[PrinterProblem] = Nil
+  printers: Seq[PrinterProblem] = Nil,
+  counts: Map[Int, TeamCounts] = Map.empty
 ) extends QuerySource {
   private val log = new java.util.concurrent.ConcurrentLinkedQueue[String]()
   def calls: Seq[String] = { import scala.collection.JavaConverters._; log.asScala.toList }
@@ -32,6 +33,9 @@ class FakeSource(
 
   def board(contestId: Int, real: Boolean): Future[Option[live.LiveBoard]] =
     call(s"board($contestId,$real)")((if (real) realBoards else freezingBoards).get(contestId))
+
+  def teamCounts(contestId: Int): Future[TeamCounts] =
+    call(s"teamCounts($contestId)")(counts.getOrElse(contestId, TeamCounts(0, 0)))
 
   def problemNames(contestId: Int): Future[Map[String, String]] =
     call(s"problemNames($contestId)")(problems.getOrElse(contestId, Map.empty))

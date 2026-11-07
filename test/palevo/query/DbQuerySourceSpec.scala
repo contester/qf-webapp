@@ -96,7 +96,7 @@ class DbQuerySourceSpec extends TestKit(ActorSystem("DbQuerySourceSpec", ConfigF
     val since = new DateTime(2026, 11, 6, 12, 0)
     val all = Seq(
       lastSubmits(3, Seq(1, 2)), recentArrivals(3, since), pendingCounts(3), teamRooms(3, Seq(5, 6)),
-      printJobs(Seq(3, 4), Some(5), Some("1234"), 10))
+      printJobs(Seq(3, 4), Some(5), Some("1234"), 10), teamCounts(3))
     for (q <- all.map(sqlOf)) {
       assert(q.contains(" limit "), q)
       assert(q.contains("contest = ") || q.contains("contest in ("), q)
@@ -114,6 +114,15 @@ class DbQuerySourceSpec extends TestKit(ActorSystem("DbQuerySourceSpec", ConfigF
     assert(pj.contains("p.contest in (3,4)"))
     assert(pj.contains("limit 10"))
     assert(sqlOf(printJobs(Seq(3), None, None, 100000)).contains(s"limit ${DbQuerySource.MaxPrintJobs}"))
+  }
+
+  test("teamCounts is one count over the contest's participants, the contest bound as a parameter") {
+    val q = sqlOf(DbQuerySource.Queries.teamCounts(3))
+    assert(q.contains("from participants p"), q)
+    assert(q.contains("p.contest = ?"), q)
+    assert(!q.contains("3"), q)
+    assert(q.contains("not_rated"), q)
+    assert(!q.contains("group by"), q)
   }
 
   test("pending means untested, so the partial index on untested submits applies") {
@@ -244,6 +253,18 @@ class DbQuerySourceSpec extends TestKit(ActorSystem("DbQuerySourceSpec", ConfigF
     assert(row == PrintJobRow(raw.id.toInt, raw.contest, raw.team, located.get(raw.computer).map(_._1).getOrElse(raw.computer),
       areaOf(raw), raw.status == "printed", raw.error, raw.pages, row.arrived))
     assert(row.arrived.getMillis == raw.arrived.getMillis)
+  }
+
+  test("teamCounts splits each contest's participants by the not-rated flag") {
+    assume(url.isDefined)
+    val raw = await(db.run(sql"""select contest, not_rated from participants""".as[(Int, Boolean)]))
+    assume(raw.nonEmpty, "the database has no participants")
+    for ((contest, rows) <- raw.groupBy(_._1)) {
+      val out = rows.count(_._2)
+      assert(await(dbSource.teamCounts(contest)) == TeamCounts(rows.size - out, out), s"contest $contest")
+    }
+    info(s"${raw.groupBy(_._1).size} contests checked, ${raw.count(_._2)} not-rated participants")
+    assert(await(dbSource.teamCounts(999999)) == TeamCounts(0, 0))
   }
 
   test("contests lists every contest") {

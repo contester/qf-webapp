@@ -43,6 +43,11 @@ object QueryJson {
       "remaining_seconds" -> (end - t) / 1000)
   }
 
+  /** `{"teams": {regular, out_of_competition, total}}`: the contest's participants, out of competition being those
+    * with the not-rated flag. */
+  def teamCounts(t: TeamCounts): JsObject =
+    Json.obj("teams" -> Json.obj("regular" -> t.regular, "out_of_competition" -> t.outOfCompetition, "total" -> t.total))
+
   /** Problems in the given id order; a problem without a known name is named by its id. */
   def problems(ids: Seq[String], names: Map[String, String]): JsObject =
     Json.obj("problems" -> ids.map { id =>

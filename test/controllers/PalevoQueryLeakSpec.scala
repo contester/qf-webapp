@@ -93,7 +93,8 @@ class PalevoQueryLeakSpec extends AnyFunSuite with BeforeAndAfterAll {
       PrintJobRow(2, 11, 11, "wi46", "Windows room", printed = true, "", 3, fixedNow.minusMinutes(5)),
       PrintJobRow(3, 1, 12, Addresses(0), "", printed = false, "", 1, fixedNow.minusMinutes(6)),
       PrintJobRow(4, 1, 13, Addresses(1), "", printed = false, "jam", 2, fixedNow.minusMinutes(7))),
-    printers = Seq(PrinterProblem("agent1", "HP-1", "paper out")))
+    printers = Seq(PrinterProblem("agent1", "HP-1", "paper out")),
+    counts = Map(1 -> TeamCounts(4, 1), 11 -> TeamCounts(77, 7)))
 
   private class Ctl(token: Option[String], src: QuerySource)
     extends PalevoQuery(cc, QueryConfig(token, (1 to 10).toSet), src) {
@@ -180,6 +181,16 @@ class PalevoQueryLeakSpec extends AnyFunSuite with BeforeAndAfterAll {
       assert(!r.body.contains("Contest 11"), r.body)
       assert(src.calls.forall(c => !c.contains("(11")), src.calls.toString)
     }
+  }
+
+  for (f <- freezes) test(s"contest: team counts are public and the same for both audiences / freeze ${f.label}") {
+    val teams = Seq("public", "all").map { audience =>
+      val r = call(endpoints.head, new Ctl(Some(token), source(f)), auth = true,
+        Seq("audience" -> audience, "contests" -> "*"))
+      if (audience == "public" && f == InEffect) info(r.body)
+      (r.json \ "contests" \ 0 \ "teams").get
+    }
+    assert(teams.distinct == Seq(Json.obj("regular" -> 4, "out_of_competition" -> 1, "total" -> 5)), teams)
   }
 
   for (audience <- Seq("public", "all")) test(s"printing never returns a job of contest 11 / $audience") {

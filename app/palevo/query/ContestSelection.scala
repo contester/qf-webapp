@@ -27,6 +27,11 @@ object ContestSelection {
     else if (now.isBefore(c.endTime)) "running"
     else "over"
 
+  /**
+    * The contests an endpoint answers about. `explicit`: exactly that candidate (Left when it is not one). Otherwise
+    * all running candidates; when none is running, the most recently finished candidate (latest end, highest id on
+    * a tie) and the soonest upcoming one (earliest start, lowest id on a tie), whichever exist. Always in id order.
+    */
   def select(all: Seq[Contest], scope: Scope, allowed: Set[Int], now: DateTime,
              explicit: Option[Int]): Either[String, Seq[Contest]] = {
     val candidates = all.filter(c => allowed(c.id) && scope.contests.forall(_.contains(c.id)))
@@ -38,11 +43,13 @@ object ContestSelection {
         val running = candidates.filter(status(_, now) == "running").sortBy(_.id)
         if (running.nonEmpty) Right(running)
         else {
+          // Nothing running: the latest-finished contest and the next one to start, so that between contests the
+          // bot sees both what just ended and what comes next.
           val finished = candidates.filter(status(_, now) == "over")
-          if (finished.nonEmpty)
-            Right(Seq(finished.maxBy(c => (c.endTime.getMillis, c.id))))
-          else
-            Right(candidates.sortBy(c => (c.startTime.getMillis, c.id)).take(1))
+          val lastFinished = if (finished.isEmpty) None else Some(finished.maxBy(c => (c.endTime.getMillis, c.id)))
+          val upcoming = candidates.filter(status(_, now) == "before")
+          val nextUpcoming = if (upcoming.isEmpty) None else Some(upcoming.minBy(c => (c.startTime.getMillis, c.id)))
+          Right((lastFinished.toSeq ++ nextUpcoming).sortBy(_.id))
         }
     }
   }

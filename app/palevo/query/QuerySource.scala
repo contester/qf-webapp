@@ -16,11 +16,20 @@ case class PrintJobRow(id: Int, contest: Int, team: Int, computer: String, area:
 /** A printer problem reported by a print agent and not yet cleared. */
 case class PrinterProblem(agent: String, printer: String, condition: String)
 
+/** The participants of a contest: `outOfCompetition` those with the not-rated flag (rank `*` on the board),
+  * `regular` the rest. */
+case class TeamCounts(regular: Int, outOfCompetition: Int) {
+  def total: Int = regular + outOfCompetition
+}
+
 /** Where the query API reads contest data from. Every method is read-only and bounded. */
 trait QuerySource {
   def contests(): Future[Seq[Contest]]
   /** The live monitor's freezing board (`real = false`) or real board; None when it is off, slow or has no such contest. */
   def board(contestId: Int, real: Boolean): Future[Option[live.LiveBoard]]
+  /** How many teams take part in the contest, from its participant list (not from the board, so it is known before
+    * the start). */
+  def teamCounts(contestId: Int): Future[TeamCounts]
   /** Problem id -> name. */
   def problemNames(contestId: Int): Future[Map[String, String]]
   /** Team -> time of its latest submit, for the given teams that have one. */

@@ -5,7 +5,7 @@ import java.security.MessageDigest
 
 import org.joda.time.DateTime
 import org.stingray.contester.dbmodel.{Contest, Team}
-import palevo.query.{AudienceView, ContestSelection, Matching, TeamNames, QueryConfig, QueryJson, QuerySource, Scope}
+import palevo.query.{AudienceView, ContestSelection, Matching, TeamCounts, TeamNames, QueryConfig, QueryJson, QuerySource, Scope}
 import play.api.Logging
 import play.api.libs.json.{JsObject, Json}
 import play.api.mvc._
@@ -102,29 +102,42 @@ class PalevoQuery(cc: ControllerComponents, cfg: QueryConfig, source: QuerySourc
 
   private def isJury(sel: Selection) = sel.scope.audience == palevo.query.Jury
 
-  /** GET /contest: times and, once started, the problem list. The list comes from the audience's board; only for
-    * audience all does a missing board fall back to the stored problem names (the public monitor may refuse to
-    * show a contest, and the public must then not learn its problems either). */
+  /** GET /contest: times, team counts and, once started, the problem list. The list comes from the audience's
+    * board; only for audience all does a missing board fall back to the stored problem names (the public monitor
+    * may refuse to show a contest, and the public must then not learn its problems either). The team counts come
+    * from the participant list, are the same for both audiences and are left out when their lookup fails. */
   def contest = authed { request =>
     withContests(request) { sel =>
       Future.traverse(sel.contests) { case (c, base) =>
-        val withTimes = base ++ QueryJson.contestTimes(c, sel.now)
-        if (!started(c, sel.now)) Future.successful(withTimes)
-        else {
-          val boardF = source.board(c.id, real = isJury(sel))
-          val namesF = source.problemNames(c.id)
-          for {
-            board <- boardF
-            names <- namesF
-          } yield board.map(_.problems) match {
-            case Some(ps) => withTimes ++ QueryJson.problems(ps, names)
-            case None if isJury(sel) => withTimes ++ QueryJson.problems(names.keys.toSeq.sorted, names)
-            case None => withTimes ++ Json.obj("note" -> "board unavailable")
+        val countsF = optionalTeamCounts(c.id)
+        val restF =
+          if (!started(c, sel.now)) Future.successful(Json.obj())
+          else {
+            val boardF = source.board(c.id, real = isJury(sel))
+            val namesF = source.problemNames(c.id)
+            for {
+              board <- boardF
+              names <- namesF
+            } yield board.map(_.problems) match {
+              case Some(ps) => QueryJson.problems(ps, names)
+              case None if isJury(sel) => QueryJson.problems(names.keys.toSeq.sorted, names)
+              case None => Json.obj("note" -> "board unavailable")
+            }
           }
-        }
+        for {
+          counts <- countsF
+          rest <- restF
+        } yield base ++ QueryJson.contestTimes(c, sel.now) ++ counts.fold(Json.obj())(QueryJson.teamCounts) ++ rest
       }
     }
   }
+
+  /** Team counts are optional: a failed lookup leaves them out (logged) instead of failing the request. */
+  private def optionalTeamCounts(contestId: Int): Future[Option[TeamCounts]] =
+    Try(source.teamCounts(contestId)).fold(Future.failed, identity).map(Option(_)).recover { case NonFatal(e) =>
+      logger.warn(s"palevo query teamCounts($contestId) failed, leaving out teams: ${e.getClass.getName}: ${e.getMessage}")
+      None
+    }
 
   /** GET /standings?top=N: the top rows of the audience's board (freezing for public, real for all). */
   def standings = authed { request =>

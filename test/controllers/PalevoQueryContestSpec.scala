@@ -8,7 +8,7 @@ import org.joda.time.{DateTime, DateTimeZone}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuite
 import org.stingray.contester.dbmodel.{Contest, LocalTeam, Team}
-import palevo.query.{FakeSource, QueryConfig, QuerySource}
+import palevo.query.{FakeSource, QueryConfig, QuerySource, TeamCounts}
 import play.api.http.{DefaultFileMimeTypes, FileMimeTypesConfiguration}
 import play.api.i18n.{DefaultLangs, DefaultMessagesApi}
 import play.api.libs.json.{JsObject, JsValue, Json}
@@ -104,10 +104,23 @@ class PalevoQueryContestSpec extends AnyFunSuite with BeforeAndAfterAll {
   private val jury = Seq("audience" -> "all", "contests" -> "*")
 
   private def fake(contests: Seq[Contest], frozen: Map[Int, LiveBoard] = Map.empty, real: Map[Int, LiveBoard] = Map.empty,
-                   problems: Map[Int, Map[String, String]] = Map.empty) =
-    new FakeSource(contestList = contests, freezingBoards = frozen, realBoards = real, problems = problems)
+                   problems: Map[Int, Map[String, String]] = Map.empty, counts: Map[Int, TeamCounts] = Map.empty) =
+    new FakeSource(contestList = contests, freezingBoards = frozen, realBoards = real, problems = problems,
+      counts = counts)
 
-  private def frozenFake() = fake(Seq(frozenRunning), Map(1 -> frozenBoard), Map(1 -> realBoard), Map(1 -> names))
+  private def frozenFake() = fake(Seq(frozenRunning), Map(1 -> frozenBoard), Map(1 -> realBoard), Map(1 -> names),
+    Map(1 -> TeamCounts(2, 1)))
+
+  private def teamsObj(regular: Int, out: Int) =
+    Json.obj("regular" -> regular, "out_of_competition" -> out, "total" -> (regular + out))
+
+  // Between contests: 3 is over (results exposed), 4 starts tomorrow.
+  private val finished3 = contest(3, -6, -3, -2, -1)
+  private val next4 = contest(4, 20, 23, 25, 26)
+  private def betweenFake() = fake(Seq(frozenRunning.copy(id = 1, startTime = h(-30), freezeTime = h(-29),
+      endTime = h(-28), exposeTime = h(-27)), finished3, next4),
+    Map(3 -> frozenBoard, 4 -> frozenBoard), Map(3 -> realBoard, 4 -> realBoard), Map(3 -> names, 4 -> names),
+    Map(1 -> TeamCounts(9, 9), 3 -> TeamCounts(2, 1), 4 -> TeamCounts(40, 3)))
 
   private def rowTuples(c: JsObject) =
     (c \ "rows").as[Seq[JsObject]].map(r => ((r \ "rank").as[String], (r \ "team").as[String], (r \ "solved").as[Int]))
@@ -166,6 +179,7 @@ class PalevoQueryContestSpec extends AnyFunSuite with BeforeAndAfterAll {
       "id" -> 1, "name" -> "Contest 1", "status" -> "running", "view" -> "frozen",
       "start" -> "2026-11-06T10:00:00Z", "end" -> "2026-11-06T13:00:00Z", "freeze" -> "2026-11-06T11:00:00Z",
       "elapsed_seconds" -> 7200, "remaining_seconds" -> 3600,
+      "teams" -> teamsObj(2, 1),
       "problems" -> Json.arr(
         Json.obj("id" -> "A", "name" -> "Apples"),
         Json.obj("id" -> "B", "name" -> "Bananas"),
@@ -202,11 +216,12 @@ class PalevoQueryContestSpec extends AnyFunSuite with BeforeAndAfterAll {
   }
 
   test("before start: no problems, no rows, and no board or problem lookups") {
-    val src = fake(Seq(upcoming), Map(3 -> frozenBoard), Map(3 -> realBoard), Map(3 -> names))
+    val src = fake(Seq(upcoming), Map(3 -> frozenBoard), Map(3 -> realBoard), Map(3 -> names), Map(3 -> TeamCounts(7, 2)))
     for (p <- Seq(pub, jury)) {
       val c = contestReq(new Ctl(src), p: _*).only
       assert((c \ "status").as[String] == "before")
       assert((c \ "problems").toOption.isEmpty, c)
+      assert((c \ "teams").get == teamsObj(7, 2), c)
       assert((c \ "elapsed_seconds").as[Int] == 0)
       assert((c \ "remaining_seconds").as[Int] == 4 * 3600)
       val s = standingsReq(new Ctl(src), p: _*).only
@@ -214,6 +229,76 @@ class PalevoQueryContestSpec extends AnyFunSuite with BeforeAndAfterAll {
       assert((s \ "teams").toOption.isEmpty, s)
     }
     assert(!src.calls.exists(x => x.startsWith("board") || x.startsWith("problemNames")), src.calls)
+    assert(src.calls.contains("teamCounts(3)"), src.calls)
+  }
+
+  test("contest: team counts for a running, a finished and an upcoming contest, the same for both audiences") {
+    val running = frozenFake()
+    for (p <- Seq(pub, jury)) assert((contestReq(new Ctl(running), p: _*).only \ "teams").get == teamsObj(2, 1))
+    val src = betweenFake()
+    for (p <- Seq(pub, jury)) {
+      val cs = contestReq(new Ctl(src), p: _*).contests
+      assert(cs.map(c => ((c \ "id").as[Int], (c \ "status").as[String], (c \ "teams").get)) ==
+        Seq((3, "over", teamsObj(2, 1)), (4, "before", teamsObj(40, 3))))
+    }
+    // An empty participant list is reported as zeros, not omitted.
+    val none = contestReq(new Ctl(fake(Seq(plainRunning))), pub: _*).only
+    assert((none \ "teams").get == teamsObj(0, 0))
+  }
+
+  test("contest between contests: the finished one with problems, the upcoming one with times and teams only") {
+    val src = betweenFake()
+    val r = contestReq(new Ctl(src), pub: _*)
+    info(r.body)
+    assert(r.json == Json.obj("as_of" -> "2026-11-06T12:00:00Z", "contests" -> Json.arr(
+      Json.obj("id" -> 3, "name" -> "Contest 3", "status" -> "over", "view" -> "no-freeze",
+        "start" -> "2026-11-06T06:00:00Z", "end" -> "2026-11-06T10:00:00Z", "freeze" -> "2026-11-06T09:00:00Z",
+        "elapsed_seconds" -> 14400, "remaining_seconds" -> 0, "teams" -> teamsObj(2, 1),
+        "problems" -> Json.arr(Json.obj("id" -> "A", "name" -> "Apples"), Json.obj("id" -> "B", "name" -> "Bananas"),
+          Json.obj("id" -> "C", "name" -> "Cherries"))),
+      Json.obj("id" -> 4, "name" -> "Contest 4", "status" -> "before", "view" -> "no-freeze",
+        "start" -> "2026-11-07T08:00:00Z", "end" -> "2026-11-07T13:00:00Z", "freeze" -> "2026-11-07T11:00:00Z",
+        "elapsed_seconds" -> 0, "remaining_seconds" -> 18000, "teams" -> teamsObj(40, 3)))))
+    assert(!src.calls.exists(x => x.startsWith("board(4") || x.startsWith("problemNames(4")), src.calls)
+    assert(!src.calls.exists(_.contains("(1")), src.calls)
+  }
+
+  test("standings between contests: rows for the finished one, only the base object for the upcoming one") {
+    val src = betweenFake()
+    val r = standingsReq(new Ctl(src), pub :+ ("top" -> "2"): _*)
+    info(r.body)
+    assert(r.status == 200, r.body)
+    val Seq(done, next) = r.contests
+    assert((done \ "id").as[Int] == 3 && (done \ "status").as[String] == "over")
+    assert((done \ "teams").as[Int] == 2)
+    assert(rowTuples(done).size == 2)
+    assert(next == Json.obj("id" -> 4, "name" -> "Contest 4", "status" -> "before", "view" -> "no-freeze"))
+    assert(!src.calls.exists(_.startsWith("teamCounts")), src.calls)
+    assert(src.calls.count(_.startsWith("board")) == 1, src.calls)
+  }
+
+  test("contest: a failed team count leaves out teams and answers the rest") {
+    def failing(how: String) = new FakeSource(contestList = Seq(frozenRunning, upcoming.copy(id = 5)),
+      freezingBoards = Map(1 -> frozenBoard), problems = Map(1 -> names)) {
+      override def teamCounts(contestId: Int): Future[TeamCounts] =
+        if (how == "throw") throw new IllegalStateException("boom")
+        else Future.failed(new RuntimeException("secret sql detail"))
+    }
+    for (how <- Seq("throw", "fail"); src = failing(how)) {
+      val r = contestReq(new Ctl(src), pub: _*)
+      assert(r.status == 200, r.body)
+      val c = r.only
+      assert((c \ "teams").toOption.isEmpty, c)
+      assert((c \ "problems").as[Seq[JsObject]].size == 3, c)
+      assert((c \ "remaining_seconds").as[Int] == 3600, c)
+      assert(!r.body.contains("secret") && !r.body.contains("boom"), r.body)
+    }
+    // An upcoming contest degrades the same way.
+    val up = new FakeSource(contestList = Seq(upcoming)) {
+      override def teamCounts(contestId: Int): Future[TeamCounts] = Future.failed(new RuntimeException("x"))
+    }
+    val c = contestReq(new Ctl(up), pub: _*).only
+    assert((c \ "status").as[String] == "before" && (c \ "teams").toOption.isEmpty && (c \ "start").isDefined, c)
   }
 
   test("over: elapsed is the duration, remaining 0") {

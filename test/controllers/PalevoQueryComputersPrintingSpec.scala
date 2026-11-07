@@ -47,6 +47,7 @@ class PalevoQueryComputersPrintingSpec extends AnyFunSuite with BeforeAndAfterAl
     val asked = new java.util.concurrent.ConcurrentLinkedQueue[(Seq[Int], Option[Int], Option[String], Int)]()
     def contests() = inner.contests()
     def board(c: Int, real: Boolean) = inner.board(c, real)
+    def teamCounts(c: Int) = inner.teamCounts(c)
     def problemNames(c: Int) = inner.problemNames(c)
     def lastSubmits(c: Int, t: Seq[Int]) = inner.lastSubmits(c, t)
     def recentArrivals(c: Int, s: DateTime) = inner.recentArrivals(c, s)

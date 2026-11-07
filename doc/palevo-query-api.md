@@ -33,10 +33,15 @@ Contest-bound endpoints (`/contest`, `/standings`, `/team`, `/problems`, `/print
 Among the candidates (allowed and listed in `contests`):
 
 1. `contest` given: exactly that contest.
-2. Otherwise all contests that are **running** now, by id.
-3. Otherwise the contest that **finished** most recently (latest end time, higher id on a tie).
-4. Otherwise the contest that **starts** next (earliest start).
-5. No candidate at all: `{"as_of": ..., "contests": [], "note": "no contest"}`.
+2. Otherwise all contests that are **running** now, by id (finished and upcoming contests are then ignored).
+3. Otherwise (nothing running) **both** the contest that **finished** most recently (latest end time, higher id on
+   a tie) **and** the contest that **starts** next (earliest start time, lower id on a tie), whichever of the two
+   exist, sorted by id. So between contests 3 (over) and 4 (tomorrow) the array holds 3 and then 4; with only
+   finished contests just the latest one, with only upcoming ones just the soonest one.
+4. No candidate at all: `{"as_of": ..., "contests": [], "note": "no contest"}`.
+
+The array can therefore mix an `over` and a `before` contest; each element is answered according to its own
+`status` (see below: a `before` contest has no problems, rows or statistics).
 
 Every contest object starts with `id`, `name`, `status` (`before` | `running` | `over`) and `view`.
 
@@ -58,7 +63,7 @@ board. A `public` response never contains a jury-only field (see below).
 object. `/computers` has no `contests` array.
 
 Before a contest starts (`status` `before`) no problems, rows or statistics are returned and the board is never
-read. When the audience's board is unavailable, `/standings`, `/team` and `/problems` answer the contest with
+read (`/contest` still gives its times and `teams`, `/standings` and `/problems` just the base object). When the audience's board is unavailable, `/standings`, `/team` and `/problems` answer the contest with
 `"note": "board unavailable"` and empty `rows` / `candidates` / `problems`, and `/contest` with `audience=public`
 answers it with that note and no `problems`. The board is unavailable when the live board is off or too slow,
 and for `audience=public` also when the live monitor does not show the contest to the public (a contest that is
@@ -76,17 +81,44 @@ freeze in effect, a public board of 3 teams and a real board of 5 teams).
 
 ### GET /contest
 
-Times and the problem list. Fields added: `start`, `end`, `freeze` (null when no freeze is configured),
-`elapsed_seconds`, `remaining_seconds` (both clamped to the contest duration), and once started `problems`
-(`id`, `name`) in the order of the audience's board. When that board is unavailable, `audience=all` lists the
-contest's problems by id instead, while `audience=public` gets no `problems` and `"note": "board unavailable"`.
+Times, team counts and the problem list. Fields added: `start`, `end`, `freeze` (null when no freeze is
+configured), `elapsed_seconds`, `remaining_seconds` (both clamped to the contest duration), `teams`, and once
+started `problems` (`id`, `name`) in the order of the audience's board. When that board is unavailable,
+`audience=all` lists the contest's problems by id instead, while `audience=public` gets no `problems` and
+`"note": "board unavailable"`.
+
+`teams` is an **object** `{"regular": X, "out_of_competition": Y, "total": X+Y}` counting the contest's
+participants (the teams registered for it), for every selected contest including `before` ones:
+
+- `out_of_competition`: participants carrying the **not-rated** flag, i.e. the teams shown with rank `*` on the
+  standings (e.g. guest teams). A jury team counts as out of competition only if it
+  carries that flag; there is no other notion of a jury team here.
+- `regular`: all other participants. `total` is their sum.
+
+It comes from the participant list, not from the board, so it is known before the start, does not depend on the
+live monitor and is the same for both audiences (it reveals no problems or results). A participant that is
+disabled still counts. If the count lookup fails, `teams` is left out and the rest of the contest object is
+answered as usual. Do not confuse it with `/standings`' `teams`, which is a plain number: the rows on the board.
 
     GET /contest?audience=public&contests=*
 
     {"as_of":"2026-11-06T12:00:00Z","contests":[{"id":1,"name":"Contest 1","status":"running","view":"frozen",
     "start":"2026-11-06T10:00:00Z","end":"2026-11-06T13:00:00Z","freeze":"2026-11-06T11:00:00Z",
-    "elapsed_seconds":7200,"remaining_seconds":3600,
+    "elapsed_seconds":7200,"remaining_seconds":3600,"teams":{"regular":4,"out_of_competition":1,"total":5},
     "problems":[{"id":"A","name":"Apples"},{"id":"B","name":"Bananas"}]}]}
+
+Between contests (from `PalevoQueryContestSpec`: contest 3 ended at 10:00 with its results exposed, contest 4
+starts tomorrow; nothing is running, so both are selected):
+
+    GET /contest?audience=public&contests=*
+
+    {"as_of":"2026-11-06T12:00:00Z","contests":[{"id":3,"name":"Contest 3","status":"over","view":"no-freeze",
+    "start":"2026-11-06T06:00:00Z","end":"2026-11-06T10:00:00Z","freeze":"2026-11-06T09:00:00Z",
+    "elapsed_seconds":14400,"remaining_seconds":0,"teams":{"regular":2,"out_of_competition":1,"total":3},
+    "problems":[{"id":"A","name":"Apples"},{"id":"B","name":"Bananas"},{"id":"C","name":"Cherries"}]},
+    {"id":4,"name":"Contest 4","status":"before","view":"no-freeze",
+    "start":"2026-11-07T08:00:00Z","end":"2026-11-07T13:00:00Z","freeze":"2026-11-07T11:00:00Z",
+    "elapsed_seconds":0,"remaining_seconds":18000,"teams":{"regular":40,"out_of_competition":3,"total":43}}]}
 
 ### GET /standings?top=N
 
@@ -100,6 +132,16 @@ Each row: `rank` is a **JSON string** (`"1"`, or `"*"` for a team that is not ra
     {"as_of":"2026-11-06T12:00:00Z","contests":[{"id":1,"name":"Contest 1","status":"running","view":"frozen",
     "teams":3,"rows":[{"rank":"1","team":"School MSU #1: Beta","team_id":12,"solved":1,"penalty":5},
     {"rank":"2","team":"School SGU #1: Alpha","team_id":11,"solved":0,"penalty":0}]}]}
+
+Between contests (same fixture as the second `/contest` example): rows for the finished contest, only the base
+object for the upcoming one.
+
+    GET /standings?audience=public&contests=*&top=2
+
+    {"as_of":"2026-11-06T12:00:00Z","contests":[{"id":3,"name":"Contest 3","status":"over","view":"no-freeze",
+    "teams":2,"rows":[{"rank":"1","team":"School 1 #1: Team1: Ivanov, Petrov","team_id":1,"solved":1,"penalty":10},
+    {"rank":"2","team":"School 2 #1: Team2: Ivanov, Petrov","team_id":2,"solved":0,"penalty":0}]},
+    {"id":4,"name":"Contest 4","status":"before","view":"no-freeze"}]}
 
 ### GET /team?q=TEXT or id=N
 
@@ -225,6 +267,7 @@ already empty). All other job fields are as for `all`.
 
 The key `room` (in `/team`) appears only for `audience=all`, and for `public` the room is not even looked up.
 `/computers` and `/printing` answer both audiences, but a `public` response never carries a print agent (`agent`)
-or a computer's raw address (see `/printing`). `view` `live-jury` and the real board (including teams, problems
+or a computer's raw address (see `/printing`). The `/contest` `teams` counts are
+public and identical for both audiences. `view` `live-jury` and the real board (including teams, problems
 and results hidden by the freeze) are likewise `all` only. The test `PalevoQueryLeakSpec` checks this for every
 endpoint, audience and freeze state.

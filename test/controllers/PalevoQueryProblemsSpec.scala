@@ -146,6 +146,7 @@ class PalevoQueryProblemsSpec extends AnyFunSuite with BeforeAndAfterAll {
     val src = new QuerySource {
       def contests() = base.contests()
       def board(c: Int, real: Boolean) = base.board(c, real)
+      def teamCounts(c: Int) = base.teamCounts(c)
       def problemNames(c: Int) = base.problemNames(c)
       def lastSubmits(c: Int, t: Seq[Int]) = base.lastSubmits(c, t)
       def recentArrivals(c: Int, since: DateTime) = { seen = Some(since); base.recentArrivals(c, since) }
@@ -207,6 +208,7 @@ class PalevoQueryProblemsSpec extends AnyFunSuite with BeforeAndAfterAll {
     val src = new QuerySource {
       def contests() = base.contests()
       def board(c: Int, real: Boolean) = base.board(c, real)
+      def teamCounts(c: Int) = base.teamCounts(c)
       def problemNames(c: Int) = base.problemNames(c)
       def lastSubmits(c: Int, t: Seq[Int]) = base.lastSubmits(c, t)
       def recentArrivals(c: Int, since: DateTime) = Future.failed(new RuntimeException("db down"))

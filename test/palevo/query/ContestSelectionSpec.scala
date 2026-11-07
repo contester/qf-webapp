@@ -67,9 +67,43 @@ class ContestSelectionSpec extends AnyFunSuite {
     assert(ids(sel(cs)) == Right(Seq(1, 3)))
   }
 
-  test("none running: the latest-ended finished one") {
-    val cs = Seq(contest(1, -9, -8, -7, -6), contest(2, -5, -4, -2, -1), contest(3, -6, -5, -3, -1), contest(4, 2, 3, 4, 5))
+  test("none running: the latest-ended finished one and the soonest upcoming one, by id") {
+    val cs = Seq(contest(5, 2, 3, 4, 5), contest(1, -9, -8, -7, -6), contest(2, -5, -4, -2, -1),
+      contest(3, -6, -5, -3, -1), contest(4, 3, 4, 5, 6))
+    assert(ids(sel(cs)) == Right(Seq(2, 5)))
+  }
+
+  test("contests 1-3 over and 4 next: both 3 and 4") {
+    val cs = Seq(contest(1, -30, -29, -28, -27), contest(2, -20, -19, -18, -17), contest(3, -10, -9, -8, -7),
+      contest(4, 20, 21, 22, 23))
+    assert(ids(sel(cs)) == Right(Seq(3, 4)))
+  }
+
+  test("an upcoming contest with a lower id than the finished one still comes first") {
+    val cs = Seq(contest(1, 2, 3, 4, 5), contest(2, -5, -4, -2, -1))
+    assert(ids(sel(cs)) == Right(Seq(1, 2)))
+  }
+
+  test("only finished contests: just the latest-ended one") {
+    val cs = Seq(contest(1, -9, -8, -7, -6), contest(2, -5, -4, -2, -1), contest(3, -6, -5, -3, -1))
     assert(ids(sel(cs)) == Right(Seq(2)))
+  }
+
+  test("two upcoming and one finished: the finished one and only the soonest upcoming one") {
+    val cs = Seq(contest(1, -9, -8, -7, -6), contest(2, 5, 6, 7, 8), contest(3, 2, 3, 4, 5))
+    assert(ids(sel(cs)) == Right(Seq(1, 3)))
+  }
+
+  test("running contests present: upcoming and finished ones are ignored") {
+    val cs = Seq(contest(1, -9, -8, -7, -6), contest(2, -1, 1, 2, 3), contest(3, 2, 3, 4, 5))
+    assert(ids(sel(cs)) == Right(Seq(2)))
+  }
+
+  test("contests outside the allowed set never appear, finished or upcoming") {
+    val cs = Seq(contest(11, -5, -4, -1, 0), contest(12, 1, 2, 3, 4), contest(1, -9, -8, -7, -6), contest(2, 5, 6, 7, 8))
+    assert(ids(sel(cs, allowed = (1 to 10).toSet)) == Right(Seq(1, 2)))
+    assert(ids(sel(Seq(contest(11, -5, -4, -1, 0), contest(12, 1, 2, 3, 4)), allowed = (1 to 10).toSet)) == Right(Nil))
+    assert(ids(sel(Seq(contest(11, -5, -4, -1, 0), contest(2, 5, 6, 7, 8)), allowed = (1 to 10).toSet)) == Right(Seq(2)))
   }
 
   test("finished tie on end time: highest id") {
@@ -77,7 +111,7 @@ class ContestSelectionSpec extends AnyFunSuite {
     assert(ids(sel(cs)) == Right(Seq(2)))
   }
 
-  test("none finished: the soonest upcoming, tie lowest id") {
+  test("none finished: only the soonest upcoming, tie lowest id") {
     val cs = Seq(contest(1, 5, 6, 7, 8), contest(2, 2, 3, 4, 5), contest(3, 2, 3, 4, 5))
     assert(ids(sel(cs)) == Right(Seq(2)))
   }

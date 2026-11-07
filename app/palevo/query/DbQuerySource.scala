@@ -29,6 +29,9 @@ class DbQuerySource(db: JdbcBackend#DatabaseDef, liveMonitor: Option[ActorRef],
     controllers.LiveStreams.snapshot(liveMonitor, if (real) controllers.LiveStreams.adminJoin(contestId, canSeeAll = true) else JoinPublic(contestId))
   }
 
+  def teamCounts(contestId: Int): Future[TeamCounts] =
+    db.run(Queries.teamCounts(contestId)).map(_.headOption.fold(TeamCounts(0, 0))(TeamCounts.tupled))
+
   def problemNames(contestId: Int): Future[Map[String, String]] =
     problems(contestId).map(_.map(p => p.id -> p.name).toMap).recover { case _ => Map.empty }
 
@@ -89,6 +92,11 @@ object DbQuerySource {
       sql"""select s.problem, count(*)::int from submits s
             where s.contest = $contest and not s.tested
             group by s.problem limit #$MaxProblems""".as[(String, Int)]
+
+    /** (regular, not rated) participants of the contest: one aggregate row, read from the participant list only. */
+    def teamCounts(contest: Int) =
+      sql"""select (count(*) filter (where not p.not_rated))::int, (count(*) filter (where p.not_rated))::int
+            from participants p where p.contest = $contest limit 1""".as[(Int, Int)]
 
     /** The area of the computer of the team's latest submit whose computer is known, else that of its latest
       * print job whose computer is known. */
