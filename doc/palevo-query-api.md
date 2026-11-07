@@ -229,6 +229,16 @@ one area.
     {"as_of":"2026-11-06T12:00:00Z","computers":[{"name":"lin46","area":"Linux room","printer":"HP-2"},
     {"name":"wi46","area":"Windows room","printer":"HP-1"}],"ambiguous":true}
 
+### GET /areas
+
+Both audiences, the same answer; global like `/computers` (`contests` optional, validated). Every area (room) of the
+location table with its number of computers, sorted by name; `total` is the number of areas, `areas` holds at most 100.
+
+    GET /areas?audience=public
+
+    {"as_of":"2026-11-06T12:00:00Z","total":2,"areas":[{"name":"Linux room","computers":2},
+    {"name":"Windows room","computers":3}]}
+
 ### GET /printing?team=N&area=NAME
 
 Both audiences, contest-bound with the usual selection. Per selected contest the

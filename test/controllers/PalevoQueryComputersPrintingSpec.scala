@@ -84,6 +84,11 @@ class PalevoQueryComputersPrintingSpec extends AnyFunSuite with BeforeAndAfterAl
     val res = await(new Ctl(src).computers(r))
     Resp(res.header.status, await(res.body.consumeData).utf8String)
   }
+  private def areas(src: QuerySource, params: (String, String)*) = {
+    val r = req("/api/palevo/v1/areas", params: _*)
+    val res = await(new Ctl(src).areas(r))
+    Resp(res.header.status, await(res.body.consumeData).utf8String)
+  }
   private def printing(src: QuerySource, params: (String, String)*) = {
     val r = req("/api/palevo/v1/printing", params: _*)
     val res = await(new Ctl(src).printing(r))
@@ -106,6 +111,17 @@ class PalevoQueryComputersPrintingSpec extends AnyFunSuite with BeforeAndAfterAl
   private def names(r: Resp) = (r.json \ "computers").as[Seq[JsObject]].map(c => (c \ "name").as[String])
 
   private val public = Seq("audience" -> "public", "contests" -> "*")
+
+  test("/areas: counts computers per area, same for both audiences") {
+    val pub = areas(fake(), "audience" -> "public")
+    assert(pub.status == 200, pub.body)
+    assert((pub.json \ "total").as[Int] == 2)
+    assert((pub.json \ "areas").as[Seq[JsObject]].map(a => ((a \ "name").as[String], (a \ "computers").as[Int])) ==
+      Seq("Linux room" -> 2, "Windows room" -> 3))
+    assert(areas(fake(), "audience" -> "all").json \ "areas" == pub.json \ "areas")
+    assert(areas(fake(), "audience" -> "public", "contests" -> "x").status == 400)
+    assert(areas(fake()).status == 400)
+  }
 
   test("/computers: public gets the same answer as the jury") {
     for (p <- Seq("q" -> "46", "q" -> "wi46", "area" -> "wINDOWS room", "area" -> "nope", "q" -> "x" * 5000)) {

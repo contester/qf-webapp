@@ -45,6 +45,7 @@ GET /api/palevo/v1/standings controllers.PalevoQuery.standings
 GET /api/palevo/v1/team controllers.PalevoQuery.team
 GET /api/palevo/v1/problems controllers.PalevoQuery.problems
 GET /api/palevo/v1/computers controllers.PalevoQuery.computers
+GET /api/palevo/v1/areas controllers.PalevoQuery.areas
 GET /api/palevo/v1/printing controllers.PalevoQuery.printing
 
 GET /admin/rejudge/:contestId controllers.AdminApplication.rejudgePage(contestId: Int)

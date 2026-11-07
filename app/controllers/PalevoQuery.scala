@@ -312,6 +312,25 @@ class PalevoQuery(cc: ControllerComponents, cfg: QueryConfig, source: QuerySourc
     }
   }
 
+  private val MaxAreas = 100
+
+  /** GET /areas: both audiences, the same rows; global like `/computers`. Every area (room) with its number of
+    * computers, sorted by name, and the total number of areas (`areas` is capped at 100). */
+  def areas = authed { request =>
+    Scope.parse(request.getQueryString("audience"), request.getQueryString("contests").orElse(Some("*"))) match {
+      case Left(e) => badRequest(e)
+      case Right(_) =>
+        guarded(request.path) {
+          source.computers().map { all =>
+            val byArea = all.groupBy(_.area).toSeq.sortBy(_._1)
+            Ok(Json.obj("as_of" -> QueryJson.iso(now()),
+              "total" -> byArea.size,
+              "areas" -> byArea.take(MaxAreas).map { case (a, cs) => Json.obj("name" -> a, "computers" -> cs.size) }))
+          }
+        }
+    }
+  }
+
   /** GET /printing?team=…&area=…: both audiences; recent print jobs of the selected contests and global printer
     * problems. The public gets no print agent names and no raw computer addresses (see `AudienceView`). */
   def printing = authed { request =>
