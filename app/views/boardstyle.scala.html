@@ -1,4 +1,4 @@
-@* Look of a public scoreboard, pure CSS. Frozen: a very light blue table and low-key snow, while <html> has the
+@* Look of a public scoreboard, pure CSS. Frozen: a very light blue card and table, and low-key snow over the page, while <html> has the
    frozen-board class. Not started: a gray table, while <html> has the not-started class. Both classes are set
    by main.js on the live page and by the server on the static file. *@
 <style>
@@ -7,17 +7,22 @@ html.not-started .well .table,
 html.not-started .well .table > thead > tr > th,
 html.not-started .well .table > tbody > tr > th,
 html.not-started .well .table > tbody > tr > td { background-color: #e8e8e8; }
+html.frozen-board .well { background-color: #f1f7fd; }
 html.frozen-board .well .table,
 html.frozen-board .well .table > thead > tr > th,
 html.frozen-board .well .table > tbody > tr > th,
-html.frozen-board .well .table > tbody > tr > td { background-color: #f1f7fd; }
+html.frozen-board .well .table > tbody > tr > td { background-color: #f1f7fd; border-color: #d9e7f6; }
+html.frozen-board .well .table-hover > tbody > tr:hover > th,
+html.frozen-board .well .table-hover > tbody > tr:hover > td { background-color: #e1edfa; }
+html.not-started .well .table-hover > tbody > tr:hover > th,
+html.not-started .well .table-hover > tbody > tr:hover > td { background-color: #dcdcdc; }
 html.frozen-board body::before {
     content: "";
     position: fixed;
     top: 0; right: 0; bottom: 0; left: 0;
-    z-index: -1;
+    z-index: 1000;
     pointer-events: none;
-    opacity: 0.7;
+    opacity: 0.5;
     background-image:
         radial-gradient(circle at 20% 30%, #a9c8ec 1.5px, transparent 2.5px),
         radial-gradient(circle at 70% 75%, #a9c8ec 1px, transparent 2px),
