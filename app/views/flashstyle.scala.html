@@ -1,0 +1,21 @@
+@* A changed row of a live board flashes and fades back to its own colour (main.js liveFlash): a changed cell by what
+   it became (pending blue, solved green, failed red), the whole row green when the team moved. Only a `from` frame,
+   so each element fades to whatever background it normally has. *@
+<style>
+.table > tbody > tr.flash-move > th,
+.table > tbody > tr.flash-move > td { animation: flash-move 2.2s ease-out; }
+.table > tbody > tr > td.flash-pend { animation: flash-pend 2.2s ease-out; }
+.table > tbody > tr > td.flash-ok { animation: flash-ok 2.2s ease-out; }
+.table > tbody > tr > td.flash-fail { animation: flash-fail 2.2s ease-out; }
+@@keyframes flash-move { from { background-color: #b9eab9; } }
+@@keyframes flash-pend { from { background-color: #b8dcff; } }
+@@keyframes flash-ok { from { background-color: #8fe08f; } }
+@@keyframes flash-fail { from { background-color: #ffb3b3; } }
+@@media (prefers-reduced-motion: reduce) {
+    .table > tbody > tr.flash-move > th,
+    .table > tbody > tr.flash-move > td,
+    .table > tbody > tr > td.flash-pend,
+    .table > tbody > tr > td.flash-ok,
+    .table > tbody > tr > td.flash-fail { animation: none; }
+}
+</style>

@@ -26,4 +26,13 @@ assert.strictEqual(ctx.liveRowHtml(['A', 'B'], row, 0),
 assert.strictEqual(ctx.liveRankText(0), '*');
 assert.strictEqual(ctx.liveRankText(4), '4');
 
+// Flash: a changed cell flashes by what it became, an unchanged one not at all; the row when it moved.
+const cell = (cls, t) => `<span class="${cls}">${t}</span>`;
+const plan = ctx.liveFlashPlan(
+  ['', cell('text-warning', '?1'), cell('text-muted', '-1'), cell('text-success', '+')],
+  [cell('text-muted', '-1'), cell('text-success', '+1'), cell('text-muted', '-1'), ''], true);
+assert.deepStrictEqual(Array.from(plan.cells), ['fail', 'ok', null, null]);
+assert.strictEqual(plan.row, true);
+assert.strictEqual(ctx.liveFlashPlan(['a'], ['a'], false).row, false);
+
 console.log('livetable-check: OK');

@@ -435,6 +435,40 @@ function liveCellHtml(c) {
     }
 }
 
+// What colour a cell flashes when it changes, from its new markup: pending, solved or failed; null for empty.
+function liveCellKind(html) {
+    if (html.indexOf('text-success') >= 0) return 'ok';
+    if (html.indexOf('text-warning') >= 0) return 'pend';
+    if (html.indexOf('text-muted') >= 0) return 'fail';
+    return null;
+}
+
+// Which parts of a replaced row flash (see flashstyle.scala.html): the cells whose markup changed, and the whole
+// row when it moved or its rank changed. oldCells/newCells are the innerHTML of the problem cells, in order.
+function liveFlashPlan(oldCells, newCells, moved) {
+    return {
+        row: !!moved,
+        cells: newCells.map(function(h, i) { return h !== oldCells[i] ? liveCellKind(h) : null; })
+    };
+}
+
+// Adds the flash classes to a row that replaced an old one, and takes them off when the animation is over.
+function liveFlash(tr, oldCells, moved) {
+    var tds = tr.children('td.text-center');
+    var plan = liveFlashPlan(oldCells, tds.map(function() { return $(this).html(); }).get(), moved);
+    var classes = [];
+    if (plan.row) { tr.addClass('flash-move'); classes.push('flash-move'); }
+    tds.each(function(i) {
+        if (plan.cells[i]) { $(this).addClass('flash-' + plan.cells[i]); classes.push('flash-' + plan.cells[i]); }
+    });
+    if (classes.length) {
+        setTimeout(function() {
+            tr.removeClass('flash-move');
+            tds.removeClass('flash-ok flash-pend flash-fail');
+        }, 2600);
+    }
+}
+
 // All problem cells of a row; a problem absent from `cells` is empty.
 function liveCellsHtml(problems, cells) {
     var h = '';
@@ -496,7 +530,12 @@ function liveMonitor(eventsPath, containerSelector, currentTeamId) {
         add('row', function(e) {
             var tbody = body();
             if (!tbody.length) return;
-            tbody.children('tr[data-team="' + e.team + '"]').remove();
+            var old = tbody.children('tr[data-team="' + e.team + '"]');
+            var had = old.length > 0;
+            var oldIndex = old.index();
+            var oldRank = old.children('th').first().text();
+            var oldCells = old.children('td.text-center').map(function() { return $(this).html(); }).get();
+            old.remove();
             var tr = $(liveRowHtml(problems, e.row, currentTeamId));
             var rows = tbody.children('tr');
             if (e.pos < rows.length) {
@@ -505,6 +544,7 @@ function liveMonitor(eventsPath, containerSelector, currentTeamId) {
                 tbody.append(tr);
             }
             rows = tbody.children('tr');
+            if (had) liveFlash(tr, oldCells, oldIndex !== tr.index() || oldRank !== tr.children('th').first().text());
             for (var i = 0; i < e.ranks.length; i++) {
                 rows.eq(e.rankFrom + i).children('th').first().text(liveRankText(e.ranks[i]));
             }
@@ -518,8 +558,10 @@ function liveMonitor(eventsPath, containerSelector, currentTeamId) {
         add('cells', function(e) {
             var tr = body().children('tr[data-team="' + e.team + '"]');
             if (!tr.length) return;
+            var oldCells = tr.children('td.text-center').map(function() { return $(this).html(); }).get();
             tr.children('td.text-center').remove();
             tr.append(liveCellsHtml(problems, e.cells));
+            liveFlash(tr, oldCells, false);
         });
     };
 
