@@ -1,6 +1,11 @@
-@* Look of a frozen public scoreboard: a slight blue tint and low-key snow, pure CSS. Active while <html> has the
-   frozen-board class (main.js updateFrozen on the live page, the server on the static file). *@
+@* Look of a public scoreboard, pure CSS. Frozen: a slight blue tint and low-key snow, while <html> has the
+   frozen-board class. Not started: slightly grayer, while <html> has the not-started class. Both classes are set
+   by main.js on the live page and by the server on the static file. *@
 <style>
+html.not-started { background: #e9e9e9; }
+html.not-started body { background: transparent; }
+html.not-started .well { background: rgba(255, 255, 255, 0.6); }
+html.not-started .container { filter: grayscale(0.5); }
 html.frozen-board { background: #e4eefa; }
 html.frozen-board body { background: transparent; }
 html.frozen-board .well { background: rgba(255, 255, 255, 0.55); }
