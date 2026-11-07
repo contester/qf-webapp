@@ -25,8 +25,8 @@ class DbQuerySource(db: JdbcBackend#DatabaseDef, liveMonitor: Option[ActorRef],
     db.run(org.stingray.contester.dbmodel.SlickModel.allContests.result)
 
   def board(contestId: Int, real: Boolean): Future[Option[live.LiveBoard]] = {
-    import actors.LiveMonitorActor.{JoinAdmin, JoinPublic}
-    controllers.LiveStreams.snapshot(liveMonitor, if (real) JoinAdmin(contestId, real = true) else JoinPublic(contestId))
+    import actors.LiveMonitorActor.JoinPublic
+    controllers.LiveStreams.snapshot(liveMonitor, if (real) controllers.LiveStreams.adminJoin(contestId, canSeeAll = true) else JoinPublic(contestId))
   }
 
   def problemNames(contestId: Int): Future[Map[String, String]] =
