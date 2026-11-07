@@ -142,7 +142,7 @@ Rules (see spec "Tracker behaviour"): per contest keep recorded phase (max ever)
   - degenerate rows: `end == start`, `freeze >= end`: no exception, no end countdown when end is not after start.
   - `contest 11` gets phase events but no countdown; `contest 10` gets both.
   - custom `CountdownConfig(Seq(3), Nil)` and `CountdownConfig(Nil, Nil)` (disabled).
-  - ids: assert `qf-contest_starting-1-<startMillis>-10`.
+  - ids: assert `qf-contest_starting-1-in10-<startMillis>`.
 - [ ] **Step 3:** `sbt "testOnly palevo.ContestTimeTrackerSpec"` — expect FAIL on the new tests.
 - [ ] **Step 4:** Implement countdown inside `observe` (after phase events).
 - [ ] **Step 5:** Same command — expect PASS. Commit: `palevo: ContestTimeTracker with start and end countdowns`.

@@ -34,6 +34,9 @@ final class ContestTimeTracker(countdown: CountdownConfig = CountdownConfig.Defa
     else if (!now.isBefore(c.startTime)) Started
     else 0
 
+  /** Different instants; the same instant in another zone is not a difference. */
+  private def differs(a: DateTime, b: DateTime): Boolean = a.getMillis != b.getMillis
+
   private def remainingMillis(target: DateTime, now: DateTime): Long = target.getMillis - now.getMillis
 
   /** The thresholds whose time has come: at most `T` minutes remain. */
@@ -83,14 +86,16 @@ final class ContestTimeTracker(countdown: CountdownConfig = CountdownConfig.Defa
   private def rescheduleEvents(c: Contest, pc: PContest, st: State, now: DateTime): Seq[PalevoEvent] = {
     val old = st.row
     st.row = c
+    val startMoved = differs(c.startTime, old.startTime)
+    val endMoved = differs(c.endTime, old.endTime)
     val changes = Seq(
-      if (c.startTime != old.startTime) Some(TimeChange("start", old.startTime, c.startTime)) else None,
-      if (c.freezeTime != old.freezeTime && (freezeEnabled(old) || freezeEnabled(c)))
+      if (startMoved) Some(TimeChange("start", old.startTime, c.startTime)) else None,
+      if (differs(c.freezeTime, old.freezeTime) && (freezeEnabled(old) || freezeEnabled(c)))
         Some(TimeChange("freeze", old.freezeTime, c.freezeTime)) else None,
-      if (c.endTime != old.endTime) Some(TimeChange("end", old.endTime, c.endTime)) else None
+      if (endMoved) Some(TimeChange("end", old.endTime, c.endTime)) else None
     ).flatten
-    if (c.startTime != old.startTime) st.startFired = mutable.Set(reached(countdown.start, remainingMillis(c.startTime, now)): _*)
-    if (c.endTime != old.endTime) st.endFired = mutable.Set(reached(countdown.end, remainingMillis(c.endTime, now)): _*)
+    if (startMoved) st.startFired = mutable.Set(reached(countdown.start, remainingMillis(c.startTime, now)): _*)
+    if (endMoved) st.endFired = mutable.Set(reached(countdown.end, remainingMillis(c.endTime, now)): _*)
     if (changes.nonEmpty && c.id <= ContestTimeTracker.MaxAnnouncedContest) Seq(ContestRescheduled(pc, now, changes))
     else Nil
   }

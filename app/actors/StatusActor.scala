@@ -20,6 +20,11 @@ import scala.concurrent.Future
 import scala.util.{Success, Try}
 
 object StatusActor {
+  /** The contest time events for a contest row when this actor is their producer (`enabled`), else none; a failure is returned. */
+  def timeEventsOf(enabled: Boolean, observe: (Contest, org.joda.time.DateTime) => Seq[palevo.PalevoEvent], c: Contest,
+                   now: org.joda.time.DateTime): Try[Seq[palevo.PalevoEvent]] =
+    if (enabled) Try(observe(c, now)) else scala.util.Success(Nil)
+
   def props(db: JdbcBackend#DatabaseDef, palevo: PalevoSink, teamLookup: (Int, Int) => Future[Option[org.stingray.contester.dbmodel.LocalTeam]],
             liveHooks: live.LiveHooks, timeEvents: Boolean, countdown: CountdownConfig) =
     Props(new StatusActor(db, palevo, teamLookup, liveHooks, timeEvents, countdown))
@@ -382,7 +387,11 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
 
     case NewMultiContestState(cs) => {
       for (c <- cs) {
-        if (timeEvents) timeTracker.observe(c, com.github.nscala_time.time.Imports.DateTime.now).foreach(palevo.send)
+        StatusActor.timeEventsOf(timeEvents, timeTracker.observe, c, com.github.nscala_time.time.Imports.DateTime.now) match {
+          case scala.util.Success(events) => events.foreach(e => Try(palevo.send(e)).failed.foreach(t =>
+            logger.warn(s"cannot send ${e.eventType} for contest ${c.id}: $t")))
+          case scala.util.Failure(t) => logger.warn(s"cannot track the times of contest ${c.id}: $t")
+        }
         val old = contestStates.get(c.id)
         if (old.isEmpty || old.get != c) {
           logger.info(s"put: $c")

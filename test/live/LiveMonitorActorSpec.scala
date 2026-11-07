@@ -294,11 +294,15 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
 
   test("a monitor started in the middle of a countdown stays silent about the thresholds already passed") {
     val sink = new CollectingSink
-    val f = new Fixture(t0.minusMinutes(30), palevoSink = sink)
+    val f = new Fixture(t0.minusMinutes(21), palevoSink = sink)
     f.barrier()
     f.actor ! Tick
     f.barrier()
     assert(sink.events.isEmpty)
+    f.clock.at = t0.minusMinutes(19) // 60 and 30 were used up at startup; only 20 is still to come
+    f.actor ! Tick
+    f.barrier()
+    assert(aheadOf(sink) == Seq(20))
     f.stop()
   }
 

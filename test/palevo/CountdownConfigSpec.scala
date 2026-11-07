@@ -23,6 +23,13 @@ class CountdownConfigSpec extends AnyFunSuite {
     assert(CountdownConfig.sanitize(Nil, d) == Nil)
   }
 
+  test("a value of the wrong type falls back to the default instead of failing") {
+    val asString = CountdownConfig(Configuration.from(Map("palevo.countdown.start" -> "60,30")))
+    assert(asString == CountdownConfig.Default)
+    val words = CountdownConfig(Configuration.from(Map("palevo.countdown.end" -> Seq("soon"))))
+    assert(words.end == CountdownConfig.Default.end)
+  }
+
   test("apply reads palevo.countdown.start and .end; a missing key gives the default") {
     val cfg = CountdownConfig(Configuration.from(Map("palevo.countdown.start" -> Seq(15, 5))))
     assert(cfg == CountdownConfig(Seq(15, 5), CountdownConfig.Default.end))

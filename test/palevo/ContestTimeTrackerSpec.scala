@@ -211,6 +211,15 @@ class ContestTimeTrackerSpec extends AnyFunSuite {
     assert(resched(es).map(_.changes) == Seq(Seq(TimeChange("end", t(15), t(16)))) && es.size == 1)
   }
 
+  test("the same instants in another zone are not a reschedule") {
+    val tr = new ContestTimeTracker
+    tr.observe(contest(), t(8))
+    val zone = org.joda.time.DateTimeZone.forOffsetHours(3)
+    val rezoned = contest().copy(startTime = t(10).withZone(zone), freezeTime = t(14).withZone(zone),
+      endTime = t(15).withZone(zone), exposeTime = t(16).withZone(zone))
+    assert(tr.observe(rezoned, t(8, 1)).isEmpty)
+  }
+
   test("expose-only and name-only changes are silent") {
     val tr = new ContestTimeTracker
     tr.observe(contest(), t(8))

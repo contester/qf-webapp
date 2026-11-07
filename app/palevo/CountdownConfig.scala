@@ -2,6 +2,8 @@ package palevo
 
 import play.api.{Configuration, Logger}
 
+import scala.util.{Failure, Success, Try}
+
 /**
   * Minutes before the start and before the end of a contest at which palevo is told "in N minutes". An empty list
   * disables that countdown.
@@ -23,10 +25,14 @@ object CountdownConfig {
   /** Reads `palevo.countdown.start` and `palevo.countdown.end` (lists of minutes); a missing key means the default. */
   def apply(cfg: Configuration): CountdownConfig = {
     def read(key: String, default: Seq[Int]): Seq[Int] =
-      cfg.getOptional[Seq[Int]](key).fold(default) { xs =>
-        val clean = sanitize(xs, default)
-        if (xs.exists(_ <= 0)) log.warn(s"$key must list positive minutes; using the default ${default.mkString(",")}")
-        clean
+      Try(cfg.getOptional[Seq[Int]](key)) match {
+        case Success(xs) => xs.fold(default) { xs =>
+          if (xs.exists(_ <= 0)) log.warn(s"$key must list positive minutes; using the default ${default.mkString(",")}")
+          sanitize(xs, default)
+        }
+        case Failure(e) =>
+          log.warn(s"$key must be a list of minutes (${e.getMessage}); using the default ${default.mkString(",")}")
+          default
       }
     CountdownConfig(read("palevo.countdown.start", DefaultStart), read("palevo.countdown.end", DefaultEnd))
   }
