@@ -9,7 +9,9 @@ sealed trait BoardOut
 case class RowOut(change: RowChange) extends BoardOut
 case class WholeOut(board: LiveBoard) extends BoardOut
 
-case class Delta(freezing: Seq[BoardOut], real: Seq[BoardOut], ownCells: Seq[(Int, Map[String, LiveCell])])
+// `public` is the change of the public board: the freezing board without the contest jury teams.
+case class Delta(freezing: Seq[BoardOut], real: Seq[BoardOut], ownCells: Seq[(Int, Map[String, LiveCell])],
+                 public: Seq[BoardOut] = Nil)
 
 object Delta {
   val empty: Delta = Delta(Nil, Nil, Nil)
@@ -32,6 +34,10 @@ class LiveContest(initial: Contest, problems: Seq[String], teams: Seq[Team], sub
 
   private[this] var freezingBoard: LiveBoard = buildBoard(Freezing, now)
   private[this] var realBoard: LiveBoard = buildBoard(Real, now)
+  private[this] var pubBoard: LiveBoard = buildPublic(now)
+
+  /** What the public sees: the freezing board without the contest jury teams (coach teams stay). */
+  def publicBoard: LiveBoard = pubBoard
 
   def board(kind: BoardKind): LiveBoard = kind match {
     case Freezing => freezingBoard
@@ -84,7 +90,8 @@ class LiveContest(initial: Contest, problems: Seq[String], teams: Seq[Team], sub
     new LiveContest(current, problems, teams, subs, now)
 
   def differences(other: LiveContest): Seq[String] =
-    Seq(Freezing, Real).flatMap(kind => LiveContest.boardDifferences(kind, board(kind), other.board(kind)))
+    Seq(Freezing, Real).flatMap(kind => LiveContest.boardDifferences(kind, board(kind), other.board(kind))) ++
+      LiveContest.boardDifferences(Freezing, publicBoard, other.publicBoard).map("public " + _)
 
   private[this] def accepts(r: SubmitRec): Boolean = teamById.contains(r.team) && problemSet(r.problem)
 
@@ -118,6 +125,11 @@ class LiveContest(initial: Contest, problems: Seq[String], teams: Seq[Team], sub
   private[this] def buildBoard(kind: BoardKind, now: DateTime): LiveBoard =
     LiveBoard.build(problems, teamList, teamList.map(t => t.id -> teamCells(t.id, kind, now)).toMap)
 
+  private[this] def buildPublic(now: DateTime): LiveBoard = {
+    val shown = teamList.filterNot(LiveContest.isJury)
+    LiveBoard.build(problems, shown, shown.map(t => t.id -> teamCells(t.id, Freezing, now)).toMap)
+  }
+
   // True when now and the last seen instant lie on different sides of start, freeze or expose.
   // The live monitor wakes at these instants (ContestTimeTracker.nextDeadline lists them): keep the two in step.
   private[this] def crossed(now: DateTime): Boolean =
@@ -127,7 +139,8 @@ class LiveContest(initial: Contest, problems: Seq[String], teams: Seq[Team], sub
     lastNow = now
     freezingBoard = buildBoard(Freezing, now)
     realBoard = buildBoard(Real, now)
-    Delta(Seq(WholeOut(freezingBoard)), Seq(WholeOut(realBoard)), Nil)
+    pubBoard = buildPublic(now)
+    Delta(Seq(WholeOut(freezingBoard)), Seq(WholeOut(realBoard)), Nil, Seq(WholeOut(pubBoard)))
   }
 
   private[this] def freezeActive(now: DateTime): Boolean =
@@ -140,8 +153,8 @@ class LiveContest(initial: Contest, problems: Seq[String], teams: Seq[Team], sub
     else {
       lastNow = now
       val teamIds = touched.map(_._1).distinct
-      def step(kind: BoardKind, start: LiveBoard): (LiveBoard, Seq[BoardOut]) =
-        teamIds.foldLeft((start, Seq.empty[BoardOut])) { case ((b, outs), tid) =>
+      def step(kind: BoardKind, start: LiveBoard, ids: Seq[Int] = teamIds): (LiveBoard, Seq[BoardOut]) =
+        ids.foldLeft((start, Seq.empty[BoardOut])) { case ((b, outs), tid) =>
           val old = b.rowOf(tid).map(_.cells).getOrElse(Map.empty[String, LiveCell])
           val cells = touched.filter(_._1 == tid).map(_._2).distinct.foldLeft(old) { (m, p) =>
             val c = cellOf(tid, p, kind, now)
@@ -152,8 +165,10 @@ class LiveContest(initial: Contest, problems: Seq[String], teams: Seq[Team], sub
         }
       val (nf, fo) = step(Freezing, freezingBoard)
       val (nr, ro) = step(Real, realBoard)
+      val (np, po) = step(Freezing, pubBoard, teamIds.filterNot(tid => LiveContest.isJury(teamById(tid))))
       freezingBoard = nf
       realBoard = nr
+      pubBoard = np
       val own =
         if (!freezeActive(now)) Nil
         else teamIds.flatMap { tid =>
@@ -162,11 +177,14 @@ class LiveContest(initial: Contest, problems: Seq[String], teams: Seq[Team], sub
           val realChanged = ro.exists { case RowOut(c) => c.team == tid; case _ => false }
           if (realChanged || real != frozen) Some(tid -> real) else None
         }
-      Delta(fo, ro, own)
+      Delta(fo, ro, own, po)
     }
 }
 
 object LiveContest {
+  /** The contest jury teams (see InitialImportTools.addServiceTeams); coach teams are not. */
+  def isJury(t: Team): Boolean = t.schoolFullName == models.InitialImportTools.JurySchoolFullName
+
   private[live] def boardDifferences(kind: BoardKind, a: LiveBoard, b: LiveBoard): Seq[String] = {
     val header =
       (if (a.problems != b.problems) Seq(s"$kind: problems ${a.problems} vs ${b.problems}") else Nil) ++

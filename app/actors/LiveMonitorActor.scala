@@ -572,7 +572,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
         st.live = fresh
         st.dirty = false
         if (diffs.nonEmpty || wasDirty)
-          changed(cid, st, Delta(Seq(WholeOut(fresh.board(Freezing))), Seq(WholeOut(fresh.board(Real))), Nil),
+          changed(cid, st, Delta(Seq(WholeOut(fresh.board(Freezing))), Seq(WholeOut(fresh.board(Real))), Nil, Seq(WholeOut(fresh.publicBoard))),
             freezingChanged = old.board(Freezing) != fresh.board(Freezing))
         true
     }
@@ -642,7 +642,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
   private def writeStatic(): Unit = for (dir <- staticLocation; (cid, st) <- contests if cid < 11) {
     val ms = clock.millis()
     if (st.throttle.due(ms))
-      Try(StaticFiles.write(dir, cid, renderStatic(st.live.contest, visibleBoard(st.live, clock.now())))) match {
+      Try(StaticFiles.write(dir, cid, renderStatic(st.live.contest, publicVisible(st.live, clock.now())))) match {
         case Success(_) =>
           st.throttle.written(ms)
           st.staticFailing = false
@@ -693,13 +693,17 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
   private def visibleBoard(lc: LiveContest, now: DateTime): LiveBoard =
     if (started(lc, now)) lc.board(Freezing) else teamsOnly(lc.board(Freezing))
 
+  /** The same for the public: without the contest jury teams. */
+  private def publicVisible(lc: LiveContest, now: DateTime): LiveBoard =
+    if (started(lc, now)) lc.publicBoard else teamsOnly(lc.publicBoard)
+
   private def snapshotParts(st: ContestState, viewer: Viewer): (LiveBoard, Option[(Int, Map[String, LiveCell])]) = {
     val lc = st.live
     val now = clock.now()
     viewer match {
       case AdminRealViewer => (lc.board(Real), None)
       case AdminFreezingViewer => (visibleBoard(lc, now), None)
-      case PublicViewer => (visibleBoard(lc, now), None)
+      case PublicViewer => (publicVisible(lc, now), None)
       case TeamViewer(t) =>
         if (!started(lc, now)) (teamsOnly(lc.board(Freezing)), None)
         else (lc.board(Freezing), if (freezeActive(lc, now)) Some(t -> realCells(lc, t)) else None)
@@ -752,6 +756,8 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       val overlay = freezeActive(lc, now)
       lazy val plain = d.freezing.map(plainEvent)
       lazy val gated = if (isStarted) plain else d.freezing.collect { case WholeOut(b) => boardEvent(teamsOnly(b)) }
+      lazy val publicPlain = d.public.map(plainEvent)
+      lazy val publicGated = if (isStarted) publicPlain else d.public.collect { case WholeOut(b) => boardEvent(teamsOnly(b)) }
       lazy val real = d.real.map(plainEvent)
 
       def teamEvents(t: Int): Seq[Event] =
@@ -769,7 +775,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
         val events = viewer match {
           case AdminRealViewer => real
           case AdminFreezingViewer => gated
-          case PublicViewer => gated
+          case PublicViewer => publicGated
           case TeamViewer(t) => teamEvents(t)
         }
         events.foreach(offer(cid, q, _))

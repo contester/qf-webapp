@@ -253,4 +253,25 @@ class LiveContestSpec extends AnyFunSuite {
       assert(lc.board(Freezing) == lc.board(Real))
     }
   }
+
+  test("the public board has no jury teams, keeps coach teams, and its header counts and updates follow") {
+    val jury = LocalTeam(8, 1, models.InitialImportTools.JurySchoolFullName, "J", 1, "", notRated = true, noPrint = false, disabled = false)
+    val coach = LocalTeam(9, 1, models.InitialImportTools.CoachSchoolFullName, "C", 1, "", notRated = true, noPrint = false, disabled = false)
+    val now = start.plusHours(1)
+    val lc = new LiveContest(contest, problems, teams ++ Seq(jury, coach), Nil, now)
+    assert(!lc.publicBoard.rows.exists(_.team.id == 8) && lc.publicBoard.rows.exists(_.team.id == 9))
+    assert(lc.board(Freezing).rows.exists(_.team.id == 8))
+
+    val dj = lc.onArrived(rec(1, 8, "A", now), now)
+    assert(dj.freezing.size == 1 && dj.public.isEmpty)
+    lc.onFinished(1, ok.compiled, ok.passed, ok.taken, now.plusMinutes(1))
+    val dc = lc.onArrived(rec(2, 9, "A", now), now)
+    lc.onFinished(2, ok.compiled, ok.passed, ok.taken, now.plusMinutes(1))
+    assert(lc.board(Freezing).solvedCounts("A") == 2 && lc.publicBoard.solvedCounts("A") == 1)
+    val d = lc.onArrived(rec(3, 1, "A", now), now)
+    assert(d.public.size == 1)
+    assert(lc.differences(lc.rebuilt(problems, teams ++ Seq(jury, coach), lc.records, now.plusMinutes(2))).isEmpty)
+    val t = lc.onTeamChanged(teams.head, now)
+    assert(t.public == Seq(WholeOut(lc.publicBoard)) && !lc.publicBoard.rows.exists(_.team.id == 8))
+  }
 }
