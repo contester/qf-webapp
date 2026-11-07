@@ -34,6 +34,8 @@ object LiveMonitorActor {
   // or with Status.Failure when the contest is unknown (or, for JoinPublic, not public).
   sealed trait Join
   case class JoinPublic(contest: Int) extends Join
+  // The public board for a contest that need not be public: only for the admin-protected preview routes.
+  case class JoinPublicPreview(contest: Int) extends Join
   case class JoinTeam(contest: Int, team: Int) extends Join
   case class JoinAdmin(contest: Int, real: Boolean) extends Join
 
@@ -376,6 +378,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
 
   private def contestOf(j: Join): Int = j match {
     case JoinPublic(c) => c
+    case JoinPublicPreview(c) => c
     case JoinTeam(c, _) => c
     case JoinAdmin(c, _) => c
   }
@@ -385,6 +388,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
   /** The contest and viewer of a join; None when it is not allowed (a contest that is not public). */
   private def viewerOf(j: Join): Option[(Int, Viewer)] = j match {
     case JoinPublic(cid) => if (cfg.publicContests(cid)) Some(cid -> PublicViewer) else None
+    case JoinPublicPreview(cid) => Some(cid -> PublicViewer)
     case JoinTeam(cid, team) => Some(cid -> TeamViewer(team))
     case JoinAdmin(cid, real) => Some(cid -> (if (real) AdminRealViewer else AdminFreezingViewer))
   }

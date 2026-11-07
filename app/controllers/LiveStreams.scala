@@ -44,6 +44,10 @@ object LiveStreams extends Results {
   def adminJoin(contestId: Int, canSeeAll: Boolean): actors.LiveMonitorActor.JoinAdmin =
     actors.LiveMonitorActor.JoinAdmin(contestId, real = canSeeAll)
 
+  /** The public board of a contest whether or not it is public: only for routes behind an admin session. */
+  def publicPreviewJoin(contestId: Int): actors.LiveMonitorActor.JoinPublicPreview =
+    actors.LiveMonitorActor.JoinPublicPreview(contestId)
+
   def response(source: Source[Event, _]): Result =
     Ok.chunked(source).as(ContentTypes.EVENT_STREAM).withHeaders(streamHeaders: _*)
 

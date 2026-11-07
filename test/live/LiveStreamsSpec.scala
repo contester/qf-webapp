@@ -28,4 +28,15 @@ class LiveStreamsSpec extends AnyFunSuite {
     val admin = new String(Files.readAllBytes(Paths.get("app/controllers/AdminApplication.scala")), "UTF-8")
     assert(admin.contains("LiveStreams.adminJoin(contestId, request.identity.canSeeAll(contestId))"))
   }
+
+  test("the public-preview join is built only in LiveStreams and used only by the admin routes") {
+    val files = Files.walk(Paths.get("app")).iterator().asScala.filter(p => p.toString.endsWith(".scala") || p.toString.endsWith(".html")).toList
+    val users = files.filter(p => new String(Files.readAllBytes(p), "UTF-8").toLowerCase.contains("publicpreview")).map(_.toString).toSet
+    assert(users == Set("app/actors/LiveMonitorActor.scala", "app/controllers/LiveStreams.scala", "app/controllers/AdminApplication.scala"), users.toString)
+    val admin = new String(Files.readAllBytes(Paths.get("app/controllers/AdminApplication.scala")), "UTF-8")
+    Seq("def publicPreview(id: Int)", "def publicPreviewEvents(id: Int)").foreach { d =>
+      val at = admin.indexOf(d)
+      assert(at >= 0 && admin.substring(at, at + d.length + 80).contains("AdminPermissions.withSpectate(id)"), d)
+    }
+  }
 }

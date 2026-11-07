@@ -81,6 +81,16 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     f.stop()
   }
 
+  test("JoinPublicPreview gives the public board of a contest that is not public") {
+    val f = new Fixture(running, rows = Seq(contest(), contest(42)))
+    val probe = TestProbe()
+    probe.send(f.actor, JoinPublic(42))
+    probe.expectMsgType[akka.actor.Status.Failure](5.seconds)
+    val p = f.subscribe(JoinPublicPreview(42))
+    assert((next(p, "board") \ "rows").as[Seq[JsValue]].size == 3)
+    f.stop()
+  }
+
   test("before start the public, team and freezing admin boards list the teams without problems; the start tick sends the whole board") {
     val f = new Fixture(t0.minusMinutes(5), subs = Map(1 -> Seq(rec(1, 1, "A", t0.minusMinutes(10), ok))))
     val pub = f.subscribe(JoinPublic(1))

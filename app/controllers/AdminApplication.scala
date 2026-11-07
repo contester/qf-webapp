@@ -133,6 +133,23 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }
 
+  // The public page and stream of any contest, for the people who can open its admin monitor: what the public
+  // would see, whether or not the contest is on the public list. Nothing here is reachable without a session.
+  def publicPreview(id: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(id)).async { implicit request =>
+    if (!liveConfig.enabled) Future.successful(NotFound)
+    else getSelectedContests(id, request.identity).flatMap { sel =>
+      if (sel.contest.id != id) Future.successful(NotFound)
+      else LiveStreams.snapshot(liveMonitor.ref, LiveStreams.publicPreviewJoin(id)).map { initial =>
+        Ok(html.publiclive(sel.contest, routes.AdminApplication.publicPreviewEvents(id).url, initial))
+          .withHeaders(LiveStreams.pageHeaders: _*)
+      }
+    }
+  }
+
+  def publicPreviewEvents(id: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(id)).async { implicit request =>
+    LiveStreams.stream(liveMonitor.ref.filter(_ => liveConfig.enabled), LiveStreams.publicPreviewJoin(id))
+  }
+
   // The real board for accounts that can see everything, otherwise the freezing board.
   def monitorEvents(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
     LiveStreams.stream(liveMonitor.ref.filter(_ => liveConfig.enabled),
