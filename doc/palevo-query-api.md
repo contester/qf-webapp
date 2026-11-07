@@ -104,9 +104,11 @@ comma-separated member after `:`; the school full name is not matched. At most 5
 non-integer `id`: 400. Fields added per contest: `candidates` (`id`, `name`, `school`; best matches first) and,
 only when exactly one candidate remains, `team`. With several candidates there is no `team`; ask again with
 `id`. Team fields: `rank` (string), `solved`, `penalty`, `id`, `name`, `problems` (per problem id a cell:
-`state` `ok` | `fail` | `pending` | `empty`, `attempts`, and `minutes` for `ok`; `attempts` counts the failed
-submits before the solve, or before the first pending or freeze-hidden submit, so `"state":"pending","attempts":1`
-means 1 earlier failure and then at least one pending or hidden submit, not 1 attempt in total), `last_submit_at` and
+`state` `ok` | `fail` | `pending` | `empty`, `attempts`, and `minutes` for `ok`; `attempts`: for `ok`, the number of
+submits up to and including the solving one; for `fail`, the number of failed submits; for `pending`, the number of
+failed submits before the first pending or freeze-hidden submit, those pending or hidden submits themselves not
+being counted, so `"state":"pending","attempts":1` means 1 earlier failure and then at least one pending or hidden
+submit), `last_submit_at` and
 `seconds_since_last_submit` (absent when the team never submitted), and for `audience=all` only `room`.
 
 `room` is the area of the computer of the team's latest submit **from a computer listed in the location
@@ -134,8 +136,8 @@ Ambiguous (`q=SGU`):
 
 ### GET /problems?window=15m
 
-Per problem, from the audience's board: `solved` (teams that solved it), `teams_attempted`, `attempts` (the sum of the cells' `attempts` as defined under /team: failures before a solve or before
-the first pending or freeze-hidden submit; pending and hidden submits themselves are not counted); plus activity: `recent_submits` (submits that **arrived** within the window,
+Per problem, from the audience's board: `solved` (teams that solved it), `teams_attempted`, `attempts` (the sum over all teams of the cell `attempts` defined under /team, so
+pending and freeze-hidden submits themselves are not counted); plus activity: `recent_submits` (submits that **arrived** within the window,
 whatever their outcome) and `pending` (submits not yet tested; under public + freeze this also covers submits hidden by the freeze). `window` is `<n>m`, n from 1 to 120, default
 `15m`; anything else is 400. The contest object also gets `window_minutes`.
 
@@ -149,6 +151,10 @@ If the activity lookup fails the counts degrade to 0 and the rest is still answe
     "window_minutes":15,"problems":[
     {"id":"A","name":"Apples","solved":1,"teams_attempted":2,"attempts":2,"recent_submits":1,"pending":1},
     {"id":"B","name":"Bananas","solved":0,"teams_attempted":1,"attempts":2,"recent_submits":0,"pending":0}]}]}
+
+How the counts add up in this example (public, frozen board): problem A has Alpha `pending` with 1 earlier failure
+(1) and Beta `ok` on the first try (1), so `attempts` is 2; problem B has Gamma `fail` with 2 failed submits, so
+`attempts` is 2 and `teams_attempted` is 1.
 
 ### GET /computers?q=TEXT or area=NAME (jury only)
 
