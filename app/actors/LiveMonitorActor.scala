@@ -148,9 +148,9 @@ object LiveMonitorActor {
   private val pingEvent = Event("", None, Some("ping"))
   private val emptyBoard = LiveBoard(Nil, Vector.empty, Map.empty)
 
-  /** What a viewer without the real board sees before the start: the teams, in board order, and no problems. */
+  /** What a viewer without the real board sees before the start: the teams, in board order, and no problems; a not-rated team keeps rank 0. */
   private[actors] def teamsOnly(b: LiveBoard): LiveBoard =
-    LiveBoard(Nil, b.rows.map(r => r.copy(score = ACM.Score(0, 0, 0), cells = Map.empty, rank = 1)), Map.empty)
+    LiveBoard(Nil, b.rows.map(r => r.copy(score = ACM.Score(0, 0, 0), cells = Map.empty, rank = if (r.rank == 0) 0 else 1)), Map.empty)
   private val crossCheckReason = "cross-check"
 }
 

@@ -97,4 +97,14 @@ class LiveTeamChangeSpec extends TestKit(ActorSystem("LiveTeamChangeSpec", Confi
     f.stop()
     succeed
   }
+
+  test("before the start a not-rated team keeps its * and the rest show rank 1") {
+    val f = new Fixture(t0.minusMinutes(5))
+    val pub = f.subscribe(JoinPublic(1))
+    next(pub, "board")
+    f.actor ! TeamChanged(1, changed(1, notRated = true))
+    val rows = (next(pub, "board") \ "rows").as[Seq[play.api.libs.json.JsValue]]
+    assert(rows.map(r => ((r \ "team").as[Int], (r \ "rank").as[String])).toSet == Set((1, "*"), (2, "1"), (3, "1")))
+    f.stop()
+  }
 }
