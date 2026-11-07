@@ -14,7 +14,7 @@ responses are `application/json`, all requests are `GET`.
 - `palevo.query.token` unset or blank: the API is disabled and **every route answers 404 with an empty body**
   (also when a header is sent).
 - Missing or wrong token: `401` with `{"error":"unauthorized"}` (the body never contains the token).
-- `palevo.query.contests` bounds every request: a contest outside this set is never shown, never read and never
+- `palevo.query.contests` bounds every request: a contest outside this set is never shown, never queried for data and never
   mentioned, whatever `contests` or `contest` say.
 
 ## Common parameters
@@ -98,12 +98,15 @@ Each row: `rank` is a **JSON string** (`"1"`, or `"*"` for a team that is not ra
 
 ### GET /team?q=TEXT or id=N
 
-Finds teams on the audience's board. `q` is matched against school (short and full name), team number and team
-name; `id` is the team id and **wins over `q`** when both are given. Neither: 400 `q or id is required`; a
+Finds teams on the audience's board. `q` is matched (ignoring case and punctuation, Latin look-alike letters folded to Cyrillic) against the school
+short name joined with the team number (`sgu1`), the school short name, the team-name part before `:` and each
+comma-separated member after `:`; the school full name is not matched. At most 5 candidates are returned; `id` is the team id and **wins over `q`** when both are given. Neither: 400 `q or id is required`; a
 non-integer `id`: 400. Fields added per contest: `candidates` (`id`, `name`, `school`; best matches first) and,
 only when exactly one candidate remains, `team`. With several candidates there is no `team`; ask again with
 `id`. Team fields: `rank` (string), `solved`, `penalty`, `id`, `name`, `problems` (per problem id a cell:
-`state` `ok` | `fail` | `pending` | `empty`, `attempts`, and `minutes` for `ok`), `last_submit_at` and
+`state` `ok` | `fail` | `pending` | `empty`, `attempts`, and `minutes` for `ok`; `attempts` counts the failed
+submits before the solve, or before the first pending or freeze-hidden submit, so `"state":"pending","attempts":1`
+means 1 earlier failure and then at least one pending or hidden submit, not 1 attempt in total), `last_submit_at` and
 `seconds_since_last_submit` (absent when the team never submitted), and for `audience=all` only `room`.
 
 `room` is the area of the computer of the team's latest submit **from a computer listed in the location
@@ -131,9 +134,9 @@ Ambiguous (`q=SGU`):
 
 ### GET /problems?window=15m
 
-Per problem, from the audience's board: `solved` (teams that solved it), `teams_attempted`, `attempts` (all
-attempts including pending ones); plus activity: `recent_submits` (submits that **arrived** within the window,
-whatever their outcome) and `pending` (submits not yet tested). `window` is `<n>m`, n from 1 to 120, default
+Per problem, from the audience's board: `solved` (teams that solved it), `teams_attempted`, `attempts` (the sum of the cells' `attempts` as defined under /team: failures before a solve or before
+the first pending or freeze-hidden submit; pending and hidden submits themselves are not counted); plus activity: `recent_submits` (submits that **arrived** within the window,
+whatever their outcome) and `pending` (submits not yet tested; under public + freeze this also covers submits hidden by the freeze). `window` is `<n>m`, n from 1 to 120, default
 `15m`; anything else is 400. The contest object also gets `window_minutes`.
 
 Under `audience=public` with a freeze in effect, `solved`, `teams_attempted` and `attempts` come from the
@@ -150,8 +153,10 @@ If the activity lookup fails the counts degrade to 0 and the rest is still answe
 ### GET /computers?q=TEXT or area=NAME (jury only)
 
 `audience=all` required, otherwise 403 `jury only` (no data is touched). **Global**: not tied to a contest; the
-`contests` parameter is optional (validated if given) and the response has no `contests` array. `q` matches the
-computer name loosely; `area` matches an area name exactly (ignoring case). Neither: 400. At most **10**
+`contests` parameter is optional (validated if given) and the response has no `contests` array. `q` needs at least one digit: its digits are compared with the computer name's trailing digits (leading zeros
+ignored) and its letters are a prefix of the name's letters; a `q` without digits returns no computers, not a 400.
+`area` is compared after normalisation (ignores case, spaces and punctuation, folds look-alike letters). When both
+are given, `q` wins. Neither: 400. At most **10**
 computers, sorted by name. `ambiguous` is true when several computers are returned and they belong to more than
 one area.
 

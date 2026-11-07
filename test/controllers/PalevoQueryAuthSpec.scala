@@ -51,7 +51,7 @@ class PalevoQueryAuthSpec extends AnyFunSuite with BeforeAndAfterAll {
 
   private val now = DateTime.now
 
-  private def ping(c: PalevoQuery, headers: (String, String)*): Result = {
+  private def callContest(c: PalevoQuery, headers: (String, String)*): Result = {
     val path = "/api/palevo/v1/contest"
     val q = Map("audience" -> Seq("public"), "contests" -> Seq("*"))
     val r = RequestFactory.plain.createRequest(RemoteConnection("127.0.0.1", secure = false, None), "GET",
@@ -64,39 +64,39 @@ class PalevoQueryAuthSpec extends AnyFunSuite with BeforeAndAfterAll {
 
   test("no token configured: 404 with an empty body, even with a bearer header") {
     val c = controller(None)
-    val r = ping(c)
+    val r = callContest(c)
     assert(r.header.status == 404)
     assert(body(r).isEmpty)
-    val r2 = ping(c, "Authorization" -> s"Bearer $token")
+    val r2 = callContest(c, "Authorization" -> s"Bearer $token")
     assert(r2.header.status == 404)
     assert(body(r2).isEmpty)
   }
 
   test("token set, no Authorization header: 401") {
-    assert(ping(controller(Some(token))).header.status == 401)
+    assert(callContest(controller(Some(token))).header.status == 401)
   }
 
   test("token set, wrong bearer: 401") {
-    assert(ping(controller(Some(token)), "Authorization" -> "Bearer wrong").header.status == 401)
+    assert(callContest(controller(Some(token)), "Authorization" -> "Bearer wrong").header.status == 401)
   }
 
   test("token set, bearer of a different length: 401 without an exception") {
     val c = controller(Some(token))
-    assert(ping(c, "Authorization" -> s"Bearer ${token}x").header.status == 401)
-    assert(ping(c, "Authorization" -> "Bearer ").header.status == 401)
-    assert(ping(c, "Authorization" -> "Bearer").header.status == 401)
-    assert(ping(c, "Authorization" -> token).header.status == 401)
+    assert(callContest(c, "Authorization" -> s"Bearer ${token}x").header.status == 401)
+    assert(callContest(c, "Authorization" -> "Bearer ").header.status == 401)
+    assert(callContest(c, "Authorization" -> "Bearer").header.status == 401)
+    assert(callContest(c, "Authorization" -> token).header.status == 401)
   }
 
   test("token set, correct bearer: 200 JSON") {
-    val r = ping(controller(Some(token)), "Authorization" -> s"Bearer $token")
+    val r = callContest(controller(Some(token)), "Authorization" -> s"Bearer $token")
     assert(r.header.status == 200)
     assert(r.body.contentType.exists(_.startsWith("application/json")))
     assert((Json.parse(body(r)) \ "contests").as[Seq[play.api.libs.json.JsObject]].nonEmpty)
   }
 
   test("401 carries a JSON error and no token") {
-    val r = ping(controller(Some(token)), "Authorization" -> "Bearer wrong")
+    val r = callContest(controller(Some(token)), "Authorization" -> "Bearer wrong")
     val b = body(r)
     assert((Json.parse(b) \ "error").asOpt[String].exists(_.nonEmpty))
     assert(!b.contains(token))
