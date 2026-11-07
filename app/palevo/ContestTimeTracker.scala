@@ -21,7 +21,8 @@ final class ContestTimeTracker(countdown: CountdownConfig = CountdownConfig.Defa
   private val Frozen = 2
   private val Finished = 3
 
-  private final class State(var phase: Int, val startFired: mutable.Set[Int], val endFired: mutable.Set[Int])
+  /** What is remembered of a contest: its phase (never goes back), the row's times and the countdown thresholds already used. */
+  private final class State(var phase: Int, var row: Contest, var startFired: mutable.Set[Int], var endFired: mutable.Set[Int])
 
   private val seen = mutable.Map[Int, State]()
 
@@ -52,11 +53,12 @@ final class ContestTimeTracker(countdown: CountdownConfig = CountdownConfig.Defa
     val pc = PContest(c.id, c.name)
     seen.get(c.id) match {
       case None =>
-        seen.put(c.id, new State(phaseAt(c, now),
+        seen.put(c.id, new State(phaseAt(c, now), c,
           mutable.Set(reached(countdown.start, remainingMillis(c.startTime, now)): _*),
           mutable.Set(reached(countdown.end, remainingMillis(c.endTime, now)): _*)))
         Nil
       case Some(st) =>
+        val rescheduled = rescheduleEvents(c, pc, st, now)
         val phase = phaseAt(c, now)
         val phaseEvents =
           if (phase > st.phase) {
@@ -69,8 +71,28 @@ final class ContestTimeTracker(countdown: CountdownConfig = CountdownConfig.Defa
               case _ => None
             }
           } else Nil
-        phaseEvents ++ countdownEvents(c, pc, st, now)
+        rescheduled ++ phaseEvents ++ countdownEvents(c, pc, st, now)
     }
+  }
+
+  /**
+    * One event for an edit of the start, freeze or end (freeze only while it is enabled before or after the edit).
+    * The edit restarts the countdowns against the new times; thresholds already reached under them are used up silently.
+    * Expose and name changes are remembered but not announced.
+    */
+  private def rescheduleEvents(c: Contest, pc: PContest, st: State, now: DateTime): Seq[PalevoEvent] = {
+    val old = st.row
+    st.row = c
+    val changes = Seq(
+      if (c.startTime != old.startTime) Some(TimeChange("start", old.startTime, c.startTime)) else None,
+      if (c.freezeTime != old.freezeTime && (freezeEnabled(old) || freezeEnabled(c)))
+        Some(TimeChange("freeze", old.freezeTime, c.freezeTime)) else None,
+      if (c.endTime != old.endTime) Some(TimeChange("end", old.endTime, c.endTime)) else None
+    ).flatten
+    if (c.startTime != old.startTime) st.startFired = mutable.Set(reached(countdown.start, remainingMillis(c.startTime, now)): _*)
+    if (c.endTime != old.endTime) st.endFired = mutable.Set(reached(countdown.end, remainingMillis(c.endTime, now)): _*)
+    if (changes.nonEmpty && c.id <= ContestTimeTracker.MaxAnnouncedContest) Seq(ContestRescheduled(pc, now, changes))
+    else Nil
   }
 
   private def countdownEvents(c: Contest, pc: PContest, st: State, now: DateTime): Seq[PalevoEvent] =

@@ -172,5 +172,99 @@ class ContestTimeTrackerSpec extends AnyFunSuite {
     assert(e.at.contains(t(10)) && e.id == s"qf-contest_starting-1-in10-${t(10).getMillis}")
     assert(e.ts == t(9, 50))
   }
+
+  // ---- reschedule ----
+
+  private def moved(c: org.stingray.contester.dbmodel.Contest, start: DateTime = null, freeze: DateTime = null,
+                    end: DateTime = null, expose: DateTime = null, name: String = null) =
+    c.copy(name = Option(name).getOrElse(c.name), startTime = Option(start).getOrElse(c.startTime),
+      freezeTime = Option(freeze).getOrElse(c.freezeTime), endTime = Option(end).getOrElse(c.endTime),
+      exposeTime = Option(expose).getOrElse(c.exposeTime))
+
+  private def resched(es: Seq[PalevoEvent]) = es.collect { case e: ContestRescheduled => e }
+
+  test("a moved start is announced once, before anything else of the same observation") {
+    val tr = new ContestTimeTracker
+    tr.observe(contest(), t(8, 30))
+    val es = tr.observe(moved(contest(), start = t(11)), t(8, 40))
+    assert(es.size == 1)
+    val e = es.head.asInstanceOf[ContestRescheduled]
+    assert(e.changes == Seq(TimeChange("start", t(10), t(11))) && e.ts == t(8, 40))
+    assert(e.id == s"qf-contest_rescheduled-1-${t(8, 40).getMillis}")
+    assert(tr.observe(moved(contest(), start = t(11)), t(8, 41)).isEmpty)
+  }
+
+  test("shifting all four times is one event listing start, freeze and end") {
+    val tr = new ContestTimeTracker
+    tr.observe(contest(), t(8))
+    val shifted = moved(contest(), start = t(11, 30), freeze = t(15, 30), end = t(16, 30), expose = t(17, 30))
+    val es = tr.observe(shifted, t(8, 5))
+    assert(es.size == 1)
+    assert(es.head.asInstanceOf[ContestRescheduled].changes ==
+      Seq(TimeChange("start", t(10), t(11, 30)), TimeChange("freeze", t(14), t(15, 30)), TimeChange("end", t(15), t(16, 30))))
+  }
+
+  test("an extended end of a running contest is announced with only the end") {
+    val tr = new ContestTimeTracker
+    tr.observe(contest(), t(12))
+    val es = tr.observe(moved(contest(), end = t(16)), t(12, 5))
+    assert(resched(es).map(_.changes) == Seq(Seq(TimeChange("end", t(15), t(16)))) && es.size == 1)
+  }
+
+  test("expose-only and name-only changes are silent") {
+    val tr = new ContestTimeTracker
+    tr.observe(contest(), t(8))
+    assert(tr.observe(moved(contest(), expose = t(18)), t(8, 1)).isEmpty)
+    assert(tr.observe(moved(contest(), expose = t(18), name = "Renamed"), t(8, 2)).isEmpty)
+  }
+
+  test("freeze is listed only when freeze is enabled before or after the change") {
+    val disabled = contest(freeze = t(15), end = t(15))
+    val tr = new ContestTimeTracker
+    tr.observe(disabled, t(8))
+    assert(tr.observe(moved(disabled, freeze = t(15, 30)), t(8, 1)).isEmpty) // still disabled
+    val tr2 = new ContestTimeTracker
+    tr2.observe(contest(), t(8))
+    val off = tr2.observe(moved(contest(), freeze = t(15)), t(8, 1)) // enabled -> disabled
+    assert(resched(off).map(_.changes) == Seq(Seq(TimeChange("freeze", t(14), t(15)))))
+  }
+
+  test("after a reschedule the countdown runs again against the new start, with new ids") {
+    val tr = new ContestTimeTracker
+    tr.observe(contest(), t(8, 30))
+    val first = tr.observe(moved(contest(), start = t(11)), t(8, 40))
+    assert(ahead(first).isEmpty)
+    val es = (1 to 140).flatMap(i => tr.observe(moved(contest(), start = t(11)), t(8, 40).plusMinutes(i)))
+    assert(ahead(es.take(es.size)) == Seq(60, 30, 20, 10, 5, 2, 1).map(("contest_starting", _)))
+    assert(es.collect { case e: ContestStarting if e.inMinutes > 0 => e.at.get }.forall(_ == t(11)))
+  }
+
+  test("a start moved earlier past a threshold marks it silently; later ones still fire") {
+    val tr = new ContestTimeTracker
+    tr.observe(contest(), t(9, 30))
+    val es = tr.observe(moved(contest(), start = t(9, 56)), t(9, 50))
+    assert(es.size == 1 && es.head.isInstanceOf[ContestRescheduled]) // 6 minutes left: 10 and larger are marked
+    assert(ahead(tr.observe(moved(contest(), start = t(9, 56)), ts(9, 50, 30))).isEmpty)
+    assert(ahead(tr.observe(moved(contest(), start = t(9, 56)), t(9, 51))) == Seq(("contest_starting", 5)))
+    assert(ahead(tr.observe(moved(contest(), start = t(9, 56)), t(9, 54))) == Seq(("contest_starting", 2)))
+  }
+
+  test("a start moved after the contest began is announced but not started again") {
+    val tr = new ContestTimeTracker
+    tr.observe(contest(), t(10, 30))
+    val es = tr.observe(moved(contest(), start = t(11)), t(10, 40))
+    assert(types(es) == Seq("contest_rescheduled"))
+    val later = (41 to 90).flatMap(m => tr.observe(moved(contest(), start = t(11)), t(10, 0).plusMinutes(m)))
+    assert(later.isEmpty)
+  }
+
+  test("contests above the bound are not announced when rescheduled; contests are independent") {
+    val tr = new ContestTimeTracker
+    tr.observe(contest(11), t(8))
+    tr.observe(contest(1), t(8))
+    assert(tr.observe(moved(contest(11), start = t(11)), t(8, 1)).isEmpty)
+    assert(resched(tr.observe(moved(contest(1), start = t(11)), t(8, 1))).size == 1)
+    assert(tr.observe(contest(2), t(8, 2)).isEmpty) // first sight
+  }
 }
 
