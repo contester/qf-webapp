@@ -6,7 +6,7 @@ import akka.stream.scaladsl.{BroadcastHub, Keep, Merge, Sink, Source}
 import akka.stream.{ActorMaterializer, OverflowStrategy}
 import models.ContesterResults.{CustomTestResult, FinishedTesting}
 import models._
-import palevo.{ContestTimeTracker, EventBuilders, PContest, PalevoSink}
+import palevo.{ContestTimeTracker, CountdownConfig, EventBuilders, PContest, PalevoSink}
 import org.stingray.contester.dbmodel.{Clarification, Contest, MaxSeen, Message2}
 import play.api.{Logger, Logging}
 import play.api.libs.EventSource
@@ -21,8 +21,8 @@ import scala.util.{Success, Try}
 
 object StatusActor {
   def props(db: JdbcBackend#DatabaseDef, palevo: PalevoSink, teamLookup: (Int, Int) => Future[Option[org.stingray.contester.dbmodel.LocalTeam]],
-            liveHooks: live.LiveHooks) =
-    Props(classOf[StatusActor], db, palevo, teamLookup, liveHooks)
+            liveHooks: live.LiveHooks, timeEvents: Boolean, countdown: CountdownConfig) =
+    Props(new StatusActor(db, palevo, teamLookup, liveHooks, timeEvents, countdown))
 
   case object Init
   case object Tick
@@ -79,7 +79,9 @@ object StatusActor {
 
 class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
                   teamLookup: (Int, Int) => Future[Option[org.stingray.contester.dbmodel.LocalTeam]],
-                  liveHooks: live.LiveHooks) extends Actor with Stash with Logging {
+                  liveHooks: live.LiveHooks,
+                  // True when the live monitor is off: then this actor, not the live monitor, produces the contest time events.
+                  timeEvents: Boolean, countdown: CountdownConfig) extends Actor with Stash with Logging {
   import StatusActor._
   import context.dispatcher
 
@@ -109,7 +111,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
 
   private[this] val (contestOut2, contestChannel2) = Concur.broadcast[Contest]()
   private[this] val contestStates = mutable.Map[Int, Contest]()
-  private[this] val phaseTracker = new ContestTimeTracker
+  private[this] val timeTracker = new ContestTimeTracker(countdown)
   private[this] val (msg2Out, msg2Channel) = Concur.broadcast[Message2]()
   private[this] val unacked = mutable.Map[(Int, Int), mutable.Map[Int, Message2]]()
   private[this] val (sub2Out, sub2Chan) = Concur.broadcast[AnnoSubmit]()
@@ -378,7 +380,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
 
     case NewMultiContestState(cs) => {
       for (c <- cs) {
-        phaseTracker.observe(c, com.github.nscala_time.time.Imports.DateTime.now).foreach(palevo.send)
+        if (timeEvents) timeTracker.observe(c, com.github.nscala_time.time.Imports.DateTime.now).foreach(palevo.send)
         val old = contestStates.get(c.id)
         if (old.isEmpty || old.get != c) {
           logger.info(s"put: $c")

@@ -11,7 +11,7 @@ import models.{ProblemClient, Submits}
 import org.joda.time.DateTime
 import org.stingray.contester.dbmodel.{Contest, Team}
 import org.stingray.qf.models.TeamClient
-import palevo.{PalevoSink, StandingsAnnouncer}
+import palevo.{ContestTimeTracker, CountdownConfig, PalevoSink, StandingsAnnouncer}
 import play.api.libs.EventSource.Event
 import slick.jdbc.JdbcBackend
 
@@ -103,14 +103,15 @@ object LiveMonitorActor {
 
   def props(db: JdbcBackend#DatabaseDef, cfg: LiveMonitorConfig, staticLocation: Option[File],
             teamClient: TeamClient, problemClient: ProblemClient, contests: () => Future[Seq[Contest]],
-            renderStatic: (Contest, LiveBoard) => String, palevo: PalevoSink): Props =
+            renderStatic: (Contest, LiveBoard) => String, palevo: PalevoSink,
+            countdown: CountdownConfig = CountdownConfig.Default): Props =
     propsWith(cfg, staticLocation, contests, new DbContestLoader(db, teamClient, problemClient), renderStatic, palevo,
-      SystemLiveClock, LiveTimings())
+      SystemLiveClock, LiveTimings(), countdown)
 
   def propsWith(cfg: LiveMonitorConfig, staticLocation: Option[File], contests: () => Future[Seq[Contest]],
                 loader: ContestLoader, renderStatic: (Contest, LiveBoard) => String, palevo: PalevoSink,
-                clock: LiveClock, timings: LiveTimings): Props =
-    Props(new LiveMonitorActor(cfg, staticLocation, contests, loader, renderStatic, palevo, clock, timings))
+                clock: LiveClock, timings: LiveTimings, countdown: CountdownConfig = CountdownConfig.Default): Props =
+    Props(new LiveMonitorActor(cfg, staticLocation, contests, loader, renderStatic, palevo, clock, timings, countdown))
 
   private case object Start
   private case class Started(result: Try[Seq[(Contest, Try[ContestData])]])
@@ -156,7 +157,8 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
                        renderStatic: (Contest, LiveBoard) => String,
                        palevoSink: PalevoSink,
                        clock: LiveMonitorActor.LiveClock,
-                       timings: LiveMonitorActor.LiveTimings) extends Actor with Stash with Timers with ActorLogging {
+                       timings: LiveMonitorActor.LiveTimings,
+                       countdown: CountdownConfig) extends Actor with Stash with Timers with ActorLogging {
   import LiveMonitorActor._
 
   private implicit val ec: ExecutionContext = context.dispatcher
@@ -191,6 +193,8 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
   // Submit id -> monotonic millis of its rejudge request, until its finish arrives or the entry expires.
   private val rejudging = mutable.Map.empty[Int, Long]
   private val standings = new StandingsAnnouncer
+  // Phase, countdown and reschedule events for palevo; when the live monitor is on, only this actor produces them.
+  private val timeTracker = new ContestTimeTracker(countdown)
 
   override def preStart(): Unit = {
     super.preStart()
@@ -246,6 +250,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       case Success(lc) =>
         val st = new ContestState(lc, new StaticThrottle(cfg.staticInterval))
         contests(c.id) = st
+        observeTime(c, now)
         guarded(c.id, st) {
           observePalevo(st)
           st.throttle.markDirty(clock.millis())
@@ -295,6 +300,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       expireRejudges()
       val now = clock.now()
       contests.foreach { case (cid, st) =>
+        observeTime(st.live.contest, now)
         Try(st.live.onTick(now)) match {
           case Success(Some(d)) => changed(cid, st, d)
           case Success(None) => ()
@@ -552,7 +558,9 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       if (st.live.contest != c) {
         val before = st.live.board(Freezing)
         Try(st.live.onContest(c, clock.now())) match {
-          case Success(d) => changed(c.id, st, d, freezingChanged = before != st.live.board(Freezing))
+          case Success(d) =>
+            observeTime(c, clock.now())
+            changed(c.id, st, d, freezingChanged = before != st.live.board(Freezing))
           case Failure(e) => failed(c.id, st, e)
         }
       }
@@ -569,6 +577,15 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       publish(cid, st, d)
       if (d.freezing.nonEmpty && freezingChanged) st.throttle.markDirty(clock.millis())
       if (d.freezing.nonEmpty || d.real.nonEmpty) observePalevo(st)
+    }
+
+  /** Tells palevo what the contest's times did: a phase reached, a countdown threshold, a reschedule. Never throws. */
+  private def observeTime(c: Contest, now: DateTime): Unit =
+    Try(timeTracker.observe(c, now)) match {
+      case Success(events) =>
+        events.foreach(e => Try(palevoSink.send(e)).failed.foreach(t =>
+          log.warning(s"live monitor: contest ${c.id}: cannot send ${e.eventType}: $t")))
+      case Failure(t) => log.warning(s"live monitor: contest ${c.id}: cannot track its times: $t")
     }
 
   private def observePalevo(st: ContestState): Unit = {

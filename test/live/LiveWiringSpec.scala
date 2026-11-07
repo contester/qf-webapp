@@ -19,6 +19,15 @@ class LiveWiringSpec extends AnyFunSuite {
     assert(LiveWiring.startOldMonitor(cfg(enabled = false)))
   }
 
+  test("contest time events have exactly one host: the live monitor when enabled, StatusActor when not") {
+    assert(LiveWiring.timeEventHost(cfg(enabled = true)) == LiveMonitorHost)
+    assert(LiveWiring.timeEventHost(cfg(enabled = false)) == StatusActorHost)
+    for (enabled <- Seq(true, false)) {
+      // the old monitor and the StatusActor's tracker are on and off together: never two producers, never none
+      assert((LiveWiring.timeEventHost(cfg(enabled)) == StatusActorHost) == LiveWiring.startOldMonitor(cfg(enabled)))
+    }
+  }
+
   test("enabled: actor hooks on the started actor, the old monitor does not start") {
     var started = 0
     val built = LiveWiring.build(cfg(enabled = true), () => { started += 1; ActorRef.noSender })

@@ -134,6 +134,10 @@ class MyComponents(context: ApplicationLoader.Context)
   // no-op hooks, and Monitor starts the old MonitorActor as before.
   lazy val liveConfig: live.LiveMonitorConfig = live.LiveMonitorConfig(configuration)
 
+  // Minutes before the start and the end at which palevo is told "in N minutes"; produced by the live monitor, or by
+  // the StatusActor when the live monitor is off (see LiveWiring.timeEventHost).
+  lazy val countdownConfig: palevo.CountdownConfig = palevo.CountdownConfig(configuration)
+
   private lazy val liveBuilt: live.LiveWiring.Built = live.LiveWiring.build(liveConfig, () => {
     import org.stingray.contester.dbmodel.MyPostgresProfile.api._
     val messages = MessagesImpl(Lang("en"), messagesApi)
@@ -141,7 +145,7 @@ class MyComponents(context: ApplicationLoader.Context)
       dbConfig.db, liveConfig, configuration.getOptional[String]("monitor.static_location").map(new File(_)),
       statusActorModel.teamClient, statusActorModel.problemClient,
       () => dbConfig.db.run(org.stingray.contester.dbmodel.SlickModel.allContests.result),
-      (c, b) => live.StaticRender.render(c, b)(messages), palevoSink), "live-monitor-actor")
+      (c, b) => live.StaticRender.render(c, b)(messages), palevoSink, countdownConfig), "live-monitor-actor")
   })
 
   lazy val liveHooks: live.LiveHooks = liveBuilt.hooks
@@ -153,7 +157,8 @@ class MyComponents(context: ApplicationLoader.Context)
   lazy val monitorModel = wire[Monitor]
   lazy val rabbitModel = wire[RabbitMqModel]
   // Deferred: the live monitor itself needs statusActorModel's team and problem clients.
-  lazy val statusActorModel = new StatusActorModel(dbConfig, actorSystem, palevoSink, live.LiveWiring.deferred(liveHooks))
+  lazy val statusActorModel = new StatusActorModel(dbConfig, actorSystem, palevoSink, live.LiveWiring.deferred(liveHooks),
+    live.LiveWiring.timeEventHost(liveConfig) == live.StatusActorHost, countdownConfig)
   lazy val printingModel = wire[PrintingModel]
 
   val subscriptionsModel = wire[SubscriptionsModel]

@@ -15,7 +15,7 @@ import org.joda.time.DateTime
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuiteLike
 import org.stingray.contester.dbmodel.{Contest, LocalTeam, Team}
-import palevo.{FirstSolveContest, PalevoEvent, PalevoSink}
+import palevo.{ContestRescheduled, ContestStarting, FirstSolveContest, PalevoEvent, PalevoSink, TimeChange}
 import play.api.libs.EventSource.Event
 import play.api.libs.json.{JsValue, Json}
 
@@ -236,6 +236,69 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     f.actor ! Arrived(1, rec(71, 2, "B", running))
     f.actor ! Finished(1, 71, compiled = true, 3, 3)
     awaitCond(sink.events.asScala.exists(_.isInstanceOf[FirstSolveContest]), 5.seconds)
+    f.stop()
+  }
+
+  private def aheadOf(sink: CollectingSink): Seq[Int] =
+    sink.events.asScala.toSeq.collect { case e: ContestStarting if e.inMinutes > 0 => e.inMinutes }
+
+  test("palevo hears a start countdown when a tick passes a threshold") {
+    val sink = new CollectingSink
+    val f = new Fixture(t0.minusMinutes(61), palevoSink = sink)
+    f.barrier()
+    assert(sink.events.isEmpty) // the first observation only records
+    f.clock.at = t0.minusMinutes(59)
+    f.actor ! Tick
+    f.barrier()
+    assert(aheadOf(sink) == Seq(60))
+    f.stop()
+  }
+
+  test("a sent contest change is announced as a reschedule at once, without a tick") {
+    val sink = new CollectingSink
+    val f = new Fixture(t0.minusHours(2), palevoSink = sink)
+    f.barrier()
+    f.actor ! ContestChanged(contest().copy(startTime = t0.plusHours(1)))
+    f.barrier()
+    val resched = sink.events.asScala.collect { case e: ContestRescheduled => e }.toSeq
+    assert(resched.size == 1 && resched.head.changes == Seq(TimeChange("start", t0, t0.plusHours(1))))
+    f.stop()
+  }
+
+  test("contests above 10 get no countdown and no reschedule announcement") {
+    val sink = new CollectingSink
+    val f = new Fixture(t0.minusMinutes(61), rows = Seq(contest(11)), palevoSink = sink)
+    def barrier11(): Unit = f.join(JoinAdmin(11, real = true))
+    barrier11()
+    f.clock.at = t0.minusMinutes(59)
+    f.actor ! Tick
+    f.actor ! ContestChanged(contest(11).copy(startTime = t0.plusHours(1)))
+    barrier11()
+    assert(sink.events.isEmpty)
+    f.stop()
+  }
+
+  test("a palevo failure while announcing time events does not stop the actor") {
+    val sink = new ThrowOnceSink
+    val f = new Fixture(t0.minusMinutes(61), palevoSink = sink)
+    f.barrier()
+    f.clock.at = t0.minusMinutes(59)
+    f.actor ! Tick
+    f.barrier() // the tick must be handled before the clock moves on
+    f.clock.at = t0.minusMinutes(29)
+    f.actor ! Tick
+    f.barrier()
+    assert(sink.calls.get == 2)
+    f.stop()
+  }
+
+  test("a monitor started in the middle of a countdown stays silent about the thresholds already passed") {
+    val sink = new CollectingSink
+    val f = new Fixture(t0.minusMinutes(30), palevoSink = sink)
+    f.barrier()
+    f.actor ! Tick
+    f.barrier()
+    assert(sink.events.isEmpty)
     f.stop()
   }
 

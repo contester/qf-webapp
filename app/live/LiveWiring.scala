@@ -4,12 +4,20 @@ import akka.actor.ActorRef
 
 import scala.util.Try
 
+/** Which actor feeds palevo the contest time events (phases, countdowns, reschedules): exactly one does. */
+sealed trait TimeEventHost
+case object LiveMonitorHost extends TimeEventHost
+case object StatusActorHost extends TimeEventHost
+
 /** The on/off decision for the live monitor, kept free of Play so it can be tested on its own. */
 object LiveWiring {
   case class Built(hooks: LiveHooks, monitor: Option[ActorRef])
 
   /** The old MonitorActor runs only when the live monitor is off: exactly one of them feeds palevo and static files. */
   def startOldMonitor(cfg: LiveMonitorConfig): Boolean = !cfg.enabled
+
+  /** The live monitor when it is enabled; the old `StatusActor` tracker otherwise. */
+  def timeEventHost(cfg: LiveMonitorConfig): TimeEventHost = if (cfg.enabled) LiveMonitorHost else StatusActorHost
 
   /** When disabled, `startActor` is never called and the hooks are no-ops. */
   def build(cfg: LiveMonitorConfig, startActor: () => ActorRef): Built =
