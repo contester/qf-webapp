@@ -2,7 +2,7 @@
 
 ## Configuration: palevo (IRC announcements)
 
-qf-webapp can post contest events (new clarifications and tasks, contest start/freeze/finish, first solves,
+qf-webapp can post contest events (new clarifications and tasks, contest start/freeze/end with countdowns and reschedules, first solves,
 new leader, print errors) to [palevo](https://github.com/contester/palevo), which announces them in the
 duty IRC channel. Add to the application configuration:
 
@@ -12,6 +12,25 @@ duty IRC channel. Add to the application configuration:
 If either key is missing the feature is off. Delivery is best effort (3 attempts, in order, one event at a
 time) and never affects contest operation. Scoreboard events are computed from the pre-freeze monitor only,
 so nothing is announced about the scoreboard after the freeze.
+
+### Contest time events
+
+palevo is told when a contest starts, freezes and ends (`contest_starting`, `contest_freezing`, `contest_ending`),
+that these are coming (the same events with `in_minutes`: "starts in 10 minutes"), and when an operator moves a
+contest (`contest_rescheduled`: "start time changed to 19:30"). Before 2026-11-07 the phase events were called
+`contest_started`, `contest_frozen` and `contest_finished`; deploy palevo first, it still accepts the old names.
+Optional keys:
+
+    palevo.countdown.start = [60, 30, 20, 10, 5, 2, 1]   # minutes before the start (default as shown)
+    palevo.countdown.end = [20, 10, 5, 1]                # minutes before the end (default as shown)
+
+An empty list turns that countdown off; a value that is not positive is ignored with a warning (the default is used).
+A late or restarted application announces only the latest threshold it has crossed, and nothing for the ones already
+passed when it started. Countdowns and reschedules are announced only for contests 1 to 10 (the others are test
+copies); the phase events themselves are announced for every contest. Expose-time changes alone are not announced.
+
+The events come from the live monitor, or from the status actor when `monitor.disable_new_monitor = true`: exactly
+one of them produces them (`LiveWiring.timeEventHost`).
 
 The query API has its own keys, independent of `palevo.url`/`palevo.token`:
 
