@@ -10,7 +10,8 @@ responses are `application/json`, all requests are `GET`.
     palevo.query.contests = [1,2,3,4,5,6,7,8,9,10]    # optional; default 1..10
 
 - Every request carries `Authorization: Bearer <token>`. The scheme word `Bearer` is case-sensitive and followed
-  by exactly one space. The token is compared in constant time. No cookie or session is read or created.
+  by exactly one space. The token is compared in constant time (SHA-256 digests of the presented and the
+  configured token are compared, so neither its content nor its length leaks). No cookie or session is read or created.
 - `palevo.query.token` unset or blank: the API is disabled and **every route answers 404 with an empty body**
   (also when a header is sent).
 - Missing or wrong token: `401` with `{"error":"unauthorized"}` (the body never contains the token).
@@ -57,8 +58,11 @@ board. A `public` response never contains a jury-only field (see below).
 object. `/computers` has no `contests` array.
 
 Before a contest starts (`status` `before`) no problems, rows or statistics are returned and the board is never
-read. When the live board is off or too slow, `/standings`, `/team` and `/problems` answer the contest with
-`"note": "board unavailable"` and empty `rows` / `candidates` / `problems`.
+read. When the audience's board is unavailable, `/standings`, `/team` and `/problems` answer the contest with
+`"note": "board unavailable"` and empty `rows` / `candidates` / `problems`, and `/contest` with `audience=public`
+answers it with that note and no `problems`. The board is unavailable when the live board is off or too slow,
+and for `audience=public` also when the live monitor does not show the contest to the public (a contest that is
+in `palevo.query.contests` but not in `monitor.public_contests`).
 
 ### Errors
 
@@ -74,7 +78,8 @@ freeze in effect, a public board of 3 teams and a real board of 5 teams).
 
 Times and the problem list. Fields added: `start`, `end`, `freeze` (null when no freeze is configured),
 `elapsed_seconds`, `remaining_seconds` (both clamped to the contest duration), and once started `problems`
-(`id`, `name`).
+(`id`, `name`) in the order of the audience's board. When that board is unavailable, `audience=all` lists the
+contest's problems by id instead, while `audience=public` gets no `problems` and `"note": "board unavailable"`.
 
     GET /contest?audience=public&contests=*
 
@@ -101,9 +106,16 @@ Each row: `rank` is a **JSON string** (`"1"`, or `"*"` for a team that is not ra
 Finds teams on the audience's board. `q` is matched (ignoring case and punctuation, Latin look-alike letters folded to Cyrillic) against the school
 short name joined with the team number (`sgu1`), the school short name, the team-name part before `:` and each
 comma-separated member after `:`; the school full name is not matched. At most 5 candidates are returned; `id` is the team id and **wins over `q`** when both are given. Neither: 400 `q or id is required`; a
-non-integer `id`: 400. Fields added per contest: `candidates` (`id`, `name`, `school`; best matches first) and,
-only when exactly one candidate remains, `team`. With several candidates there is no `team`; ask again with
-`id`. Team fields: `rank` (string), `solved`, `penalty`, `id`, `name`, `problems` (per problem id a cell:
+non-integer `id`: 400. Fields added per contest: `candidates` (`id`, `name` (display name), `school_short`
+(school short name), `num` (team number, a JSON number); best matches first) and, only when exactly one
+candidate remains, `team`. With several candidates there is no `team`; ask again with `id`.
+
+Each field match scores: exact 3, prefix 2, substring 1; a team scores its best field. If exactly one team has
+an **exact** match (score 3), it is resolved alone: `candidates` holds just that team and `team` is present, even
+when other teams match by prefix or substring (`q=СГУ1` resolves `СГУ #1` although `СГУ #10` starts with
+`сгу1`). Several exact matches (`q=СГУ` equals the school short name of every СГУ team) stay ambiguous, and so
+do several matches none of which is exact (a bare number such as `q=1` is only a substring of `сгу1`, `мгу11`,
+...). Team fields: `rank` (string), `solved`, `penalty`, `id`, `name`, `problems` (per problem id a cell:
 `state` `ok` | `fail` | `pending` | `empty`, `attempts`, and `minutes` for `ok`; `attempts`: for `ok`, the number of
 submits up to and including the solving one; for `fail`, the number of failed submits; for `pending`, the number of
 failed submits before the first pending or freeze-hidden submit, those pending or hidden submits themselves not
@@ -120,7 +132,7 @@ Resolved:
     GET /team?audience=public&contests=*&q=Alpha
 
     {"as_of":"2026-11-06T12:00:00Z","contests":[{"id":1,"name":"Contest 1","status":"running","view":"frozen",
-    "candidates":[{"id":11,"name":"School SGU #1: Alpha","school":"School SGU #1"}],
+    "candidates":[{"id":11,"name":"School SGU #1: Alpha","school_short":"SGU","num":1}],
     "team":{"rank":"2","solved":0,"penalty":0,"id":11,"name":"School SGU #1: Alpha",
     "problems":{"A":{"state":"pending","attempts":1},"B":{"state":"empty","attempts":0}},
     "last_submit_at":"2026-11-06T11:57:00Z","seconds_since_last_submit":180}}]}
@@ -128,21 +140,24 @@ Resolved:
 The same request with `audience=all` shows the live cells (`"A":{"state":"ok","attempts":1,"minutes":1}`) and
 ends with `"room":"Room 7"`.
 
-Ambiguous (`q=SGU`):
+Ambiguous (`q=SGU`, two exact matches):
 
     {"as_of":"2026-11-06T12:00:00Z","contests":[{"id":1,"name":"Contest 1","status":"running","view":"frozen",
-    "candidates":[{"id":11,"name":"School SGU #1: Alpha","school":"School SGU #1"},
-    {"id":13,"name":"School SGU #2: Gamma","school":"School SGU #2"}]}]}
+    "candidates":[{"id":11,"name":"School SGU #1: Alpha","school_short":"SGU","num":1},
+    {"id":13,"name":"School SGU #2: Gamma","school_short":"SGU","num":2}]}]}
 
 ### GET /problems?window=15m
 
 Per problem, from the audience's board: `solved` (teams that solved it), `teams_attempted`, `attempts` (the sum over all teams of the cell `attempts` defined under /team, so
 pending and freeze-hidden submits themselves are not counted); plus activity: `recent_submits` (submits that **arrived** within the window,
-whatever their outcome) and `pending` (submits not yet tested; under public + freeze this also covers submits hidden by the freeze). `window` is `<n>m`, n from 1 to 120, default
-`15m`; anything else is 400. The contest object also gets `window_minutes`.
+whatever their outcome) and `pending` (submits not yet tested, whatever the freeze; a hidden submit stops
+counting once it is tested, and this does not reveal its outcome. It can therefore differ from the number of
+`pending` cells on the frozen board). `window` is `<n>m`, n from 1 to 120, default `15m`; anything else is 400.
+Once the contest has started, the contest object also gets `window_minutes`.
 
 Under `audience=public` with a freeze in effect, `solved`, `teams_attempted` and `attempts` come from the
-**frozen** board, while `recent_submits` and `pending` count arrivals regardless of outcome and of the freeze.
+**frozen** board, while `recent_submits` and `pending` count submits regardless of the freeze (`pending` only
+those not yet tested).
 If the activity lookup fails the counts degrade to 0 and the rest is still answered.
 
     GET /problems?audience=public&contests=*
