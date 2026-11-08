@@ -44,6 +44,10 @@ object LiveStreams extends Results {
   def adminJoin(contestId: Int, canSeeAll: Boolean): actors.LiveMonitorActor.JoinAdmin =
     actors.LiveMonitorActor.JoinAdmin(contestId, real = canSeeAll)
 
+  /** The rows of the admin status page: an account that cannot see everything gets none of the submits after the freeze. */
+  def adminStatusJoin(contestId: Int, canSeeAll: Boolean): actors.LiveMonitorActor.JoinAdminStatus =
+    actors.LiveMonitorActor.JoinAdminStatus(contestId, real = canSeeAll)
+
   /** The public board of a contest whether or not it is public: only for routes behind an admin session. */
   def publicPreviewJoin(contestId: Int): actors.LiveMonitorActor.JoinPublicPreview =
     actors.LiveMonitorActor.JoinPublicPreview(contestId)

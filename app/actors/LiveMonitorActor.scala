@@ -13,6 +13,7 @@ import org.stingray.contester.dbmodel.{Contest, Team}
 import org.stingray.qf.models.TeamClient
 import palevo.{ContestTimeTracker, CountdownConfig, PalevoSink, StandingsAnnouncer}
 import play.api.libs.EventSource.Event
+import play.api.libs.json.Json
 import slick.jdbc.JdbcBackend
 
 import scala.collection.mutable
@@ -38,6 +39,11 @@ object LiveMonitorActor {
   case class JoinPublicPreview(contest: Int) extends Join
   case class JoinTeam(contest: Int, team: Int) extends Join
   case class JoinAdmin(contest: Int, real: Boolean) extends Join
+  /**
+    * The rows of the admin status page: a `ready` event first, then a `statusRow` event for every submit that arrives,
+    * finishes or is rejudged. `real` false hides the submits after the freeze, as the page does.
+    */
+  case class JoinAdminStatus(contest: Int, real: Boolean) extends Join
 
   /**
     * The board a join would start with, as a LiveBoard (for server-side rendering of the page), answered with
@@ -59,6 +65,54 @@ object LiveMonitorActor {
     /** The contest a submit belongs to, None if there is no such submit. A failure makes callers fall back to reloading every contest. */
     def contestOf(submitId: Int)(implicit ec: ExecutionContext): Future[Option[Int]] =
       Future.failed(new UnsupportedOperationException("contestOf"))
+  }
+
+  /** A submit rendered for the status page: the row for an admin who can rejudge (`rw`) and for one who cannot (`ro`). */
+  case class StatusRow(contest: Int, id: Int, team: Int, afterFreeze: Boolean, rw: String, ro: String)
+
+  /** Renders a status page row from the database; None when there is no such submit. */
+  trait StatusRows {
+    /**
+      * @param inTesting what the row says while it is being (re)tested: the database still holds the old verdict
+      *                  of a rejudge, and has none yet for a fresh submit; false after a finish.
+      */
+    def render(id: Int, inTesting: Option[models.SubmitResult])(implicit ec: ExecutionContext): Future[Option[StatusRow]]
+  }
+
+  object NoStatusRows extends StatusRows {
+    override def render(id: Int, inTesting: Option[models.SubmitResult])(implicit ec: ExecutionContext): Future[Option[StatusRow]] =
+      Future.successful(None)
+  }
+
+  /**
+    * Status page rows from the database. A finish can be heard before the tester's result is visible; the row is then
+    * read again a few times, so that a finished submit is never shown as running.
+    */
+  class DbStatusRows(db: JdbcBackend#DatabaseDef, teamClient: TeamClient, scheduler: akka.actor.Scheduler,
+                     retryAfter: FiniteDuration = 500.millis, retries: Int = 4) extends StatusRows {
+    private implicit val timeout: akka.util.Timeout = akka.util.Timeout(5.seconds)
+
+    private def read(id: Int)(implicit ec: ExecutionContext) = models.AdminSubmits.row(db, id)
+
+    override def render(id: Int, inTesting: Option[models.SubmitResult])(implicit ec: ExecutionContext): Future[Option[StatusRow]] = {
+      def attempt(left: Int): Future[Option[models.AdminSubmitRow]] = read(id).flatMap {
+        case Some(r) if inTesting.isEmpty && !r.submit.finished && left > 0 =>
+          akka.pattern.after(retryAfter, scheduler)(attempt(left - 1))
+        case other => Future.successful(other)
+      }
+
+      attempt(retries).flatMap {
+        case None => Future.successful(None)
+        case Some(found) =>
+          val r = inTesting.fold(found)(res => found.copy(result = res))
+          val cid = r.submit.submitId.contestId
+          teamClient.getTeams(cid).map { teams =>
+            val body = (rejudge: Boolean) => views.html.admin.submitrow(r, teams, rejudge, linkTeam = true).body.trim
+            Some(StatusRow(cid, r.submit.submitId.id, r.submit.submitId.teamId, r.submit.submitId.arrived.afterFreeze,
+              body(true), body(false)))
+          }
+      }
+    }
   }
 
   /** Wall clock for the boards and palevo; monotonic milliseconds for the static throttle and reload rate limit. */
@@ -107,14 +161,15 @@ object LiveMonitorActor {
   def props(db: JdbcBackend#DatabaseDef, cfg: LiveMonitorConfig, staticLocation: Option[File],
             teamClient: TeamClient, problemClient: ProblemClient, contests: () => Future[Seq[Contest]],
             renderStatic: (Contest, LiveBoard) => String, palevo: PalevoSink,
-            countdown: CountdownConfig = CountdownConfig.Default): Props =
+            countdown: CountdownConfig = CountdownConfig.Default, statusRows: StatusRows = NoStatusRows): Props =
     propsWith(cfg, staticLocation, contests, new DbContestLoader(db, teamClient, problemClient), renderStatic, palevo,
-      SystemLiveClock, LiveTimings(), countdown)
+      SystemLiveClock, LiveTimings(), countdown, statusRows)
 
   def propsWith(cfg: LiveMonitorConfig, staticLocation: Option[File], contests: () => Future[Seq[Contest]],
                 loader: ContestLoader, renderStatic: (Contest, LiveBoard) => String, palevo: PalevoSink,
-                clock: LiveClock, timings: LiveTimings, countdown: CountdownConfig = CountdownConfig.Default): Props =
-    Props(new LiveMonitorActor(cfg, staticLocation, contests, loader, renderStatic, palevo, clock, timings, countdown))
+                clock: LiveClock, timings: LiveTimings, countdown: CountdownConfig = CountdownConfig.Default,
+                statusRows: StatusRows = NoStatusRows): Props =
+    Props(new LiveMonitorActor(cfg, staticLocation, contests, loader, renderStatic, palevo, clock, timings, countdown, statusRows))
 
   /**
     * How long to sleep until `deadline` (the earliest moment something can happen): a margin past it so the clock has
@@ -134,12 +189,15 @@ object LiveMonitorActor {
   private case class StartReload(contest: Int)
   private case class Register(contest: Int, viewer: Viewer, queue: BoundedSourceQueue[Event])
   private case class Unregister(contest: Int, queue: BoundedSourceQueue[Event])
+  private case class StatusRowReady(seq: Long, id: Int, result: Try[Option[StatusRow]])
 
   private sealed trait Viewer
   private case object PublicViewer extends Viewer
   private case object AdminFreezingViewer extends Viewer
   private case object AdminRealViewer extends Viewer
   private case class TeamViewer(team: Int) extends Viewer
+  // Not a board: the rows of the status page. `real` sees the submits after the freeze.
+  private case class StatusViewer(real: Boolean) extends Viewer
 
   private sealed trait Ev { def id: Int }
   private case class EvArrived(rec: SubmitRec) extends Ev { def id: Int = rec.id }
@@ -174,7 +232,8 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
                        palevoSink: PalevoSink,
                        clock: LiveMonitorActor.LiveClock,
                        timings: LiveMonitorActor.LiveTimings,
-                       countdown: CountdownConfig) extends Actor with Stash with Timers with ActorLogging {
+                       countdown: CountdownConfig,
+                       statusRows: LiveMonitorActor.StatusRows) extends Actor with Stash with Timers with ActorLogging {
   import LiveMonitorActor._
 
   private implicit val ec: ExecutionContext = context.dispatcher
@@ -208,6 +267,10 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
   private val subscribers = mutable.Map.empty[Int, mutable.Map[BoundedSourceQueue[Event], Viewer]]
   // Submit id -> monotonic millis of its rejudge request, until its finish arrives or the entry expires.
   private val rejudging = mutable.Map.empty[Int, Long]
+  // Submit id -> the newest status row requested for it. A row read for an older event can come back after a newer
+  // one (a quick finish after the arrival) and must not replace it.
+  private val statusRequests = mutable.Map.empty[Int, Long]
+  private var statusSeq = 0L
   private val standings = new StandingsAnnouncer
   // The deadline the pending wake timer was armed for, if any.
   private var armedFor: Option[DateTime] = None
@@ -287,13 +350,20 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
   }
 
   def running: Receive = {
-    case Arrived(cid, rec) => withContest(cid, "arrival")(st => applyEvent(cid, st, EvArrived(rec), mayReload = false))
+    case Arrived(cid, rec) =>
+      withContest(cid, "arrival")(st => applyEvent(cid, st, EvArrived(rec), mayReload = false))
+      requestStatusRow(cid, rec.id, Some(models.SubmitWaiting))
 
     case Finished(cid, id, compiled, passed, taken) =>
       rejudging -= id
       withContest(cid, "finish")(st => applyEvent(cid, st, EvFinished(id, compiled, passed, taken), mayReload = true))
+      requestStatusRow(cid, id, None)
 
-    case RejudgeRequested(id) => rejudge(id)
+    case RejudgeRequested(id) =>
+      rejudge(id)
+      requestStatusRow(-1, id, Some(models.BeingRetestedResult))
+
+    case StatusRowReady(seq, id, result) => statusRowReady(seq, id, result)
 
     case TeamChanged(cid, team) => withContest(cid, "team change")(st => teamChanged(cid, st, team))
 
@@ -381,6 +451,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
     case JoinPublicPreview(c) => c
     case JoinTeam(c, _) => c
     case JoinAdmin(c, _) => c
+    case JoinAdminStatus(c, _) => c
   }
 
   private def notFound(j: Join): NoSuchElementException = notFound(contestOf(j))
@@ -391,6 +462,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
     case JoinPublicPreview(cid) => Some(cid -> PublicViewer)
     case JoinTeam(cid, team) => Some(cid -> TeamViewer(team))
     case JoinAdmin(cid, real) => Some(cid -> (if (real) AdminRealViewer else AdminFreezingViewer))
+    case JoinAdminStatus(cid, real) => Some(cid -> StatusViewer(real))
   }
 
   private def withContest(cid: Int, what: String)(f: ContestState => Unit): Unit =
@@ -705,8 +777,8 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
     val lc = st.live
     val now = clock.now()
     viewer match {
-      case AdminRealViewer => (lc.board(Real), None)
-      case AdminFreezingViewer => (visibleBoard(lc, now), None)
+      case AdminRealViewer | StatusViewer(true) => (lc.board(Real), None)
+      case AdminFreezingViewer | StatusViewer(false) => (visibleBoard(lc, now), None)
       case PublicViewer => (publicVisible(lc, now), None)
       case TeamViewer(t) =>
         if (!started(lc, now)) (teamsOnly(lc.board(Freezing)), None)
@@ -731,7 +803,10 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       case Some(st) =>
         val subs = subscribers.getOrElseUpdate(cid, mutable.Map.empty)
         subs(q) = viewer
-        offer(cid, q, Try(snapshot(st, viewer)).getOrElse(boardEvent(emptyBoard)))
+        viewer match {
+          case _: StatusViewer => offer(cid, q, LiveJson.event("ready", Json.obj()))
+          case _ => offer(cid, q, Try(snapshot(st, viewer)).getOrElse(boardEvent(emptyBoard)))
+        }
       case None => q.complete()
     }
 
@@ -750,6 +825,37 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
         q.complete()
         unregister(cid, q)
       case _ => unregister(cid, q)
+    }
+
+  /**
+    * Reads the submit's row for the status pages that are open and sends it on. `cid` -1: the contest is not known
+    * (a rejudge request has only the id), any open status page will do to ask for.
+    */
+  private def requestStatusRow(cid: Int, id: Int, inTesting: Option[models.SubmitResult]): Unit =
+    if (hasStatusViewers(cid)) {
+      statusSeq += 1
+      val seq = statusSeq
+      statusRequests(id) = seq
+      val me = self
+      Future.fromTry(Try(statusRows.render(id, inTesting))).flatten.onComplete(r => me ! StatusRowReady(seq, id, r))
+    }
+
+  private def hasStatusViewers(cid: Int): Boolean =
+    subscribers.iterator.exists { case (c, subs) => (cid < 0 || c == cid) && subs.valuesIterator.exists(_.isInstanceOf[StatusViewer]) }
+
+  private def statusRowReady(seq: Long, id: Int, result: Try[Option[StatusRow]]): Unit =
+    if (statusRequests.get(id).contains(seq)) {
+      statusRequests -= id
+      result match {
+        case Success(Some(row)) =>
+          lazy val event = LiveJson.event("statusRow", Json.obj("id" -> row.id, "team" -> row.team, "rw" -> row.rw, "ro" -> row.ro))
+          subscribers.get(row.contest).foreach(_.toList.foreach {
+            case (q, StatusViewer(real)) if real || !row.afterFreeze => offer(row.contest, q, event)
+            case _ =>
+          })
+        case Success(None) => log.debug(s"live monitor: no status row for submit $id")
+        case Failure(e) => log.warning(s"live monitor: cannot build the status row of submit $id: $e")
+      }
     }
 
   private def publish(cid: Int, st: ContestState, d: Delta): Unit =
@@ -781,6 +887,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
           case AdminFreezingViewer => gated
           case PublicViewer => publicGated
           case TeamViewer(t) => teamEvents(t)
+          case _: StatusViewer => Nil
         }
         events.foreach(offer(cid, q, _))
       }

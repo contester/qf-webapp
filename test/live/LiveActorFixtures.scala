@@ -59,7 +59,8 @@ trait LiveActorFixtures { this: TestKit =>
                         overrideData: Map[Int, ContestData] = Map.empty,
                         render: (Contest, LiveBoard) => String = (c, b) => s"${c.id}:${b.rows.size}",
                         // True: the actor reads the system clock (timer tests); `clock` is then unused.
-                        realClock: Boolean = false) {
+                        realClock: Boolean = false,
+                        statusRows: StatusRows = NoStatusRows) {
     val clock = new FakeClock(now)
     @volatile var contestRows: Seq[Contest] = rows
     // A poll reads the rows when it starts but only answers when this is completed; a test holds a poll back with it.
@@ -93,7 +94,7 @@ trait LiveActorFixtures { this: TestKit =>
 
     val actor: ActorRef = system.actorOf(LiveMonitorActor.propsWith(cfg, staticDir, () => { val read = contestRows; pollGate.map(_ => read)(ExecutionContext.global) },
       loader, (c: Contest, b: LiveBoard) => { rendered.incrementAndGet(); render(c, b) },
-      palevoSink, if (realClock) SystemLiveClock else clock, timings))
+      palevoSink, if (realClock) SystemLiveClock else clock, timings, statusRows = statusRows))
 
     def join(m: Any): Source[Event, NotUsed] = {
       val p = TestProbe()
