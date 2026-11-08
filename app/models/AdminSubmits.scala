@@ -90,6 +90,44 @@ object AdminSubmits {
     a.map(x => (SubmitResult.message.getOrElse(x.lastCode, "unknown"), x.lastTest))
 
   /**
+   * The rows for the submits `shown` (newest first). `base` is the query they came from: the scores need everything
+   * the same teams submitted for the same problems in it, up to the newest shown submit.
+   */
+  private def describe(db: JdbcBackend#DatabaseDef, base: Query[SlickModel.LiftedSubmit, UpliftedSubmit, Seq], shown: Seq[Submit])(
+    implicit ec: ExecutionContext): Future[Seq[AdminSubmitRow]] = {
+    val maxId = shown.head.submitId.id.toLong
+    val pairs = shown.map(s => (s.submitId.teamId, s.submitId.problem.id)).distinct
+    val context = base.filter(x => pairs.map { case (t, p) => x.teamID === t && x.problemID === p }.reduceLeft(_ || _))
+      .filter(_.id <= maxId)
+    val testingIds = shown.flatMap(_.testingId.map(_.toLong))
+
+    db.run(context.result.zip(aggregates(testingIds)).zip(runCounts(shown.map(_.submitId.id.toLong))).map {
+      case ((ctx, aggs), counts) => (ctx, aggs, counts)
+    }).map { case (ctx, aggs, counts) =>
+      val scores: Map[Int, Option[Score]] = Submits.groupByTP(ctx.map(Submits.upliftSub)).values.flatMap { subs =>
+        Submits.scoreGrouped(subs, ACMCell.empty, ACMScorer)._2.map { case (s, sc) => s.submitId.id -> sc }
+      }.toMap
+
+      shown.map { s =>
+        val agg = s.testingId.flatMap(t => aggs.get(t.toLong))
+        AdminSubmitRow(s, scores.getOrElse(s.submitId.id, None),
+          SubmitResult.fromLast(schoolMode = false, s, lastResult(agg)),
+          agg.map(_.stats).getOrElse(SubmitStats(TimeMs(0), Memory(0))),
+          counts.getOrElse(s.submitId.id.toLong, 0))
+      }
+    }
+  }
+
+  /** One submit as the status page shows it, in whatever contest it is, with no freeze applied. None: no such submit. */
+  def row(db: JdbcBackend#DatabaseDef, id: Int)(implicit ec: ExecutionContext): Future[Option[AdminSubmitRow]] =
+    db.run(submitsQuery.filter(_.id === id.toLong).result.headOption).flatMap {
+      case None => Future.successful(None)
+      case Some(found) =>
+        val s = Submits.upliftSub(found)
+        describe(db, submitsQuery.filter(_.contestID === s.submitId.contestId), Seq(s)).map(_.headOption)
+    }
+
+  /**
    * One page of a contest's submits, newest first.
    * @param team only this team's submits
    * @param before only submits with a smaller id (the next, older page)
@@ -114,27 +152,7 @@ object AdminSubmits {
       else {
         val maxId = shown.head.submitId.id.toLong
         val minId = shown.last.submitId.id.toLong
-        val pairs = shown.map(s => (s.submitId.teamId, s.submitId.problem.id)).distinct
-        // Everything these teams submitted for these problems up to the newest shown submit: needed for the scores.
-        val context = base.filter(x => pairs.map { case (t, p) => x.teamID === t && x.problemID === p }.reduceLeft(_ || _))
-          .filter(_.id <= maxId)
-        val testingIds = shown.flatMap(_.testingId.map(_.toLong))
-
-        db.run(context.result.zip(aggregates(testingIds)).zip(runCounts(shown.map(_.submitId.id.toLong))).map {
-          case ((ctx, aggs), counts) => (ctx, aggs, counts)
-        }).map { case (ctx, aggs, counts) =>
-          val scores: Map[Int, Option[Score]] = Submits.groupByTP(ctx.map(Submits.upliftSub)).values.flatMap { subs =>
-            Submits.scoreGrouped(subs, ACMCell.empty, ACMScorer)._2.map { case (s, sc) => s.submitId.id -> sc }
-          }.toMap
-
-          val rows = shown.map { s =>
-            val agg = s.testingId.flatMap(t => aggs.get(t.toLong))
-            AdminSubmitRow(s, scores.getOrElse(s.submitId.id, None),
-              SubmitResult.fromLast(schoolMode = false, s, lastResult(agg)),
-              agg.map(_.stats).getOrElse(SubmitStats(TimeMs(0), Memory(0))),
-              counts.getOrElse(s.submitId.id.toLong, 0))
-          }
-
+        describe(db, base, shown).map { rows =>
           val (older, newer) = after match {
             case Some(_) => (Some(minId), if (hasMore) Some(maxId) else None)
             case None => (if (hasMore) Some(minId) else None, before.map(_ => maxId))
