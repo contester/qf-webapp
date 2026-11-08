@@ -80,7 +80,7 @@ show. A poll that read the database before an edit was sent is ignored for that 
 
 Between freeze_time and expose_time a submit that arrived after the freeze is shown as `?` on the freezing board
 (a contest with freeze_time >= end_time has no freeze). A `?` also appears on every board for a submit that is not
-judged yet. A team sees the real result of its own cells, but not its rank, the solved and penalty columns or any
+judged yet. It is yellow and numbered by attempt: `?1` for a team's first try, `?2` after one failure; it turns into `+`/`+N` or `-N` when judged. A team sees the real result of its own cells, but not its rank, the solved and penalty columns or any
 other team. At expose_time the public and team boards become the real board; `canSeeAll` admins always see it.
 
 Rollback: set `monitor.disable_new_monitor = true` and restart qf. No live actor is created, the hooks do

@@ -33,7 +33,7 @@ class LiveJsonSpec extends AnyFunSuite {
       "cells" -> Json.obj(
         "A" -> Json.obj("t" -> "ok", "s" -> Solved(2, 600).text, "at" -> "00:10"),
         "B" -> Json.obj("t" -> "fail", "s" -> Failed(3).text),
-        "C" -> Json.obj("t" -> "pend", "s" -> "?1"),
+        "C" -> Json.obj("t" -> "pend", "s" -> "?2"),
         "D" -> Json.obj("t" -> "empty", "s" -> ""))))
   }
 

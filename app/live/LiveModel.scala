@@ -59,7 +59,7 @@ object LiveCell {
   }
   case class Pending(failures: Int) extends LiveCell {
     val solved = false
-    def text: String = if (failures == 0) "?" else s"?$failures"
+    def text: String = s"?${failures + 1}"   // the attempt in flight: ?1 for the first, ?2 after one failure
   }
 }
 

@@ -11,7 +11,7 @@
     <td>ID</td><td>SCHOOL<br/><small>TEAM NAME</small></td><td>SOLVED</td><td>PENALTY</td>, then per problem
     <td class="text-center">CELL</td>, then </tr>.
   - CELL: solved <span class="text-success"><strong>+X</strong></span><br/><span class="text-info"><small>HH:MM</small></span>;
-    failed <span class="text-muted">-X</span>; pending <span class="text-warning">?X</span>; empty: nothing.
+    failed <span class="text-muted">-X</span>; pending <span class="text-warning">?X</span> (X = the attempt, 1 for the first); empty: nothing.
   - Then </tbody></table>. Text is HTML-escaped (& < > " ').
 *@
 @cell(c: live.LiveCell) = {@c match {

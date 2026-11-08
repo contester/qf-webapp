@@ -20,9 +20,9 @@ class LiveCellsSpec extends AnyFunSuite {
   test("empty and pending") {
     assert(cell(Nil) == LiveCell.Empty)
     val p = cell(Seq(rec(1, t1, Pending)))
-    assert(p == LiveCell.Pending(0)); assert(p.text == "?")
+    assert(p == LiveCell.Pending(0)); assert(p.text == "?1")
     val q = cell(Seq(rec(1, t1, fail), rec(2, t1.plusMinutes(1), Pending)))
-    assert(q == LiveCell.Pending(1)); assert(q.text == "?1")
+    assert(q == LiveCell.Pending(1)); assert(q.text == "?2")
   }
 
   test("failures follow ACMScorer") {

@@ -2,6 +2,8 @@
    it became (pending blue, solved green, failed red), the whole row green when the team moved. Only a `from` frame,
    so each element fades to whatever background it normally has. *@
 <style>
+/* bootstrap-material makes .text-warning a red-orange; a pending cell is yellow */
+#live-monitor .text-warning { color: #d9a400; }
 .table > tbody > tr.flash-move > th,
 .table > tbody > tr.flash-move > td { animation: flash-move 2.2s ease-out; }
 .table > tbody > tr > td.flash-pend { animation: flash-pend 2.2s ease-out; }
