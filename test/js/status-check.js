@@ -29,11 +29,12 @@ if (!jqueryPath) {
 const jquery = fs.readFileSync(jqueryPath, 'utf8');
 const main = fs.readFileSync(path.join(root, 'app/assets/js/main.js'), 'utf8');
 
-// A row as submitrow.scala.html renders it, as far as the script looks at it.
+// The rows are the ones the server renders: pinned by views.AdminStatusViewSpec (submit 4242, team 7777, verdict
+// @@VERDICT@@), with the rejudge cell (rw) and without (ro).
+const pinned = (name) => fs.readFileSync(path.join(root, 'test/resources/admin', name), 'utf8').trim();
+const fixtures = {rw: pinned('statusrow-rw.html'), ro: pinned('statusrow-ro.html')};
 const rowHtml = (id, verdict, team, variant) =>
-    `<tr id="result-row-${id}"><th>${id}</th><td class="v">${variant}</td>` +
-    `<td><a class="team-link" href="/admin/submits/1?team=${team}">Team ${team}</a></td>` +
-    `<td id="result-${id}">${verdict}</td></tr>`;
+    fixtures[variant].split('4242').join(String(id)).split('7777').join(String(team)).split('@@VERDICT@@').join(verdict);
 const ev = (id, team, verdict) => ({id, team, rw: rowHtml(id, verdict, team, 'rw'), ro: rowHtml(id, verdict, team, 'ro')});
 
 // A page with the rows `ids` (newest first), the stream opened with the given options. Returns helpers.
@@ -61,7 +62,7 @@ function page(ids, opts) {
         send(name, obj) { src().listeners[name]({data: JSON.stringify(obj)}); },
         // Array.from: jsdom's own arrays are another realm's, which deepStrictEqual does not take for equal.
         ids() { return Array.from($('#submits > tbody > tr').map(function () { return Number(this.id.replace('result-row-', '')); }).get()); },
-        verdict(id) { return $('#result-' + id).text(); },
+        verdict(id) { return $('#result-' + id).text().trim(); },
         bar() { return $('#newSubmits'); },
         barShown() { return $('#newSubmits').css('display') !== 'none'; }
     };
@@ -170,10 +171,10 @@ check('without a filter the team link stays a link', () => {
 check('the rejudge variant is for those who can rejudge, the other for the rest', () => {
     const rw = page([100], {canRejudge: true});
     rw.open(); rw.send('statusRow', ev(101, 1, 'x')); rw.bar().click();
-    assert.strictEqual(rw.$('#result-row-101 .v').text(), 'rw');
+    assert.strictEqual(rw.$('#result-row-101 #rejudge-101').length, 1);
     const ro = page([100], {canRejudge: false});
     ro.open(); ro.send('statusRow', ev(101, 1, 'x')); ro.bar().click();
-    assert.strictEqual(ro.$('#result-row-101 .v').text(), 'ro');
+    assert.strictEqual(ro.$('#result-row-101 #rejudge-101').length, 0);
 });
 
 check('an empty page takes the first row', () => {
