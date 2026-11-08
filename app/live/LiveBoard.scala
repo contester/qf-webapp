@@ -14,7 +14,7 @@ case class LiveBoard(problems: Seq[String], rows: Vector[LiveRow], solvedCounts:
   def update(team: Team, cells: Map[String, LiveCell]): (LiveBoard, Option[RowChange]) = {
     val oldPos = rows.indexWhere(_.team.id == team.id)
     val old = if (oldPos >= 0) Some(rows(oldPos)) else None
-    if (old.exists(_.cells == cells)) (this, None)
+    if (old.exists(r => r.cells == cells && r.team == team)) (this, None)
     else {
       val score = LiveBoard.scoreOf(cells.values)
       val without = if (oldPos >= 0) rows.patch(oldPos, Nil, 1) else rows

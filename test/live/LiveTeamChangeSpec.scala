@@ -34,7 +34,10 @@ class LiveTeamChangeSpec extends TestKit(ActorSystem("LiveTeamChangeSpec", Confi
     val d = m.onTeamChanged(changed(1, notRated = true), running)
     assert(ranks(m.board(Real)) == Seq((1, 0), (2, 1), (3, 2)))
     assert(ranks(m.board(Freezing)) == ranks(m.board(Real)))
-    assert(d.freezing == Seq(WholeOut(m.board(Freezing))) && d.real == Seq(WholeOut(m.board(Real))))
+    // one row change per board, not a whole board
+    assert(d.freezing.size == 1 && d.freezing.forall(_.isInstanceOf[RowOut]) && d.real.size == 1 && d.real.forall(_.isInstanceOf[RowOut]))
+    assert(d.public.size == 1 && d.public.forall(_.isInstanceOf[RowOut]) && d.ownCells.isEmpty)
+    assert(m.differences(new LiveContest(contest(), problems, Seq(changed(1, notRated = true), teams(1), teams(2)), subs, running)).isEmpty)
     assert(m.board(Real).rowOf(1).get.team.schoolFullNameWithNum.contains("Changed"))
     // the cells are kept
     assert(m.board(Real).rowOf(1).get.cells.contains("A"))
@@ -60,8 +63,8 @@ class LiveTeamChangeSpec extends TestKit(ActorSystem("LiveTeamChangeSpec", Confi
     val pub = f.subscribe(JoinPublic(1))
     next(pub, "board")
     f.actor ! TeamChanged(1, changed(1, disqualified = true))
-    val rows = (next(pub, "board") \ "rows").as[Seq[play.api.libs.json.JsValue]]
-    assert(rows.map(r => ((r \ "team").as[Int], (r \ "rank").as[String])) == Seq((1, "DSQ"), (2, "1"), (3, "2")))
+    val r = next(pub, "row")
+    assert((r \ "row" \ "rank").as[String] == "DSQ" && (r \ "ranks").as[Seq[Int]] == Seq(0, 1, 2))
     f.stop()
   }
 
@@ -95,7 +98,7 @@ class LiveTeamChangeSpec extends TestKit(ActorSystem("LiveTeamChangeSpec", Confi
     assert(m.board(Real).rowOf(9).isDefined)
   }
 
-  test("actor: every stream gets a whole board") {
+  test("actor: every stream gets a row change") {
     val f = new Fixture(running, subs = Map(1 -> subs))
     val pub = f.subscribe(JoinPublic(1))
     val adm = f.subscribe(JoinAdmin(1, real = true))
@@ -104,10 +107,13 @@ class LiveTeamChangeSpec extends TestKit(ActorSystem("LiveTeamChangeSpec", Confi
 
     f.actor ! TeamChanged(1, changed(1, notRated = true))
     for (p <- Seq(pub, adm, tm)) {
-      val b = next(p, "board")
-      val rows = (b \ "rows").as[Seq[play.api.libs.json.JsValue]]
-      assert(rows.map(r => ((r \ "team").as[Int], (r \ "rank").as[String])) == Seq((1, "*"), (2, "1"), (3, "2")))
+      val r = next(p, "row")
+      assert((r \ "team").as[Int] == 1 && (r \ "row" \ "rank").as[String] == "*")
+      // the rest of the ranks move up: positions 0 to 2
+      assert((r \ "rankFrom").as[Int] == 0 && (r \ "ranks").as[Seq[Int]] == Seq(0, 1, 2))
     }
+    f.actor ! TeamChanged(1, changed(1, disqualified = true))
+    for (p <- Seq(pub, adm, tm)) assert((next(p, "row") \ "row" \ "rank").as[String] == "DSQ")
     f.stop()
   }
 
@@ -121,7 +127,7 @@ class LiveTeamChangeSpec extends TestKit(ActorSystem("LiveTeamChangeSpec", Confi
     f.actor ! CrossCheck
     awaitCond(f.loads.get == 2, 5.seconds)
     f.actor ! TeamChanged(1, changed(1, notRated = true))
-    next(pub, "board")
+    next(pub, "row")
     release.success(())
     pub.expectNoMessage(500.millis)
     val b = next(f.subscribe(JoinPublic(1)), "board")

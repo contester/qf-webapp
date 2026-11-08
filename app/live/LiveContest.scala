@@ -70,14 +70,35 @@ class LiveContest(initial: Contest, problems: Seq[String], teams: Seq[Team], sub
     }
 
   /**
-    * A team's details changed (not rated, name, school, number): replace it, or add a team new to the contest, and
-    * rebuild both boards, since the flag and the name change the order and the ranks.
+    * A team's details changed (not rated, disqualified, name, school, number): replace it, or add a team new to the
+    * contest. While the contest runs, a team that stays on the same boards is moved and re-ranked as one row change
+    * per board, like a score change. Anything else (a team added, disabled or enabled, one that appears on or leaves
+    * the public board, a contest not started yet whose boards carry no ranks) rebuilds the boards.
     */
   def onTeamChanged(team: Team, now: DateTime): Delta = {
+    val old = teamById.get(team.id)
     val i = teamList.indexWhere(_.id == team.id)
     teamList = if (i >= 0) teamList.updated(i, team) else teamList :+ team
     teamById += team.id -> team
-    rebuildAll(now)
+    val inPlace = old.exists(o => !o.disabled && !team.disabled &&
+      LiveContest.hiddenFromPublic(o) == LiveContest.hiddenFromPublic(team)) &&
+      !now.isBefore(current.startTime) && !crossed(now)
+    if (!inPlace) rebuildAll(now)
+    else {
+      lastNow = now
+      def step(b: LiveBoard): (LiveBoard, Seq[BoardOut]) =
+        b.rowOf(team.id).fold((b, Seq.empty[BoardOut])) { r =>
+          val (nb, ch) = b.update(team, r.cells)
+          (nb, ch.map(RowOut).toSeq)
+        }
+      val (nf, fo) = step(freezingBoard)
+      val (nr, ro) = step(realBoard)
+      val (np, po) = step(pubBoard)
+      freezingBoard = nf
+      realBoard = nr
+      pubBoard = np
+      Delta(fo, ro, Nil, po)
+    }
   }
 
   def onContest(c: Contest, now: DateTime): Delta = {

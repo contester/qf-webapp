@@ -281,6 +281,6 @@ class LiveContestSpec extends AnyFunSuite {
     assert(d.public.size == 1)
     assert(lc.differences(lc.rebuilt(problems, teams ++ Seq(jury, coach), lc.records, now.plusMinutes(2))).isEmpty)
     val t = lc.onTeamChanged(teams.head, now)
-    assert(t.public == Seq(WholeOut(lc.publicBoard)) && !lc.publicBoard.rows.exists(_.team.id == 8))
+    assert(t.public.isEmpty && !lc.publicBoard.rows.exists(_.team.id == 8))
   }
 }
