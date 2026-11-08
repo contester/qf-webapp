@@ -135,6 +135,11 @@ POST /admin/:contestID/admins controllers.AdminApplication.postAddAdmin(contestI
 GET /admin/:contestID/admins/:username controllers.AdminApplication.editAdmin(contestID: Int, username: String)
 POST /admin/:contestID/admins/:username controllers.AdminApplication.postEditAdmin(contestID: Int, username: String)
 POST /admin/:contestID/admins/:username/delete controllers.AdminApplication.deleteAdmin(contestID: Int, username: String)
+GET /admin/:contestID/extrainfo controllers.AdminApplication.extraInfoPage(contestID: Int)
+GET /admin/:contestID/extrainfo/new controllers.AdminApplication.newExtraInfo(contestID: Int)
+POST /admin/:contestID/extrainfo controllers.AdminApplication.postExtraInfo(contestID: Int, original: Option[Int] ?= None)
+GET /admin/:contestID/extrainfo/:num controllers.AdminApplication.editExtraInfo(contestID: Int, num: Int)
+POST /admin/:contestID/extrainfo/:num/delete controllers.AdminApplication.deleteExtraInfo(contestID: Int, num: Int)
 GET /admin/:contestID/areas controllers.AdminApplication.areasPage(contestID: Int)
 POST /admin/:contestID/areas/:areaID controllers.AdminApplication.postEditArea(contestID: Int, areaID: Int)
 

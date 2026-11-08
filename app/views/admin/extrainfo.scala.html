@@ -1,0 +1,41 @@
+@(pages: Seq[org.stingray.contester.dbmodel.Extrainfo], contest: SelectedContest)(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@adminmain(tab = "extrainfo", contest=contest) {
+@flash.get("success").map { message =>
+<div class="alert alert-success" role="alert">@message</div>
+}
+@flash.get("error").map { message =>
+<div class="alert alert-danger" role="alert">@message</div>
+}
+<div class="panel panel-success">
+    <div class="panel-heading"><h3 class="panel-title">Extra pages of contest @contest.contest.id</h3></div>
+    <div class="panel-body">
+        <p>Teams see these as extra links in their navbar, in this order. The page body is HTML, shown as is.</p>
+        <table class="table table-hover table-bordered table-responsive">
+            <thead>
+            <tr><th>Number</th><th>Heading</th><th>Size</th><th></th></tr>
+            </thead>
+            <tbody>
+            @for(p <- pages) {
+            <tr>
+                <th scope="row">@p.num</th>
+                <td>@p.heading</td>
+                <td>@p.data.length chars</td>
+                <td>
+                    <a class="btn btn-xs btn-primary" href="@controllers.routes.AdminApplication.editExtraInfo(contest.contest.id, p.num)">Edit</a>
+                    @helper.form(controllers.routes.AdminApplication.deleteExtraInfo(contest.contest.id, p.num), 'style -> "display:inline",
+                        'onsubmit -> "return confirm('Delete this page?');") {
+                        @helper.CSRF.formField
+                        <button type="submit" class="btn btn-xs btn-danger">Delete</button>
+                    }
+                </td>
+            </tr>
+            }
+            @if(pages.isEmpty) {
+            <tr><td colspan="4">No extra pages.</td></tr>
+            }
+            </tbody>
+        </table>
+        <a class="btn btn-warning" href="@controllers.routes.AdminApplication.newExtraInfo(contest.contest.id)"><span class="glyphicon glyphicon-plus"></span> Add page</a>
+    </div>
+</div>
+}

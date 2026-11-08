@@ -1,0 +1,18 @@
+@(form: Form[org.stingray.contester.dbmodel.Extrainfo], original: Option[Int], contest: SelectedContest)(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@import helper.Implicits._
+@import b3.vertical.fieldConstructor
+@adminmain(tab = "extrainfo", contest=contest) {
+<div class="panel panel-success">
+    <div class="panel-heading"><h3 class="panel-title">@if(original.isDefined){Edit page @original.get}else{New page}</h3></div>
+    <div class="panel-body">
+        @b3.horizontal.formCSRF(controllers.routes.AdminApplication.postExtraInfo(contest.contest.id, original),
+        "col-md-2", "col-md-10") { implicit fc =>
+        @b3.number(form("num"), '_label -> "Number", 'min -> 0)
+        @b3.text(form("heading"), '_label -> "Heading")
+        @b3.textarea(form("data"), '_label -> "HTML", 'rows -> 25, 'style -> "font-family: monospace")
+        @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Save}
+        }
+        <a href="@controllers.routes.AdminApplication.extraInfoPage(contest.contest.id)">Back to the list</a>
+    </div>
+</div>
+}

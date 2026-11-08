@@ -38,7 +38,7 @@ object Users {
   import org.stingray.contester.dbmodel.SlickModel
 
   private[this] def extraInfoQuery(contest: Int) =
-    SlickModel.extraInfos.filter(_.contest === contest).result
+    SlickModel.extraInfos.filter(_.contest === contest).sortBy(_.num).result
 
   private[this] val resolveQ = Compiled((username: Rep[String]) =>
     SlickModel.joinedLoginQuery.filter(_.username === username).take(1)

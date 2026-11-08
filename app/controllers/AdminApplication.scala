@@ -1099,6 +1099,59 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
       }
   }
 
+  private val extraInfoForm = Form(
+    mapping(
+      "num" -> number(min = 0),
+      "heading" -> text.transform[String](_.trim, identity).verifying("Required", _.nonEmpty),
+      "data" -> text
+    )((num, heading, data) => org.stingray.contester.dbmodel.Extrainfo(0, num, heading, data))(x => Some((x.num, x.heading, x.data)))
+  )
+
+  def extraInfoPage(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
+    getSelectedContests(contestID, request.identity).zip(AdminExtraInfo.list(db, contestID)).map {
+      case (contest, pages) => Ok(html.admin.extrainfo(pages, contest))
+    }
+  }
+
+  def newExtraInfo(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
+    getSelectedContests(contestID, request.identity).zip(AdminExtraInfo.list(db, contestID)).map {
+      case (contest, pages) =>
+        val next = if (pages.isEmpty) 1 else pages.map(_.num).max + 1
+        Ok(html.admin.editextrainfo(extraInfoForm.fill(org.stingray.contester.dbmodel.Extrainfo(contestID, next, "", "")), None, contest))
+    }
+  }
+
+  def editExtraInfo(contestID: Int, num: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
+    getSelectedContests(contestID, request.identity).zip(AdminExtraInfo.get(db, contestID, num)).map {
+      case (contest, Some(page)) => Ok(html.admin.editextrainfo(extraInfoForm.fill(page), Some(num), contest))
+      case _ => NotFound
+    }
+  }
+
+  /** Adds a page when `original` is empty, otherwise saves the page that has that number now. */
+  def postExtraInfo(contestID: Int, original: Option[Int]) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
+    getSelectedContests(contestID, request.identity).flatMap { contest =>
+      extraInfoForm.bindFromRequest.fold(
+        formWithErrors => Future.successful(BadRequest(html.admin.editextrainfo(formWithErrors, original, contest))),
+        data => AdminExtraInfo.save(db, contestID, original, data).map {
+          case AdminExtraInfo.Saved =>
+            Redirect(routes.AdminApplication.extraInfoPage(contestID)).flashing("success" -> s"Saved page ${data.num}")
+          case AdminExtraInfo.NumberTaken =>
+            BadRequest(html.admin.editextrainfo(extraInfoForm.fill(data).withError("num", s"Page ${data.num} already exists"), original, contest))
+          case AdminExtraInfo.Missing =>
+            Redirect(routes.AdminApplication.extraInfoPage(contestID)).flashing("error" -> "That page was deleted meanwhile")
+        }
+      )
+    }
+  }
+
+  def deleteExtraInfo(contestID: Int, num: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
+    AdminExtraInfo.delete(db, contestID, num).map { found =>
+      Redirect(routes.AdminApplication.extraInfoPage(contestID))
+        .flashing(if (found) "success" -> s"Deleted page $num" else "error" -> s"No page $num")
+    }
+  }
+
   private val areaPrinterForm = Form(single("printer" -> text))
 
   def areasPage(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
