@@ -157,10 +157,20 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
 
+  /** The submit's contest and whether it arrived after that contest's freeze time (the same rule as the status list). */
+  private[this] def getSubmitContestFreeze(submitId: Long)(implicit ec: ExecutionContext): Future[Option[(Int, Boolean)]] =
+    db.run((for {
+      s <- SlickModel.submits if s.id === submitId
+      c <- SlickModel.contests if c.id === s.contest
+    } yield (s.contest, s.arrived > c.freezeTime)).take(1).result.headOption)
+
+  /** Spectators may open a submit of their contest; those with a restricted view only if it arrived before the freeze. */
   case class canSeeSubmit(submitId: Int) extends Authorization[Admin, SessionAuthenticator] {
     override def isAuthorized[B](identity: Admin, authenticator: SessionAuthenticator)(implicit request: Request[B]): Future[Boolean] =
-      getSubmitCid(submitId).map { cids =>
-        cids.exists(identity.canSpectate)
+      getSubmitContestFreeze(submitId).map { found =>
+        found.exists { case (cid, afterFreeze) =>
+          identity.canSpectate(cid) && (!afterFreeze || identity.canSeeAll(cid))
+        }
       }
   }
 
