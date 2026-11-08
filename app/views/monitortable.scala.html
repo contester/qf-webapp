@@ -27,7 +27,7 @@
     <tbody>
 
     @for(r <- status.anyRows) {
-    <tr @if(current == r.team.id) { class="info" } >
+    <tr @if(r.team.disqualified) { class="danger" } else { @if(current == r.team.id) { class="info" } } >
         <th scope="row">@r.rankStr</th><td>@r.team.id</td>
         <td>@r.team.schoolFullNameWithNum<br/><small>@r.team.teamName</small></td>
         @r.anyScore match {

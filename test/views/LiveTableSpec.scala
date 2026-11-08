@@ -39,6 +39,13 @@ class LiveTableSpec extends AnyFunSuite {
     assert(html.livetable(LiveTableFixture.board, currentTeam = 1).body.trim == LiveTableFixture.html)
   }
 
+  test("livetable shows DSQ and a red row for a disqualified team") {
+    val dsq = LocalTeam(3, 1, "School 3", "S3", 0, "", notRated = true, noPrint = false, disabled = false, disqualified = true)
+    val b = LiveBoard.build(Seq("A"), Seq(dsq), Map(3 -> Map("A" -> LiveCell.Solved(1, 60))))
+    val out = html.livetable(b, currentTeam = 3).body
+    assert(out.contains("""<tr data-team="3" class="danger"><th scope="row">DSQ</th>"""), out)
+  }
+
   test("the JSON fixture used by the browser-side check is LiveJson.board of the same board") {
     assert(Json.parse(LiveTableFixture.json) == LiveJson.board(LiveTableFixture.board))
   }

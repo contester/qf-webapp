@@ -22,5 +22,5 @@ case _ => {}
 }}
 @count(p: String) = @{board.solvedCounts.getOrElse(p, 0)}
 <table class="table table-hover table-bordered table-responsive"><thead><tr><th>@messages("label.rank")</th><th>ID</th><th>@messages("label.team")</th><th>=</th><th>@messages("label.penalty")</th>@for(p <- board.problems) {<th style="text-align: center;">@p<div style="font-size: 65%;@if(count(p) == 0){color:#ccc;}">(@count(p))</div></th>}</tr></thead><tbody>
-@for(r <- board.rows) {<tr data-team="@r.team.id"@if(r.team.id == currentTeam){ class="info"}><th scope="row">@if(r.rank == 0){*}else{@r.rank}</th><td>@r.team.id</td><td>@r.team.schoolFullNameWithNum<br/><small>@r.team.teamName</small></td><td>@r.score.solved</td><td>@r.score.penalty</td>@for(p <- board.problems) {<td class="text-center">@cell(r.cells.getOrElse(p, live.LiveCell.Empty))</td>}</tr>
+@for(r <- board.rows) {<tr data-team="@r.team.id"@if(r.team.disqualified){ class="danger"}else{@if(r.team.id == currentTeam){ class="info"}}><th scope="row">@if(r.team.disqualified){DSQ}else{@if(r.rank == 0){*}else{@r.rank}}</th><td>@r.team.id</td><td>@r.team.schoolFullNameWithNum<br/><small>@r.team.teamName</small></td><td>@r.score.solved</td><td>@r.score.penalty</td>@for(p <- board.problems) {<td class="text-center">@cell(r.cells.getOrElse(p, live.LiveCell.Empty))</td>}</tr>
 }</tbody></table>

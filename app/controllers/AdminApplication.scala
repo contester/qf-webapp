@@ -40,7 +40,7 @@ case class PostWaiterTask(message: String, rooms: String)
 
 case class ContestDescription(id: Int)
 
-case class EditTeam(schoolID: Int, teamName: String, teamNum: Option[Int], notRated: Boolean = false)
+case class EditTeam(schoolID: Int, teamName: String, teamNum: Option[Int], notRated: Boolean = false, disqualified: Boolean = false)
 
 case class PrintTarget(addr: String, name: String, area: String, printer: String)
 case class ServiceTeamsStatus(kind: InitialImportTools.ServiceTeamKind, schoolId: Option[Int], teams: Int)
@@ -690,7 +690,8 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     mapping("schoolID" -> number,
     "teamName" -> text,
     "teamNum" -> optional(number),
-    "notRated" -> boolean
+    "notRated" -> boolean,
+    "disqualified" -> boolean
     )(EditTeam.apply)(EditTeam.unapply)
   }
 
@@ -698,7 +699,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
                               participant: Option[SlickModel.Participant])(implicit request: RequestHeader, ec: ExecutionContext) = {
     Ok(html.admin.editteam(form.getOrElse(
       editTeamForm.fill(EditTeam(team.school, team.name, if (team.num!=0) Some(team.num) else None,
-        participant.exists(_.notRated)))), team.id, schools.map(x => x.id.toString -> x.name), contest, participant.isDefined))
+        participant.exists(_.notRated), participant.exists(_.disqualified)))), team.id, schools.map(x => x.id.toString -> x.name), contest, participant.isDefined))
   }
 
   private def forEditTeam(request: SecuredRequest[AdminEnv, AnyContent], contestID: Int, teamID: Int) =
@@ -774,9 +775,9 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
                     } else Future.successful(0)
 
                     // Only this contest's participation changes; a team that does not take part has nothing to switch.
-                    val updateRated = if (participant.exists(_.notRated != data.notRated)) {
+                    val updateRated = if (participant.exists(p => p.notRated != data.notRated || p.disqualified != data.disqualified)) {
                       db.run(SlickModel.participants.filter(x => x.contest === contestID && x.team === teamID)
-                        .map(_.notRated).update(data.notRated))
+                        .map(x => (x.notRated, x.disqualified)).update((data.notRated, data.disqualified)))
                     } else Future.successful(0)
 
                     updateTeam.zip(updateRated).flatMap { case (a, b) =>

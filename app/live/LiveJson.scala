@@ -20,7 +20,7 @@ object LiveJson {
       "team" -> r.team.id,
       "school" -> r.team.schoolFullNameWithNum,
       "name" -> r.team.teamName,
-      "rank" -> (if (r.rank == 0) "*" else r.rank.toString),
+      "rank" -> (if (r.team.disqualified) "DSQ" else if (r.rank == 0) "*" else r.rank.toString),
       "solved" -> r.score.solved,
       "penalty" -> r.score.penalty,
       "cells" -> cellsObj(keys, cells))

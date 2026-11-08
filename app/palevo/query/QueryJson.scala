@@ -59,7 +59,7 @@ object QueryJson {
     * is shown as `*`, as on the monitor. */
   def standingsRow(r: live.LiveRow): JsObject =
     Json.obj(
-      "rank" -> (if (r.rank == 0) "*" else r.rank.toString),
+      "rank" -> (if (r.team.disqualified) "DSQ" else if (r.rank == 0) "*" else r.rank.toString),
       "team" -> r.team.teamFullName,
       "team_id" -> r.team.id,
       "solved" -> r.score.solved,

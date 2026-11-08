@@ -37,6 +37,15 @@ class LiveJsonSpec extends AnyFunSuite {
         "D" -> Json.obj("t" -> "empty", "s" -> ""))))
   }
 
+  test("a disqualified team is unranked like a not-rated one, but its rank reads DSQ") {
+    val dsq = LocalTeam(9, 1, "School09", "S9", 0, "", notRated = true, noPrint = false, disabled = false, disqualified = true)
+    val board = LiveBoard.build(problems, Seq(team(7), team(8), dsq),
+      Map(7 -> c7, 8 -> c8, 9 -> Map("A" -> Solved(1, 50))))
+    val rows = (LiveJson.board(board) \ "rows").as[Seq[play.api.libs.json.JsObject]]
+    assert(rows.map(r => (r \ "team").as[Int]) == Seq(9, 8, 7))
+    assert(rows.map(r => (r \ "rank").as[String]) == Seq("DSQ", "1", "2"))
+  }
+
   test("board with own differs only in that team's cells") {
     val plain = LiveJson.board(b).as[play.api.libs.json.JsObject]
     val own = LiveJson.board(b, Some((7, real7))).as[play.api.libs.json.JsObject]

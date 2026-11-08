@@ -43,7 +43,7 @@ class TeamStateActor(db: JdbcBackend#DatabaseDef) extends AnyStateActor[TeamStat
         localRows.flatMap { x =>
           globalTeamMap.get(x.team).flatMap { globalTeam =>
             schoolMap.get(globalTeam.school).map { school =>
-              x.team -> LocalTeam(x.team, x.contest, school.fullName, school.shortName, globalTeam.num, globalTeam.name, x.notRated, x.noPrint, x.disabled)
+              x.team -> LocalTeam(x.team, x.contest, school.fullName, school.shortName, globalTeam.num, globalTeam.name, x.notRated || x.disqualified, x.noPrint, x.disabled, x.disqualified)
             }
           }
         }.groupBy(_._2.contest).mapValues(_.toMap)

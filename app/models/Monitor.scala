@@ -39,7 +39,7 @@ trait AnyRankedRow {
   def anyCells: Map[String, ProblemCell]
 
   def rankStr =
-    if (rank == 0) "*" else rank.toString
+    if (team.disqualified) "DSQ" else if (rank == 0) "*" else rank.toString
 }
 
 object Foo {

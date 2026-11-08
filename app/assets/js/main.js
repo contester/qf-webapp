@@ -479,7 +479,7 @@ function liveEsc(s) {
 
 // Rank 0 (not rated) shows as *; board/row JSON already carries "*" or the number as a string.
 function liveRankText(rank) {
-    return (rank === 0 || rank === '*') ? '*' : String(rank);
+    return (rank === 0 || rank === '*') ? '*' : String(rank); // "DSQ" passes through as is
 }
 
 function liveCellHtml(c) {
@@ -546,7 +546,7 @@ function liveCountHtml(problem, n) {
 }
 
 function liveRowHtml(problems, row, currentTeamId) {
-    return '<tr data-team="' + row.team + '"' + (row.team === currentTeamId ? ' class="info"' : '') + '>' +
+    return '<tr data-team="' + row.team + '"' + (row.rank === 'DSQ' ? ' class="danger"' : row.team === currentTeamId ? ' class="info"' : '') + '>' +
         '<th scope="row">' + liveEsc(liveRankText(row.rank)) + '</th><td>' + row.team + '</td>' +
         '<td>' + liveEsc(row.school) + '<br/><small>' + liveEsc(row.name) + '</small></td>' +
         '<td>' + row.solved + '</td><td>' + row.penalty + '</td>' + liveCellsHtml(problems, row.cells) + '</tr>';
@@ -608,7 +608,8 @@ function liveMonitor(eventsPath, containerSelector, currentTeamId) {
             rows = tbody.children('tr');
             if (had) liveFlash(tr, oldCells, oldIndex !== tr.index() || oldRank !== tr.children('th').first().text());
             for (var i = 0; i < e.ranks.length; i++) {
-                rows.eq(e.rankFrom + i).children('th').first().text(liveRankText(e.ranks[i]));
+                var rankCell = rows.eq(e.rankFrom + i);
+                if (!rankCell.hasClass('danger')) rankCell.children('th').first().text(liveRankText(e.ranks[i]));
             }
             var head = box.find('thead tr').first().children('th');
             $.each(e.solved, function(p, n) {

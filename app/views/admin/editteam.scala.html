@@ -26,6 +26,7 @@
         @b3.text(form("teamNum"), '_label -> messages("label.teamNum"))
         @if(participates) {
         @b3.checkbox(form("notRated"), '_text -> messages("label.notRated"))
+        @b3.checkbox(form("disqualified"), '_text -> messages("label.disqualified"))
         }
         @b3.submit('class -> "btn btn-large btn-primary"){ <span class="glyphicon glyphicon-ok"></span> Update}
         }
