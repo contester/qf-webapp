@@ -36,6 +36,10 @@ case class Admin(username: String, passwordHash: String, spectator: Set[Int], ad
   def canSeeAll(contestId: Int) =
     unrestricted.contains(contestId) || unrestricted.contains(-1) || canModify(contestId)
 
+  /** One submit of the contest, opened by id: a restricted view stops at the freeze, like the status list. */
+  def canSeeSubmit(contestId: Int, afterFreeze: Boolean) =
+    canSpectate(contestId) && (!afterFreeze || canSeeAll(contestId))
+
   def canModify(contestId: Int) =
     administrator.contains(contestId) || administrator.contains(-1)
 

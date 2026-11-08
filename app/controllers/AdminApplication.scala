@@ -168,9 +168,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   case class canSeeSubmit(submitId: Int) extends Authorization[Admin, SessionAuthenticator] {
     override def isAuthorized[B](identity: Admin, authenticator: SessionAuthenticator)(implicit request: Request[B]): Future[Boolean] =
       getSubmitContestFreeze(submitId).map { found =>
-        found.exists { case (cid, afterFreeze) =>
-          identity.canSpectate(cid) && (!afterFreeze || identity.canSeeAll(cid))
-        }
+        found.exists { case (cid, afterFreeze) => identity.canSeeSubmit(cid, afterFreeze) }
       }
   }
 
