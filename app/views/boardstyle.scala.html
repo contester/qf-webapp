@@ -17,6 +17,15 @@ html.frozen-board .well .table-hover > tbody > tr:hover > th,
 html.frozen-board .well .table-hover > tbody > tr:hover > td { background-color: #e1edfa; }
 html.not-started .well .table-hover > tbody > tr:hover > th,
 html.not-started .well .table-hover > tbody > tr:hover > td { background-color: #dcdcdc; }
+/* A disqualified row stays red on the tinted boards (the rules above would paint it over). */
+html.frozen-board .well .table > tbody > tr.danger > th,
+html.frozen-board .well .table > tbody > tr.danger > td { background-color: #f2dede; }
+html.frozen-board .well .table-hover > tbody > tr.danger:hover > th,
+html.frozen-board .well .table-hover > tbody > tr.danger:hover > td { background-color: #ebcccc; }
+html.not-started .well .table > tbody > tr.danger > th,
+html.not-started .well .table > tbody > tr.danger > td { background-color: #f2dede; }
+html.not-started .well .table-hover > tbody > tr.danger:hover > th,
+html.not-started .well .table-hover > tbody > tr.danger:hover > td { background-color: #ebcccc; }
 html.frozen-board body::before {
     content: "";
     position: fixed;
