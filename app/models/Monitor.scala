@@ -98,7 +98,8 @@ object Foo {
         teamId -> cells
     }
 
-    val teamRows = teams.map { team =>
+    // A disabled team is on no board: it neither shows nor affects the ranks.
+    val teamRows = teams.filterNot(_.disabled).map { team =>
       val cells = rows.getOrElse(team.id, Seq()).toMap
       val score = getScore(cells.values.toSeq)
 

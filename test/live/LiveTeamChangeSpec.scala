@@ -65,6 +65,23 @@ class LiveTeamChangeSpec extends TestKit(ActorSystem("LiveTeamChangeSpec", Confi
     f.stop()
   }
 
+  test("model: a disabled team is on no board, its submits score nothing, and enabling it brings its work back") {
+    def off(id: Int) = LocalTeam(id, 1, "Off", s"S$id", 0, "", notRated = false, noPrint = false, disabled = true)
+    val m = new LiveContest(contest(), problems, teams, subs, running)
+    val d = m.onTeamChanged(off(1), running)
+    assert(ranks(m.board(Real)) == Seq((2, 1), (3, 2)) && m.publicBoard.rowOf(1).isEmpty)
+    assert(d.real == Seq(WholeOut(m.board(Real))))
+    // a new submit of the disabled team changes nothing
+    val late = m.onArrived(rec(5, 1, "B", t0.plusMinutes(30), ok), running)
+    assert(late == Delta.empty || (late.real.isEmpty && late.freezing.isEmpty && late.public.isEmpty))
+    assert(ranks(m.board(Real)) == Seq((2, 1), (3, 2)))
+    // a team that starts disabled behaves the same, and a fresh build agrees
+    assert(m.differences(new LiveContest(contest(), problems, Seq(off(1), teams(1), teams(2)), subs :+ rec(5, 1, "B", t0.plusMinutes(30), ok), running)).isEmpty)
+    m.onTeamChanged(teams(0), running)
+    assert(ranks(m.board(Real)) == Seq((1, 1), (2, 2), (3, 3)))
+    assert(m.board(Real).rowOf(1).get.cells.contains("B"))
+  }
+
   test("model: the result equals a fresh build from the changed team list") {
     val m = new LiveContest(contest(), problems, teams, subs, running)
     m.onTeamChanged(changed(2, notRated = true), running)

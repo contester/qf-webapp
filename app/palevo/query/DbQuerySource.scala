@@ -93,11 +93,11 @@ object DbQuerySource {
             where s.contest = $contest and not s.tested
             group by s.problem limit #$MaxProblems""".as[(String, Int)]
 
-    /** (regular, not rated) participants of the contest: one aggregate row, read from the participant list only. */
+    /** (regular, not rated) participants of the contest, disabled ones left out: one aggregate row, read from the participant list only. */
     def teamCounts(contest: Int) =
       sql"""select (count(*) filter (where not (p.not_rated or p.disqualified)))::int,
                    (count(*) filter (where p.not_rated or p.disqualified))::int
-            from participants p where p.contest = $contest limit 1""".as[(Int, Int)]
+            from participants p where p.contest = $contest and not p.disabled limit 1""".as[(Int, Int)]
 
     /** The area of the computer of the team's latest submit whose computer is known, else that of its latest
       * print job whose computer is known. */

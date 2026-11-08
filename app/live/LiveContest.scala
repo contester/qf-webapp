@@ -93,6 +93,9 @@ class LiveContest(initial: Contest, problems: Seq[String], teams: Seq[Team], sub
     Seq(Freezing, Real).flatMap(kind => LiveContest.boardDifferences(kind, board(kind), other.board(kind))) ++
       LiveContest.boardDifferences(Freezing, publicBoard, other.publicBoard).map("public " + _)
 
+  // Disabled teams are on no board and score nothing. Their submits are still kept, for when they are enabled again.
+  private[this] def onBoards: Vector[Team] = teamList.filterNot(_.disabled)
+
   private[this] def accepts(r: SubmitRec): Boolean = teamById.contains(r.team) && problemSet(r.problem)
 
   private[this] def insert(r: SubmitRec): Unit = {
@@ -123,10 +126,10 @@ class LiveContest(initial: Contest, problems: Seq[String], teams: Seq[Team], sub
     }.toMap
 
   private[this] def buildBoard(kind: BoardKind, now: DateTime): LiveBoard =
-    LiveBoard.build(problems, teamList, teamList.map(t => t.id -> teamCells(t.id, kind, now)).toMap)
+    LiveBoard.build(problems, onBoards, onBoards.map(t => t.id -> teamCells(t.id, kind, now)).toMap)
 
   private[this] def buildPublic(now: DateTime): LiveBoard = {
-    val shown = teamList.filterNot(LiveContest.hiddenFromPublic)
+    val shown = onBoards.filterNot(LiveContest.hiddenFromPublic)
     LiveBoard.build(problems, shown, shown.map(t => t.id -> teamCells(t.id, Freezing, now)).toMap)
   }
 
@@ -152,7 +155,7 @@ class LiveContest(initial: Contest, problems: Seq[String], teams: Seq[Team], sub
     if (crossed(now)) rebuildAll(now)
     else {
       lastNow = now
-      val teamIds = touched.map(_._1).distinct
+      val teamIds = touched.map(_._1).distinct.filterNot(tid => teamById(tid).disabled)
       def step(kind: BoardKind, start: LiveBoard, ids: Seq[Int] = teamIds): (LiveBoard, Seq[BoardOut]) =
         ids.foldLeft((start, Seq.empty[BoardOut])) { case ((b, outs), tid) =>
           val old = b.rowOf(tid).map(_.cells).getOrElse(Map.empty[String, LiveCell])

@@ -255,9 +255,9 @@ class DbQuerySourceSpec extends TestKit(ActorSystem("DbQuerySourceSpec", ConfigF
     assert(row.arrived.getMillis == raw.arrived.getMillis)
   }
 
-  test("teamCounts splits each contest's participants by the not-rated flag") {
+  test("teamCounts splits each contest's enabled participants by the not-rated flag") {
     assume(url.isDefined)
-    val raw = await(db.run(sql"""select contest, not_rated from participants""".as[(Int, Boolean)]))
+    val raw = await(db.run(sql"""select contest, not_rated or disqualified from participants where not disabled""".as[(Int, Boolean)]))
     assume(raw.nonEmpty, "the database has no participants")
     for ((contest, rows) <- raw.groupBy(_._1)) {
       val out = rows.count(_._2)
