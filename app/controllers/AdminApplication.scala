@@ -175,13 +175,20 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     Future.successful(Redirect(routes.AdminApplication.submits(request.identity.defaultContest, None, None, None)))
   }
 
+  // The status page's rows as they arrive and finish; 404 when the live monitor is off (the page is then static).
+  def statusEvents(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
+    LiveStreams.stream(liveMonitor.ref.filter(_ => liveConfig.enabled),
+      LiveStreams.adminStatusJoin(contestId, request.identity.canSeeAll(contestId)))
+  }
+
   def submits(contestId: Int, team: Option[Int], before: Option[Long], after: Option[Long]) =
     silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
       val account = request.identity
       getSelectedContests(contestId, account).zip(statusActorModel.teamClient.getTeams(contestId)).flatMap {
         case (contest, teamMap) =>
           AdminSubmits.page(db, contestId, team, before, after, account.canSeeAll(contestId)).map { page =>
-            Ok(html.admin.submits(page, teamMap, contest, account, team))
+            Ok(html.admin.submits(page, teamMap, contest, account, team,
+              live = liveMonitor.ref.isDefined && liveConfig.enabled, newest = before.isEmpty && page.newer.isEmpty))
           }
       }
     }

@@ -1,6 +1,6 @@
 package live
 
-import actors.LiveMonitorActor.JoinAdmin
+import actors.LiveMonitorActor.{JoinAdmin, JoinAdminStatus}
 import controllers.LiveStreams
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -11,6 +11,13 @@ class LiveStreamsSpec extends AnyFunSuite {
   test("only an account that can see everything gets the real admin stream") {
     assert(LiveStreams.adminJoin(7, canSeeAll = true) == JoinAdmin(7, real = true))
     assert(LiveStreams.adminJoin(7, canSeeAll = false) == JoinAdmin(7, real = false))
+  }
+
+  test("the status page stream is real only for an account that can see everything") {
+    assert(LiveStreams.adminStatusJoin(7, canSeeAll = true) == JoinAdminStatus(7, real = true))
+    assert(LiveStreams.adminStatusJoin(7, canSeeAll = false) == JoinAdminStatus(7, real = false))
+    val admin = new String(Files.readAllBytes(Paths.get("app/controllers/AdminApplication.scala")), "UTF-8")
+    assert(admin.contains("LiveStreams.adminStatusJoin(contestId, request.identity.canSeeAll(contestId))"))
   }
 
   test("no code outside the actor and LiveStreams builds a real-board join") {

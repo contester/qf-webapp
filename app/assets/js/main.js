@@ -259,6 +259,8 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
 
         // The popup event (stored until acked). Also keeps the verdict cell right if the rows did not come.
         add('submit', function(obj) {
+            // The status page fed by the live monitor (listenOnStatus) takes care of its rows.
+            if (window.statusLive) { return; }
             var tr = $('#result-' + obj.submitId);
             if (tr.length) {
                 tr.toggleClass('success', !!obj.result.success);
@@ -341,6 +343,84 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
     return listenV2(path, setup, setConnectedBadge);
 }
 
+// The admin status page, fed by the live monitor. A row that is on the page is replaced where it stands (the verdict
+// arrives, the statistics fill in). A submit that is not on the page is held back, never put in: the table does not
+// move under the cursor. A bar above it counts them and a click puts them in.
+//   canRejudge: the viewer sees the rejudge buttons; newest: this is the first page; teamFilter: team id, 0 for all.
+function listenOnStatus(path, canRejudge, newest, teamFilter) {
+    var held = {};
+    var down = false;
+    var bar = $('#newSubmits');
+    var rowOf = function(obj) {
+        var tr = $($.parseHTML($.trim(canRejudge ? obj.rw : obj.ro)));
+        if (teamFilter) { tr.find('a.team-link').replaceWith(function() { return $(this).text(); }); }
+        return tr;
+    };
+    var shownIds = function() {
+        return $('#submits > tbody > tr').map(function() { return parseInt(this.id.replace('result-row-', ''), 10); }).get();
+    };
+    // On the first page everything above its oldest row belongs to it; whatever is older is on another page.
+    var belongsHere = function(id) {
+        var ids = shownIds();
+        return ids.length === 0 || id > Math.min.apply(null, ids);
+    };
+    // Puts a row among the shown ones, newest first, where its id says.
+    var insertRow = function(id, tr) {
+        var after = $('#submits > tbody > tr').filter(function() {
+            return parseInt(this.id.replace('result-row-', ''), 10) < id;
+        }).first();
+        if (after.length) { after.before(tr); } else { $('#submits > tbody').append(tr); }
+    };
+    var showBar = function() {
+        var n = Object.keys(held).length;
+        if (down) {
+            bar.text('Связь прерывалась, возможны пропущенные попытки. Обновите страницу.');
+        } else if (n) {
+            bar.text('Новых попыток: ' + n + '. Показать');
+        } else {
+            bar.hide();
+            return;
+        }
+        bar.show();
+    };
+    bar.on('click', function() {
+        if (down) { window.location.reload(); return; }
+        Object.keys(held).map(Number).forEach(function(id) { insertRow(id, held[id]); });
+        held = {};
+        showBar();
+    });
+
+    var setup = function(add) {
+        add('ready', function() {
+            // A drop in between may have lost rows; the first connection is not one.
+            if (down) { showBar(); }
+        });
+        add('statusRow', function(obj) {
+            if (teamFilter && obj.team !== teamFilter) { return; }
+            var on = $('#result-row-' + obj.id);
+            if (on.length) {
+                on.replaceWith(rowOf(obj));
+            } else if (held[obj.id]) {
+                held[obj.id] = rowOf(obj);
+            } else if (newest && belongsHere(obj.id)) {
+                held[obj.id] = rowOf(obj);
+                showBar();
+            }
+        });
+    };
+
+    var opened = false;
+    return listenV2(path, setup, function(state) {
+        if (state) {
+            // Opened again after a drop: events were missed.
+            if (opened && down) { showBar(); }
+            opened = true;
+        } else if (opened) {
+            down = true;
+        }
+    });
+}
+
 function listenOnAdmin(path, iconbase) {
     var setup = function(add) {
         add('submit', function(obj) {
@@ -349,15 +429,6 @@ function listenOnAdmin(path, iconbase) {
                 tr.toggleClass('success', !!obj.result.success).text(obj.result.message);
             } else {
                 $('#lastSubmitId').html('<b>' + obj.submitId + '</b>');
-            }
-        });
-
-        add('adminSubmit', function(obj) {
-            var tr = $('#result-row-' + obj.submitId);
-            if (tr.length) {
-                tr.html(obj.rendered);
-            } else {
-                $('#submits > tbody').prepend(obj.rendered);
             }
         });
 

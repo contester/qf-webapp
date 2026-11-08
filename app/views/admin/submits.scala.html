@@ -1,5 +1,5 @@
 @import org.stingray.contester.dbmodel._
-@(page: AdminSubmitPage, teams: Map[Int, Team], contest: SelectedContest, admin: Admin, teamFilter: Option[Int])(implicit request: RequestHeader, messages: Messages)
+@(page: AdminSubmitPage, teams: Map[Int, Team], contest: SelectedContest, admin: Admin, teamFilter: Option[Int], live: Boolean = false, newest: Boolean = true)(implicit request: RequestHeader, messages: Messages)
 @pager(page: AdminSubmitPage, cid: Int, teamFilter: Option[Int]) = {
 <ul class="pager">
     @for(n <- page.newer) { <li class="previous"><a href="@routes.AdminApplication.submits(cid, teamFilter, None, Some(n))">&larr; Новее</a></li> }
@@ -12,6 +12,9 @@
 @defining(contest.contest.id) { cid =>
 @if(teamFilter.isDefined) {
 <p>Только одна команда: <a href="@routes.AdminApplication.submits(cid, None, None, None)">показать все команды</a></p>
+}
+@if(live) {
+<div id="newSubmits" class="alert alert-info" style="display: none; cursor: pointer;"></div>
 }
 @pager(page, cid, teamFilter)
 <table id="submits" class="table table-hover table-bordered table-responsive">
@@ -28,6 +31,14 @@
 </table>
 @if(page.rows.isEmpty) { <p class="text-muted">Нет попыток.</p> }
 @pager(page, cid, teamFilter)
+@if(live) {
+<script>
+    window.statusLive = true;
+    $(function() {
+        listenOnStatus('@routes.AdminApplication.statusEvents(cid)', @showRejudge, @newest, @teamFilter.getOrElse(0));
+    });
+</script>
+}
 }
 }
 }
