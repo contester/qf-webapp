@@ -7,7 +7,17 @@
 </ul>
 }
 
-@adminmain(tab = "status", contest = contest) {
+@* The script goes in the page's scripts slot, after jQuery and main.js: in the body $ does not exist yet. *@
+@liveScript = {
+<script>
+    window.statusLive = true;
+    $(function() {
+        listenOnStatus('@routes.AdminApplication.statusEvents(contest.contest.id)', @admin.canModify(contest.contest.id), @newest, @teamFilter.getOrElse(0));
+    });
+</script>
+}
+
+@adminmain(tab = "status", contest = contest, scripts = if (live) liveScript else Html("")) {
 @defining(admin.canModify(contest.contest.id)) { showRejudge =>
 @defining(contest.contest.id) { cid =>
 @if(teamFilter.isDefined) {
@@ -31,14 +41,6 @@
 </table>
 @if(page.rows.isEmpty) { <p class="text-muted">Нет попыток.</p> }
 @pager(page, cid, teamFilter)
-@if(live) {
-<script>
-    window.statusLive = true;
-    $(function() {
-        listenOnStatus('@routes.AdminApplication.statusEvents(cid)', @showRejudge, @newest, @teamFilter.getOrElse(0));
-    });
-</script>
-}
 }
 }
 }

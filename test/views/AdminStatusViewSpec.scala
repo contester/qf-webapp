@@ -93,6 +93,16 @@ class AdminStatusViewSpec extends AnyFunSuite {
     assert(p.indexOf("id=\"newSubmits\"") < p.indexOf("<table id=\"submits\""))
   }
 
+  test("the script runs after jQuery and main.js are loaded, not in the body before them") {
+    val p = page(live = true)
+    val jq = p.indexOf("lib/jquery/jquery")
+    val main = p.indexOf("js/main.js")
+    val mine = p.indexOf("listenOnStatus(")
+    assert(jq >= 0 && main > jq, "the page loads jquery and then main.js")
+    assert(mine > main, "listenOnStatus is called after main.js defines it")
+    assert(p.indexOf("window.statusLive = true;") > jq)
+  }
+
   test("the script is told what the viewer may do and which page this is") {
     assert(page(live = true, modify = false).contains("listenOnStatus('/admin/submits/3/events', false, true, 0);"))
     assert(page(live = true, newest = false).contains("listenOnStatus('/admin/submits/3/events', true, false, 0);"))
