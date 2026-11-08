@@ -423,15 +423,6 @@ function listenOnStatus(path, canRejudge, newest, teamFilter) {
 
 function listenOnAdmin(path, iconbase) {
     var setup = function(add) {
-        add('submit', function(obj) {
-            var tr = $('#result-' + obj.submitId);
-            if (tr.length) {
-                tr.toggleClass('success', !!obj.result.success).text(obj.result.message);
-            } else {
-                $('#lastSubmitId').html('<b>' + obj.submitId + '</b>');
-            }
-        });
-
         add('clarificationRequestState', function(obj) {
             var clrp = $("#clrPending");
             clrp.text(obj.pending);

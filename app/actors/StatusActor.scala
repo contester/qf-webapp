@@ -121,7 +121,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
   private[this] val rowGuard = new ContestRowGuard
   private[this] val (msg2Out, msg2Channel) = Concur.broadcast[Message2]()
   private[this] val unacked = mutable.Map[(Int, Int), mutable.Map[Int, Message2]]()
-  private[this] val (sub2Out, sub2Chan) = Concur.broadcast[AnnoSubmit]()
   private[this] val (rowsOut, rowsChan) = Concur.broadcast[SubmitRows]()
   private[this] val pendingClarificationRequests = mutable.Map[Long, mutable.Set[Long]]().withDefaultValue(mutable.Set[Long]())
   private[this] val (clr2Out, clr2Chan) = Concur.broadcast[ClarificationRequestState]()
@@ -374,7 +373,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
     case annotated: AnnoSubmit => {
       logger.debug(s"received annotated: $annotated")
 
-      sub2Chan.offer(annotated)
       pushPersistent(annotated.contest, annotated.team, "submit", Json.toJson(annotated))
     }
 
@@ -419,13 +417,12 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
     case JoinAdmin(c: Int) => {
       import ContestWrites._
       val enum = Try {
-        val sev= sub2Out.filter(_.contest == c) via EventSource.flow
         val pings = Source.tick(tickDuration, tickDuration, userPing)
         val clars = Source.apply[ClarificationRequestState](Seq(ClarificationRequestState(c, pendingClarificationRequests(c).size, newRequest = false)).toList)
             .concat(clr2Out.filter(_.contest == c)) via EventSource.flow
         Source.combine(
           contestStreamSource(c) via EventSource.flow,
-          sev, pings, clars)(Merge(_))
+          pings, clars)(Merge(_))
       }
       sender ! enum
     }
