@@ -26,6 +26,12 @@ class EventBuildersSpec extends AnyFunSuite {
     assert(EventBuilders.clarificationRequested(req, c, team, now).asInstanceOf[ClarificationRequested].problem == "")
   }
 
+  test("clarificationAnswered: the stored request, with its question and answer") {
+    val req = ClarificationRequest(4, 12, 7, "B", "why?", "because", now, answered = true)
+    assert(EventBuilders.clarificationAnswered(req, c, PTeam(7, "N"), now) ==
+      ClarificationAnswered(4, c, now, PTeam(7, "N"), "B", "why?", "because"))
+  }
+
   test("clarificationPosted: empty problem becomes None, non-empty is kept") {
     assert(EventBuilders.clarificationPosted(3, c, updated = false, "", "t", now) ==
       ClarificationPosted(3, c, now, updated = false, None, "t"))

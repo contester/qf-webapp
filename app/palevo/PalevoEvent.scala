@@ -62,6 +62,13 @@ final case class ClarificationRequested(requestId: Long, contest: PContest, ts: 
   def data = Json.obj("team" -> PalevoEvent.team(team), "problem" -> problem, "text" -> text)
 }
 
+final case class ClarificationAnswered(requestId: Long, contest: PContest, ts: DateTime, team: PTeam,
+                                       problem: String, question: String, answer: String) extends PalevoEvent {
+  def id = s"qf-clr-ans-$requestId-${ts.getMillis}"
+  def eventType = "clarification_answered"
+  def data = Json.obj("team" -> PalevoEvent.team(team), "problem" -> problem, "question" -> question, "answer" -> answer)
+}
+
 final case class ClarificationPosted(clarificationId: Long, contest: PContest, ts: DateTime, updated: Boolean,
                                      problem: Option[String], text: String) extends PalevoEvent {
   def id = s"qf-clr-$clarificationId-${ts.getMillis}"

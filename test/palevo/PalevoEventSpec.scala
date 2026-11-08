@@ -40,6 +40,14 @@ class PalevoEventSpec extends AnyFunSuite {
     assert((some \ "data").get == Json.obj("problem" -> "A", "text" -> "t", "updated" -> true))
   }
 
+  test("clarification_answered carries the team, the problem, the question and the answer") {
+    val j = PalevoEvent.toJson(ClarificationAnswered(9, c, ts, team, "A", "why?", "because"))
+    assert((j \ "id").as[String] == s"qf-clr-ans-9-${ts.getMillis}")
+    assert((j \ "type").as[String] == "clarification_answered")
+    assert((j \ "data").get == Json.obj("team" -> Json.obj("id" -> 7, "name" -> "Name"), "problem" -> "A",
+      "question" -> "why?", "answer" -> "because"))
+  }
+
   test("clarification_requested") {
     val j = PalevoEvent.toJson(ClarificationRequested(9, c, ts, team, "A", "why?"))
     assert((j \ "id").as[String] == s"qf-clr-req-9-${ts.getMillis}")

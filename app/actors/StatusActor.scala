@@ -231,6 +231,20 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
     f.failed.foreach(e => logger.warn(s"palevo: cannot announce clarification request $clrId: $e"))
   }
 
+  private def announceClarificationAnswer(contest: Int, clrId: Long): Unit = {
+    val pcontest = contestForPalevo(contest)
+    val f = db.run(ClarificationModel.getClarificationReq(clrId).result.headOption).flatMap {
+      case Some(req) =>
+        teamLookup(contest, req.team).map { team =>
+          palevo.send(EventBuilders.clarificationAnswered(req, pcontest,
+            EventBuilders.teamOrPlaceholder(req.team, team), com.github.nscala_time.time.Imports.DateTime.now))
+        }
+      case None =>
+        Future.successful(logger.warn(s"palevo: clarification request $clrId not found"))
+    }
+    f.failed.foreach(e => logger.warn(s"palevo: cannot announce answer to clarification request $clrId: $e"))
+  }
+
   override def receive = {
     case Init => {
       loadAll.foreach { sis =>
@@ -283,6 +297,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
       clr2Chan.offer(ClarificationRequestState(contest, pendingClarificationRequests(contest).size, newRequest = false))
       logger.info(s"pushPersistent: $contest $clrId $teamId $problem $text")
       pushPersistent(contest, teamId, "clarificationAnswered", Json.obj("problem" -> problem, "text" -> text))
+      announceClarificationAnswer(contest, clrId)
     }
 
       // This handles both toggles and full edits.

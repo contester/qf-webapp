@@ -2,7 +2,7 @@
 
 ## Configuration: palevo (IRC announcements)
 
-qf-webapp can post contest events (new clarifications and tasks, contest start/freeze/end with countdowns and reschedules, first solves,
+qf-webapp can post contest events (new clarifications, questions from teams and the answers to them, tasks, contest start/freeze/end with countdowns and reschedules, first solves,
 new leader, print errors) to [palevo](https://github.com/contester/palevo), which announces them in the
 duty IRC channel. Add to the application configuration:
 

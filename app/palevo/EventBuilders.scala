@@ -17,6 +17,10 @@ object EventBuilders {
   def clarificationRequested(req: ClarificationRequest, contest: PContest, team: PTeam, now: DateTime): PalevoEvent =
     ClarificationRequested(req.id, contest, now, team, req.problem, req.request)
 
+  /** `req` is the request as stored after the answer, so its answer is the one given. */
+  def clarificationAnswered(req: ClarificationRequest, contest: PContest, team: PTeam, now: DateTime): PalevoEvent =
+    ClarificationAnswered(req.id, contest, now, team, req.problem, req.request, req.answer)
+
   def clarificationPosted(id: Long, contest: PContest, updated: Boolean, problem: String, text: String,
                           now: DateTime): PalevoEvent =
     ClarificationPosted(id, contest, now, updated, Some(problem).filter(_.nonEmpty), text)
