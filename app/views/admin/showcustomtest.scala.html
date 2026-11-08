@@ -1,5 +1,5 @@
 @import org.stingray.contester.dbmodel._
-@(ev: EvalEntry, team: Option[Team], contest: SelectedContest)(implicit request: RequestHeader, messages: Messages)
+@(ev: EvalEntry, team: Option[Team], contest: SelectedContest, canRerun: Boolean = false)(implicit request: RequestHeader, messages: Messages)
 @fmt(d: org.joda.time.DateTime) = @{d.withZone(org.joda.time.DateTimeZone.getDefault).toString("yyyy-MM-dd HH:mm:ss.SSS")}
 
 @panel(name: String)(value: String) = {
@@ -18,6 +18,12 @@
         <p><b>Отправлено:</b> @fmt(ev.arrived), <b>завершено:</b> @ev.finishTime.map(fmt).getOrElse("ещё нет")</p>
         <p><b>Результат:</b> @if(ev.finishTime.isEmpty){<i>выполняется</i>}else{@messages(s"status.${ev.resultCode}")},
             <b>время:</b> @ev.timex, <b>память:</b> @ev.memory, <b>код возврата:</b> @ev.returnCode</p>
+        @if(canRerun) {
+        @helper.form(action = routes.AdminApplication.rerunCustomTest(ev.contest, ev.id), 'style -> "display:inline") {
+            @helper.CSRF.formField
+            <button type="submit" class="btn btn-default btn-sm">Запустить заново</button>
+        }
+        }
         <p><a href="@routes.AdminApplication.customTests(ev.contest, None, None, None)">&larr; все custom tests</a></p>
     </div>
 </div>

@@ -67,6 +67,14 @@ object AdminCustomTests {
   def get(db: JdbcBackend#DatabaseDef, contest: Int, id: Long)(implicit ec: ExecutionContext): Future[Option[EvalEntry]] =
     db.run(SlickModel.customTestWithLang.filter(x => x.id === id && x.contest === contest).take(1).result.headOption)
 
+  /**
+   * Marks a custom test as not yet run again, so the list shows it as running until the director records the new
+   * result. Only if it belongs to the contest; false if there is no such test.
+   */
+  def reset(db: JdbcBackend#DatabaseDef, contest: Int, id: Long)(implicit ec: ExecutionContext): Future[Boolean] =
+    db.run(sqlu"""update custom_test set tested = false, finish_time = null
+                   where id = $id and contest = $contest""").map(_ > 0)
+
   private def decode(b: Array[Byte]) = new String(b, "CP1251")
   def sourceText(e: EvalEntry): String = decode(e.source)
   def inputText(e: EvalEntry): String = decode(e.input)

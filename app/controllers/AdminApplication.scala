@@ -208,7 +208,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
       AdminCustomTests.get(db, contestId, id).flatMap {
         case Some(ev) =>
           getSelectedContests(contestId, request.identity).zip(statusActorModel.teamClient.getTeams(contestId)).map {
-            case (contest, teamMap) => Ok(html.admin.showcustomtest(ev, teamMap.get(ev.team), contest))
+            case (contest, teamMap) => Ok(html.admin.showcustomtest(ev, teamMap.get(ev.team), contest, request.identity.canModify(contestId)))
           }
         case None => Future.successful(NotFound)
       }
@@ -1162,4 +1162,16 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
       } yield Ok(html.admin.misc(comps, statuses, contest, request.identity))
     }
   }
+
+  /** Runs a custom test again: the director takes it from the queue like a fresh one and writes the result over the old. */
+  def rerunCustomTest(contestId: Int, id: Long) =
+    silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request =>
+      AdminCustomTests.reset(db, contestId, id).map {
+        case true =>
+          rabbitMq ! Message.queue(ServerSideEvalID(id.toInt), queue = "contester.evalrequests")
+          Redirect(routes.AdminApplication.showCustomTest(contestId, id))
+        case false => NotFound
+      }
+    }
+
 }
