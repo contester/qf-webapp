@@ -91,3 +91,5 @@ label.teamNum=Team number
 label.notRated=Not rated in this contest (out of competition)
 label.pages=Pages
 label.disqualified=Disqualified (shown as DSQ, not rated)
+label.disabled=Disabled
+label.noPrint=No printing

@@ -20,8 +20,8 @@ class LiveTeamChangeSpec extends TestKit(ActorSystem("LiveTeamChangeSpec", Confi
 
   override def afterAll(): Unit = TestKit.shutdownActorSystem(system)
 
-  private def changed(id: Int, notRated: Boolean = false, school: String = "Changed"): Team =
-    LocalTeam(id, 1, school, s"S$id", 0, "", notRated, noPrint = false, disabled = false)
+  private def changed(id: Int, notRated: Boolean = false, school: String = "Changed", disqualified: Boolean = false): Team =
+    LocalTeam(id, 1, school, s"S$id", 0, "", notRated || disqualified, noPrint = false, disabled = false, disqualified = disqualified)
 
   // Team 1 solved A fast, team 2 solved A slower, team 3 nothing.
   private val subs = Seq(rec(1, 1, "A", t0.plusMinutes(10), ok), rec(2, 2, "A", t0.plusMinutes(20), ok))
@@ -40,6 +40,29 @@ class LiveTeamChangeSpec extends TestKit(ActorSystem("LiveTeamChangeSpec", Confi
     assert(m.board(Real).rowOf(1).get.cells.contains("A"))
     m.onTeamChanged(changed(1), running)
     assert(ranks(m.board(Real)) == Seq((1, 1), (2, 2), (3, 3)))
+  }
+
+  test("model: a disqualified team is unranked and flagged, and an undone disqualification ranks it again") {
+    val m = new LiveContest(contest(), problems, teams, subs, running)
+    m.onTeamChanged(changed(1, disqualified = true), running)
+    assert(ranks(m.board(Real)) == Seq((1, 0), (2, 1), (3, 2)))
+    assert(m.board(Real).rowOf(1).get.team.disqualified)
+    // disqualified, then merely not rated: still unranked, no longer DSQ
+    m.onTeamChanged(changed(1, notRated = true), running)
+    assert(ranks(m.board(Real)) == Seq((1, 0), (2, 1), (3, 2)) && !m.board(Real).rowOf(1).get.team.disqualified)
+    m.onTeamChanged(changed(1), running)
+    assert(ranks(m.board(Real)) == Seq((1, 1), (2, 2), (3, 3)))
+    assert(m.differences(new LiveContest(contest(), problems, Seq(changed(1), teams(1), teams(2)), subs, running)).isEmpty)
+  }
+
+  test("actor: a disqualification reaches every stream as DSQ") {
+    val f = new Fixture(running, subs = Map(1 -> subs))
+    val pub = f.subscribe(JoinPublic(1))
+    next(pub, "board")
+    f.actor ! TeamChanged(1, changed(1, disqualified = true))
+    val rows = (next(pub, "board") \ "rows").as[Seq[play.api.libs.json.JsValue]]
+    assert(rows.map(r => ((r \ "team").as[Int], (r \ "rank").as[String])) == Seq((1, "DSQ"), (2, "1"), (3, "2")))
+    f.stop()
   }
 
   test("model: the result equals a fresh build from the changed team list") {
