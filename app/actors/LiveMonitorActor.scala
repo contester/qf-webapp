@@ -88,11 +88,9 @@ object LiveMonitorActor {
     * Status page rows from the database. A finish can be heard before the tester's result is visible; the row is then
     * read again a few times, so that a finished submit is never shown as running.
     */
-  class DbStatusRows(db: JdbcBackend#DatabaseDef, teamClient: TeamClient, scheduler: akka.actor.Scheduler,
+  class DbStatusRows(read: Int => Future[Option[models.AdminSubmitRow]], teamClient: TeamClient, scheduler: akka.actor.Scheduler,
                      retryAfter: FiniteDuration = 500.millis, retries: Int = 4) extends StatusRows {
     private implicit val timeout: akka.util.Timeout = akka.util.Timeout(5.seconds)
-
-    private def read(id: Int)(implicit ec: ExecutionContext) = models.AdminSubmits.row(db, id)
 
     override def render(id: Int, inTesting: Option[models.SubmitResult])(implicit ec: ExecutionContext): Future[Option[StatusRow]] = {
       def attempt(left: Int): Future[Option[models.AdminSubmitRow]] = read(id).flatMap {
@@ -113,6 +111,11 @@ object LiveMonitorActor {
           }
       }
     }
+  }
+
+  object DbStatusRows {
+    def fromDb(db: JdbcBackend#DatabaseDef, teamClient: TeamClient, scheduler: akka.actor.Scheduler)(implicit ec: ExecutionContext): DbStatusRows =
+      new DbStatusRows(id => models.AdminSubmits.row(db, id), teamClient, scheduler)
   }
 
   /** Wall clock for the boards and palevo; monotonic milliseconds for the static throttle and reload rate limit. */

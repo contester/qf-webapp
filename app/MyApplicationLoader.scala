@@ -146,7 +146,7 @@ class MyComponents(context: ApplicationLoader.Context)
       statusActorModel.teamClient, statusActorModel.problemClient,
       () => dbConfig.db.run(org.stingray.contester.dbmodel.SlickModel.allContests.result),
       (c, b) => live.StaticRender.render(c, b)(messages), palevoSink, countdownConfig,
-      new actors.LiveMonitorActor.DbStatusRows(dbConfig.db, statusActorModel.teamClient, actorSystem.scheduler)), "live-monitor-actor")
+      actors.LiveMonitorActor.DbStatusRows.fromDb(dbConfig.db, statusActorModel.teamClient, actorSystem.scheduler)(executionContext)), "live-monitor-actor")
   })
 
   lazy val liveHooks: live.LiveHooks = liveBuilt.hooks
