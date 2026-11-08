@@ -104,7 +104,9 @@ object AdminSubmits {
     db.run(context.result.zip(aggregates(testingIds)).zip(runCounts(shown.map(_.submitId.id.toLong))).map {
       case ((ctx, aggs), counts) => (ctx, aggs, counts)
     }).map { case (ctx, aggs, counts) =>
-      val scores: Map[Int, Option[Score]] = Submits.groupByTP(ctx.map(Submits.upliftSub)).values.flatMap { subs =>
+      // groupByTP orders by whole seconds and is stable, so what the query returns decides submits in the same second:
+      // by id, the same for every page and for a single row.
+      val scores: Map[Int, Option[Score]] = Submits.groupByTP(ctx.map(Submits.upliftSub).sortBy(_.submitId.id)).values.flatMap { subs =>
         Submits.scoreGrouped(subs, ACMCell.empty, ACMScorer)._2.map { case (s, sc) => s.submitId.id -> sc }
       }.toMap
 
