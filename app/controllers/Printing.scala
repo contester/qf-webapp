@@ -48,8 +48,14 @@ class Printing (cc: ControllerComponents,
       solution.filename -> FileUtils.readFileToByteArray(solution.ref.path.toFile)
     }
 
-    val parsed0 = if (solutionOpt.isDefined) parsed
-      else parsed.withGlobalError("can't read file")
+    val parsed0 = solutionOpt match {
+      case None => parsed.withGlobalError("can't read file")
+      case Some((_, data)) => utils.PrintableCheck.check(data) match {
+        case utils.PrintableCheck.Ok => parsed
+        case utils.PrintableCheck.Binary => parsed.withGlobalError(Messages("error.printNotText"))
+        case utils.PrintableCheck.TooLong => parsed.withGlobalError(Messages("error.printTooLong"))
+      }
+    }
 
     Locator.locate(db, request.remoteAddress).flatMap { location =>
       if (location.isEmpty) {
