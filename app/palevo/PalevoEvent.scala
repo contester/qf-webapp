@@ -77,11 +77,12 @@ final case class ClarificationPosted(clarificationId: Long, contest: PContest, t
     problem.fold(Json.obj())(p => Json.obj("problem" -> p))
 }
 
-final case class TaskCreated(taskId: Long, ts: DateTime, text: String, rooms: Seq[String]) extends PalevoEvent {
+final case class TaskCreated(taskId: Long, ts: DateTime, text: String, rooms: Seq[String], allRooms: Boolean = false) extends PalevoEvent {
   def id = s"qf-task-$taskId-${ts.getMillis}"
   def eventType = "task_created"
   def contest = NoContest.value
-  def data = Json.obj("text" -> text, "rooms" -> rooms)
+  def data = Json.obj("text" -> text, "rooms" -> rooms) ++
+    (if (allRooms) Json.obj("all_rooms" -> true) else Json.obj())
 }
 
 /** Shared by the three phase events: `inMinutes == 0` means "now"; otherwise the event is about the moment `at`. */

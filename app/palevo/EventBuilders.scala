@@ -26,7 +26,7 @@ object EventBuilders {
     ClarificationPosted(id, contest, now, updated, Some(problem).filter(_.nonEmpty), text)
 
   def taskCreated(task: StoredWaiterTask, now: DateTime): PalevoEvent =
-    TaskCreated(task.id, now, task.message, task.rooms.toSeq.sorted)
+    TaskCreated(task.id, now, task.message, task.rooms.toSeq.sorted, task.allRooms)
 
   def printerProblem(printer: String, areas: Seq[String], open: Boolean, condition: String, waitingJobs: Int,
                      now: DateTime): PalevoEvent =

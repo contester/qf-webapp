@@ -9,7 +9,7 @@ import scala.concurrent.{ExecutionContext, Future}
 // Model: stored things.
 
 case class StoredWaiterTask(id: Long, when: DateTime, message: String, rooms: Set[String],
-                            acked: Map[String, DateTime]) {
+                            acked: Map[String, DateTime], allRooms: Boolean = false) {
   def matches(perm: WaiterPermissions): Boolean =
     perm.canCreateTasks || rooms.exists(perm.filter)
 
@@ -51,7 +51,7 @@ object WaiterModel {
     val q = (waiterTasks.map(x => (x.message, x.rooms)) returning(waiterTasks.map(x => (x.id)))) += (message, ra)
 
     db.run(q).map { lastInsertId =>
-      StoredWaiterTask(lastInsertId, now, message, newRa.toSet, Map.empty)
+      StoredWaiterTask(lastInsertId, now, message, newRa.toSet, Map.empty, roomsActive.isEmpty)
     }
   }
 
@@ -81,7 +81,7 @@ object WaiterModel {
     getAllRecords(db).zip(getAllTasks(db)).map {
       case (records, tasks) =>
         tasks.map {
-          case StoredWaiterTask(id, ts, message, roomsActive, _) =>
+          case StoredWaiterTask(id, ts, message, roomsActive, _, _) =>
             StoredWaiterTask(id, ts, message, roomsActive, records.getOrElse(id, Map.empty))
         }
     }

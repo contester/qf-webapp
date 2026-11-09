@@ -44,6 +44,12 @@ class EventBuildersSpec extends AnyFunSuite {
     assert(EventBuilders.taskCreated(task, now) == TaskCreated(8, now, "bring water", Seq("101", "102")))
   }
 
+  test("taskCreated flags a task posted to all rooms") {
+    val task = StoredWaiterTask(9, now, "bring water", Set("101", "102"), Map.empty, allRooms = true)
+    assert(EventBuilders.taskCreated(task, now) == TaskCreated(9, now, "bring water", Seq("101", "102"), allRooms = true))
+    assert((EventBuilders.taskCreated(task, now).data \ "all_rooms").as[Boolean])
+  }
+
   test("unknown team gets a placeholder name rather than dropping the event") {
     assert(EventBuilders.teamOrPlaceholder(7, None) == PTeam(7, "team 7"))
   }
