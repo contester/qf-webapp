@@ -1,4 +1,4 @@
-@(loggedIn: LoggedInTeam, optLocation: Option[Location], form: Form[printing.SubmitData], jobs: Seq[PrintEntry])(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@(loggedIn: LoggedInTeam, optLocation: Option[Location], form: Form[printing.SubmitData], jobs: Seq[PrintEntry], maxBytes: Int)(implicit flash: Flash, messages: Messages, request: RequestHeader)
 
 @import helper.Implicits._
 @import b3.vertical.fieldConstructor
@@ -7,7 +7,7 @@
 <script>
             $(function() {
             $('#submitform').validate({
-                rules: { file: { required: true, filesize: 32000  }}
+                rules: { file: { required: true, filesize: @maxBytes  }}
             });
             })
         </script>

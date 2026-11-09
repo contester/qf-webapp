@@ -21,9 +21,11 @@ case class SubmitData(textOnly: Boolean)
 
 class Printing (cc: ControllerComponents,
                 silhouette: Silhouette[TeamsEnv],
+                configuration: play.api.Configuration,
                 dbConfig: DatabaseConfig[JdbcProfile],
                 printingModel: PrintingModel) extends AbstractController(cc) with I18nSupport with Logging {
   private val db = dbConfig.db
+  private val printLimits = utils.PrintableCheck.limitsFrom(configuration)
 
   implicit val ec = defaultExecutionContext
 
@@ -33,7 +35,7 @@ class Printing (cc: ControllerComponents,
 
   private def getPrintForm(loggedIn: LoggedInTeam, form: Form[printing.SubmitData], location: Option[Location])(implicit request: RequestHeader, ec: ExecutionContext) =
     printingModel.printJobsForTeam(loggedIn.contest.id, loggedIn.team.id).map { printJobs =>
-      html.printform(loggedIn,location, form, printJobs)
+      html.printform(loggedIn,location, form, printJobs, printLimits.maxBytes)
     }
 
   def index = silhouette.SecuredAction.async { implicit request =>
@@ -50,7 +52,7 @@ class Printing (cc: ControllerComponents,
 
     val parsed0 = solutionOpt match {
       case None => parsed.withGlobalError("can't read file")
-      case Some((_, data)) => utils.PrintableCheck.check(data) match {
+      case Some((_, data)) => utils.PrintableCheck.check(data, printLimits) match {
         case utils.PrintableCheck.Ok => parsed
         case utils.PrintableCheck.Binary => parsed.withGlobalError(Messages("error.printNotText"))
         case utils.PrintableCheck.TooLong => parsed.withGlobalError(Messages("error.printTooLong"))

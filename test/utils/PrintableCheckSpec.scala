@@ -19,8 +19,18 @@ class PrintableCheckSpec extends AnyFunSuite {
   }
 
   test("too many lines or too many bytes is rejected, the limit itself is fine") {
-    assert(PrintableCheck.check(bytes("x\n" * (PrintableCheck.MaxLines - 1))) == PrintableCheck.Ok)
-    assert(PrintableCheck.check(bytes("x\n" * PrintableCheck.MaxLines)) == PrintableCheck.TooLong)
-    assert(PrintableCheck.check(bytes("x" * (PrintableCheck.MaxBytes + 1))) == PrintableCheck.TooLong)
+    assert(PrintableCheck.check(bytes("x\n" * (PrintableCheck.DefaultLimits.maxLines - 1))) == PrintableCheck.Ok)
+    assert(PrintableCheck.check(bytes("x\n" * PrintableCheck.DefaultLimits.maxLines)) == PrintableCheck.TooLong)
+    assert(PrintableCheck.check(bytes("x" * (PrintableCheck.DefaultLimits.maxBytes + 1))) == PrintableCheck.TooLong)
+  }
+
+  test("limits come from the configuration, with defaults") {
+    import play.api.Configuration
+    assert(PrintableCheck.limitsFrom(Configuration.empty) == PrintableCheck.DefaultLimits)
+    val cfg = Configuration.from(Map("printing.max_lines" -> 10, "printing.max_bytes" -> 100))
+    val limits = PrintableCheck.limitsFrom(cfg)
+    assert(limits == PrintableCheck.Limits(10, 100))
+    assert(PrintableCheck.check(bytes("x\n" * 20), limits) == PrintableCheck.TooLong)
+    assert(PrintableCheck.check(bytes("x\n" * 5), limits) == PrintableCheck.Ok)
   }
 }

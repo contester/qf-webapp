@@ -42,6 +42,14 @@ it is unset or blank every route answers 404. `palevo.query.contests` is the har
 API can ever show, whatever the request asks for (default 1 to 10, so contest 11 is never served). The contract
 is in [doc/palevo-query-api.md](doc/palevo-query-api.md).
 
+## Printing
+
+Uploads to the print form must be text or source code of about 10 pages at most. Limits (optional, read at
+startup, so a restart is needed to change them but not a rebuild):
+
+    printing.max_lines = 450
+    printing.max_bytes = 32000
+
 ## Live monitor
 
 The scoreboard is pushed to browsers over server-sent events and replaces the polling monitor. Configuration
