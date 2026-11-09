@@ -46,7 +46,7 @@ object ContestWrites {
   }
 }
 
-case class SelectedContest(contest: Contest, contests: Seq[(Int, String)], canModify: Boolean = true)
+case class SelectedContest(contest: Contest, contests: Seq[(Int, String)], canModify: Boolean = true, isSuperAdmin: Boolean = false)
 
 class ProblemClient(problemStateActor: ActorRef) {
   import akka.pattern.ask

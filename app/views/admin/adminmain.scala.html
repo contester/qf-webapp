@@ -19,6 +19,7 @@
 @navlink("teams", Html("Teams"))
 @navlink("contests", Html("Contests"))
 @if(contest.canModify) {@navlink("extrainfo", Html("Extra pages"))}
+@if(contest.isSuperAdmin) {@navlink("contester", Html("Contester"))}
 <li class="dropdown">
     <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">
         @contest.contest.id

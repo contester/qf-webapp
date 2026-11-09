@@ -36,6 +36,8 @@ GET /admin/submits/:contestId controllers.AdminApplication.submits(contestId: In
 GET /admin/customtests/:contestId controllers.AdminApplication.customTests(contestId: Int, team: Option[Int] ?= None, before: Option[Long] ?= None, after: Option[Long] ?= None)
 GET /admin/customtest/:contestId/:id controllers.AdminApplication.showCustomTest(contestId: Int, id: Long)
 POST /admin/customtest/:contestId/:id/rerun controllers.AdminApplication.rerunCustomTest(contestId: Int, id: Long)
+GET /admin/contester/events controllers.AdminApplication.contesterEvents
+GET /admin/contester/:contestId controllers.AdminApplication.contester(contestId: Int)
 GET /admin/monitor/:contestId controllers.AdminApplication.monitor(contestId: Int)
 GET /admin/monitor/:contestId/events controllers.AdminApplication.monitorEvents(contestId: Int)
 GET /public/monitor/:contestId controllers.PublicMonitor.page(contestId: Int)

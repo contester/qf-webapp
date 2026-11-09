@@ -141,7 +141,7 @@ class LiveStatusRowsSpec extends TestKit(ActorSystem("LiveStatusRowsSpec", Confi
     val f = new Fixture(running, statusRows = new FakeRows)
     val mat = Materializer(system)
     // The body of the route: the join, and the response a browser's EventSource reads.
-    val result = Await.result(controllers.LiveStreams.stream(Some(f.actor), JoinAdminStatus(1, real = true))(ExecutionContext.global), 5.seconds)
+    val result = Await.result(controllers.LiveStreams.stream(Some(f.actor), JoinAdminStatus(1, real = true), new ConnectionStats)(ExecutionContext.global), 5.seconds)
     assert(result.header.status == 200)
     assert(result.body.contentType.exists(_.startsWith("text/event-stream")), result.body.contentType.toString)
     assert(result.header.headers.get("X-Accel-Buffering").contains("no") && result.header.headers.get("Cache-Control").contains("no-cache"))

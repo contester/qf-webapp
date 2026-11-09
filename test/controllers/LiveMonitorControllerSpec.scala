@@ -65,7 +65,7 @@ class LiveMonitorControllerSpec extends TestKit(ActorSystem("LiveMonitorControll
   }
 
   private def controller(probe: Option[TestProbe], config: LiveMonitorConfig = cfg()) =
-    new PublicMonitor(cc, config, LiveMonitorRef(probe.map(_.ref)), lookup)
+    new PublicMonitor(cc, config, LiveMonitorRef(probe.map(_.ref)), lookup, new live.ConnectionStats)
 
   private def get(path: String): Request[AnyContent] =
     RequestFactory.plain.createRequest(RemoteConnection("127.0.0.1", secure = false, None), "GET",

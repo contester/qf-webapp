@@ -41,7 +41,8 @@ class Application (cc: ControllerComponents,
                             configuration: Configuration,
                             liveHooks: live.LiveHooks,
                             liveConfig: live.LiveMonitorConfig,
-                            liveMonitor: live.LiveMonitorRef) extends AbstractController(cc) with I18nSupport with Logging {
+                            liveMonitor: live.LiveMonitorRef,
+                            stats: live.ConnectionStats) extends AbstractController(cc) with I18nSupport with Logging {
 
   private val db = dbConfig.db
   import org.stingray.contester.dbmodel.MyPostgresProfile.api._
@@ -73,7 +74,7 @@ class Application (cc: ControllerComponents,
   // The team's live stream: the freezing board with the team's own row overlay.
   def monitorEvents = silhouette.SecuredAction.async { implicit request =>
     LiveStreams.stream(liveMonitor.ref.filter(_ => liveConfig.enabled),
-      actors.LiveMonitorActor.JoinTeam(request.identity.contest.id, request.identity.team.id))
+      actors.LiveMonitorActor.JoinTeam(request.identity.contest.id, request.identity.team.id), stats)
   }
 
   private[this] def getSubmits(team: LoggedInTeam) = {
@@ -190,7 +191,7 @@ class Application (cc: ControllerComponents,
 
     statusActorModel.statusActor.ask(StatusActor.JoinUser(contestId, teamId))(Duration(5, SECONDS)).map {
       case StatusActor.UserJoined(e) => {
-        Ok.chunked(e).as(ContentTypes.EVENT_STREAM)
+        Ok.chunked(e.via(stats.track(live.FeedKind.TeamFeed, contestId))).as(ContentTypes.EVENT_STREAM)
       }
       case _ => BadRequest("foo")
     }

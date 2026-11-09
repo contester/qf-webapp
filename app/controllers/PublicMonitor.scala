@@ -3,7 +3,7 @@ package controllers
 import java.util.concurrent.atomic.AtomicInteger
 
 import actors.LiveMonitorActor
-import live.{LiveContestLookup, LiveMonitorConfig, LiveMonitorRef}
+import live.{ConnectionStats, FeedKind, LiveContestLookup, LiveMonitorConfig, LiveMonitorRef}
 import play.api.mvc._
 import views.html
 
@@ -12,7 +12,7 @@ import scala.concurrent.Future
 /** The unauthenticated live monitor: a page and a stream of the freezing board for the public contests.
  * No session or cookie is read or created here. */
 class PublicMonitor(cc: ControllerComponents, liveConfig: LiveMonitorConfig, liveMonitor: LiveMonitorRef,
-                    contests: LiveContestLookup) extends AbstractController(cc) {
+                    contests: LiveContestLookup, stats: ConnectionStats) extends AbstractController(cc) {
   private implicit val ec = defaultExecutionContext
 
   private val connections = new AtomicInteger(0)
@@ -54,7 +54,7 @@ class PublicMonitor(cc: ControllerComponents, liveConfig: LiveMonitorConfig, liv
           }.map {
             case Left(r) => r
             case Right(source) =>
-              LiveStreams.response(source.watchTermination() { (m, done) =>
+              LiveStreams.response(source.via(stats.track(FeedKind.PublicMonitor, contestId)).watchTermination() { (m, done) =>
                 done.onComplete(_ => connections.decrementAndGet())
                 m
               })

@@ -152,6 +152,7 @@ class MyComponents(context: ApplicationLoader.Context)
   lazy val liveHooks: live.LiveHooks = liveBuilt.hooks
   lazy val liveMonitor: Option[ActorRef] = liveBuilt.monitor
   lazy val liveMonitorRef: live.LiveMonitorRef = live.LiveMonitorRef(liveMonitor)
+  lazy val connectionStats: live.ConnectionStats = new live.ConnectionStats
   lazy val liveContestLookup: live.LiveContestLookup =
     live.LiveContestLookup(id => statusActorModel.getContest(id)(akka.util.Timeout(5, java.util.concurrent.TimeUnit.SECONDS), executionContext))
 

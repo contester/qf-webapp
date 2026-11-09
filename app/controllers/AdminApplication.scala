@@ -85,7 +85,8 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
                                   ws: WSClient,
                         liveHooks: live.LiveHooks,
                         liveConfig: live.LiveMonitorConfig,
-                        liveMonitor: live.LiveMonitorRef) extends AbstractController(cc)  with I18nSupport with Logging {
+                        liveMonitor: live.LiveMonitorRef,
+                        stats: live.ConnectionStats) extends AbstractController(cc)  with I18nSupport with Logging {
 
   implicit val ec = defaultExecutionContext
 
@@ -114,11 +115,22 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     getAllContests.map(_.filter(c => account.canSpectate(c.id)).sortBy(_.id)).map { contests =>
       val cmap = contests.map(x => x.id -> x).toMap
       val selected = cmap.getOrElse(contestId, contests.head)
-      SelectedContest(selected, cmap.mapValues(_.name).toSeq, account.canModify(selected.id))
+      SelectedContest(selected, cmap.mapValues(_.name).toSeq, account.canModify(selected.id), account.isSuperAdmin)
     }
 
   private def getAllWaiterTasks(perm: WaiterPermissions)(implicit ec: ExecutionContext) =
     Ask[WaiterActor.Snapshot](statusActorModel.waiterActor, WaiterActor.GetSnapshot(perm)).map(_.tasks)
+
+  // How many connections each feed has, for global admins: the page, and the stream it is updated by.
+  def contester(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
+    getSelectedContests(contestId, request.identity).map { contest =>
+      Ok(html.admin.contester(contest)).withHeaders(LiveStreams.pageHeaders: _*)
+    }
+  }
+
+  def contesterEvents = silhouette.SecuredAction(AdminPermissions.withSuperAdmin) { implicit request =>
+    LiveStreams.response(stats.events())
+  }
 
   def monitor(id: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(id)).async { implicit request =>
     if (liveConfig.enabled)
@@ -148,13 +160,13 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
   def publicPreviewEvents(id: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(id)).async { implicit request =>
-    LiveStreams.stream(liveMonitor.ref.filter(_ => liveConfig.enabled), LiveStreams.publicPreviewJoin(id))
+    LiveStreams.stream(liveMonitor.ref.filter(_ => liveConfig.enabled), LiveStreams.publicPreviewJoin(id), stats)
   }
 
   // The real board for accounts that can see everything, otherwise the freezing board.
   def monitorEvents(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
     LiveStreams.stream(liveMonitor.ref.filter(_ => liveConfig.enabled),
-      LiveStreams.adminJoin(contestId, request.identity.canSeeAll(contestId)))
+      LiveStreams.adminJoin(contestId, request.identity.canSeeAll(contestId)), stats)
   }
 
 
@@ -187,7 +199,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   // The status page's rows as they arrive and finish; 404 when the live monitor is off (the page is then static).
   def statusEvents(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
     LiveStreams.stream(liveMonitor.ref.filter(_ => liveConfig.enabled),
-      LiveStreams.adminStatusJoin(contestId, request.identity.canSeeAll(contestId)))
+      LiveStreams.adminStatusJoin(contestId, request.identity.canSeeAll(contestId)), stats)
   }
 
   def submits(contestId: Int, team: Option[Int], before: Option[Long], after: Option[Long]) =
@@ -392,7 +404,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
   def feed(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
     joinAdminFeed(contestId, request.identity, request).map { e =>
-      Ok.chunked(e).as(ContentTypes.EVENT_STREAM)
+      Ok.chunked(e.via(stats.track(live.FeedKind.AdminFeed, contestId))).as(ContentTypes.EVENT_STREAM)
     }
   }
 

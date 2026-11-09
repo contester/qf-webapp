@@ -421,6 +421,43 @@ function listenOnStatus(path, canRejudge, newest, teamFilter) {
     });
 }
 
+function listenOnContester(path, table) {
+    var labels = {
+        publicMonitor: 'Public monitor', teamMonitor: 'Team monitor', teamFeed: 'Team feed',
+        adminMonitorRestricted: 'Admin monitor (restricted)', adminMonitorUnrestricted: 'Admin monitor (unrestricted)',
+        adminFeed: 'Admin feed', publicPreview: 'Public preview', statusRows: 'Status rows'
+    };
+    var names = {};
+    $('#contester-names span').each(function() { names[$(this).data('id')] = $(this).text(); });
+    var t = $(table);
+    var cell = function(tag, text) { return $('<' + tag + '/>').text(text); };
+    var setup = function(add) {
+        add('counts', function(obj) {
+            var head = $('<tr/>').append(cell('th', 'Contest'));
+            obj.kinds.forEach(function(k) { head.append(cell('th', labels[k] || k)); });
+            var total = obj.kinds.map(function() { return 0; });
+            var body = [];
+            Object.keys(obj.contests).sort(function(a, b) { return a - b; }).forEach(function(cid) {
+                var row = $('<tr/>').append(cell('td', names[cid] ? cid + ' - ' + names[cid] : cid));
+                obj.contests[cid].forEach(function(n, i) {
+                    total[i] += n;
+                    row.append(cell('td', n || '').addClass(n ? '' : 'text-muted'));
+                });
+                body.push(row);
+            });
+            var foot = $('<tr/>').append(cell('th', 'Total'));
+            total.forEach(function(n) { foot.append(cell('th', n)); });
+            t.find('thead').empty().append(head);
+            t.find('tbody').empty().append(body);
+            t.find('tfoot').empty().append(foot);
+        });
+    };
+    return listenV2(path, setup, function(ok) {
+        var badge = $('#contester-state');
+        badge.toggleClass('badge-error', !ok).text(ok ? '+' : 'No connection');
+    });
+}
+
 function listenOnAdmin(path, iconbase) {
     var setup = function(add) {
         add('clarificationRequestState', function(obj) {

@@ -4,6 +4,7 @@ import akka.NotUsed
 import akka.actor.ActorRef
 import akka.pattern.{AskTimeoutException, ask}
 import akka.stream.scaladsl.Source
+import live.{ConnectionStats, FeedKind}
 import play.api.http.{ContentTypes, HeaderNames}
 import play.api.libs.EventSource.Event
 import play.api.mvc.{Result, Results}
@@ -55,10 +56,22 @@ object LiveStreams extends Results {
   def response(source: Source[Event, _]): Result =
     Ok.chunked(source).as(ContentTypes.EVENT_STREAM).withHeaders(streamHeaders: _*)
 
-  /** The whole route body for the team and admin streams; 404 when the live monitor is disabled. */
-  def stream(ref: Option[ActorRef], msg: Any)(implicit ec: ExecutionContext): Future[Result] =
+  /** The kind of feed and the contest a join is counted under on the contester page. */
+  def feedOf(j: actors.LiveMonitorActor.Join): (FeedKind, Int) = j match {
+    case actors.LiveMonitorActor.JoinPublic(c) => (FeedKind.PublicMonitor, c)
+    case actors.LiveMonitorActor.JoinPublicPreview(c) => (FeedKind.PublicPreview, c)
+    case actors.LiveMonitorActor.JoinTeam(c, _) => (FeedKind.TeamMonitor, c)
+    case actors.LiveMonitorActor.JoinAdmin(c, real) =>
+      (if (real) FeedKind.AdminMonitorUnrestricted else FeedKind.AdminMonitorRestricted, c)
+    case actors.LiveMonitorActor.JoinAdminStatus(c, _) => (FeedKind.StatusRows, c)
+  }
+
+  /** The whole route body for the team and admin streams, counted in `stats`; 404 when the live monitor is disabled. */
+  def stream(ref: Option[ActorRef], msg: actors.LiveMonitorActor.Join, stats: ConnectionStats)(implicit ec: ExecutionContext): Future[Result] =
     ref match {
       case None => Future.successful(NotFound)
-      case Some(r) => join(r, msg).map(_.fold(identity, response))
+      case Some(r) =>
+        val (kind, contest) = feedOf(msg)
+        join(r, msg).map(_.fold(identity, src => response(src.via(stats.track(kind, contest)))))
     }
 }
