@@ -80,7 +80,7 @@ object SchoolScorer extends SubmitScorer[SchoolCell] with Logging {
   def apply(cell: SchoolCell, submit: Submit) =
     if (!submit.compiled || !submit.finished || submit.taken == 0 || submit.failedOnFirst) {
       if (submit.compiled && submit.taken == 0) {
-        logger.info(s"Compiled but taken = 0: $submit")
+        logger.info(s"Compiled but taken = 0: contest ${submit.submitId.contestId} team ${submit.submitId.teamId} submit ${submit.submitId.id}")
       }
       (cell, None)
     } else {

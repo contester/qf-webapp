@@ -163,7 +163,6 @@ class Application (cc: ControllerComponents,
 
   def ackMessage = silhouette.SecuredAction.async { implicit request =>
     request.body.asFormUrlEncoded.flatMap(_.get("msgid")).flatMap(_.headOption).flatMap(x => Try(x.toInt).toOption).foreach { msgid =>
-      logger.info(s"Acking: $msgid")
       statusActorModel.statusActor ! StatusActor.Ack(request.identity, msgid)
     }
     Future.successful(Ok("ok"))

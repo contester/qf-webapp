@@ -54,7 +54,7 @@ class SubscriptionsModel(rabbitMqModel: RabbitMqModel, statusActorModel: StatusA
     channel(qos = 1) {
       consume(queue("contester.printingresult")) {
         body(as[PrintJobReport]) { pjob =>
-          logger.info(s"Received finished printing result $pjob")
+          logger.info(s"Received printing result for ${pjob.jobExpandedId}: stage ${pjob.stage}, pages ${pjob.numPages}, error '${pjob.errorMessage}'")
           val acked = printingModel.processPrintJobReport(pjob)
           ack(acked)
         }

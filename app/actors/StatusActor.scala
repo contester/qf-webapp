@@ -295,7 +295,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
     case ClarificationAnswered(contest, clrId, teamId, problem, text) => {
       pendingClarificationRequests(contest) -= clrId
       clr2Chan.offer(ClarificationRequestState(contest, pendingClarificationRequests(contest).size, newRequest = false))
-      logger.info(s"pushPersistent: $contest $clrId $teamId $problem $text")
+      logger.info(s"pushPersistent: contest $contest clarification $clrId team $teamId problem $problem")
       pushPersistent(contest, teamId, "clarificationAnswered", Json.obj("problem" -> problem, "text" -> text))
       announceClarificationAnswer(contest, clrId)
     }
@@ -353,7 +353,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
     }
 
     case finished: FinishedTesting => {
-      logger.info(s"received finished: $finished")
 
       annotateFinished(finished).foreach {
         case (annotated, rows) =>
@@ -368,7 +367,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
     }
 
     case Ack(loggedInTeam, msgid) => {
-      logger.info(s"acking $msgid for $loggedInTeam")
       getUnacked(loggedInTeam.contest.id, loggedInTeam.team.id) -= msgid
       val loc = SlickModel.messageSeenByID(msgid)
       val upd = loc.update(true)
@@ -407,7 +405,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
         }
         val old = contestStates.get(c.id)
         if (old.isEmpty || old.get != c) {
-          logger.info(s"put: $c")
           contestStates.put(c.id, c)
           contestChannel2.offer(c)
         }
