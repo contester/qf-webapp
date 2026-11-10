@@ -17,7 +17,7 @@
 @cell(c: live.LiveCell) = {@c match {
 case live.LiveCell.Solved(_, s) => {<span class="text-success"><strong>@c.text</strong></span><br/><span class="text-info"><small>@SecondsToTimeStr(s)</small></span>}
 case live.LiveCell.Failed(_) => {<span class="text-muted">@c.text</span>}
-case live.LiveCell.Pending(_) => {<span class="text-warning">@c.text</span>}
+case live.LiveCell.Pending(_, _) => {<span class="text-warning">@c.text</span>}
 case _ => {}
 }}
 @count(p: String) = @{board.solvedCounts.getOrElse(p, 0)}

@@ -51,6 +51,13 @@ class LiveCellsSpec extends AnyFunSuite {
     val now = start.plusHours(5).plusMinutes(30)
     assert(cell(Seq(late), Freezing, now) == LiveCell.Pending(0))
     assert(cell(Seq(late), Real, now).isInstanceOf[LiveCell.Solved])
+    // frozen: every post-freeze submit counts as a try, after the visible failure
+    val l2 = rec(2, start.plusHours(4).plusMinutes(40), fail)
+    val l3 = rec(3, start.plusHours(4).plusMinutes(50), Pending)
+    val pre = rec(0, start.plusHours(1), fail)
+    val f = cell(Seq(pre, late, l2, l3), Freezing, now)
+    assert(f == LiveCell.Pending(1, 3)); assert(f.text == "?4")
+    assert(cell(Seq(pre, late, l2, l3), Real, now) == LiveCell.Solved(2, 15000))
     assert(cell(Seq(late), Freezing, start.plusHours(6)).isInstanceOf[LiveCell.Solved])
     assert(cell(Seq(late), Real, start.plusHours(6)).isInstanceOf[LiveCell.Solved])
     val early = rec(2, start.plusHours(3), ok, 100)

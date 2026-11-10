@@ -8,7 +8,7 @@ object LiveJson {
   private def cell(c: LiveCell): JsObject = c match {
     case LiveCell.Solved(_, seconds) => Json.obj("t" -> "ok", "s" -> c.text, "at" -> SecondsToTimeStr(seconds))
     case LiveCell.Failed(_) => Json.obj("t" -> "fail", "s" -> c.text)
-    case LiveCell.Pending(_) => Json.obj("t" -> "pend", "s" -> c.text)
+    case LiveCell.Pending(_, _) => Json.obj("t" -> "pend", "s" -> c.text)
     case LiveCell.Empty => Json.obj("t" -> "empty", "s" -> "")
   }
 

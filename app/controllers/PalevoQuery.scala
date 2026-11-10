@@ -200,7 +200,7 @@ class PalevoQuery(cc: ControllerComponents, cfg: QueryConfig, source: QuerySourc
   private def cellJson(cell: live.LiveCell): JsObject = cell match {
     case live.LiveCell.Solved(a, secs) => Json.obj("state" -> "ok", "attempts" -> a, "minutes" -> secs / 60)
     case live.LiveCell.Failed(a) => Json.obj("state" -> "fail", "attempts" -> a)
-    case live.LiveCell.Pending(f) => Json.obj("state" -> "pending", "attempts" -> f)
+    case live.LiveCell.Pending(f, _) => Json.obj("state" -> "pending", "attempts" -> f)
     case live.LiveCell.Empty => Json.obj("state" -> "empty", "attempts" -> 0)
   }
 
@@ -260,7 +260,7 @@ class PalevoQuery(cc: ControllerComponents, cfg: QueryConfig, source: QuerySourc
                         "attempts" -> cells.map {
                           case live.LiveCell.Solved(a, _) => a
                           case live.LiveCell.Failed(a) => a
-                          case live.LiveCell.Pending(f) => f
+                          case live.LiveCell.Pending(f, _) => f
                           case live.LiveCell.Empty => 0
                         }.sum,
                         "recent_submits" -> nrecent,

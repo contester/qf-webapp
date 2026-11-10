@@ -57,9 +57,10 @@ object LiveCell {
     val solved = true
     def text: String = ACMCell(attempts, seconds, fullSolution = true).toString
   }
-  case class Pending(failures: Int) extends LiveCell {
+  /** `queued` = submits from the first unresolved one onward that the board may not judge (1 unless frozen). */
+  case class Pending(failures: Int, queued: Int = 1) extends LiveCell {
     val solved = false
-    def text: String = s"?${failures + 1}"   // the attempt in flight: ?1 for the first, ?2 after one failure
+    def text: String = s"?${failures + queued}"   // the attempts so far: ?1 for the first, ?2 after one failure
   }
 }
 
@@ -70,10 +71,16 @@ object LiveCells {
     val sorted = recs.sortBy(r => (r.arrivedAt.getMillis, r.id))
     var cell = ACMCell.empty
     val it = sorted.iterator
+    var idx = 0
     while (it.hasNext && !cell.fullSolution) {
       val r = it.next()
-      if (r.state == live.Pending || (kind == Freezing && rules.hides(r.arrivedAt, now)))
-        return LiveCell.Pending(cell.attempt)
+      if (r.state == live.Pending || (kind == Freezing && rules.hides(r.arrivedAt, now))) {
+        // frozen board: each hidden submit counts as a try whatever its verdict (the first one is r itself if it is
+        // hidden, else r is a pending pre-freeze submit and counts as one more); no freeze active gives 1, as on the real board
+        val hidden = if (kind == Freezing) sorted.drop(idx).count(x => rules.hides(x.arrivedAt, now)) else 0
+        return LiveCell.Pending(cell.attempt, if (hidden > 0 && rules.hides(r.arrivedAt, now)) hidden else hidden + 1)
+      }
+      idx += 1
       cell = ACMScorer(cell, r.toSubmit)._1
     }
     if (cell.attempt == 0) Empty
