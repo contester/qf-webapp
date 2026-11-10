@@ -2,6 +2,9 @@
 @(contest: Contest)(implicit messages: Messages)
 
 <p id="contest-frozen" class="text-warning" @if(!contest.frozen) { hidden }>@messages("msg.scoreboardFrozen")</p>
+<p id="contest-unfreeze" class="text-warning" hidden>
+    @messages("msg.scoreboardUnfreezesIn"): <span id="contest-unfreeze-counter"></span>
+</p>
 <p id="contest-ended" class="text-info" @if(!contest.finished){ hidden }>@messages("msg.contestIsOver")</p>
 <p id="contest-timer" @if(contest.finished){ hidden }>
     <span id="contest-ending-in" @if(!contest.started) { hidden }>@messages("msg.contestFinishesIn"):</span>

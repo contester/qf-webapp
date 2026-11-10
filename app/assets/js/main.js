@@ -89,7 +89,16 @@ function formatSeconds(s) {
         var frozen = c.freezeTime < c.endTime && now >= c.freezeTime && now < c.exposeTime;
         if (frozen) $("#contest-frozen").show(); else $("#contest-frozen").hide();
         // The public page also dresses the board for the freeze (boardstyle.scala.html).
-        if (countdownState.publicTheme) document.documentElement.classList.toggle('frozen-board', frozen);
+        if (countdownState.publicTheme) {
+            document.documentElement.classList.toggle('frozen-board', frozen);
+            // Public monitor only: tick the time left until the board is exposed.
+            if (frozen) {
+                $("#contest-unfreeze-counter").text(formatSeconds(Math.max(0, ((c.exposeTime - now) / 1000) >> 0)));
+                $("#contest-unfreeze").show();
+            } else {
+                $("#contest-unfreeze").hide();
+            }
+        }
         if (now >= c.exposeTime && countdownState.frozenInterval) {
             clearInterval(countdownState.frozenInterval);
             countdownState.frozenInterval = null;

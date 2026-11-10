@@ -20,6 +20,7 @@ print=Печать
 customtest=Запуск
 send=Отправить
 msg.scoreboardFrozen=Монитор заморожен
+msg.scoreboardUnfreezesIn=До разморозки монитора
 msg.contestIsOver=Соревнование закончено
 msg.contestFinishesIn=До окончания соревнования
 msg.contestStartsIn=До начала соревнования

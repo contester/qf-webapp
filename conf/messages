@@ -21,6 +21,7 @@ print=Print
 customtest=Custom test
 send=Send
 msg.scoreboardFrozen=Scoreboard is frozen
+msg.scoreboardUnfreezesIn=Scoreboard unfreezes in
 msg.contestIsOver=Contest is over
 msg.contestFinishesIn=Contest finishes in
 msg.contestStartsIn=Contest starts in
