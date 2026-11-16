@@ -16,10 +16,10 @@ class DescribeAttemptsSpec extends AnyFunSuite {
       finished = true, compiled = true, passed, taken, Some(testing))
 
   private def wrongAnswer(testing: Int) =
-    testing.toLong -> Seq(ResultEntry(testing, 3, 13, TimeMs(15), Memory(2048), 0, 0, Array.empty, Array.empty))
+    testing.toLong -> Seq(ResultEntry(testing, 3, 13, TimeMs(15), Memory(2048), 0, 0))
 
   private def accepted(testing: Int) =
-    testing.toLong -> Seq(ResultEntry(testing, 1, 10, TimeMs(40), Memory(4096), 0, 0, Array.empty, Array.empty))
+    testing.toLong -> Seq(ResultEntry(testing, 1, 10, TimeMs(40), Memory(4096), 0, 0))
 
   private def row(fs: FullyDescribedSubmit, plus: String = "+") = views.html.singlesubmit(fs, plus).body
 

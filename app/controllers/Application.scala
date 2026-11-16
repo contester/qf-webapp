@@ -13,6 +13,7 @@ import play.api.data.Forms._
 import play.api.http.ContentTypes
 import play.api.i18n.I18nSupport
 import play.api.libs.json._
+import play.api.libs.ws.WSClient
 import play.api.mvc._
 import play.api.{Configuration, Logger, Logging}
 import slick.basic.DatabaseConfig
@@ -42,9 +43,12 @@ class Application (cc: ControllerComponents,
                             liveHooks: live.LiveHooks,
                             liveConfig: live.LiveMonitorConfig,
                             liveMonitor: live.LiveMonitorRef,
-                            stats: live.ConnectionStats) extends AbstractController(cc) with I18nSupport with Logging {
+                            stats: live.ConnectionStats,
+                            ws: WSClient) extends AbstractController(cc) with I18nSupport with Logging {
 
   private val db = dbConfig.db
+  private val fileserverBaseOpt = configuration.getOptional[String]("fileserver.url").map(_.stripSuffix("fs/"))
+  private val shortn = configuration.getOptional[String]("fileserver.shortn").getOrElse("")
   import org.stingray.contester.dbmodel.MyPostgresProfile.api._
   import org.stingray.contester.dbmodel._
 
@@ -175,7 +179,17 @@ class Application (cc: ControllerComponents,
   }
 
   def showSubmit(submitId: Int) = silhouette.SecuredAction(canSeeSubmit(submitId)).async { implicit request =>
-    Submits.getSubmitById(db, submitId).map(x => Ok(html.showsubmit(request.identity, x)))
+    Submits.getSubmitById(db, submitId).flatMap {
+      case Some(sub) =>
+        val compileF: Future[Option[CompileOutput]] = (for {
+          base <- fileserverBaseOpt
+          tid <- sub.fsub.submit.testingId
+          if sub.fsub.details.exists(d => d.test == 0 && !d.success)
+        } yield Outputs.getCompileAssets(ws, base, shortn, submitId, tid)).getOrElse(Future.successful(None))
+        compileF.map(compileOut => Ok(html.showsubmit(request.identity, Some(sub), compileOut)))
+      case None =>
+        Future.successful(Ok(html.showsubmit(request.identity, None, None)))
+    }
   }
 
   private case class canSeeFeed(contestId: Int, teamId: Int) extends Authorization[LoggedInTeam, SessionAuthenticator] {

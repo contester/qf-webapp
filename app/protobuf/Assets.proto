@@ -19,6 +19,8 @@ message TestRecord {
     Asset output = 3;
     Asset answer = 4;
     Asset tester_output = 5;
+    Asset tester_error = 6;
+    Asset solution_stderr = 7;
 }
 
 message TestingRecord {

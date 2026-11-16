@@ -317,7 +317,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
           getTestingByID(tid.toInt).flatMap {
             case Some(t) =>
               Outputs.getAllAssets2(ws, fileserverBase, shortn, submit.fsub.submit.submitId.id, tid.toInt,
-                submit.fsub.details.map(_.test), PolygonURL(t._4))
+                Try(PolygonURL(t._4).prefix).getOrElse(""))
             case None => Future.successful(Map[Int, ResultAssets]())
           }
         }.getOrElse(Future.successful(Map[Int, ResultAssets]()))
@@ -339,8 +339,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
     db.run(q.take(1).result.headOption).map {
         case Some((testingID, problemURL)) =>
-          val phandle = PolygonURL(problemURL)
-          val pprefix = phandle.prefix.stripPrefix("problem/")
+          val pprefix = Try(PolygonURL(problemURL).prefix.stripPrefix("problem/")).getOrElse("")
           val downloadLoc = s"/fs2/?contest=$shortn&submit=${submitId}&testing=${testingID}&problem=${pprefix}"
           logger.trace(s"download: $downloadLoc")
           Ok("download").as("application/zip").withHeaders("X-Accel-Redirect" -> downloadLoc)

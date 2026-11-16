@@ -8,7 +8,7 @@
     * ext is only for information
 - Submit(submitId: SubmitId, finished: Boolean, compiled: Boolean, passed: Int, taken: Int, testingId: Option\[Int\])
     * this is enough to do the scoring?
-- ResultEntry(test: Int, result: Int, time: Int, memory: Long, info: Int, testerExitCode: Int, testerOutput: String, testerError: String)
+- ResultEntry(testingID: Long, test: Int, result: Int, time: TimeMs, memory: Memory, info: Long, testerExitCode: Long)
     * 1:1 from Results
 - FullyDescribedSubmit(submit: Submit, index: Int, score: Option\[Score\], result: SubmitResult, stats: SubmitStats, details: Seq\[ResultEntry\])
     * used for list of submits

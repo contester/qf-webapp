@@ -138,13 +138,8 @@ case class ACMCell(attempt: Int, arrivedSeconds: Int, fullSolution: Boolean) ext
     else s"-$attempt"
 }
 
-case class ResultEntry(testingID: Long, test: Int, result: Int, time: TimeMs, memory: Memory, info: Long, testerExitCode: Long,
-                       testerOutput: Array[Byte], testerError: Array[Byte]) {
+case class ResultEntry(testingID: Long, test: Int, result: Int, time: TimeMs, memory: Memory, info: Long, testerExitCode: Long) {
   def resultString = SubmitResult.message(result)
-
-  def testerOutputStr = new String(testerOutput, StandardCharsets.UTF_8)
-
-  def testerErrorStr = new String(testerError, StandardCharsets.UTF_8)
 
   def timeLimitExceeded = result == 11
 
@@ -281,7 +276,7 @@ object Submits {
         if (testingIds.isEmpty) Future.successful(Map.empty[Long, Seq[ResultEntry]])
         else db.run(SlickModel.results.filter(_.testingID inSet testingIds).sortBy(_.testID)
           .map(x => (x.testingID, x.testID, x.resultCode, x.timeMs, x.memoryBytes)).result).map(_.map {
-          case (tid, test, code, time, memory) => ResultEntry(tid, test, code, time, memory, 0, 0, Array.empty, Array.empty)
+          case (tid, test, code, time, memory) => ResultEntry(tid, test, code, time, memory, 0, 0)
         }.groupBy(_.testingID))
       results.map(describeAttempts(schoolMode, submits, _))
     }
@@ -308,7 +303,7 @@ object Submits {
   def loadSubmitDetails(db: JdbcBackend#DatabaseDef, testingId: Int)(implicit ec: ExecutionContext) =
     db.run(SlickModel.results0ByTesting(testingId.toLong).result).map(_.map(x =>
       ResultEntry(x.testingID, x.testID, x.resultCode, x.timeMs, x.memoryBytes,
-        x.returnCode, x.testerReturnCode, x.testerOutput, x.testerError)
+        x.returnCode, x.testerReturnCode)
     ))
 
   def dbsub2sub(s: DatabaseSubmitRow): Submit = {
