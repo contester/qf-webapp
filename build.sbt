@@ -45,7 +45,6 @@ libraryDependencies ++= Seq(
   "org.scalatest" %% "scalatest" % "3.2.19" % Test,
   "com.typesafe.akka" %% "akka-testkit" % "2.6.21" % Test,
   "org.apache.pdfbox" % "pdfbox" % "3.0.5",
-  "org.stingray.contester" %% "contester-dbmodel" % "2024.0.1-SNAPSHOT",
   "com.typesafe.play" %% "play-slick" % "5.1.0",
   "com.github.tototoshi" %% "slick-joda-mapper" % "2.4.2",
   "com.softwaremill.macwire" %% "macros" % "2.4.1" % "provided",
