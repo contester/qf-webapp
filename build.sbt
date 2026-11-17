@@ -1,6 +1,6 @@
 name := "qf"
 
-scalaVersion := "2.12.20"
+scalaVersion := "2.12.21"
 
 organization := "org.stingray.contester"
 
@@ -107,8 +107,8 @@ libraryDependencies ~= { _ map {
   case m => m
 }}
 
-PB.targets in Compile := Seq(
-  scalapb.gen() -> (sourceManaged in Compile).value
+Compile / PB.targets := Seq(
+  scalapb.gen() -> (Compile / sourceManaged).value
 )
 
-javacOptions in Compile ++= Seq("-source", "1.8",  "-target", "1.8")
+Compile / javacOptions ++= Seq("--release", "17")
