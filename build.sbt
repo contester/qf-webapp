@@ -17,9 +17,6 @@ scalacOptions ++= Seq(
   "-language:higherKinds",
   "-language:existentials",
   "-language:postfixOps",
-  "-opt:l:method",
-  "-opt:l:inline",
-  "-opt-inline-from:<sources>"
 )
 
 lazy val root = (project in file(".")).enablePlugins(PlayScala)
