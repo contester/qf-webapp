@@ -121,7 +121,7 @@ class ContestDataDbSpec extends AnyFunSuite with BeforeAndAfterAll {
     val details = await(Submits.loadSubmitDetails(db, testing.toInt))
     assert(details.map(_.test) == Seq(0, 1, 2))
     val described = await(Submits.teamProblemSubmits(db, round, team, "A"))
-    assert(described.map(_.result.message) == Seq("Wrong answer on test 2"))
+    assert(described.map(_.result.message) == Seq("10 из 20"))
     assert(await(Submits.getSubmitById(db, id.toInt)).map(_.sourceStr).contains("int main(){}"))
 
     val rows = await(db.run(SlickModel.results0ByTesting(testing).result))
@@ -130,7 +130,7 @@ class ContestDataDbSpec extends AnyFunSuite with BeforeAndAfterAll {
     assert(await(db.run(SlickModel.problems.filter(_.contestID === round).result)).map(p => (p.id, p.maxPoints)) == Seq(("A", 20.0)))
 
     val page = await(AdminSubmits.page(db, round, None, None, None, canSeeAll = true))
-    assert(page.rows.map(r => (r.submit.submitId.id.toLong, r.runs, r.result.message)) == Seq((id, 1, "Wrong answer on test 2")))
+    assert(page.rows.map(r => (r.submit.submitId.id.toLong, r.runs, r.result.message)) == Seq((id, 1, "10 из 20")))
     assert(page.rows.head.stats.timeMs.underlying == 20)
     val runs = await(AdminSubmits.runHistory(db, id, Some(testing)))
     assert(runs.map(r => (r.testingId, r.problemURL, r.current)) == Seq((testing, "revision 7", true)))

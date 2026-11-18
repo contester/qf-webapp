@@ -487,11 +487,11 @@ object SlickModel {
   case class LiftedSubmit(id: Rep[Long], arrived: Rep[DateTime], arrivedSeconds: Rep[Period], afterFreeze: Rep[Boolean],
                           teamID: Rep[Int], contestID: Rep[Int], problemID: Rep[String], ext: Rep[String],
                           finished: Rep[Boolean], compiled: Rep[Boolean], passed: Rep[Int], taken: Rep[Int],
-                          testingID: Rep[Option[Long]])
+                          testingID: Rep[Option[Long]], points: Rep[Option[Double]], maxPoints: Rep[Double])
 
   case class UpliftedSubmit(id: Long, arrived: DateTime, arrivedSeconds: Period, afterFreeze: Boolean, teamID: Int,
                             contestID: Int, problemID: String, ext: String, finished: Boolean, compiled: Boolean,
-                            passed: Int, taken: Int, testingID: Option[Long])
+                            passed: Int, taken: Int, testingID: Option[Long], points: Option[Double], maxPoints: Double)
 
   implicit object SubmitShape extends CaseClassShape(LiftedSubmit.tupled, UpliftedSubmit.tupled)
 
@@ -502,7 +502,7 @@ object SlickModel {
     problem <- problems if s.problem === problem.id && s.contest === problem.contestID
     lang <- compilers if s.language === lang.id
   } yield LiftedSubmit(s.id, s.arrived, s.arrived - round.startsAt.ifNull(s.arrived), s.arrived > round.startsAt.ifNull(s.arrived),
-    s.team, s.contest, s.problem, lang.moduleID, s.tested, s.compiled, s.passed, s.taken, s.testingID)
+    s.team, s.contest, s.problem, lang.moduleID, s.tested, s.compiled, s.passed, s.taken, s.testingID, s.points, problem.maxPoints)
 
   val submits0 = submitsUnsorted.sortBy(_.arrived)
 
@@ -619,6 +619,9 @@ object SlickModel {
                            returnCode: Long, testerReturnCode: Long, groupName: Option[String], points: Double)
 
   val results0 = results.sortBy(_.testID)
+
+  val groupsByTesting = Compiled((testingID: Rep[Long]) =>
+    testingGroups.filter(_.testingId === testingID).sortBy(_.groupName))
 
   // ---- TODO(task19): printing, rooms and waiter tasks. These tables do not exist in the teacher-web schema; the
   // definitions stay only so that the printing code compiles until it is deleted. ----

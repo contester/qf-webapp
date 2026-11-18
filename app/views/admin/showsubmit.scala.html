@@ -1,4 +1,4 @@
-@(sub: SubmitDetails, contest: SelectedContest, outputs: Map[Int, ResultAssets], runs: Seq[RunSummary], viewed: Option[Long])(implicit request: RequestHeader, messages: Messages)
+@(sub: SubmitDetails, contest: SelectedContest, outputs: Map[Int, ResultAssets], runs: Seq[RunSummary], viewed: Option[Long], rows: Seq[TestRowView])(implicit request: RequestHeader, messages: Messages)
 
 @fmt(d: org.joda.time.DateTime) = @{d.withZone(org.joda.time.DateTimeZone.getDefault).toString("yyyy-MM-dd HH:mm:ss.SSS")}
 
@@ -55,6 +55,12 @@
     }
     </tbody>
 </table>
+}
+}
+
+@if(rows.nonEmpty) {
+@panel("Тесты", "info", "nopadding") {
+@testtable(rows)
 }
 }
 

@@ -56,18 +56,10 @@ case object SubmitCompileError extends SubmitResult {
   override val message = "Compilation error"
 }
 
-case class SubmitPartialResult(passed: Int, taken: Int) extends SubmitResult {
-  override val success = false
+case class SubmitPointsResult(points: Double, max: Double) extends SubmitResult {
+  override val success: Boolean = points == max && max > 0
 
-  override val message =
-    s"$passed из $taken"
-}
-
-case class SubmitACMPartialResult(text: String, test: Option[Int]) extends SubmitResult {
-  override val success = false
-
-  override def message =
-    s"${text}${test.map(x => s" on test $x").getOrElse("")}"
+  override val message: String = s"${TestRows.formatPoints(points)} из ${TestRows.formatPoints(max)}"
 }
 
 case object BeingRetestedResult extends SubmitResult {
@@ -84,50 +76,41 @@ object SubmitResult extends Logging {
     )
   }
 
-  /** The verdict from the submit and its last (message, test) result. */
-  def fromLast(submit: Submit, last: Option[(String, Int)]): SubmitResult =
+  /** The verdict from the submit: waiting, a compile error, or the points it earned of the problem's maximum. */
+  def fromSubmit(submit: Submit): SubmitResult =
     if (!submit.finished)
       SubmitWaiting
-    else if (submit.success)
-      SubmitAccepted
     else if (!submit.compiled)
       SubmitCompileError
-    else {
-      val lr = last.getOrElse(("unknown", 0))
-      SubmitACMPartialResult(lr._1, Some(lr._2))
-    }
+    else
+      SubmitPointsResult(submit.points.getOrElse(0.0), submit.maxPoints)
 
-  private[models] def annotate2(submit: Submit, details: Seq[ResultEntry]): SubmitResult =
-    fromLast(submit, Submits.getTestingLastResult(details).map(x => (x.resultString, x.test)))
+  private[models] def annotate2(submit: Submit): SubmitResult = fromSubmit(submit)
 
   def annotate(db: JdbcBackend#DatabaseDef, submit: Submit)(implicit ec: ExecutionContext): Future[(SubmitResult, Seq[ResultEntry], SubmitStats)] =
     submit.testingId.map { tid =>
       Submits.loadSubmitDetails(db, tid)
     }.getOrElse(Future.successful(Nil)).map { details =>
-      val sr = annotate2(submit, details)
+      val sr = annotate2(submit)
       val st = Submits.getTestingStats(details)
       (sr, details, st)
     }
-
-  private def finishedSuccess(finished: FinishedTesting) =
-    finished.compiled && finished.taken != 0 && finished.passed == finished.taken
 
   def annotateFinished2(db: JdbcBackend#DatabaseDef, finished: FinishedTesting)(implicit ec: ExecutionContext): Future[AnnoSubmit] = {
     import org.stingray.contester.dbmodel.MyPostgresProfile.api._
     import org.stingray.contester.dbmodel.SlickModel
 
-    val sr = if (finishedSuccess(finished))
-      Future.successful(SubmitAccepted)
-    else if (!finished.compiled)
-      Future.successful(SubmitCompileError)
-    else {
-      val xtid = finished.testingId.toLong
-      db.run(SlickModel.headResultByTesting(xtid).result.headOption).map { lastResultOption =>
-        lastResultOption.map { lastResult =>
-          SubmitACMPartialResult(message.getOrElse(lastResult.resultCode, "wtf"), Some(lastResult.testID))
-        }.getOrElse(BeingRetestedResult)
-      }
-    }
+    val sr =
+      if (!finished.compiled)
+        Future.successful(SubmitCompileError)
+      else
+        db.run((for {
+          s <- SlickModel.submits if s.id === finished.submit.id.toLong
+          p <- SlickModel.problems if p.contestID === s.contest && p.id === s.problem
+        } yield (s.points, p.maxPoints)).result.headOption).map {
+          case Some((Some(points), max)) => SubmitPointsResult(points, max)
+          case _ => BeingRetestedResult
+        }
 
     sr.map(AnnoSubmit(finished.submit.id, finished.submit.contest, finished.submit.team, finished.submit.problem, _))
   }

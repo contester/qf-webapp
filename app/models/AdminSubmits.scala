@@ -80,9 +80,6 @@ object AdminSubmits {
         .as[(Long, Int)].map(_.toMap)
     }
 
-  private def lastResult(a: Option[RunAggregate]): Option[(String, Int)] =
-    a.map(x => (SubmitResult.message.getOrElse(x.lastCode, "unknown"), x.lastTest))
-
   /**
    * The rows for the submits `shown` (newest first). `base` is the query they came from: the scores need everything
    * the same teams submitted for the same problems in it, up to the newest shown submit.
@@ -107,7 +104,7 @@ object AdminSubmits {
       shown.map { s =>
         val agg = s.testingId.flatMap(t => aggs.get(t.toLong))
         AdminSubmitRow(s, scores.getOrElse(s.submitId.id, None),
-          SubmitResult.fromLast(s, lastResult(agg)),
+          SubmitResult.fromSubmit(s),
           agg.map(_.stats).getOrElse(SubmitStats(TimeMs(0), Memory(0))),
           counts.getOrElse(s.submitId.id.toLong, 0))
       }

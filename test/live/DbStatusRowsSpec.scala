@@ -49,7 +49,7 @@ class DbStatusRowsSpec extends TestKit(ActorSystem("DbStatusRowsSpec", ConfigFac
                         teamId: Int = 5): AdminSubmitRow = {
     val s = Submit(SubmitId(id, Arrived(new DateTime(2026, 11, 1, 10, 0), 600, afterFreeze), teamId, 3, RatedProblem("A", 30), "cpp"),
       finished, compiled = finished, passed = if (success) 3 else 1, taken = if (finished) 3 else 0, None)
-    AdminSubmitRow(s, None, if (!finished) SubmitWaiting else if (success) SubmitAccepted else SubmitACMPartialResult("Wrong answer", Some(2)),
+    AdminSubmitRow(s, None, if (!finished) SubmitWaiting else if (success) SubmitAccepted else SubmitPointsResult(1, 3),
       SubmitStats(TimeMs(31), Memory(2048)), runs = 1)
   }
 

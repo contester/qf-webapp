@@ -300,10 +300,11 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
             case None => Future.successful(Map[Int, ResultAssets]())
           }
         }.getOrElse(Future.successful(Map[Int, ResultAssets]()))
+        val rowsF = viewed.map(Submits.loadTestRows(db, _)).getOrElse(Future.successful(Nil))
         outputsF.zip(getSelectedContests(contestId, request.identity))
-          .zip(AdminSubmits.runHistory(db, submitId, submit.fsub.submit.testingId.map(_.toLong))).map {
-          case ((outputs, contest), runs) =>
-            Ok(html.admin.showsubmit(submit, contest, outputs, runs, viewed))
+          .zip(AdminSubmits.runHistory(db, submitId, submit.fsub.submit.testingId.map(_.toLong))).zip(rowsF).map {
+          case (((outputs, contest), runs), rows) =>
+            Ok(html.admin.showsubmit(submit, contest, outputs, runs, viewed, rows))
         }
       case None =>
         Future.successful(NotFound)

@@ -29,7 +29,8 @@ case class SubmitTestingData(testingId: Long, finished: Boolean, compiled: Boole
                              maxTimeMs: Long, maxMemory: Long)
 case class DatabaseSubmitRow(submit: UntestedSubmit, testingData: Option[SubmitTestingData])
 
-case class Submit(submitId: SubmitId, finished: Boolean, compiled: Boolean, passed: Int, taken: Int, testingId: Option[Int]) {
+case class Submit(submitId: SubmitId, finished: Boolean, compiled: Boolean, passed: Int, taken: Int, testingId: Option[Int],
+                  points: Option[Double] = None, maxPoints: Double = 0) {
   val success = finished && compiled && taken > 0 && passed == taken
   def afterFreeze = submitId.arrived.afterFreeze
   val failedOnFirst = taken == 1 && passed == 0
@@ -80,7 +81,8 @@ case class ACMCell(attempt: Int, arrivedSeconds: Int, fullSolution: Boolean) ext
     else s"-$attempt"
 }
 
-case class ResultEntry(testingID: Long, test: Int, result: Int, time: TimeMs, memory: Memory, info: Long, testerExitCode: Long) {
+case class ResultEntry(testingID: Long, test: Int, result: Int, time: TimeMs, memory: Memory, info: Long, testerExitCode: Long,
+                       group: Option[String] = None, points: Double = 0) {
   def resultString = SubmitResult.message(result)
 
   def timeLimitExceeded = result == 11
@@ -168,7 +170,7 @@ object Submits {
       SubmitId(s.id.toInt, Arrived(s.arrived, s.arrivedSeconds.toStandardSeconds.getSeconds, s.afterFreeze),
         s.teamID, s.contestID, RatedProblem(s.problemID, 30), s.ext), s.finished,
       s.compiled, s.passed, s.taken,
-      s.testingID.map(_.toInt))
+      s.testingID.map(_.toInt), s.points, s.maxPoints)
 
   def getContestSubmits(contest: Int) = {
     SlickModel.submits0ByContest(contest).result
@@ -230,7 +232,7 @@ object Submits {
     indexGrouped(scored).map {
       case ((submit, optScore), index) =>
         val details = submit.testingId.flatMap(t => resultsByTesting.get(t.toLong)).getOrElse(Nil)
-        FullyDescribedSubmit(submit, index, optScore, SubmitResult.annotate2(submit, details),
+        FullyDescribedSubmit(submit, index, optScore, SubmitResult.annotate2(submit),
           getTestingStats(details), details)
     }
   }
@@ -275,8 +277,19 @@ object Submits {
   def loadSubmitDetails(db: JdbcBackend#DatabaseDef, testingId: Int)(implicit ec: ExecutionContext) =
     db.run(SlickModel.results0ByTesting(testingId.toLong).result).map(_.map(x =>
       ResultEntry(x.testingID, x.testID, x.resultCode, x.timeMs, x.memoryBytes,
-        x.returnCode, x.testerReturnCode)
+        x.returnCode, x.testerReturnCode, x.groupName, x.points)
     ))
+
+  /** The groups of a testing, as the per-test table wants them. */
+  def loadGroups(db: JdbcBackend#DatabaseDef, testingId: Long)(implicit ec: ExecutionContext): Future[Seq[GroupRow]] =
+    db.run(SlickModel.groupsByTesting(testingId).result).map(_.map(g =>
+      GroupRow(g.groupName, g.policy, g.pointsEarned, g.pointsMax, g.passed, g.skipped)))
+
+  /** The per-test table of a testing: its results and groups. What the submit pages call. */
+  def loadTestRows(db: JdbcBackend#DatabaseDef, testingId: Long)(implicit ec: ExecutionContext): Future[Seq[TestRowView]] =
+    loadSubmitDetails(db, testingId.toInt).zip(loadGroups(db, testingId)).map { case (details, groups) =>
+      TestRows.describe(details.map(TestRows.fromEntry), groups)
+    }
 
   def dbsub2sub(s: DatabaseSubmitRow): Submit = {
     Submit(SubmitId(s.submit.id.toInt, s.submit.arrived, s.submit.team.id.toInt, s.submit.contest.toInt, RatedProblem(s.submit.problem.id, s.submit.problem.rating), s.submit.ext),

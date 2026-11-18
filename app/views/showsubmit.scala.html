@@ -1,4 +1,4 @@
-@(loggedIn: LoggedInTeam, subopt: Option[SubmitDetails], compileOut: Option[CompileOutput] = None)(implicit request: RequestHeader, messages: Messages)
+@(loggedIn: LoggedInTeam, subopt: Option[SubmitDetails], rows: Seq[TestRowView], compileOut: Option[CompileOutput] = None)(implicit request: RequestHeader, messages: Messages)
 
 @main(loggedIn, tab = "") {
 
@@ -9,21 +9,21 @@
 <div class="panel panel-info">
     <div class="panel-heading"><h3 class="panel-title">@messages("heading.testingResult")</h3>
     </div>
-    <div class="panel-body"><table class="table table-hover table-bordered table-responsive">
-        <thead>
-        <tr><th>@messages("label.test")</th><th>@messages("label.result")</th><th>@messages("label.elapsedTime"), ms</th><th>@messages("label.memory"), KB</th></tr>
-        </thead>
-        <tbody>
-        @for(s <- sub.fsub.details.reverse) {
-        <tr><td>@s.test</td><td>@s.resultString</td><td>@if(!s.timeLimitExceeded){ @s.time }</td><td>@s.memory</td></tr>
-        @if(s.test == 0 && !s.success) {
-            @for(co <- compileOut; text = co.combinedText if text.nonEmpty) {
-            <tr><td colspan="4"><pre>@text</pre></td></tr>
+    <div class="panel-body">
+        @for(s <- sub.fsub.details.filter(_.test == 0)) {
+        <table class="table table-bordered table-responsive" id="compile">
+            <tbody>
+            <tr><td>@messages("label.compile")</td><td>@s.resultString</td></tr>
+            @if(!s.success) {
+                @for(co <- compileOut; text = co.combinedText if text.nonEmpty) {
+                <tr><td colspan="2"><pre>@text</pre></td></tr>
+                }
             }
+            </tbody>
+        </table>
         }
-        }
-        </tbody>
-    </table></div>
+        @testtable(rows)
+    </div>
 </div>
 <div class="panel panel-info">
     <div class="panel-heading"><h3 class="panel-title">@messages("label.sourceCode")</h3>

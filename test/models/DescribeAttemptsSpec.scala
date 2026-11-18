@@ -11,9 +11,12 @@ import org.stingray.contester.dbmodel.{Memory, TimeMs}
 class DescribeAttemptsSpec extends AnyFunSuite {
   private val t0 = new DateTime(2026, 11, 5, 10, 0)
 
-  private def attempt(id: Int, seconds: Int, passed: Int, taken: Int = 5, testing: Int) =
+  private def attempt(id: Int, seconds: Int, passed: Int, taken: Int = 5, testing: Int) = {
+    val points = if (passed == taken) 10.0 else 3.0
+
     Submit(SubmitId(id, Arrived(t0.plusSeconds(seconds), seconds, afterFreeze = false), 1, 1, RatedProblem("A", 30), "cpp"),
-      finished = true, compiled = true, passed, taken, Some(testing))
+      finished = true, compiled = true, passed, taken, Some(testing), Some(points), 10)
+  }
 
   private def wrongAnswer(testing: Int) =
     testing.toLong -> Seq(ResultEntry(testing, 3, 13, TimeMs(15), Memory(2048), 0, 0))
@@ -29,7 +32,7 @@ class DescribeAttemptsSpec extends AnyFunSuite {
     val rows = Submits.describeAttempts(Seq(attempt(11, 600, 3, testing = 1), attempt(12, 1200, 3, testing = 2), attempt(13, 1800, 5, testing = 3)), results)
     assert(rows.map(_.index) == Seq(1, 2, 3))
     assert(rows.map(_.score.map(_.toString)) == Seq(None, None, Some("70")))
-    assert(rows.map(_.result.message) == Seq("Wrong answer on test 3", "Wrong answer on test 3", "ACCEPTED"))
+    assert(rows.map(_.result.message) == Seq("3 из 10", "3 из 10", "10 из 10"))
     assert(row(rows(2)).contains("+70") && row(rows(2)).contains("class=\"success\""))
   }
 

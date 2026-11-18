@@ -170,9 +170,10 @@ class Application (cc: ControllerComponents,
           tid <- sub.fsub.submit.testingId
           if sub.fsub.details.exists(d => d.test == 0 && !d.success)
         } yield Outputs.getCompileAssets(ws, base, shortn, submitId, tid)).getOrElse(Future.successful(None))
-        compileF.map(compileOut => Ok(html.showsubmit(request.identity, Some(sub), compileOut)))
+        val rowsF = sub.fsub.submit.testingId.map(t => Submits.loadTestRows(db, t.toLong)).getOrElse(Future.successful(Nil))
+        compileF.zip(rowsF).map { case (compileOut, rows) => Ok(html.showsubmit(request.identity, Some(sub), rows, compileOut)) }
       case None =>
-        Future.successful(Ok(html.showsubmit(request.identity, None, None)))
+        Future.successful(Ok(html.showsubmit(request.identity, None, Nil, None)))
     }
   }
 

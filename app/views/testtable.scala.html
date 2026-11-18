@@ -1,0 +1,14 @@
+@(rows: Seq[TestRowView])(implicit messages: Messages)
+
+@policyLabel(p: String) = @{ if (p == "complete-group") messages("policy.completeGroup") else messages("policy.eachTest") }
+
+<table class="table table-hover table-bordered table-responsive" id="tests">
+    <thead>
+    <tr><th>@messages("label.test")</th><th>@messages("label.result")</th><th>@messages("label.elapsedTime"), ms</th><th>@messages("label.memory"), KB</th><th>@messages("label.group")</th><th>@messages("label.policy")</th><th>@messages("label.points")</th></tr>
+    </thead>
+    <tbody>
+    @for(r <- rows) {
+    <tr><td>@r.testNo</td><td>@r.verdict</td><td>@r.timeMs</td><td>@r.memoryBytes</td><td>@r.group.getOrElse("")</td><td>@r.policy.map(policyLabel(_)).getOrElse("")</td><td>@r.pointsText</td></tr>
+    }
+    </tbody>
+</table>
