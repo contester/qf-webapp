@@ -93,7 +93,8 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   private def getSelectedContests(contestId: Int, account: Admin)(implicit ec: ExecutionContext): Future[SelectedContest] =
     getAllContests.map(_.filter(c => account.canSpectate(c.id)).sortBy(_.id)).map { contests =>
       val cmap = contests.map(x => x.id -> x).toMap
-      val selected = cmap.getOrElse(contestId, contests.head)
+      val selected = cmap.getOrElse(contestId, contests.headOption.getOrElse(
+        throw new NoSuchElementException("there are no current rounds")))
       SelectedContest(selected, cmap.mapValues(_.name).toSeq, account.canModify(selected.id), account.isSuperAdmin)
     }
 
@@ -568,8 +569,15 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
   def showContestList(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
-    getSelectedContests(contestID, request.identity).zip(Rounds.currentRounds(db)).map { case (contest, rounds) =>
-      Ok(html.admin.contestlist(rounds.filter(x => request.identity.canSpectate(x.id)), contest))
+    Rounds.currentRounds(db).flatMap { rounds =>
+      if (rounds.isEmpty)
+        // no round, so no page chrome (it needs a selected round): say so instead of failing
+        Future.successful(Ok(play.twirl.api.Html("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>No rounds</title></head>" +
+          "<body><p>There are no rounds with a start and an end in the current season.</p></body></html>")))
+      else
+        getSelectedContests(contestID, request.identity).map { contest =>
+          Ok(html.admin.contestlist(rounds.filter(x => request.identity.canSpectate(x.id)), contest))
+        }
     }
   }
 

@@ -35,8 +35,10 @@ class AuthDbSpec extends AnyFunSuite {
 
   private def exec(sql: DBIO[Int]): Int = await(db.run(sql))
 
-  private def passwordOf(login: String): String =
-    await(db.run(sql"select password from round_credentials where login = $login".as[String].head))
+  private def passwordOf(login: String): String = passwordOf(login, seedRound)
+
+  private def passwordOf(login: String, round: Int): String =
+    await(db.run(sql"select password from round_credentials where login = $login and round_id = $round".as[String].head))
 
   private def seedRound: Int =
     await(db.run(sql"select id from contest_rounds where testing_system_id = 62042".as[Int].head))
@@ -53,7 +55,7 @@ class AuthDbSpec extends AnyFunSuite {
     assert(t.username == "team1_2")
     assert(t.team.id == participantOf("team1_2"))
     assert(t.contest.id == seedRound)
-    assert(await(Users.resolve(db, "team1_2")).exists(_.team.id == t.team.id))
+    assert(await(Users.resolve(db, t.sessionKey)).exists(_.team.id == t.team.id))
   }
 
   test("the login is case-insensitive, the password is not") {
@@ -61,7 +63,6 @@ class AuthDbSpec extends AnyFunSuite {
     val pw = passwordOf("team1_1")
     assert(login("TEAM1_1", pw).exists(_.team.id == participantOf("team1_1")))
     assert(login(" Team1_1 ", pw).isDefined)
-    assert(await(Users.resolve(db, "TEAM1_1")).isDefined)
     assert(login("team1_1", pw.reverse + "x").isEmpty)
     assert(login("team1_1", "").isEmpty)
     assert(login("nobody", pw).isEmpty)
@@ -73,7 +74,6 @@ class AuthDbSpec extends AnyFunSuite {
     try {
       exec(sqlu"update round_credentials set is_active = false where login = 'team1_3'")
       assert(login("team1_3", pw).isEmpty)
-      assert(await(Users.resolve(db, "team1_3")).isEmpty)
     } finally exec(sqlu"update round_credentials set is_active = true where login = 'team1_3'")
     assert(login("team1_3", pw).isDefined)
   }
@@ -125,8 +125,72 @@ class AuthDbSpec extends AnyFunSuite {
                   join seasons s on s.id = r.season_id where s.short_id = $short""")
       assert(await(db.run(sql"select count(*) from round_credentials where login = 'old1_1'".as[Int].head)) == 1)
       assert(login("old1_1", "111111").isEmpty)
-      assert(await(Users.resolve(db, "old1_1")).isEmpty)
+      assert(await(Users.resolve(db, "1:1")).forall(_.username != "old1_1"))
     } finally cleanup()
+  }
+
+  // ---- sessions keyed by the credential ----
+
+  /** A second round in the current season with one participant whose credential has the given login and password. */
+  private def withSecondRound(login: String, password: String)(body: (Int, Int) => Unit): Unit = {
+    def cleanup() = {
+      exec(sqlu"delete from round_credentials where round_id in (select id from contest_rounds where name = 'Auth spec round')")
+      exec(sqlu"delete from participants where full_name = 'Auth Spec Kid'")
+      exec(sqlu"delete from contest_rounds where name = 'Auth spec round'")
+    }
+    cleanup()
+    try {
+      exec(sqlu"""insert into contest_rounds (contest_id, season_id, round_seq, season_seq, name, starts_at, ends_at)
+                  select c.id, c.season_id, 2, 2, 'Auth spec round', now() - interval '1 hour', now() + interval '1 hour'
+                  from contests c join seasons s on s.id = c.season_id where s.is_current""")
+      exec(sqlu"""insert into participants (season_id, teacher_id, season_seq, full_name, school_id, grade, contest_id)
+                  select p.season_id, p.teacher_id, 99, 'Auth Spec Kid', p.school_id, 9, p.contest_id
+                  from participants p where p.id = ${participantOf("team1_1")}""")
+      exec(sqlu"""insert into round_credentials (round_id, contest_id, participant_id, login, password)
+                  select r.id, r.contest_id, p.id, $login, $password
+                  from contest_rounds r join participants p on p.contest_id = r.contest_id
+                  where r.name = 'Auth spec round' and p.full_name = 'Auth Spec Kid'""")
+      val round2 = await(db.run(sql"select id from contest_rounds where name = 'Auth spec round'".as[Int].head))
+      val kid = await(db.run(sql"select id from participants where full_name = 'Auth Spec Kid'".as[Int].head))
+      body(round2, kid)
+    } finally cleanup()
+  }
+
+  test("two current rounds sharing a login: each password logs in as its own participant and each session key resolves to it") {
+    assume(url.isDefined)
+    withSecondRound("team1_1", "999000") { (round2, kid) =>
+      val a = login("team1_1", passwordOf("team1_1", seedRound)).getOrElse(fail("round 1 login rejected"))
+      val b = login("TEAM1_1", "999000").getOrElse(fail("round 2 login rejected"))
+      assert(a.team.id == participantOf("team1_1") && a.contest.id == seedRound)
+      assert(b.team.id == kid && b.contest.id == round2)
+      assert(a.sessionKey != b.sessionKey)
+      assert(await(Users.resolve(db, a.sessionKey)).exists(x => x.team.id == a.team.id && x.contest.id == seedRound))
+      assert(await(Users.resolve(db, b.sessionKey)).exists(x => x.team.id == kid && x.contest.id == round2))
+      assert(await(Users.resolve(db, "team1_1")).isEmpty, "a bare login is not a session key")
+    }
+  }
+
+  test("the same login and the same password in two rounds is rejected") {
+    assume(url.isDefined)
+    withSecondRound("team1_1", passwordOf("team1_1", seedRound)) { (_, _) =>
+      assert(login("team1_1", passwordOf("team1_1", seedRound)).isEmpty)
+    }
+  }
+
+  test("a session key of a credential deactivated or deleted afterwards no longer resolves") {
+    assume(url.isDefined)
+    val t = login("team1_2", passwordOf("team1_2")).get
+    assert(await(Users.resolve(db, t.sessionKey)).isDefined)
+    try {
+      exec(sqlu"update round_credentials set is_active = false where login = 'team1_2'")
+      assert(await(Users.resolve(db, t.sessionKey)).isEmpty)
+    } finally exec(sqlu"update round_credentials set is_active = true where login = 'team1_2'")
+    val p = t.team.id
+    try {
+      exec(sqlu"update participants set is_deleted = true where id = $p")
+      assert(await(Users.resolve(db, t.sessionKey)).isEmpty)
+    } finally exec(sqlu"update participants set is_deleted = false where id = $p")
+    assert(await(Users.resolve(db, t.sessionKey)).isDefined)
   }
 
   // ---- admins ----

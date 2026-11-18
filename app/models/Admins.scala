@@ -51,7 +51,7 @@ object Admins {
   import org.stingray.contester.dbmodel.SlickModel
 
   // teacher-web enforces uniqueness on LOWER(BTRIM(email)).
-  private[this] def normalize(email: String) = email.trim.toLowerCase
+  private[this] def normalize(email: String) = email.trim.toLowerCase(java.util.Locale.ROOT)
 
   private[this] val byEmailQ = Compiled((email: Rep[String]) =>
     SlickModel.admins.filter(_.email.trim.toLowerCase === email).take(1))

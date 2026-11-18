@@ -66,7 +66,7 @@ class ContestDataDbSpec extends AnyFunSuite with BeforeAndAfterAll {
     assert(lt.contest.id == round && lt.contest.seasonId == season)
     assert(lt.team.id == team && lt.team.name == "Participant 1" && lt.team.school == "Test School")
     assert(await(Users.authenticate(db, "team1_1", "wrong")).isEmpty)
-    assert(await(Users.resolve(db, "team1_1")).map(_.team.id).contains(team))
+    assert(await(Users.resolve(db, lt.sessionKey)).map(_.team.id).contains(team))
   }
 
   test("clarifications, requests, seen marks, messages and extra pages are written with the round's season") {

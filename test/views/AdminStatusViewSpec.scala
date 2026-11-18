@@ -76,11 +76,11 @@ class AdminStatusViewSpec extends AnyFunSuite {
   private val contest =
     Contest(3, "C", DateTime.now.minusHours(1), DateTime.now.plusHours(4), None, 1)
 
-  private def admin(modify: Boolean) = Admin("a@example.org", "h")
+  private def admin() = Admin("a@example.org", "h")
 
   private def page(live: Boolean, newest: Boolean = true, team: Option[Int] = None, modify: Boolean = true) =
     html.admin.submits(AdminSubmitPage(Seq(row), None, None), Map.empty[Int, org.stingray.contester.dbmodel.Team],
-      SelectedContest(contest, Seq(3 -> "C"), modify), admin(modify), team, live, newest).body
+      SelectedContest(contest, Seq(3 -> "C"), modify), admin(), team, live, newest).body
 
   test("a live page has the bar, the table and the script with the stream, the rejudge right, the page and the team") {
     val p = page(live = true)
