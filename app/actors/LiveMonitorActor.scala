@@ -8,6 +8,7 @@ import akka.stream.scaladsl.Source
 import akka.stream.{BoundedSourceQueue, Materializer, QueueOfferResult}
 import live._
 import models.{ACM, ProblemClient, Submits}
+import org.stingray.qf.actors.ProblemStateActor
 import org.joda.time.DateTime
 import org.stingray.contester.dbmodel.{Contest, Team}
 import org.stingray.qf.models.TeamClient
@@ -139,13 +140,17 @@ object LiveMonitorActor {
                          connectionBuffer: Int = 1024,
                          scheduled: Boolean = true)
 
-  /** Problems and teams from the state actors, all submits of the contest (finished or not) from the database. */
+  /**
+    * Teams from the team state actor; problems and all submits of the contest (finished or not) from the database.
+    * Problems are read directly: a round_changed for a problem change reaches the problem state actor and this
+    * monitor at the same time, and the actor's own reload may not have finished yet.
+    */
   class DbContestLoader(db: JdbcBackend#DatabaseDef, teamClient: TeamClient, problemClient: ProblemClient)
     extends ContestLoader {
     private implicit val timeout: akka.util.Timeout = akka.util.Timeout(30.seconds)
 
     override def load(contest: Contest)(implicit ec: ExecutionContext): Future[ContestData] =
-      problemClient.getProblems(contest.id)
+      ProblemStateActor.loadRound(db, contest.id)
         .zip(teamClient.getTeams(contest.id))
         .zip(db.run(Submits.getContestSubmits(contest.id)))
         .map { case ((problems, teams), submits) =>
@@ -204,6 +209,7 @@ object LiveMonitorActor {
   private case class EvRejudge(id: Int, quiet: Boolean = false) extends Ev
 
   private val pingEvent = Event("", None, Some("ping"))
+  private val roundChangedReason = "round changed"
   private val emptyBoard = LiveBoard(Nil, Vector.empty, Map.empty)
 
   /** What a viewer without the real board sees before the start: the teams, in board order, and no problems; a not-rated team keeps rank 0. */
@@ -247,6 +253,8 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
   private class ContestState(var live: LiveContest) {
     var loading: Option[Load] = None
     var reloadScheduled = false
+    // A round_changed with an unchanged row (its problems changed) came in while a load ran: load once more after it.
+    var reloadAgain = false
     var lastLoadStart: Option[Long] = None
     // Events about ids the contest did not know, waiting for the next load.
     var waiting: Vector[Ev] = Vector.empty
@@ -562,20 +570,25 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
 
   private def loaded(cid: Int, st: ContestState, result: Try[ContestData]): Unit = st.loading.foreach { l =>
     st.loading = None
+    val again = st.reloadAgain
+    st.reloadAgain = false
     result match {
       case Failure(e) =>
         log.warning(s"live monitor: contest $cid: ${l.reason} load failed: $e")
+        // A failed round-change load must not lose the change: retried with the reload backoff.
+        if (l.reason == roundChangedReason) st.dirty = true
         retryLater(cid, st, l)
       case Success(data) =>
         if (rebuild(cid, st, l, data)) {
           // Unknown ids that this load was for: apply once, never reload for them again.
           l.waiting.foreach(ev => applyEvent(cid, st, ev, mayReload = false))
           // Unknown ids that came in while it ran: the new state may know them; otherwise reload again.
-          val again = st.waiting
+          val waitingAgain = st.waiting
           st.waiting = Vector.empty
-          again.foreach(ev => applyEvent(cid, st, ev, mayReload = true))
+          waitingAgain.foreach(ev => applyEvent(cid, st, ev, mayReload = true))
         } else retryLater(cid, st, l)
     }
+    if (again && st.loading.isEmpty) startLoad(cid, st, roundChangedReason)
   }
 
   /**
@@ -625,9 +638,16 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
     }
   }
 
+  /**
+    * A round_changed. A changed row is applied in memory. An unchanged row means something else of the round changed
+    * (its problems, teacher-web 00009): the contest is reloaded, and a burst of them while a load runs coalesces into
+    * one more load after it.
+    */
   private def contestRow(c: Contest): Unit = contests.get(c.id) match {
+    case Some(st) if st.live.contest == c =>
+      if (st.loading.isEmpty) startLoad(c.id, st, roundChangedReason) else st.reloadAgain = true
     case Some(st) =>
-      if (st.live.contest != c) {
+      {
         val before = st.live.board(Freezing)
         val wasStarted = started(st.live, clock.now())
         Try(st.live.onContest(c, clock.now())) match {

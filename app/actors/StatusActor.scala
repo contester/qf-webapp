@@ -29,7 +29,14 @@ object StatusActor {
             liveHooks: live.LiveHooks, timeEvents: Boolean, countdown: CountdownConfig) =
     Props(new StatusActor(db, palevo, teamLookup, liveHooks, timeEvents, countdown))
 
+  /** With the start-up load replaced (tests). */
+  def propsWith(db: JdbcBackend#DatabaseDef, initialLoad: () => Future[StatusActorInitialState]): Props =
+    Props(new StatusActor(db, palevo.NoopPalevoSink, (_, _) => Future.successful(None), live.NoopLiveHooks, false,
+      CountdownConfig.Default, Some(initialLoad)))
+
   case object Init
+  private case object InitFailed
+  private case object InitRetryKey
   /**
     * A round changed (round_changed: its row, its problems, or its season's is_current): its new value. Contests are
     * loaded once at start-up; afterwards they change only through this and ContestRemoved, never by a rescan.
@@ -79,6 +86,8 @@ object StatusActor {
   case class AckAllClarifications(contest: Int, team: Int)
 
   private val userPing = Event("", None, Some("ping"))
+  private val MinInitRetry = scala.concurrent.duration.FiniteDuration(1, "second")
+  private val MaxInitRetry = scala.concurrent.duration.FiniteDuration(30, "seconds")
 
   private def roundJson(c: Contest): JsObject =
     Json.obj("round" -> c.id, "startTime" -> c.startTime.getMillis, "endTime" -> c.endTime.getMillis, "isFinished" -> c.isFinished)
@@ -111,7 +120,9 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
                   teamLookup: (Int, Int) => Future[Option[org.stingray.contester.dbmodel.Team]],
                   liveHooks: live.LiveHooks,
                   // True when the live monitor is off: then this actor, not the live monitor, produces the contest time events.
-                  timeEvents: Boolean, countdown: CountdownConfig) extends Actor with Stash with Logging {
+                  timeEvents: Boolean, countdown: CountdownConfig,
+                  initialLoad: Option[() => Future[StatusActor.StatusActorInitialState]] = None)
+  extends Actor with Stash with akka.actor.Timers with Logging {
   import StatusActor._
   import context.dispatcher
 
@@ -128,6 +139,8 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
     self ! Init
   }
 
+
+  private[this] var initRetry: scala.concurrent.duration.FiniteDuration = MinInitRetry
 
   private[this] val tickDuration = {
     import scala.concurrent.duration._
@@ -204,8 +217,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
           SlickModel.clrSeen2.result zip
           SlickModel.currentRounds.result.map(_.map(SlickModel.toContest))
       )
-
-    f.failed.foreach(e => logger.error(s"loading status actor: $e"))
 
     f.map {
       case ((((msgs, clst), clrs), seen2), contests) =>
@@ -289,11 +300,18 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
   }
 
   override def receive = {
-    case Init => {
-      loadAll.foreach { sis =>
-        self ! sis
+    case Init =>
+      Future.fromTry(Try(initialLoad.fold(loadAll())(_.apply()))).flatten.onComplete {
+        case Success(sis) => self ! sis
+        case scala.util.Failure(e) =>
+          logger.error(s"loading status actor: $e")
+          self ! InitFailed
       }
-    }
+
+    // Retry-on-failure of the one start-up load (1 s doubling to 30 s on one timer), never a poll.
+    case InitFailed =>
+      timers.startSingleTimer(InitRetryKey, Init, initRetry)
+      initRetry = (initRetry * 2).min(MaxInitRetry)
 
     case StatusActorInitialState(msgs, clrs, cls, contests) => {
       clrs.foreach {

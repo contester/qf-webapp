@@ -118,7 +118,8 @@ object RoundClockActor {
   def props(initial: Seq[Contest], subscribers: Seq[ActorRef], now: () => DateTime = () => DateTime.now): Props =
     Props(new RoundClockActor(initial, subscribers, now))
 
-  private case object Wake
+  /** The deadline timer's message; public so tests with an injected clock can deliver it by hand. */
+  case object Wake
 }
 
 class RoundClockActor(initial: Seq[Contest], subscribers: Seq[ActorRef], now: () => DateTime) extends Actor with Timers with Logging {

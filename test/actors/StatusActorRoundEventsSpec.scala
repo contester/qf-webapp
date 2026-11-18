@@ -53,6 +53,21 @@ class StatusActorRoundEventsSpec extends TestKit(ActorSystem("StatusActorRoundEv
   }
 
   /** Round events go to the probe; the first event of any kind shows the stream is running. */
+  test("a failed start-up load is retried (retry-on-failure, no polling) and the actor then serves its contests") {
+    val calls = new java.util.concurrent.atomic.AtomicInteger
+    val status = system.actorOf(StatusActor.propsWith(null, () =>
+      if (calls.incrementAndGet() == 1) scala.concurrent.Future.failed(new RuntimeException("db down"))
+      else scala.concurrent.Future.successful(StatusActor.StatusActorInitialState(Nil, Map.empty,
+        StatusActor.ClarificationsInitialState(Nil, Nil), Seq(c)))))
+    try {
+      val probe = TestProbe()
+      probe.send(status, StatusActor.GetAllContests)
+      val all = probe.expectMsgType[scala.util.Success[StatusActor.AllContests]](10.seconds).value
+      assert(all.contests == Seq(c))
+      assert(calls.get == 2)
+    } finally system.stop(status)
+  }
+
   private def roundEvents(src: Source[Event, NotUsed]): TestProbe = {
     val p = TestProbe()
     val running = TestProbe()

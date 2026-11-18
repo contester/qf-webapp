@@ -464,6 +464,33 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     f.stop()
   }
 
+  test("a round_changed with an unchanged row (its problems changed) reloads the contest; the new problem appears") {
+    val f = new Fixture(running)
+    val p = f.subscribe(JoinAdmin(1, real = true))
+    assert((next(p, "board") \ "problems").as[Seq[String]] == problems)
+    f.data = Map(1 -> ContestData(problems :+ "D", teams, Nil))
+    f.actor ! ContestChanged(contest())
+    assert((next(p, "board") \ "problems").as[Seq[String]] == problems :+ "D")
+    assert(f.loads.get == 2)
+    f.stop()
+  }
+
+  test("a burst of unchanged-row round_changed during a load coalesces into one more load") {
+    val f = new Fixture(running)
+    f.barrier()
+    val gate = Promise[Unit]()
+    f.loadGate = gate.future
+    (1 to 10).foreach(_ => f.actor ! ContestChanged(contest()))
+    f.barrier()
+    assert(f.loads.get == 2)
+    gate.success(())
+    awaitCond(f.loads.get == 3, 5.seconds)
+    f.barrier()
+    Thread.sleep(300) // a window in which an extra load would show up
+    assert(f.loads.get == 3, "the burst may cause at most two loads")
+    f.stop()
+  }
+
   test("a removed round is dropped: its streams end, joins fail, and later events for it are ignored") {
     val f = new Fixture(running, rows = Seq(contest(), contest(2)))
     val p = TestProbe()
