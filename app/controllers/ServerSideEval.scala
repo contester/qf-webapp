@@ -5,7 +5,6 @@ import javax.inject.Inject
 import akka.actor.{ActorSystem, Props}
 import com.mohiva.play.silhouette.api.{Authorization, Silhouette}
 import com.mohiva.play.silhouette.impl.authenticators.SessionAuthenticator
-import com.spingo.op_rabbit.{Message, RabbitControl}
 import models._
 import org.apache.commons.io.FileUtils
 import play.api.Logging
@@ -31,23 +30,14 @@ case class ServerSideData(compiler: Int, inlinesolution: String, inlinedata: Str
 
 import com.github.nscala_time.time.Imports.DateTime
 
-case class ServerSideEvalID(id: Int)
-
-object ServerSideEvalID {
-  implicit val format = Json.format[ServerSideEvalID]
-}
-
 class ServerSideEval (cc: ControllerComponents,
                       silhouette: Silhouette[TeamsEnv],
-                      dbConfig: DatabaseConfig[JdbcProfile], rabbitMqModel: RabbitMqModel
+                      dbConfig: DatabaseConfig[JdbcProfile]
                       ) extends AbstractController(cc) with I18nSupport with Logging {
   private[this] val db = dbConfig.db
   import org.stingray.contester.dbmodel.MyPostgresProfile.api._
   import org.stingray.contester.dbmodel._
   import controllers.serversideeval.ServerSideData
-
-  private[this] val rabbitMq = rabbitMqModel.rabbitMq
-  import com.spingo.op_rabbit.PlayJsonSupport._
 
   private[this] val serverSideForm = Form {
     mapping("compiler" -> number, "inlinesolution" -> text, "inlinedata" -> text)(ServerSideData.apply)(ServerSideData.unapply)
@@ -101,8 +91,9 @@ class ServerSideEval (cc: ControllerComponents,
           submitData => {
             val solutionBytes = FormUtil.inlineOrFile(submitData.inlinesolution, request.body.file("file")).getOrElse(FormUtil.emptyBytes)
             val dataBytes = FormUtil.inlineOrFile(submitData.inlinedata, request.body.file("inputfile")).getOrElse(FormUtil.emptyBytes)
-            insertEval(request.identity.contest, request.identity.team.id, submitData.compiler, solutionBytes, dataBytes).map {  wid =>
-              rabbitMq ! Message.queue(ServerSideEvalID(wid.toInt), queue = "contester.evalrequests")
+            // The row (finished_at NULL) is the request: its insert trigger notifies the bridge (eval_new),
+            // and the list shows it as running until the result is written.
+            insertEval(request.identity.contest, request.identity.team.id, submitData.compiler, solutionBytes, dataBytes).map { _ =>
               Redirect(routes.ServerSideEval.index)
             }
           }

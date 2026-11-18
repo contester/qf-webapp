@@ -120,7 +120,7 @@ class MyComponents(context: ApplicationLoader.Context)
   lazy val queryConfig: palevo.query.QueryConfig = palevo.query.QueryConfig(configuration)
   lazy val querySource: palevo.query.QuerySource = new palevo.query.DbQuerySource(dbConfig.db, liveMonitor,
     id => statusActorModel.problemClient.getProblems(id)(akka.util.Timeout(5, java.util.concurrent.TimeUnit.SECONDS)),
-    () => printingModel.currentPrinterProblems)(executionContext)
+    () => Seq.empty /* TODO(task18): printing is gone; the palevo printing endpoint goes with the query API trim */)(executionContext)
 
   // Live monitor. When monitor.disable_new_monitor = true nothing below is constructed beyond the config and the
   // no-op hooks, and Monitor starts the old MonitorActor as before.
@@ -149,18 +149,19 @@ class MyComponents(context: ApplicationLoader.Context)
 
   lazy val monitorModel = wire[Monitor]
   lazy val boardSource: models.BoardSource = monitorModel.source
-  lazy val rabbitModel = wire[RabbitMqModel]
   // Deferred: the live monitor itself needs statusActorModel's team and problem clients.
   lazy val statusActorModel = new StatusActorModel(dbConfig, actorSystem, palevoSink, live.LiveWiring.deferred(liveHooks),
     live.LiveWiring.timeEventHost(liveConfig) == live.StatusActorHost, countdownConfig)
-  lazy val printingModel = wire[PrintingModel]
 
-  val subscriptionsModel = wire[SubscriptionsModel]
+  // Database notifications (testing/eval results, round and team changes) for the actors; see NotifyListener.
+  lazy val notifyListener: ActorRef = actorSystem.actorOf(NotifyListener.props(
+    NotifyListener.ConnectionSettings.fromConfig(configuration), dbConfig.db,
+    NotifyListener.Targets(statusActorModel.statusActor, statusActorModel.teamStateActor,
+      c => { liveHooks.contestChanged(c); () })), "notify-listener")
 
   lazy val homeController = wire[_root_.controllers.Application]
   lazy val qAndAController = wire[_root_.controllers.QandA]
   lazy val sseController = wire[_root_.controllers.ServerSideEval]
-  lazy val printingController = wire[_root_.controllers.Printing]
   lazy val adminController = wire[_root_.controllers.AdminApplication]
   lazy val publicMonitorController = wire[_root_.controllers.PublicMonitor]
   lazy val palevoQueryController = wire[_root_.controllers.PalevoQuery]
@@ -174,4 +175,6 @@ class MyComponents(context: ApplicationLoader.Context)
 
   // Start the live monitor (when enabled) with the application, not on the first event.
   liveMonitor
+  // Listen from the start. The actor system stops with the application, and the listener's postStop closes its connection.
+  notifyListener
 }

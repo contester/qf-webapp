@@ -149,7 +149,9 @@ class ContestDataDbSpec extends AnyFunSuite with BeforeAndAfterAll {
     await(db.run(sqlu"update custom_tests set tested = true, finished_at = now(), output = 'out'::bytea where id = $id"))
     val e = await(AdminCustomTests.get(db, round, id)).getOrElse(fail("no custom test"))
     assert(e.finishTime.isDefined && e.outputStr == "out" && e.languageName == "GNU C++")
-    assert(await(AdminCustomTests.reset(db, round, id)))
-    assert(await(AdminCustomTests.get(db, round, id)).exists(_.finishTime.isEmpty))
+    val copy = await(AdminCustomTests.rerun(db, round, id)).getOrElse(fail("no copy"))
+    assert(copy != id)
+    assert(await(AdminCustomTests.get(db, round, copy)).exists(c => c.finishTime.isEmpty && c.sourceStr == "src"))
+    assert(await(AdminCustomTests.get(db, round, id)).exists(_.finishTime.isDefined))
   }
 }

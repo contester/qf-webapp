@@ -9,8 +9,6 @@ GET /sendwithinput controllers.ServerSideEval.index
 POST /sendwithinput controllers.ServerSideEval.post
 GET /evaldetails/:id controllers.ServerSideEval.details(id: Long)
 
-GET /print controllers.Printing.index
-POST /print controllers.Printing.post
 
 + nocsrf
 POST /ackMessage controllers.Application.ackMessage
@@ -81,14 +79,10 @@ GET /admin/feed/:contestId controllers.AdminApplication.feed(contestId: Int)
 GET /admin/publicPreview/:contestId controllers.AdminApplication.publicPreview(contestId: Int)
 GET /admin/publicPreview/:contestId/events controllers.AdminApplication.publicPreviewEvents(contestId: Int)
 
-GET /admin/:contestID/printJobs controllers.AdminApplication.listPrintJobs(contestID: Int)
-POST /admin/:contestID/printJobs/inject controllers.AdminApplication.injectPrintJob(contestID: Int)
 
 
 + nocsrf
-POST /admin/reprintPrintJob/:id controllers.AdminApplication.reprintJob(id: Long)
 + nocsrf
-POST /admin/rerenderPrintJob/:id controllers.AdminApplication.rerenderJob(id: Long)
 
 GET /admin/:contestID/contests/ controllers.AdminApplication.showContestList(contestID: Int)
 

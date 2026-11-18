@@ -35,6 +35,8 @@ object StatusActor {
   case class NewMultiContestState(cs: Iterable[Contest])
   /** A contest row was changed by the application; it is applied at once instead of at the next Tick. */
   case class ContestChanged(c: Contest)
+  /** The participants or credentials of a round changed in the database; handled by TeamStateActor, which reloads it. */
+  case class TeamsChanged(roundId: Int)
   private case class RescanResult(contests: Seq[Contest], startedAt: Long)
   case class Ack(loggedInTeam: LoggedInTeam, msgid: Long)
   case class JoinAdmin(c: Int)

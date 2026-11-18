@@ -68,12 +68,15 @@ object AdminCustomTests {
     db.run(SlickModel.customTestWithLang.filter(x => x.id === id && x.contest === contest).take(1).result.headOption)
 
   /**
-   * Marks a custom test as not yet run again, so the list shows it as running until the director records the new
-   * result. Only if it belongs to the contest; false if there is no such test.
+   * Runs a custom test again as a new row: a copy (same participant, round, season, language, source and input) with a
+   * new id and no result, so the bridge sees a new `eval:<id>` and the original keeps its result. The insert trigger
+   * notifies `eval_new`. Only for a test of the contest; None if there is no such test.
    */
-  def reset(db: JdbcBackend#DatabaseDef, contest: Int, id: Long)(implicit ec: ExecutionContext): Future[Boolean] =
-    db.run(sqlu"""update custom_tests set tested = false, finished_at = null
-                   where id = $id and round_id = $contest""").map(_ > 0)
+  def rerun(db: JdbcBackend#DatabaseDef, contest: Int, id: Long)(implicit ec: ExecutionContext): Future[Option[Long]] =
+    db.run(sql"""insert into custom_tests (season_id, round_id, participant_id, language_id, source, input)
+                 select season_id, round_id, participant_id, language_id, source, input
+                   from custom_tests where id = $id and round_id = $contest
+                 returning id""".as[Long].headOption)
 
   private def decode(b: Array[Byte]) = new String(b, "CP1251")
   def sourceText(e: EvalEntry): String = decode(e.source)

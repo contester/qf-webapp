@@ -8,7 +8,6 @@ import com.github.nscala_time.time.Imports._
 import com.mohiva.play.silhouette.api.actions.SecuredRequest
 import com.mohiva.play.silhouette.api.{Authorization, Silhouette}
 import com.mohiva.play.silhouette.impl.authenticators.SessionAuthenticator
-import com.spingo.op_rabbit.Message
 import models._
 import org.apache.commons.io.FileUtils
 import org.stingray.contester.dbmodel.{Clarification, Problem}
@@ -36,30 +35,9 @@ case class PostClarification(problem: String, text: String, hidden: Boolean)
 case class ClarificationResponse(answer: String)
 
 
-case class PrintTarget(addr: String, name: String, area: String, printer: String)
-
-case class AdminPrintAttempt(id: Long, kind: String, created: DateTime, requestedBy: Option[String], printer: String,
-                             status: String, pagesPrinted: Int, renderPages: Option[Int], error: String, detail: String)
-
-case class AdminPrintJob(id: Long, contestID: Int, team: org.stingray.contester.dbmodel.Team, filename: String, arrived: DateTime,
-                         printed: Option[DateTime], computerName: String, pages: Int, error: String,
-                         attempts: Seq[AdminPrintAttempt])
-
-case class SubmitIdLite(id: Int)
-object SubmitIdLite {
-  implicit val format = Json.format[SubmitIdLite]
-}
-
-case class SubmitTicketLite(submit: SubmitIdLite)
-object SubmitTicketLite {
-  implicit val format = Json.format[SubmitTicketLite]
-}
-
 class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEnv], dbConfig: DatabaseConfig[JdbcProfile],
                              monitorModel: Monitor,
-                                 rabbitMqModel: RabbitMqModel,
                              statusActorModel: StatusActorModel,
-                        printingModel: PrintingModel,
                                   configuration: Configuration,
                                   ws: WSClient,
                         liveHooks: live.LiveHooks,
@@ -70,10 +48,6 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   implicit val ec = defaultExecutionContext
 
   private val db = dbConfig.db
-  import com.spingo.op_rabbit.PlayJsonSupport._
-
-  private val rabbitMq = rabbitMqModel.rabbitMq
-
   private val fileserverUrl = configuration.get[String]("fileserver.url")
   private val shortn = configuration.get[String]("fileserver.shortn")
 
@@ -239,11 +213,8 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
           case Some(url) =>
             val ids = if (data.all) AdminSubmits.allSubmitIds(db, contestId, data.problem)
               else AdminSubmits.rejudgePlan(db, contestId, data.problem, url).map(_.outdated.map(_._1))
-            ids.map { ids =>
-              ids.foreach { id =>
-                rabbitMq ! Message.queue(SubmitMessage(id), queue = "contester.submitrequests")
-                Try(liveHooks.rejudged(id.toInt))
-              }
+            ids.flatMap(ids => AdminSubmits.resetForRejudge(db, ids).map(_ => ids)).map { ids =>
+              ids.foreach(id => Try(liveHooks.rejudged(id.toInt)))
               back.flashing("success" -> s"${ids.size} ${if (data.all) "(all) " else ""}submits of problem ${data.problem}")
             }
         }
@@ -252,10 +223,11 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
   // Called from the status page via ajax, which has nothing to do with a response body.
-  def rejudgeSubmit(submitId: Int) = silhouette.SecuredAction(canRejudgeSubmit(submitId)) { implicit request =>
-    rabbitMq ! Message.queue(SubmitMessage(submitId), queue = "contester.submitrequests")
-    Try(liveHooks.rejudged(submitId))
-    NoContent
+  def rejudgeSubmit(submitId: Int) = silhouette.SecuredAction(canRejudgeSubmit(submitId)).async { implicit request =>
+    AdminSubmits.resetForRejudge(db, Seq(submitId.toLong)).map { _ =>
+      Try(liveHooks.rejudged(submitId))
+      NoContent
+    }
   }
 
   private def getTestingByID(testingID: Int) =
@@ -476,99 +448,6 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }
 
-  private def getPrintJobs(contestID: Int) = {
-    import org.stingray.contester.dbmodel.MyPostgresProfile.api._
-    import org.stingray.contester.dbmodel.SlickModel._
-
-    val jobsAndAttempts = db.run(locatedPrintJobsByContest(contestID).result).flatMap { jobs =>
-      val q = dbPrintAttempts.filter(_.jobId inSet jobs.map(_.id)).sortBy(_.id.desc)
-        .joinLeft(dbPrintRenders).on(_.renderId === _.id)
-        .map { case (a, r) => (a, r.map(_.pages)) }
-      db.run(q.result).map { attempts =>
-        (jobs, attempts.groupBy(_._1.jobId).mapValues(_.map { case (a, renderPages) =>
-          AdminPrintAttempt(a.id.get, a.kind, a.created, a.requestedBy, a.printer, a.status, a.pagesPrinted, renderPages, a.error, a.detail)
-        }))
-      }
-    }
-
-    jobsAndAttempts.zip(statusActorModel.teamClient.getTeams(contestID)).map {
-      case ((jobs, attempts), teams) =>
-        jobs.flatMap { src =>
-          teams.get(src.team).map { team =>
-            AdminPrintJob(src.id, src.contest, team, src.filename, src.arrived, src.printed, src.computerName, src.pages, src.error,
-              attempts.getOrElse(src.id, Seq.empty))
-          }
-        }
-    }
-  }
-
-  /** All known computers with their area and the area's printer (may be empty), for the test print form. */
-  private def printTargets: Future[Seq[PrintTarget]] = {
-    import org.stingray.contester.dbmodel.MyPostgresProfile.api._
-    val q = (for {
-      c <- SlickModel.compLocations
-      a <- SlickModel.areas if a.id === c.location
-    } yield (c.id, c.name, a.name, a.printer)).sortBy(x => (x._3, x._2))
-    db.run(q.result).map(_.map(x => PrintTarget(x._1.address, x._2, x._3, x._4)))
-  }
-
-  // TODO(task19): printing goes away; there are no jury teams any more, so test prints go to the first participant.
-  private def firstJuryTeam(contestID: Int): Future[Option[Int]] =
-    statusActorModel.teamClient.getTeams(contestID).map(_.keys.toSeq.sorted.headOption)
-
-  def listPrintJobs(contestID: Int)= silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
-    getSelectedContests(contestID, request.identity)
-      .zip(getPrintJobs(contestID))
-      .zip(printTargets)
-      .map {
-        case ((contest, jobs), targets) =>
-          Ok(html.admin.printjobs(jobs, targets, contest, request.identity))
-      }
-
-  }
-
-  /** Test print: queues an uploaded file as a print job from the chosen computer, attributed to the contest's first jury team. */
-  def injectPrintJob(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID))(parse.multipartFormData).async { implicit request =>
-    val back = Redirect(routes.AdminApplication.listPrintJobs(contestID))
-    val computer = request.body.dataParts.get("computer").flatMap(_.headOption).getOrElse("")
-    request.body.file("file").filter(_.filename.nonEmpty) match {
-      case None => Future.successful(back.flashing("error" -> "Pick a file to print"))
-      case Some(file) =>
-        printTargets.zip(firstJuryTeam(contestID)).flatMap {
-          case (targets, teamOpt) =>
-            (targets.find(_.addr == computer), teamOpt) match {
-              case (None, _) => Future.successful(back.flashing("error" -> "Pick a computer"))
-              case (Some(t), _) if t.printer.trim.isEmpty =>
-                Future.successful(back.flashing("error" -> s"Area ${t.area} has no printer set"))
-              case (_, None) =>
-                Future.successful(back.flashing("error" -> "This contest has no jury team; add one on the misc page"))
-              case (Some(t), Some(team)) =>
-                val bytes = FileUtils.readFileToByteArray(file.ref.path.toFile)
-                printingModel.insertAndPrintJob(contestID, team, file.filename, bytes, t.addr).map {
-                  case true => back.flashing("success" -> s"Queued ${file.filename} for ${t.name} (${t.area}, ${t.printer})")
-                  case false => back.flashing("error" -> "Job saved but could not be queued; see the log")
-                }
-            }
-        }
-    }
-  }
-
-  /** Prints the job again from its stored render (or renders it, if it never was). */
-  def reprintJob(printJobID: Long) = silhouette.SecuredAction.async { implicit request =>
-    printingModel.createPrintOnlyAttempt(printJobID, Some(request.identity.email)).map {
-      case Right(_) => Ok("ok")
-      case Left(message) => InternalServerError(message)
-    }
-  }
-
-  /** Renders the job from its source again, and prints the result. */
-  def rerenderJob(printJobID: Long) = silhouette.SecuredAction.async { implicit request =>
-    printingModel.createFullAttempt(printJobID, Some(request.identity.email)).map {
-      case Some(_) => Ok("ok")
-      case None => InternalServerError("can't build print job (unknown computer location, team or contest?)")
-    }
-  }
-
   def showContestList(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
     Rounds.currentRounds(db).flatMap { rounds =>
       if (rounds.isEmpty)
@@ -635,6 +514,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }
 
+  // TODO(task19): the areas, computers and agent printer pages go with the rest of printing (their tables are not in the schema).
   private val areaPrinterForm = Form(single("printer" -> text))
 
   def areasPage(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
@@ -688,14 +568,12 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
       }
   }
 
-  /** Runs a custom test again: the director takes it from the queue like a fresh one and writes the result over the old. */
+  /** Runs a custom test again as a copy with a new id (the bridge picks it up like a fresh one); shows the copy. */
   def rerunCustomTest(contestId: Int, id: Long) =
     silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request =>
-      AdminCustomTests.reset(db, contestId, id).map {
-        case true =>
-          rabbitMq ! Message.queue(ServerSideEvalID(id.toInt), queue = "contester.evalrequests")
-          Redirect(routes.AdminApplication.showCustomTest(contestId, id))
-        case false => NotFound
+      AdminCustomTests.rerun(db, contestId, id).map {
+        case Some(copy) => Redirect(routes.AdminApplication.showCustomTest(contestId, copy))
+        case None => NotFound
       }
     }
 

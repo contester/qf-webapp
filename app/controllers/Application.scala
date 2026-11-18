@@ -26,12 +26,6 @@ import scala.util.Try
 
 case class SubmitData(problem: String, compiler: Int, inline: String)
 
-case class SubmitMessage(id: Long)
-
-object SubmitMessage {
-  implicit val formatSubmitMessage = Json.format[SubmitMessage]
-}
-
 class Application (cc: ControllerComponents,
                              silhouette: Silhouette[TeamsEnv],
                              dbConfig: DatabaseConfig[JdbcProfile],

@@ -42,13 +42,17 @@ it is unset or blank every route answers 404. `palevo.query.contests` is the har
 API can ever show, whatever the request asks for (default 1 to 10, so contest 11 is never served). The contract
 is in [doc/palevo-query-api.md](doc/palevo-query-api.md).
 
-## Printing
+## Database notifications
 
-Uploads to the print form must be text or source code of about 10 pages at most. Limits (optional, read at
-startup, so a restart is needed to change them but not a rebuild):
+Testing results, custom test results and changes to rounds, credentials and participants reach qf as PostgreSQL
+notifications (`LISTEN testing_finished, eval_finished, round_changed, credential_changed, participant_changed`;
+the triggers are teacher-web's migrations). `NotifyListener` holds one connection of its own, opened from
+`slick.dbs.default.db.url` / `user` / `password` (not from the pool) with `ApplicationName=qf-notify-listener`,
+and reconnects with a backoff of 1 s doubling to 30 s. A notification missed while it is disconnected is not
+replayed: the pages read the database, so it only delays a live update until a reload.
 
-    printing.max_lines = 450
-    printing.max_bytes = 32000
+Submits and custom tests are requests by themselves: the insert triggers notify the bridge. An admin rejudge sets
+`submits.testing_id` to NULL (the bridge hears `submit_new` again); a custom test rerun inserts a copy of the test.
 
 ## Live monitor
 

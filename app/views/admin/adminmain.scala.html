@@ -14,7 +14,6 @@
 @navlink("monitor", Html(messages("scoreboard")))
 @navlink("qanda", Html(messages("heading.clarifications")+" <span id='clrPending' class='badge'>-</span>"))
 @if(contest.canModify) {@navlink("rejudge", Html("Rejudge"))}
-@navlink("print", Html("Print"))
 @navlink("contests", Html("Contests"))
 @if(contest.canModify) {@navlink("extrainfo", Html("Extra pages"))}
 @if(contest.isSuperAdmin) {@navlink("contester", Html("Contester"))}
