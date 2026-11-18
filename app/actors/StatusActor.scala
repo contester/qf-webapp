@@ -31,8 +31,8 @@ object StatusActor {
 
   case object Init
   /**
-    * A round's row changed (round_changed): its new value. Contests are loaded once at start-up; afterwards they change
-    * only through this and ContestRemoved, never by a rescan.
+    * A round changed (round_changed: its row, its problems, or its season's is_current): its new value. Contests are
+    * loaded once at start-up; afterwards they change only through this and ContestRemoved, never by a rescan.
     */
   case class ContestChanged(c: Contest)
   /** A round vanished or became unusable (null times, not of the current season): it is dropped everywhere. */

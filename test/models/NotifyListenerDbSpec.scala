@@ -111,7 +111,7 @@ class NotifyListenerDbSpec extends TestKit(ActorSystem("NotifyListenerDbSpec")) 
     }
   }
 
-  test("a round that becomes invalid or vanishes delivers ContestRemoved, once per notification") {
+  test("a round that becomes invalid delivers ContestRemoved, once per notification") {
     withListener { rig =>
       val r = fx.round
       exec(sqlu"update contest_rounds set ends_at = null where id = $r")
@@ -120,14 +120,34 @@ class NotifyListenerDbSpec extends TestKit(ActorSystem("NotifyListenerDbSpec")) 
       awaitCond(rig.removed.size == 1 && rig.removed.peek() == r, 2.seconds)
       rig.status.expectNoMessage(300.millis)
       assert(rig.contests.isEmpty)
-      // Deleted: contest_rounds has no DELETE trigger (teacher-web 00006), so the notification its deletion would
-      // need is sent by hand; the listener must treat the vanished id the same way.
-      exec(sqlu"delete from problems where round_id = $r")
+    }
+  }
+
+  test("a problem row change (teacher-web 00009 trigger) delivers ContestChanged for its round") {
+    withListener { rig =>
+      val (r, s) = (fx.round, fx.season)
+      for (stmt <- Seq(
+        sqlu"insert into problems (season_id, round_id, problem_id, name, tests, max_points) values ($s, $r, 'Y', 'Why', 1, 5)",
+        sqlu"update problems set max_points = 6 where round_id = $r and problem_id = 'Y'",
+        sqlu"delete from problems where round_id = $r and problem_id = 'Y'")) {
+        exec(stmt)
+        assert(rig.status.expectMsgType[StatusActor.ContestChanged](2.seconds).c.id == r)
+        rig.teams.expectMsg(2.seconds, StatusActor.TeamsChanged(r))
+        rig.status.expectNoMessage(300.millis)
+      }
+      assert(rig.contests.size == 3)
+    }
+  }
+
+  test("deleting a round (teacher-web 00009 trigger) delivers ContestRemoved") {
+    withListener { rig =>
+      val r = fx.round
+      exec(sqlu"delete from problems where round_id = $r") // still a valid round: one ContestChanged
+      assert(rig.status.expectMsgType[StatusActor.ContestChanged](2.seconds).c.id == r)
       exec(sqlu"delete from round_credentials where round_id = $r")
       exec(sqlu"delete from contest_rounds where id = $r")
-      one(sql"select pg_notify('round_changed', ${r.toString})::text".as[String])
       rig.status.expectMsg(2.seconds, StatusActor.ContestRemoved(r))
-      awaitCond(rig.removed.size == 2, 2.seconds)
+      awaitCond(rig.removed.contains(r), 2.seconds)
       rig.status.expectNoMessage(300.millis)
     }
   }

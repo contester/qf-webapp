@@ -112,8 +112,9 @@ from one exact single-shot timer (`actors.RoundClock`), armed for the next deadl
 and after it fires; each edge is pushed to the round's participants and admins as a `round_started` / `round_ended`
 server-sent event, and a moved round as `round_rescheduled`. On start-up the clock announces nothing that already
 happened (a running round gets no `round_started`). The only other timers are SSE keep-alive comments and
-retries after a failure. A change of the `problems` table alone has no notification: it is seen after any
-`round_changed` or a restart.
+retries after a failure. `round_changed` also fires for a deleted round, for any change of a round's
+`problems` rows and, for every round of the season, when a season becomes (or stops being) current
+(teacher-web migration 00009), so problems and season switches need no restart either.
 
 ## TODO
 

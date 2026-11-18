@@ -15,7 +15,11 @@ import scala.util.Try
 import scala.util.control.NonFatal
 
 /**
-  * Pushes the database's NOTIFY events (teacher-web triggers, migration 00006) to the actors.
+  * Pushes the database's NOTIFY events (teacher-web triggers, migrations 00006, 00008 and 00009) to the actors.
+  * `round_changed <round id>` fires for an insert, update or delete of the round, for any change of its `problems`
+  * rows (the bridge's problem sync) and, for every round of the season, when `seasons.is_current` flips. The
+  * listener re-reads the round: a current round with times becomes ContestChanged (status, teams, and the hooks,
+  * which also reload the problems), anything else ContestRemoved.
   *
   * The actor owns one dedicated pgjdbc connection, opened with DriverManager outside the Slick pool, on a thread of
   * its own: `PGConnection.getNotifications(0)` blocks that thread until a notification arrives, so nothing wakes up

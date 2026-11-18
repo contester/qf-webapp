@@ -39,9 +39,9 @@ class ProblemStateActor(db: JdbcBackend#DatabaseDef) extends AnyStateActor[Probl
   }
 
   /**
-    * Loaded at start-up and again on every ContestChanged (round_changed); a removed round is dropped. There is no
-    * notification for the `problems` table (the bridge writes it at its start-up and on director's ContestEvent), so a
-    * change of problems alone is only seen after a round_changed for any round or a qf restart.
+    * Loaded at start-up and again on every ContestChanged; a removed round is dropped. A change of the `problems`
+    * table (the bridge's sync at its start-up and on director's ContestEvent) fires round_changed for that round
+    * (teacher-web 00009), which arrives here as ContestChanged; nothing is polled.
     */
   override def initialized: Receive = {
     case Refresh => doRefresh()
