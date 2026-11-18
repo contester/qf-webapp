@@ -222,17 +222,19 @@ object AdminSubmits {
   def revisionStatus(db: JdbcBackend#DatabaseDef, contest: Int)(implicit ec: ExecutionContext): Future[Seq[ProblemRevisionStatus]] =
     db.run(revisionStatusAction(contest))
 
-  /** Every submit of the problem in the contest, tested or not. */
   /**
    * Admin rejudge: puts the submits back to untested in one statement. Their old testings and results stay; the
    * teacher-web trigger (00008) notifies `submit_new` for each submit whose testing_id was set, and the bridge then
    * allocates a fresh testing. A submit that has no testing yet is still waiting for one and is left to it.
+   * A legacy submit with tested = true but testing_id NULL gets no submit_new either (the trigger needs testing_id
+   * to go from a value to NULL); only the bridge's start-time recovery picks it up.
    */
   def resetForRejudge(db: JdbcBackend#DatabaseDef, ids: Seq[Long])(implicit ec: ExecutionContext): Future[Int] =
     if (ids.isEmpty) Future.successful(0)
     else db.run(sqlu"""update submits set testing_id = null, tested = false, compiled = false, passed = 0, taken = 0, points = null
                         where id in (#${ids.mkString(",")})""")
 
+  /** Every submit of the problem in the contest, tested or not. */
   def allSubmitIds(db: JdbcBackend#DatabaseDef, contest: Int, problem: String)(implicit ec: ExecutionContext): Future[Seq[Long]] =
     db.run(SlickModel.submits.filter(s => s.contest === contest && s.problem === problem).map(_.id).sorted.result)
 }

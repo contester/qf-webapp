@@ -147,6 +147,17 @@ class NotifyListenerDbSpec extends TestKit(ActorSystem("NotifyListenerDbSpec")) 
     }
   }
 
+  test("the listener's connect properties work against the server: keep-alive options applied, factory loaded") {
+    assume(fx.url.isDefined)
+    val settings = NotifyListener.ConnectionSettings(fx.url.get, fx.user, fx.password, appName, NotifyListener.KeepAlive(45, 7, 4))
+    val (u, p) = NotifyListener.connectProperties(settings)
+    val c = java.sql.DriverManager.getConnection(u, p)
+    try {
+      def show(k: String) = { val rs = c.createStatement().executeQuery(s"show $k"); rs.next(); rs.getString(1) }
+      assert((show("tcp_keepalives_idle"), show("tcp_keepalives_interval"), show("tcp_keepalives_count")) == (("45", "7", "4")))
+    } finally c.close()
+  }
+
   test("TeamStateActor reloads one round on TeamsChanged") {
     assume(fx.url.isDefined)
     fx.withFixture {

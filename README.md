@@ -51,6 +51,13 @@ the triggers are teacher-web's migrations). `NotifyListener` holds one connectio
 and reconnects with a backoff of 1 s doubling to 30 s. A notification missed while it is disconnected is not
 replayed: the pages read the database, so it only delays a live update until a reload.
 
+A silently dropped connection (NAT or firewall timeout, dead server) is detected by TCP keep-alive, set on our
+socket and, through the `options` startup parameter, on the server too (optional, seconds):
+
+    notify.keepalive.idle = 60
+    notify.keepalive.interval = 10
+    notify.keepalive.count = 6
+
 Submits and custom tests are requests by themselves: the insert triggers notify the bridge. An admin rejudge sets
 `submits.testing_id` to NULL (the bridge hears `submit_new` again); a custom test rerun inserts a copy of the test.
 

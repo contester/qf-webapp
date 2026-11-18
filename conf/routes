@@ -81,8 +81,6 @@ GET /admin/publicPreview/:contestId/events controllers.AdminApplication.publicPr
 
 
 
-+ nocsrf
-+ nocsrf
 
 GET /admin/:contestID/contests/ controllers.AdminApplication.showContestList(contestID: Int)
 

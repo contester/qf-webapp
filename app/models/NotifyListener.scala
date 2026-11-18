@@ -19,7 +19,8 @@ import scala.util.control.NonFatal
   *
   * The actor owns one dedicated pgjdbc connection, opened with DriverManager outside the Slick pool, on a thread of
   * its own: `PGConnection.getNotifications(0)` blocks that thread until a notification arrives, so nothing wakes up
-  * periodically. The connection has TCP keep-alive on, so a dead peer is noticed by the kernel. Stopping the actor
+  * periodically. TCP keep-alive with short timings on both ends (see KeepAlive) makes the kernel notice a silently
+  * dropped connection within about two minutes; the blocked read then fails. Stopping the actor
   * aborts the connection, which ends the blocked read and the thread.
   *
   * On a lost connection the thread reconnects with exponential backoff (1 s doubling to 30 s, reset by a successful
@@ -35,16 +36,60 @@ object NotifyListener {
 
   val DefaultApplicationName = "qf-notify-listener"
 
-  case class ConnectionSettings(url: String, user: String, password: String, applicationName: String = DefaultApplicationName)
+  /**
+    * TCP keep-alive of the notification connection, in seconds: probes start after `idle` seconds of silence and
+    * repeat every `interval`; after `count` unanswered ones the peer is dead. Set on both ends: on our socket through
+    * KeepAliveSocketFactory (a dead server breaks the blocked read) and on the server through the `options` startup
+    * parameter (its probes also keep NAT and firewall state alive, and a dead client is dropped).
+    */
+  case class KeepAlive(idle: Int = 60, interval: Int = 10, count: Int = 6) {
+    def factoryArg: String = s"$idle,$interval,$count"
+    def serverOptions: String = s"-c tcp_keepalives_idle=$idle -c tcp_keepalives_interval=$interval -c tcp_keepalives_count=$count"
+  }
+
+  case class ConnectionSettings(url: String, user: String, password: String, applicationName: String = DefaultApplicationName,
+                                keepAlive: KeepAlive = KeepAlive())
 
   object ConnectionSettings {
-    /** The URL and credentials of play-slick's default database (`slick.dbs.default.db`). */
+    /**
+      * The URL and credentials of play-slick's default database (`slick.dbs.default.db`, or its `properties.*`), and
+      * the keep-alive from `notify.keepalive.idle|interval|count` (seconds; default 60, 10, 6).
+      */
     def fromConfig(configuration: Configuration): ConnectionSettings = {
-      val c = configuration.get[Configuration]("slick.dbs.default.db")
-      def opt(k: String) = c.getOptional[String](k).orElse(c.getOptional[String](s"properties.$k"))
-      ConnectionSettings(opt("url").getOrElse(throw new IllegalArgumentException("slick.dbs.default.db.url is not set")),
-        opt("user").getOrElse(""), opt("password").getOrElse(""))
+      val base = "slick.dbs.default.db"
+      def opt(k: String) = configuration.getOptional[String](s"$base.$k").orElse(configuration.getOptional[String](s"$base.properties.$k"))
+      val d = KeepAlive()
+      def ka(k: String, default: Int) = configuration.getOptional[Int](s"notify.keepalive.$k").getOrElse(default)
+      ConnectionSettings(opt("url").getOrElse(throw new IllegalArgumentException(s"$base.url is not set: the notification listener needs it")),
+        opt("user").getOrElse(""), opt("password").getOrElse(""), DefaultApplicationName,
+        KeepAlive(ka("idle", d.idle), ka("interval", d.interval), ka("count", d.count)))
     }
+  }
+
+  /**
+    * The URL and properties to connect with. An `options` parameter already in the URL is taken out of it and
+    * appended after the keep-alive settings (pgjdbc lets URL parameters override properties, and with `-c` the last
+    * setting wins, so the operator's own settings are kept).
+    */
+  def connectProperties(settings: ConnectionSettings): (String, Properties) = {
+    val (base, query) = settings.url.indexOf('?') match {
+      case -1 => (settings.url, "")
+      case i => (settings.url.substring(0, i), settings.url.substring(i + 1))
+    }
+    val params = query.split('&').filter(_.nonEmpty)
+    def isOptions(p: String) = p.takeWhile(_ != '=') == "options"
+    val theirs = params.filter(isOptions).map(p => java.net.URLDecoder.decode(p.dropWhile(_ != '=').drop(1), "UTF-8"))
+    val rest = params.filterNot(isOptions)
+    val url = if (rest.isEmpty) base else base + "?" + rest.mkString("&")
+    val props = new Properties()
+    props.setProperty("user", settings.user)
+    props.setProperty("password", settings.password)
+    props.setProperty("ApplicationName", settings.applicationName)
+    props.setProperty("tcpKeepAlive", "true")
+    props.setProperty("socketFactory", classOf[KeepAliveSocketFactory].getName)
+    props.setProperty("socketFactoryArg", settings.keepAlive.factoryArg)
+    props.setProperty("options", (settings.keepAlive.serverOptions +: theirs.toSeq).filter(_.trim.nonEmpty).mkString(" "))
+    (url, props)
   }
 
   /**
@@ -134,16 +179,18 @@ class NotifyListener(settings: NotifyListener.ConnectionSettings, db: JdbcBacken
     Try(c.abort(r => r.run())).failed.foreach(e => logger.warn(s"closing the notification connection: $e"))
 
   private def connect(): Connection = {
-    val props = new Properties()
-    props.setProperty("user", settings.user)
-    props.setProperty("password", settings.password)
-    props.setProperty("ApplicationName", settings.applicationName)
-    props.setProperty("tcpKeepAlive", "true")
-    val c = DriverManager.getConnection(settings.url, props)
-    c.setAutoCommit(true)
-    val st = c.createStatement()
-    try Channels.foreach(ch => st.execute(s"LISTEN $ch")) finally st.close()
-    c
+    val (url, props) = connectProperties(settings)
+    val c = DriverManager.getConnection(url, props)
+    try {
+      c.setAutoCommit(true)
+      val st = c.createStatement()
+      try Channels.foreach(ch => st.execute(s"LISTEN $ch")) finally st.close()
+      c
+    } catch {
+      case NonFatal(e) =>
+        Try(c.close())
+        throw e
+    }
   }
 
   private val minBackoffMs = 1000L
