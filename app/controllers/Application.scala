@@ -5,7 +5,6 @@ import java.nio.charset.StandardCharsets
 import actors.StatusActor
 import com.mohiva.play.silhouette.api.{Authorization, Silhouette}
 import com.mohiva.play.silhouette.impl.authenticators.SessionAuthenticator
-import com.spingo.op_rabbit._
 import models._
 import org.apache.commons.io.FileUtils
 import play.api.data.Form
@@ -37,7 +36,6 @@ class Application (cc: ControllerComponents,
                              silhouette: Silhouette[TeamsEnv],
                              dbConfig: DatabaseConfig[JdbcProfile],
                              monitorModel: Monitor,
-                            rabbitMqModel: RabbitMqModel,
                             statusActorModel: StatusActorModel,
                             configuration: Configuration,
                             liveHooks: live.LiveHooks,
@@ -54,13 +52,10 @@ class Application (cc: ControllerComponents,
 
   import scala.language.postfixOps
 
-  private[this] val rabbitMq = rabbitMqModel.rabbitMq
-
-  private[this] def getProblems(contest: Int)(implicit ec: ExecutionContext) =
-    statusActorModel.problemClient.getProblems(contest)
-
+  // The problems of the contestant's round and the languages of the round's season, straight from the database.
   private[this] def getProblemsAndCompilers(contest: Contest)(implicit ec: ExecutionContext) =
-    getProblems(contest.id).zip(db.run(Contests.getCompilers(contest).result))
+    db.run(SlickModel.problems.filter(_.contestID === contest.id).sortBy(_.id).result)
+      .zip(db.run(Contests.getCompilers(contest).result))
 
   import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -119,20 +114,12 @@ class Application (cc: ControllerComponents,
     }
   }
 
-  // TODO(task12): the submit flow (round running, FK errors as form errors, remote address) is Task 12's.
-  private[this] def submitInsertQuery(contest: Contest, teamId: Int, problemId: String, srcLang: Int, source: Array[Byte], remoteAddr: String) = {
-    (SlickModel.submits.map(x => (x.seasonId, x.contest, x.team, x.problem, x.language, x.source)) returning(SlickModel.submits.map(x => (x.id, x.arrived)))) +=
-      ((contest.seasonId, contest.id, teamId, problemId, srcLang, source))
-  }
-
   // Tells the live monitor about a new submit; the arrival time is the one the database assigned. Never throws.
-  private[this] def liveArrived(team: LoggedInTeam, id: Int, problem: String, arrivedAt: org.joda.time.DateTime): Unit =
+  private[this] def liveArrived(team: LoggedInTeam, id: Long, problem: String, arrivedAt: org.joda.time.DateTime): Unit =
     Try {
       val seconds = org.joda.time.Seconds.secondsBetween(team.contest.startTime, arrivedAt).getSeconds
-      liveHooks.submitArrived(team.contest.id, live.SubmitRec(id, team.team.id, problem, arrivedAt, seconds, live.Pending))
+      liveHooks.submitArrived(team.contest.id, live.SubmitRec(id.toInt, team.team.id, problem, arrivedAt, seconds, live.Pending))
     }.failed.foreach(e => logger.warn(s"live monitor: submit $id arrival not sent", e))
-
-  import com.spingo.op_rabbit.PlayJsonSupport._
 
   def submitPost = silhouette.SecuredAction(parse.multipartFormData).async { implicit request =>
     getProblemsAndCompilers(request.identity.contest).flatMap {
@@ -147,15 +134,15 @@ class Application (cc: ControllerComponents,
             val solutionBytes = FormUtil.inlineOrFile(submitData.inline, request.body.file("file")).getOrElse(FormUtil.emptyBytes)
             if (solutionBytes.isEmpty) {
               Future.successful(Some(parsed.withGlobalError("No solution")))
-            } else if (!request.identity.contest.running) {
-              Future.successful(Some(parsed.withGlobalError("Contest is not running")))
             } else {
-              db.run(submitInsertQuery(request.identity.contest, request.identity.team.id, submitData.problem,
-                submitData.compiler, solutionBytes, request.remoteAddress)).map { case (wat, arrivedAt) =>
-                logger.info(s"Inserted submit id: $wat")
-                liveArrived(request.identity, wat.toInt, submitData.problem, arrivedAt)
-                rabbitMq ! Message.queue(SubmitMessage(wat.toInt), queue = "contester.submitrequests")
-                None
+              val now = org.joda.time.DateTime.now
+              Submits.insert(db, request.identity, submitData.problem, submitData.compiler, solutionBytes,
+                Some(request.remoteAddress), now).map {
+                case Right(id) =>
+                  logger.info(s"Inserted submit id: $id")
+                  liveArrived(request.identity, id, submitData.problem, now)
+                  None
+                case Left(e) => Some(SubmitErrors.withError(parsed, e))
               }
             }
           }

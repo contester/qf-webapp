@@ -65,3 +65,8 @@ error.printNotQueued=Не удалось поставить файл в очер
 error=Ошибка
 label.pages=Страниц
 status.running=Выполняется...
+
+submit.error.roundNotRunning=Соревнование сейчас не идёт
+submit.error.unknownProblem=Нет такой задачи
+submit.error.unknownLanguage=Нет такого языка
+submit.error.notAdmitted=Вы не допущены к этому туру

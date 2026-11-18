@@ -97,6 +97,38 @@ case class SubmitDetails(fsub: FullyDescribedSubmit, source: Array[Byte]) {
 case class FullyDescribedSubmit(submit: Submit, index: Int, score: Option[Score], result: SubmitResult,
                                 stats: SubmitStats, details: Seq[ResultEntry])
 
+sealed trait SubmitError
+case object RoundNotRunning extends SubmitError
+case object UnknownProblem extends SubmitError
+case object UnknownLanguage extends SubmitError
+case object NotAdmitted extends SubmitError
+
+object SubmitErrors {
+  def key(e: SubmitError): String = e match {
+    case RoundNotRunning => "submit.error.roundNotRunning"
+    case UnknownProblem => "submit.error.unknownProblem"
+    case UnknownLanguage => "submit.error.unknownLanguage"
+    case NotAdmitted => "submit.error.notAdmitted"
+  }
+
+  def withError[T](form: play.api.data.Form[T], e: SubmitError): play.api.data.Form[T] = form.withGlobalError(key(e))
+}
+
+/** What a foreign key violation (SQLState 23503) on submits means to the contestant. */
+object SubmitConstraints {
+  def errorOf(constraint: String): Option[SubmitError] =
+    if (constraint == "fk_submits_credential") Some(NotAdmitted)
+    else if (constraint.startsWith("fk_submits_problem")) Some(UnknownProblem)
+    else if (constraint.startsWith("fk_submits_language")) Some(UnknownLanguage)
+    else None
+
+  def fromException(e: Throwable): Option[SubmitError] = e match {
+    case p: org.postgresql.util.PSQLException if p.getSQLState == "23503" =>
+      Option(p.getServerErrorMessage).flatMap(m => Option(m.getConstraint)).flatMap(errorOf)
+    case _ => Option(e.getCause).filter(_ ne e).flatMap(fromException)
+  }
+}
+
 object Submits {
   import org.stingray.contester.dbmodel.MyPostgresProfile.api._
   import org.stingray.contester.dbmodel.SlickModel
@@ -251,5 +283,38 @@ object Submits {
       s.testingData.exists(_.finished), s.testingData.exists(_.compiled),
       s.testingData.map(_.passed).getOrElse(0), s.testingData.map(_.taken).getOrElse(0),
       s.testingData.map(_.testingId.toInt))
+  }
+
+  /**
+    * Inserts a submit for the team, after checking in this order: the round runs at `now` (read from the database,
+    * not from the session), the problem is the round's, the language is the round season's, the credential is active.
+    * A foreign key violation that gets past the checks (a race) maps to the matching error too. The director learns
+    * of the row from the database trigger, so nothing is published here.
+    */
+  def insert(db: JdbcBackend#DatabaseDef, team: LoggedInTeam, problemId: String, languageId: Int, source: Array[Byte], remoteAddr: Option[String],
+             now: DateTime)(implicit ec: ExecutionContext): Future[Either[SubmitError, Long]] = {
+    val roundId = team.contest.id
+    val participantId = team.team.id
+    val addr = remoteAddr.flatMap(a => scala.util.Try(com.github.tminglei.slickpg.InetString(a)).toOption)
+    def refuse(e: SubmitError): DBIO[Either[SubmitError, Long]] = DBIO.successful(Left(e))
+    val action: DBIO[Either[SubmitError, Long]] =
+      SlickModel.contestRounds.filter(_.id === roundId).map(r => (r.seasonId, r.startsAt, r.endsAt, r.isFinished)).result.headOption.flatMap {
+        case Some((seasonId, Some(start), Some(end), false)) if !now.isBefore(start) && now.isBefore(end) =>
+          for {
+            problem <- SlickModel.problems.filter(p => p.contestID === roundId && p.id === problemId).exists.result
+            language <- SlickModel.compilers.filter(l => l.id === languageId && l.seasonId === seasonId).exists.result
+            admitted <- SlickModel.roundCredentials.filter(c => c.roundId === roundId && c.participantId === participantId && c.isActive).exists.result
+            r <- if (!problem) refuse(UnknownProblem)
+              else if (!language) refuse(UnknownLanguage)
+              else if (!admitted) refuse(NotAdmitted)
+              else ((SlickModel.submits.map(x => (x.seasonId, x.contest, x.team, x.problem, x.language, x.source, x.arrived,
+                      x.remoteAddr, x.tested, x.compiled, x.passed, x.taken)) returning SlickModel.submits.map(_.id)) +=
+                ((seasonId, roundId, participantId, problemId, languageId, source, now, addr, false, false, 0, 0))).map (Right(_): Either[SubmitError, Long])
+          } yield r
+        case _ => refuse(RoundNotRunning)
+      }
+    db.run(action).recover {
+      case e => SubmitConstraints.fromException(e).map(x => Left(x): Either[SubmitError, Long]).getOrElse(throw e)
+    }
   }
 }

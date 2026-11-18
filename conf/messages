@@ -95,3 +95,8 @@ label.pages=Pages
 label.disqualified=Disqualified (shown as DSQ, not rated)
 label.disabled=Disabled
 label.noPrint=No printing
+
+submit.error.roundNotRunning=The contest is not running now
+submit.error.unknownProblem=No such problem
+submit.error.unknownLanguage=No such language
+submit.error.notAdmitted=You are not admitted to this round

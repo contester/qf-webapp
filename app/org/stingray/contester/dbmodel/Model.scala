@@ -32,7 +32,11 @@ case class Extrainfo(contest: Int, num: Int, heading: String, data: String)
   * A round of the current season, with both times set. `id` is contest_rounds.id, the "contest id" of qf's URLs.
   * Start and end are also the freeze and expose times: there is no freeze configuration.
   */
-case class Contest(id: Int, name: String, startTime: DateTime, endTime: DateTime, polygonId: Option[String], seasonId: Int) {
+case class Contest(id: Int, name: String, startTime: DateTime, endTime: DateTime, polygonId: Option[String], seasonId: Int,
+                   isFinished: Boolean = false) {
+  /** A round takes submits from starts_at (inclusive) to ends_at (exclusive), unless it was finished early. */
+  def acceptsSubmits(now: DateTime): Boolean = !isFinished && !now.isBefore(startTime) && now.isBefore(endTime)
+
   // Kept so that the legacy board code compiles; the scoreboard rewrite drops them.
   def freezeTime: DateTime = startTime
   def exposeTime: DateTime = endTime
@@ -251,11 +255,11 @@ object SlickModel {
   }
 
   /** The times are never None: the query keeps only rounds that have both. */
-  type RoundRow = (Int, String, String, Option[DateTime], Option[DateTime], Option[String], Int)
+  type RoundRow = (Int, String, String, Option[DateTime], Option[DateTime], Option[String], Int, Boolean)
 
   def toContest(r: RoundRow): Contest = r match {
-    case (id, contestName, name, start, end, polygonId, seasonId) =>
-      Contest(id, roundName(contestName, name), start.get, end.get, polygonId, seasonId)
+    case (id, contestName, name, start, end, polygonId, seasonId, finished) =>
+      Contest(id, roundName(contestName, name), start.get, end.get, polygonId, seasonId, finished)
   }
 
   /** Rounds of the current season with both times set: the only rounds qf knows. */
@@ -263,7 +267,7 @@ object SlickModel {
     r <- contestRounds if r.startsAt.isDefined && r.endsAt.isDefined
     c <- twContests if c.id === r.contestId
     s <- seasons if s.id === r.seasonId && s.isCurrent
-  } yield (r.id, c.name, r.name, r.startsAt, r.endsAt, r.testingSystemId.asColumnOf[Option[String]], r.seasonId)
+  } yield (r.id, c.name, r.name, r.startsAt, r.endsAt, r.testingSystemId.asColumnOf[Option[String]], r.seasonId, r.isFinished)
 
   val currentRounds = Compiled(currentRoundRows.sortBy(_._1))
 
