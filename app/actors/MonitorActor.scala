@@ -18,6 +18,9 @@ import scala.concurrent.Future
   * The fallback static board writer, run only when the live monitor is off: writes `<round>.html` with the points
   * board into monitor.static_location, and only for rounds that are over, since the files are public.
   * The pages do not ask this actor; they render the board on demand (BoardSource).
+  * No polling: the files are written once at start-up and again for a round when the round clock says it ended
+  * (RoundClockActor.Fired on the event stream). TODO(task17): re-render on testing_finished / credential and
+  * participant changes too; until then a result judged after the end reaches the file only at the next restart.
   * TODO(task18): palevo standings were fed from here (ACM status); with the live monitor off they are not sent now.
   */
 object MonitorActor {
@@ -25,6 +28,7 @@ object MonitorActor {
     Props(new MonitorActor(db, staticLocation, messagesApi))
 
   case class State(boards: Seq[(Contest, MonitorPoints)])
+  /** Writes the files of every round that is over (start-up). */
   case object Refresh
 }
 
@@ -32,28 +36,30 @@ class MonitorActor(db: JdbcBackend#DatabaseDef, staticLocation: Option[String], 
   import MonitorActor._
   import context.dispatcher
 
-  import scala.concurrent.duration._
-  import scala.language.postfixOps
-
   private implicit val messages: MessagesImpl = MessagesImpl(Lang("ru"), messagesApi)
 
   private val staticLocationFile = staticLocation.map(x => new File(x))
 
   override def preStart(): Unit = {
     super.preStart()
+    context.system.eventStream.subscribe(self, classOf[RoundClockActor.Fired])
     self ! Refresh
   }
 
-  private def loadBoards(): Unit = {
+  override def postStop(): Unit = {
+    context.system.eventStream.unsubscribe(self)
+    super.postStop()
+  }
+
+  private def loadBoards(rounds: Future[Seq[Contest]]): Unit = {
     val now = DateTime.now
-    val fu = Rounds.currentRounds(db).flatMap { rounds =>
-      Future.sequence(rounds.filter(Visibility.canSeeBoard(_, Anonymous, now)).map { r =>
+    val fu = rounds.flatMap { rs =>
+      Future.sequence(rs.filter(Visibility.canSeeBoard(_, Anonymous, now)).map { r =>
         MonitorPoints.load(db, r.id).map(r -> _)
       })
     }
     fu.foreach(st => self ! State(st))
-    // TODO(task16): periodic refresh is polling; re-render on testing_finished/round_changed notifications instead.
-    fu.onComplete(_ => context.system.scheduler.scheduleOnce(20 seconds, self, Refresh))
+    fu.failed.foreach(e => play.api.Logger(getClass).error(s"writing the static boards: $e"))
   }
 
   private def write(contest: Contest, board: MonitorPoints): Unit =
@@ -64,7 +70,8 @@ class MonitorActor(db: JdbcBackend#DatabaseDef, staticLocation: Option[String], 
     }
 
   override def receive: Receive = {
-    case Refresh => loadBoards()
+    case Refresh => loadBoards(Rounds.currentRounds(db))
+    case RoundClockActor.Fired(_: RoundClock.Ended, round) => loadBoards(Future.successful(Seq(round)))
     case State(boards) => boards.foreach { case (c, b) => write(c, b) }
   }
 }

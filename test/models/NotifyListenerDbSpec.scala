@@ -7,7 +7,7 @@ import models.ContesterResults.{CustomTestResult, FinishedTesting, SubmitObject}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuiteLike
 import org.stingray.contester.dbmodel.{Contest, Team}
-import org.stingray.qf.actors.TeamStateActor
+import org.stingray.qf.actors.{ProblemStateActor, TeamStateActor}
 
 import java.util.concurrent.ConcurrentLinkedQueue
 import scala.concurrent.ExecutionContext
@@ -32,7 +32,7 @@ class NotifyListenerDbSpec extends TestKit(ActorSystem("NotifyListenerDbSpec")) 
     fx.await(fx.db.run(sql"select pid from pg_stat_activity where application_name = $appName".as[Int]))
 
   case class Rig(listener: ActorRef, status: TestProbe, teams: TestProbe, contests: ConcurrentLinkedQueue[Contest],
-                 listening: TestProbe)
+                 listening: TestProbe, removed: ConcurrentLinkedQueue[Int])
 
   /** Starts a listener with probes as targets, waits until it listens, runs the body, then stops it. */
   private def withListener(body: Rig => Unit): Unit = {
@@ -43,12 +43,13 @@ class NotifyListenerDbSpec extends TestKit(ActorSystem("NotifyListenerDbSpec")) 
       val listening = TestProbe()
       system.eventStream.subscribe(listening.ref, classOf[NotifyListener.Listening])
       val contests = new ConcurrentLinkedQueue[Contest]()
+      val removed = new ConcurrentLinkedQueue[Int]()
       val settings = NotifyListener.ConnectionSettings(fx.url.get, fx.user, fx.password, appName)
       val listener = system.actorOf(NotifyListener.props(settings, fx.db,
-        NotifyListener.Targets(status.ref, teams.ref, c => { contests.add(c); () })))
+        NotifyListener.Targets(status.ref, teams.ref, c => { contests.add(c); () }, id => { removed.add(id); () })))
       try {
         listening.expectMsgType[NotifyListener.Listening](10.seconds)
-        body(Rig(listener, status, teams, contests, listening))
+        body(Rig(listener, status, teams, contests, listening, removed))
       } finally {
         system.eventStream.unsubscribe(listening.ref)
         listener ! PoisonPill
@@ -90,19 +91,44 @@ class NotifyListenerDbSpec extends TestKit(ActorSystem("NotifyListenerDbSpec")) 
     }
   }
 
-  test("round_changed delivers ContestChanged for a current round and nothing for a round with null times") {
+  test("round_changed delivers ContestChanged for a current round and ContestRemoved for a round with null times") {
     withListener { rig =>
       val r = fx.round
       exec(sqlu"update contest_rounds set ends_at = timestamptz '2030-01-01 15:00:00+00' where id = $r")
       val got = rig.status.expectMsgType[StatusActor.ContestChanged](2.seconds)
       assert(got.c.id == r)
       assert(got.c.endTime.getMillis == new org.joda.time.DateTime(2030, 1, 1, 15, 0, org.joda.time.DateTimeZone.UTC).getMillis)
+      rig.teams.expectMsg(2.seconds, StatusActor.TeamsChanged(r))
       awaitCond(rig.contests.size == 1, 2.seconds)
       assert(rig.contests.peek().id == r)
       val n = fx.nullRound
       exec(sqlu"update contest_rounds set name = name where id = $n")
-      rig.status.expectNoMessage(1.second)
+      rig.status.expectMsg(2.seconds, StatusActor.ContestRemoved(n))
+      rig.teams.expectMsg(2.seconds, StatusActor.TeamsChanged(n))
+      awaitCond(rig.removed.contains(n), 2.seconds)
+      rig.status.expectNoMessage(300.millis)
       assert(rig.contests.size == 1)
+    }
+  }
+
+  test("a round that becomes invalid or vanishes delivers ContestRemoved, once per notification") {
+    withListener { rig =>
+      val r = fx.round
+      exec(sqlu"update contest_rounds set ends_at = null where id = $r")
+      rig.status.expectMsg(2.seconds, StatusActor.ContestRemoved(r))
+      rig.teams.expectMsg(2.seconds, StatusActor.TeamsChanged(r))
+      awaitCond(rig.removed.size == 1 && rig.removed.peek() == r, 2.seconds)
+      rig.status.expectNoMessage(300.millis)
+      assert(rig.contests.isEmpty)
+      // Deleted: contest_rounds has no DELETE trigger (teacher-web 00006), so the notification its deletion would
+      // need is sent by hand; the listener must treat the vanished id the same way.
+      exec(sqlu"delete from problems where round_id = $r")
+      exec(sqlu"delete from round_credentials where round_id = $r")
+      exec(sqlu"delete from contest_rounds where id = $r")
+      one(sql"select pg_notify('round_changed', ${r.toString})::text".as[String])
+      rig.status.expectMsg(2.seconds, StatusActor.ContestRemoved(r))
+      awaitCond(rig.removed.size == 2, 2.seconds)
+      rig.status.expectNoMessage(300.millis)
     }
   }
 
@@ -136,7 +162,7 @@ class NotifyListenerDbSpec extends TestKit(ActorSystem("NotifyListenerDbSpec")) 
   test("malformed or unknown payloads are skipped and the listener keeps going") {
     withListener { rig =>
       for ((ch, p) <- Seq("testing_finished" -> "abc", "testing_finished" -> "999999999", "eval_finished" -> "",
-        "round_changed" -> "x", "round_changed" -> "999999999", "credential_changed" -> "1", "credential_changed" -> "a:b",
+        "round_changed" -> "x", "credential_changed" -> "1", "credential_changed" -> "a:b",
         "participant_changed" -> "1.5"))
         one(sql"select pg_notify($ch, $p)::text".as[String])
       rig.status.expectNoMessage(500.millis)
@@ -178,6 +204,40 @@ class NotifyListenerDbSpec extends TestKit(ActorSystem("NotifyListenerDbSpec")) 
         teams ! StatusActor.TeamsChanged(r)
         awaitCond(!kids.contains(k), 5.seconds, 50.millis)
       } finally system.stop(teams)
+    }
+  }
+
+  test("no periodic refresh: TeamStateActor drops a removed round, ProblemStateActor re-reads problems on ContestChanged") {
+    assume(fx.url.isDefined)
+    fx.withFixture {
+      val r = fx.round
+      val teams = system.actorOf(TeamStateActor.props(fx.db))
+      val problems = system.actorOf(ProblemStateActor.props(fx.db))
+      try {
+        val probe = TestProbe()
+        def kids: Map[Int, Team] = {
+          probe.send(teams, TeamStateActor.GetTeams(r))
+          probe.expectMsgType[Map[Int, Team]](5.seconds)
+        }
+        def problemIds: Seq[String] = {
+          probe.send(problems, ProblemStateActor.GetProblems(r))
+          probe.expectMsgType[Seq[org.stingray.contester.dbmodel.Problem]](5.seconds).map(_.id)
+        }
+        awaitCond(kids.nonEmpty, 10.seconds)
+        teams ! StatusActor.ContestRemoved(r)
+        assert(kids.isEmpty)
+        awaitCond(problemIds == Seq("Z"), 10.seconds)
+        val s = fx.season
+        exec(sqlu"insert into problems (season_id, round_id, problem_id, name, tests, max_points) values ($s, $r, 'Y', 'Why', 1, 5)")
+        assert(problemIds == Seq("Z"), "problems are not polled")
+        problems ! StatusActor.ContestChanged(Contest(r, "x", org.joda.time.DateTime.now, org.joda.time.DateTime.now, None, s))
+        awaitCond(problemIds == Seq("Y", "Z"), 5.seconds, 50.millis)
+        problems ! StatusActor.ContestRemoved(r)
+        assert(problemIds.isEmpty)
+      } finally {
+        system.stop(teams)
+        system.stop(problems)
+      }
     }
   }
 }

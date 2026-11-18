@@ -93,10 +93,13 @@ object NotifyListener {
   }
 
   /**
-    * Where the events go: `status` gets FinishedTesting, CustomTestResult and ContestChanged (the messages
-    * it already handles), `teams` gets TeamsChanged, and `contestChanged` is also told of a changed round (the live monitor).
+    * Where the events go: `status` gets FinishedTesting, CustomTestResult, ContestChanged and ContestRemoved (it feeds
+    * the round clock), `teams` gets TeamsChanged (also for every round_changed: a round that became usable needs its
+    * teams, one that did not is dropped), and the hooks are told of a changed or removed round (the live monitor, the
+    * problems).
     */
-  case class Targets(status: ActorRef, teams: ActorRef, contestChanged: Contest => Unit = _ => ())
+  case class Targets(status: ActorRef, teams: ActorRef, contestChanged: Contest => Unit = _ => (),
+                     contestRemoved: Int => Unit = _ => ())
 
   /** Published on the event stream each time the listener has (re)connected and issued its LISTENs. */
   case class Listening(applicationName: String)
@@ -259,10 +262,14 @@ class NotifyListener(settings: NotifyListener.ConnectionSettings, db: JdbcBacken
         Rounds.currentRound(db, id).map {
           case Some(c) =>
             targets.status.tell(StatusActor.ContestChanged(c), self)
+            targets.teams.tell(StatusActor.TeamsChanged(id), self)
             Try(targets.contestChanged(c)).failed.foreach(e => logger.warn(s"contest change hook for round $id: $e"))
           case None =>
-            // Gone, of another season, or without times: such a round is unusable, so nobody is told.
-            logger.info(s"round $id is not a current round with times; ignored")
+            // Gone, of another season, or without times: such a round is unusable and is dropped everywhere.
+            logger.info(s"round $id is not a current round with times; removing it")
+            targets.status.tell(StatusActor.ContestRemoved(id), self)
+            targets.teams.tell(StatusActor.TeamsChanged(id), self)
+            Try(targets.contestRemoved(id)).failed.foreach(e => logger.warn(s"contest removal hook for round $id: $e"))
         }
       case Some(CredentialChanged(round, _)) =>
         targets.teams.tell(StatusActor.TeamsChanged(round), self)

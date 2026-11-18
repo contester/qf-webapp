@@ -42,7 +42,7 @@ class LiveMonitorControllerSpec extends TestKit(ActorSystem("LiveMonitorControll
   }
 
   private def cfg(enabled: Boolean = true, max: Int = 1000) =
-    LiveMonitorConfig(enabled, 30.seconds, 60.seconds, (1 to 10).toSet, max)
+    LiveMonitorConfig(enabled, (1 to 10).toSet, max)
 
   private val t0 = DateTime.now.minusHours(1)
   private def contest(id: Int) = Contest(id, s"C$id", t0, t0.plusHours(5), None, 1)

@@ -8,7 +8,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scala.concurrent.duration._
 
 class LiveWiringSpec extends AnyFunSuite {
-  private def cfg(enabled: Boolean) = LiveMonitorConfig(enabled, 30.seconds, 60.seconds, (1 to 10).toSet, 1000)
+  private def cfg(enabled: Boolean) = LiveMonitorConfig(enabled, (1 to 10).toSet, 1000)
 
   test("disabled: no-op hooks, the actor factory is never called, the old monitor starts") {
     var started = 0
@@ -56,6 +56,7 @@ class LiveWiringSpec extends AnyFunSuite {
       override def rejudged(id: Int): Unit = calls += s"rejudged $id"
       override def teamChanged(contest: Int, team: Team): Unit = calls += s"team $contest ${team.id}"
       override def contestChanged(contest: Contest): Unit = calls += s"contest ${contest.id}"
+      override def contestRemoved(roundId: Int): Unit = calls += s"removed $roundId"
     }
     val hooks = LiveWiring.deferred { resolved += 1; target }
     assert(resolved == 0)
@@ -64,8 +65,9 @@ class LiveWiringSpec extends AnyFunSuite {
     hooks.rejudged(5)
     hooks.teamChanged(1, Team(7, 0, "", "School", "City", None))
     hooks.contestChanged(Contest(3, "c", new DateTime(0), new DateTime(0), None, 1))
+    hooks.contestRemoved(3)
     assert(resolved == 1)
-    assert(calls == Seq("arrived 1 5", "finished 1 5 true 3 100", "rejudged 5", "team 1 7", "contest 3"))
+    assert(calls == Seq("arrived 1 5", "finished 1 5 true 3 100", "rejudged 5", "team 1 7", "contest 3", "removed 3"))
   }
 
   test("deferred hooks swallow an exception from resolving or calling the target") {

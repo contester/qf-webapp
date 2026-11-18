@@ -30,14 +30,15 @@ object StatusActor {
     Props(new StatusActor(db, palevo, teamLookup, liveHooks, timeEvents, countdown))
 
   case object Init
-  case object Tick
-  case object RefreshTick
-  case class NewMultiContestState(cs: Iterable[Contest])
-  /** A contest row was changed by the application; it is applied at once instead of at the next Tick. */
+  /**
+    * A round's row changed (round_changed): its new value. Contests are loaded once at start-up; afterwards they change
+    * only through this and ContestRemoved, never by a rescan.
+    */
   case class ContestChanged(c: Contest)
+  /** A round vanished or became unusable (null times, not of the current season): it is dropped everywhere. */
+  case class ContestRemoved(roundId: Int)
   /** The participants or credentials of a round changed in the database; handled by TeamStateActor, which reloads it. */
   case class TeamsChanged(roundId: Int)
-  private case class RescanResult(contests: Seq[Contest], startedAt: Long)
   case class Ack(loggedInTeam: LoggedInTeam, msgid: Long)
   case class JoinAdmin(c: Int)
   case class JoinUser(contest: Int, team: Int)
@@ -79,6 +80,27 @@ object StatusActor {
 
   private val userPing = Event("", None, Some("ping"))
 
+  private def roundJson(c: Contest): JsObject =
+    Json.obj("round" -> c.id, "startTime" -> c.startTime.getMillis, "endTime" -> c.endTime.getMillis, "isFinished" -> c.isFinished)
+
+  /** The SSE event for a round edge: `round_started` / `round_ended` with the round id and its times (epoch millis). */
+  def roundEvent(edge: RoundClock.RoundEdge, c: Contest): Event = {
+    val name = edge match {
+      case _: RoundClock.Started => "round_started"
+      case _: RoundClock.Ended => "round_ended"
+    }
+    Event(Json.stringify(roundJson(c)), None, Some(name))
+  }
+
+  /** The SSE event for a round whose start or end moved: `round_rescheduled` with the new times. */
+  def rescheduledEvent(c: Contest): Event = Event(Json.stringify(roundJson(c)), None, Some("round_rescheduled"))
+
+  def rescheduled(old: Contest, updated: Contest): Boolean =
+    old.startTime.getMillis != updated.startTime.getMillis || old.endTime.getMillis != updated.endTime.getMillis
+
+  /** A round event for the streams of one round (its participants and admins). */
+  private case class RoundPush(round: Int, event: Event)
+
   case class StatusActorInitialState(msgs: Iterable[Message2],
                                      storedClarificationRequests: Map[Int, Seq[Long]],
                                      clarifications: ClarificationsInitialState,
@@ -107,11 +129,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
   }
 
 
-  private[this] val tick = {
-    import scala.concurrent.duration._
-    context.system.scheduler.scheduleWithFixedDelay(0 seconds, 10 seconds, self, Tick)
-  }
-
   private[this] val tickDuration = {
     import scala.concurrent.duration._
     30 seconds
@@ -120,7 +137,9 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
   private[this] val (contestOut2, contestChannel2) = Concur.broadcast[Contest]()
   private[this] val contestStates = mutable.Map[Int, Contest]()
   private[this] val timeTracker = new ContestTimeTracker(countdown)
-  private[this] val rowGuard = new ContestRowGuard
+  // The exact deadline timer for round starts and ends; created once the contests are loaded.
+  private[this] var roundClock: Option[akka.actor.ActorRef] = None
+  private[this] val (roundOut, roundChannel) = Concur.broadcast[RoundPush]()
   private[this] val (msg2Out, msg2Channel) = Concur.broadcast[Message2]()
   private[this] val unacked = mutable.Map[(Int, Int), mutable.Map[Long, Message2]]()
   private[this] val (rowsOut, rowsChan) = Concur.broadcast[SubmitRows]()
@@ -215,6 +234,28 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
       m.remove(id)
     }.headOption
 
+  /** Palevo's contest time events when this actor is their producer (the live monitor is off). Never throws. */
+  private def observeTimes(c: Contest): Unit =
+    StatusActor.timeEventsOf(timeEvents, timeTracker.observe, c, com.github.nscala_time.time.Imports.DateTime.now) match {
+      case scala.util.Success(events) => events.foreach(e => Try(palevo.send(e)).failed.foreach(t =>
+        logger.warn(s"cannot send ${e.eventType} for contest ${c.id}: $t")))
+      case scala.util.Failure(t) => logger.warn(s"cannot track the times of contest ${c.id}: $t")
+    }
+
+  /** A round's new row: stored, streamed as the `contest` event, and pushed as `round_rescheduled` when its times moved. */
+  private def applyContest(c: Contest): Unit = {
+    observeTimes(c)
+    val old = contestStates.get(c.id)
+    if (old.isEmpty || old.get != c) {
+      contestStates.put(c.id, c)
+      contestChannel2.offer(c)
+    }
+    for (o <- old if rescheduled(o, c))
+      roundChannel.offer(RoundPush(c.id, rescheduledEvent(c)))
+  }
+
+  private def roundEvents(contest: Int): Source[Event, NotUsed] = roundOut.filter(_.round == contest).map(_.event)
+
   private def contestForPalevo(contest: Int): PContest =
     contestStates.get(contest).map(EventBuilders.contestOf).getOrElse(PContest(contest, ""))
 
@@ -276,6 +317,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
       for (c <- contests) {
         contestStates.put(c.id, c)
       }
+      roundClock = Some(context.actorOf(RoundClockActor.props(contests.toSeq, Seq(self)), "round-clock"))
 
       for (msg <- msgs)
         catchMsg(msg)
@@ -397,45 +439,29 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
 
     case msg2: Message2 => catchMsg(msg2)
 
-    case NewMultiContestState(cs) => {
-      for (c <- cs) {
-        StatusActor.timeEventsOf(timeEvents, timeTracker.observe, c, com.github.nscala_time.time.Imports.DateTime.now) match {
-          case scala.util.Success(events) => events.foreach(e => Try(palevo.send(e)).failed.foreach(t =>
-            logger.warn(s"cannot send ${e.eventType} for contest ${c.id}: $t")))
-          case scala.util.Failure(t) => logger.warn(s"cannot track the times of contest ${c.id}: $t")
-        }
-        val old = contestStates.get(c.id)
-        if (old.isEmpty || old.get != c) {
-          contestStates.put(c.id, c)
-          contestChannel2.offer(c)
-        }
-      }
-    }
+    // Applied in place (not re-sent to self), so a ContestRemoved right behind it can never be overtaken.
+    case m @ ContestChanged(c) =>
+      roundClock.foreach(_ ! m)
+      applyContest(c)
 
-    case ContestChanged(c) =>
-      rowGuard.changed(c.id)
-      self ! NewMultiContestState(Seq(c))
+    case m @ ContestRemoved(id) =>
+      roundClock.foreach(_ ! m)
+      if (contestStates.remove(id).isDefined) logger.info(s"round $id is gone or no longer usable; dropped")
 
-    case Tick => {
-      val started = rowGuard.beginRescan()
-      models.Rounds.currentRounds(db).map { contests =>
-        self ! RescanResult(contests, started)
-      }
-    }
-
-    // A rescan that read the table before an edit that has been applied since would put the old row back.
-    case RescanResult(contests, started) =>
-      self ! NewMultiContestState(contests.filter(c => rowGuard.believes(c.id, started)))
+    case RoundClockActor.Fired(edge, c) =>
+      // TODO(task18): palevo's phase and countdown events from the clock's edges.
+      observeTimes(c)
+      roundChannel.offer(RoundPush(c.id, roundEvent(edge, c)))
 
     case JoinAdmin(c: Int) => {
       import ContestWrites._
       val enum = Try {
-        val pings = Source.tick(tickDuration, tickDuration, userPing)
+        val pings = Source.tick(tickDuration, tickDuration, userPing) // SSE keep-alive; reads nothing
         val clars = Source.apply[ClarificationRequestState](Seq(ClarificationRequestState(c, pendingClarificationRequests(c).size, newRequest = false)).toList)
             .concat(clr2Out.filter(_.contest == c)) via EventSource.flow
         Source.combine(
           contestStreamSource(c) via EventSource.flow,
-          pings, clars)(Merge(_))
+          pings, clars, roundEvents(c))(Merge(_))
       }
       sender ! enum
     }
@@ -471,6 +497,8 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
         clrPostOut.filter(_.contest == contest) via EventSource.flow,
         msg2Out.filter(p => p.contest == contest && p.team == team) via EventSource.flow,
         rowsOut.filter(p => p.contest == contest && p.team == team) via EventSource.flow,
+        roundEvents(contest),
+        // SSE keep-alive comment; it reads nothing.
         Source.tick(tickDuration, tickDuration, userPing)
       )(Merge(_))
 
@@ -481,7 +509,6 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
   @throws[Exception](classOf[Exception])
   override def postStop(): Unit = {
     logger.debug(s"Disconnected")
-    tick.cancel()
     super.postStop()
   }
 }

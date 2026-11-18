@@ -157,7 +157,7 @@ class MyComponents(context: ApplicationLoader.Context)
   lazy val notifyListener: ActorRef = actorSystem.actorOf(NotifyListener.props(
     NotifyListener.ConnectionSettings.fromConfig(configuration), dbConfig.db,
     NotifyListener.Targets(statusActorModel.statusActor, statusActorModel.teamStateActor,
-      c => { liveHooks.contestChanged(c); () })), "notify-listener")
+      statusActorModel.contestChanged, statusActorModel.contestRemoved)), "notify-listener")
 
   lazy val homeController = wire[_root_.controllers.Application]
   lazy val qAndAController = wire[_root_.controllers.QandA]

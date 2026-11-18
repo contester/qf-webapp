@@ -102,7 +102,7 @@ class BoardAccessSpec extends TestKit(ActorSystem("BoardAccessSpec", ConfigFacto
   private def controller(rounds: Map[Int, Contest]) = {
     val asked = new java.util.concurrent.atomic.AtomicInteger(0)
     val source = BoardSource(id => Future.successful(rounds.get(id)), _ => { asked.incrementAndGet(); Future.successful(board) })
-    (new PublicMonitor(cc, LiveMonitorConfig(enabled = false, 30.seconds, 60.seconds, Set.empty, 10),
+    (new PublicMonitor(cc, LiveMonitorConfig(enabled = false, Set.empty, 10),
       LiveMonitorRef(None), source, new live.ConnectionStats), asked)
   }
 

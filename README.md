@@ -67,13 +67,13 @@ The scoreboard is pushed to browsers over server-sent events and replaces the po
 (all optional):
 
     monitor.disable_new_monitor = false  # true switches the live monitor off (restart qf); the old monitor runs instead
-    monitor.static_interval = 30s        # how often the static public pages are rewritten
-    monitor.crosscheck_interval = 60s    # reload from the database and compare; 0 disables
     monitor.public_contests = [1,...,10] # contests served on /public/monitor
     monitor.public_max_connections = 1000
     monitor.static_location = "/path"    # directory for the static pages; unset = no static files
 
-Static files are written only for contests with id < 11 (hardcoded, independent of `monitor.public_contests`).
+Static files are written only for contests with id < 11 (hardcoded, independent of `monitor.public_contests`), when
+the board changes. The old keys `monitor.static_interval` and `monitor.crosscheck_interval` are ignored: nothing in qf
+runs on an interval (see "No polling" below).
 With the live monitor on, the live actor feeds palevo's standings events; with it off, the old monitor does.
 
 Three audiences, each page with an `/events` stream next to it:
@@ -89,13 +89,10 @@ shows up before the stream connects); the stream then replaces it. If the live m
 second the page is served with an empty box and the stream fills it. These pages are sent `Cache-Control: no-store`.
 
 Editing a team (not rated, name, school, number) updates the team list in memory and tells the live monitor, which
-rebuilds the boards and sends every stream a whole `board` event; no waiting for the cross-check. Editing a school
-is not covered: it shows up at the next cross-check.
+rebuilds the boards and sends every stream a whole `board` event.
 
-Editing a contest (the edit form, or moving it earlier or later) tells the status actor and the live monitor the new
-row at once. The live monitor still re-reads the contests every 5 minutes (`LiveTimings.contestPoll`), only to find
-contests that were added or changed in the database behind the application's back; such a change can take that long to
-show. A poll that read the database before an edit was sent is ignored for that contest.
+A change of a round in teacher-web (`round_changed`) reaches the status actor, its round clock and the live monitor at
+once; a round whose times are cleared, or that is no longer in the current season, is dropped from all of them.
 
 Between freeze_time and expose_time a submit that arrived after the freeze is shown as `?` on the freezing board
 (a contest with freeze_time >= end_time has no freeze). A `?` also appears on every board for a submit that is not
@@ -104,9 +101,19 @@ other team. At expose_time the public and team boards become the real board; `ca
 
 Rollback: set `monitor.disable_new_monitor = true` and restart qf. No live actor is created, the hooks do
 nothing, and the old monitor (palevo and static files) starts again. Remove the key and restart to go back.
-With the live monitor on, a malformed `static_interval`, `crosscheck_interval`, `public_contests` or
-`public_max_connections` stops qf at boot (fail-fast).
+With the live monitor on, a malformed `public_contests` or `public_max_connections` stops qf at boot (fail-fast).
 `monitor.disable_new_monitor = true` ignores all the other live keys, so it always works as the rollback switch.
+
+## No polling
+
+qf never re-reads the database on an interval. Contests, teams and problems are loaded once at start-up and then
+follow the notifications (`round_changed`, `credential_changed`, `participant_changed`). Round starts and ends come
+from one exact single-shot timer (`actors.RoundClock`), armed for the next deadline and re-armed on every round change
+and after it fires; each edge is pushed to the round's participants and admins as a `round_started` / `round_ended`
+server-sent event, and a moved round as `round_rescheduled`. On start-up the clock announces nothing that already
+happened (a running round gets no `round_started`). The only other timers are SSE keep-alive comments and
+retries after a failure. A change of the `problems` table alone has no notification: it is seen after any
+`round_changed` or a restart.
 
 ## TODO
 

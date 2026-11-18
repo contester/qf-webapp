@@ -37,8 +37,7 @@ trait LiveActorFixtures { this: TestKit =>
   def rec(id: Int, t: Int, p: String, at: DateTime, state: SubmitState = live.Pending): SubmitRec =
     SubmitRec(id, t, p, at, ((at.getMillis - t0.getMillis) / 1000).toInt, state)
 
-  val defaultCfg = LiveMonitorConfig(enabled = true, staticInterval = 30.seconds,
-    crosscheckInterval = 60.seconds, publicContests = (1 to 10).toSet, publicMaxConnections = 1000)
+  val defaultCfg = LiveMonitorConfig(enabled = true, publicContests = (1 to 10).toSet, publicMaxConnections = 1000)
 
   val defaultTimings = LiveTimings(scheduled = false, reloadGap = Duration.Zero, ping = 1.hour)
 
@@ -63,7 +62,7 @@ trait LiveActorFixtures { this: TestKit =>
                         statusRows: StatusRows = NoStatusRows) {
     val clock = new FakeClock(now)
     @volatile var contestRows: Seq[Contest] = rows
-    // A poll reads the rows when it starts but only answers when this is completed; a test holds a poll back with it.
+    // The start-up listing reads the rows when it starts but only answers when this is completed.
     @volatile var pollGate: Future[Unit] = Future.successful(())
     @volatile var data: Map[Int, ContestData] =
       rows.map(c => c.id -> ContestData(problems, teams, subs.getOrElse(c.id, Nil))).toMap ++ overrideData

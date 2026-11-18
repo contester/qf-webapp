@@ -14,6 +14,8 @@ trait LiveHooks {
   def teamChanged(contest: Int, team: org.stingray.contester.dbmodel.Team): Unit
   /** A contest row was changed by the application; `contest` is the whole new row. */
   def contestChanged(contest: org.stingray.contester.dbmodel.Contest): Unit
+  /** A round vanished or became unusable; the monitor drops it. */
+  def contestRemoved(roundId: Int): Unit
 }
 
 object NoopLiveHooks extends LiveHooks {
@@ -22,6 +24,7 @@ object NoopLiveHooks extends LiveHooks {
   override def rejudged(id: Int): Unit = ()
   override def teamChanged(contest: Int, team: org.stingray.contester.dbmodel.Team): Unit = ()
   override def contestChanged(contest: org.stingray.contester.dbmodel.Contest): Unit = ()
+  override def contestRemoved(roundId: Int): Unit = ()
 }
 
 class ActorLiveHooks(ref: ActorRef) extends LiveHooks {
@@ -42,4 +45,6 @@ class ActorLiveHooks(ref: ActorRef) extends LiveHooks {
 
   override def contestChanged(contest: org.stingray.contester.dbmodel.Contest): Unit =
     tell(LiveMonitorActor.ContestChanged(contest))
+
+  override def contestRemoved(roundId: Int): Unit = tell(LiveMonitorActor.ContestRemoved(roundId))
 }

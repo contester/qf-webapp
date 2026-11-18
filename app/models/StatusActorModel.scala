@@ -29,10 +29,19 @@ class StatusActorModel (dbConfig: DatabaseConfig[JdbcProfile], system: ActorSyst
   def getContest(contest: Int)(implicit timeout: akka.util.Timeout, ec: ExecutionContext): Future[Option[Contest]] =
     Ask[GetSingleContestResult](statusActor, StatusActor.GetSingleContest(contest)).map(_.c)
 
-  /** A contest row was changed through the application: the status actor and the live monitor learn of it at once. */
+  /**
+    * The round-change hooks of the notification listener, besides the status actor (which feeds its round clock) and
+    * the team state actor it tells itself: the problems and the live monitor.
+    */
   def contestChanged(c: Contest): Unit = {
-    statusActor ! StatusActor.ContestChanged(c)
+    problemStateActor ! StatusActor.ContestChanged(c)
     scala.util.Try(liveHooks.contestChanged(c))
+    ()
+  }
+
+  def contestRemoved(roundId: Int): Unit = {
+    problemStateActor ! StatusActor.ContestRemoved(roundId)
+    scala.util.Try(liveHooks.contestRemoved(roundId))
     ()
   }
 }

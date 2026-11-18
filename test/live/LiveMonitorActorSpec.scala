@@ -161,70 +161,40 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     f.stop()
   }
 
-  test("cross-check finds a difference, logs it, replaces the state and sends the board") {
-    val f = new Fixture(running)
-    val p = f.subscribe(JoinPublic(1))
-    next(p, "board")
-    val missed = Seq(rec(41, 3, "C", running, ok))
-    f.data = Map(1 -> ContestData(problems, teams, missed))
-    EventFilter.warning(pattern = "cross-check.*contest 1", occurrences = 1).intercept {
-      f.actor ! CrossCheck
-    }
-    assert(next(p, "board") == LiveJson.board(boardOf(contest(), missed, running, Freezing)))
-    f.stop()
-  }
-
-  test("with a zero cross-check interval no cross-check runs") {
-    val f = new Fixture(running, cfg = defaultCfg.copy(crosscheckInterval = Duration.Zero))
-    f.barrier()
-    f.actor ! CrossCheck
-    f.barrier()
-    Thread.sleep(200)
-    assert(f.loads.get == 1)
-    f.stop()
-  }
-
-  test("a submit with a rejudge in flight is excluded from the cross-check") {
+  test("a submit with a rejudge in flight is excluded from a reload's comparison") {
     val solved = rec(51, 1, "A", t0.plusMinutes(30), ok)
     val f = new Fixture(running, subs = Map(1 -> Seq(solved)))
     val real = f.subscribe(JoinAdmin(1, real = true))
     next(real, "board")
     f.actor ! RejudgeRequested(51)
     assert((next(real, "row") \ "row" \ "cells" \ "A" \ "t").as[String] == "pend")
-    EventFilter.warning(pattern = "cross-check", occurrences = 0).intercept {
-      f.actor ! CrossCheck
-      awaitCond(f.loads.get == 2, 5.seconds)
-      real.expectNoMessage(500.millis)
-    }
+    // A finish for an id the contest does not know makes it reload from the database.
+    f.actor ! Finished(1, 999, compiled = true, 3, 3)
+    awaitCond(f.loads.get == 2, 5.seconds)
+    real.expectNoMessage(500.millis)
     assert(cellT(next(f.subscribe(JoinAdmin(1, real = true)), "board"), 1, "A") == "pend")
     f.actor ! Finished(1, 51, compiled = true, 3, 3)
     assert((next(real, "row") \ "row" \ "cells" \ "A" \ "t").as[String] == "ok")
     f.stop()
   }
 
-  test("static file is written once per interval when dirty and not when clean") {
+  test("the static file is written at load and on each change of the freezing board, without any interval") {
     val dir = Files.createTempDirectory("live-static").toFile
     val f = new Fixture(running, rows = Seq(contest(), contest(11)), staticDir = Some(dir))
     f.barrier()
-    f.actor ! StaticCheck
-    f.barrier()
     assert(f.rendered.get == 1)
     assert(new File(dir, "1.html").exists() && !new File(dir, "11.html").exists())
-    f.actor ! StaticCheck
-    f.barrier()
-    assert(f.rendered.get == 1)
 
     f.actor ! Arrived(1, rec(61, 1, "A", running))
-    f.actor ! StaticCheck
-    f.barrier()
-    assert(f.rendered.get == 1)
-    f.clock.ms = 30000
-    f.actor ! StaticCheck
     f.barrier()
     assert(f.rendered.get == 2)
-    f.actor ! StaticCheck
+    // a finish hidden by the freeze leaves the freezing board, and so the file, alone
+    f.actor ! Finished(1, 61, compiled = true, 3, 3)
     f.barrier()
     assert(f.rendered.get == 2)
+    f.actor ! Arrived(1, rec(62, 2, "B", running))
+    f.barrier()
+    assert(f.rendered.get == 3)
     f.stop()
     dir.listFiles().foreach(_.delete())
     dir.delete()
@@ -299,7 +269,7 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
 
   // ---- deadline timers (the scheduled actor, on the system clock) ----
 
-  private val scheduled = LiveTimings(scheduled = true, reloadGap = Duration.Zero, ping = 1.hour, heartbeat = 1.hour)
+  private val scheduled = LiveTimings(scheduled = true, reloadGap = Duration.Zero, ping = 1.hour)
 
   private def startingIn(d: FiniteDuration, id: Int = 1): Contest = {
     val start = DateTime.now.plusMillis(d.toMillis.toInt)
@@ -309,7 +279,7 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
   private def startedNow(sink: CollectingSink) =
     sink.events.asScala.exists { case e: ContestStarting => e.inMinutes == 0; case _ => false }
 
-  test("the monitor wakes at the start by itself, without a tick or a heartbeat") {
+  test("the monitor wakes at the start by itself, on its one deadline timer") {
     val sink = new CollectingSink
     val f = new Fixture(DateTime.now, rows = Seq(startingIn(2500.millis)), palevoSink = sink, timings = scheduled, realClock = true)
     awaitCond(startedNow(sink), 8.seconds)
@@ -326,7 +296,7 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
       f.actor ! ContestChanged(f.contestRows.head)
       Thread.sleep(20)
     }
-    assert(startedNow(sink), "the start was not announced although the timer was due; it would wait for the heartbeat")
+    assert(startedNow(sink), "the start was not announced although the timer was due")
     f.stop()
   }
 
@@ -389,7 +359,8 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     probe.expectMsgType[akka.actor.Status.Failure](5.seconds)
 
     f.data = f.data + (2 -> ContestData(problems, teams, Nil))
-    f.actor ! PollContests
+    // No contest poll any more: the next change of that round retries it.
+    f.actor ! ContestChanged(contest(2))
     awaitCond({
       probe.send(f.actor, JoinAdmin(2, real = true))
       probe.expectMsgType[AnyRef](5.seconds).isInstanceOf[Source[_, _]]
@@ -397,8 +368,8 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     f.stop()
   }
 
-  test("a failed reload is retried and its unknown id is then applied (no cross-check)") {
-    val f = new Fixture(running, cfg = defaultCfg.copy(crosscheckInterval = Duration.Zero))
+  test("a failed reload is retried and its unknown id is then applied") {
+    val f = new Fixture(running)
     val p = f.subscribe(JoinAdmin(1, real = true))
     next(p, "board")
     f.data = Map(1 -> ContestData(problems, teams, Seq(rec(95, 2, "C", running))))
@@ -472,7 +443,7 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     f.stop()
   }
 
-  test("a rejudge whose finish is lost heals at the first cross-check after the age limit") {
+  test("a rejudge whose finish is lost heals at the first reload after the age limit") {
     val solved = rec(97, 1, "A", t0.plusMinutes(30), ok)
     val f = new Fixture(running, subs = Map(1 -> Seq(solved)), timings = defaultTimings.copy(rejudgeMaxAge = 10.seconds))
     val real = f.subscribe(JoinAdmin(1, real = true))
@@ -480,19 +451,31 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     f.actor ! RejudgeRequested(97)
     assert((next(real, "row") \ "row" \ "cells" \ "A" \ "t").as[String] == "pend")
 
+    // Reloads are caused by finishes of ids the contest does not know.
     f.clock.ms = 5000
-    EventFilter.warning(pattern = "cross-check", occurrences = 0).intercept {
-      f.actor ! CrossCheck
-      awaitCond(f.loads.get == 2, 5.seconds)
-      real.expectNoMessage(500.millis)
-    }
+    f.actor ! Finished(1, 998, compiled = true, 3, 3)
+    awaitCond(f.loads.get == 2, 5.seconds)
+    real.expectNoMessage(500.millis)
     assert(cellT(next(f.subscribe(JoinAdmin(1, real = true)), "board"), 1, "A") == "pend")
 
     f.clock.ms = 10000
-    EventFilter.warning(pattern = "cross-check.*contest 1", occurrences = 1).intercept {
-      f.actor ! CrossCheck
-    }
+    f.actor ! Finished(1, 999, compiled = true, 3, 3)
     assert(cellT(next(real, "board"), 1, "A") == "ok")
+    f.stop()
+  }
+
+  test("a removed round is dropped: its streams end, joins fail, and later events for it are ignored") {
+    val f = new Fixture(running, rows = Seq(contest(), contest(2)))
+    val p = TestProbe()
+    val done = f.join(JoinAdmin(2, real = true)).runForeach(e => p.ref ! e)
+    next(p, "board")
+    f.actor ! ContestRemoved(2)
+    scala.concurrent.Await.result(done, 5.seconds)
+    val probe = TestProbe()
+    probe.send(f.actor, JoinAdmin(2, real = true))
+    probe.expectMsgType[akka.actor.Status.Failure](5.seconds)
+    f.actor ! Arrived(2, rec(81, 1, "A", running))
+    next(f.subscribe(JoinAdmin(1, real = true)), "board") // contest 1 keeps working
     f.stop()
   }
 
@@ -503,9 +486,11 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     hooks.submitArrived(1, r)
     hooks.finished(1, 1, compiled = true, 3, 3)
     hooks.rejudged(1)
+    hooks.contestRemoved(4)
     probe.expectMsg(Arrived(1, r))
     probe.expectMsg(Finished(1, 1, compiled = true, 3, 3))
     probe.expectMsg(RejudgeRequested(1))
+    probe.expectMsg(ContestRemoved(4))
     NoopLiveHooks.rejudged(1)
   }
 }

@@ -271,8 +271,6 @@ class LiveLeakSpec extends TestKit(ActorSystem("LiveLeakSpec", ConfigFactory.par
           }
         reals :+= model.board(Real)
         frozens :+= model.board(Freezing)
-        f.clock.ms += 31000
-        f.actor ! StaticCheck
         f.barrier()
         if (d.exists(_.freezing.nonEmpty) || file.exists()) {
           assert(file.exists(), s"seed $s")

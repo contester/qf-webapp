@@ -38,9 +38,15 @@ class ProblemStateActor(db: JdbcBackend#DatabaseDef) extends AnyStateActor[Probl
     problems = v
   }
 
+  /**
+    * Loaded at start-up and again on every ContestChanged (round_changed); a removed round is dropped. There is no
+    * notification for the `problems` table (the bridge writes it at its start-up and on director's ContestEvent), so a
+    * change of problems alone is only seen after a round_changed for any round or a qf restart.
+    */
   override def initialized: Receive = {
     case Refresh => doRefresh()
-    case State(m) => setState(m)
+    case actors.StatusActor.ContestChanged(_) => doRefresh()
+    case actors.StatusActor.ContestRemoved(round) => problems = problems - round
     case GetProblems(contest) => {
       sender() ! problems.getOrElse(contest, Seq.empty)
     }

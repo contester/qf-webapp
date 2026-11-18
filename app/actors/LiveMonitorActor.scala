@@ -28,8 +28,10 @@ object LiveMonitorActor {
   case class RejudgeRequested(id: Int)
   /** A team's details in a contest changed (not rated, name, school, number); `team` is the whole new value. */
   case class TeamChanged(contest: Int, team: Team)
-  /** A contest row was changed (times, name, ...) by the application; `contest` is the whole new row. */
+  /** A contest row changed (round_changed: times, name, ...); `contest` is the whole new row. A new id is loaded. */
   case class ContestChanged(contest: Contest)
+  /** A round vanished or became unusable: dropped, and its streams end. */
+  case class ContestRemoved(contest: Int)
 
   // Each join is answered with a Source[Event, NotUsed] whose first element is the `board` event,
   // or with Status.Failure when the contest is unknown (or, for JoinPublic, not public).
@@ -51,11 +53,8 @@ object LiveMonitorActor {
     */
   case class Snapshot(join: Join)
 
-  // Timer messages; public so tests can drive them with timers switched off.
+  // The deadline wake (the one exact timer, see rearm); public so tests can drive it with timers switched off.
   case object Tick
-  case object StaticCheck
-  case object CrossCheck
-  case object PollContests
 
   case class ContestData(problems: Seq[String], teams: Seq[Team], submits: Seq[SubmitRec])
 
@@ -118,7 +117,7 @@ object LiveMonitorActor {
       new DbStatusRows(id => models.AdminSubmits.row(db, id), teamClient, scheduler)
   }
 
-  /** Wall clock for the boards and palevo; monotonic milliseconds for the static throttle and reload rate limit. */
+  /** Wall clock for the boards and palevo; monotonic milliseconds for the reload rate limit and rejudge ages. */
   trait LiveClock {
     def now(): DateTime
     def millis(): Long
@@ -129,14 +128,11 @@ object LiveMonitorActor {
     override def millis(): Long = System.nanoTime() / 1000000
   }
 
-  case class LiveTimings(// The monitor wakes at the next deadline (see rearm); this is the longest it sleeps, a safety net for clock jumps.
-                         heartbeat: FiniteDuration = 30.seconds,
-                         staticCheck: FiniteDuration = 1.second,
-                         // Only a safety net for contests changed in the database behind the application's back; edits made through it
-                         // arrive as ContestChanged.
-                         contestPoll: FiniteDuration = 5.minutes,
+  case class LiveTimings(// The shortest gap between two reloads of one contest after failures (a retry backoff, not a poll).
                          reloadGap: FiniteDuration = 5.seconds,
+                         // SSE keep-alive comments.
                          ping: FiniteDuration = 30.seconds,
+                         // Retry after the start-up listing of the contests failed.
                          startupRetry: FiniteDuration = 10.seconds,
                          // How long a rejudge may stay in flight (its finish not yet heard) before the database wins.
                          rejudgeMaxAge: FiniteDuration = 30.minutes,
@@ -176,11 +172,11 @@ object LiveMonitorActor {
 
   /**
     * How long to sleep until `deadline` (the earliest moment something can happen): a margin past it so the clock has
-    * reached it, at least 50 ms, and never longer than the heartbeat (the wake is re-armed from there; Akka's scheduler
-    * refuses delays of about 248 days and more). The heartbeat when there is no deadline.
+    * reached it, at least 50 ms, and at most RoundClockActor.MaxDelay (7 days; Akka's scheduler refuses delays of
+    * about 248 days and more, so a farther deadline is re-armed from there). There is no heartbeat.
     */
-  def wakeDelay(deadline: Option[DateTime], now: DateTime, heartbeat: FiniteDuration): FiniteDuration =
-    deadline.fold(heartbeat)(d => (d.getMillis - now.getMillis + 50).max(50L).millis.min(heartbeat))
+  def wakeDelay(deadline: DateTime, now: DateTime): FiniteDuration =
+    (deadline.getMillis - now.getMillis + 50).max(50L).millis.min(RoundClockActor.MaxDelay)
 
   private case object Start
   private case object WakeKey
@@ -188,7 +184,6 @@ object LiveMonitorActor {
   private case class Loaded(contest: Int, result: Try[ContestData])
   private case class Added(contest: Contest, result: Try[ContestData])
   private case class RejudgeContest(id: Int, result: Try[Option[Int]])
-  private case class ContestsPolled(contests: Seq[Contest], generation: Long)
   private case class StartReload(contest: Int)
   private case class Register(contest: Int, viewer: Viewer, queue: BoundedSourceQueue[Event])
   private case class Unregister(contest: Int, queue: BoundedSourceQueue[Event])
@@ -214,15 +209,15 @@ object LiveMonitorActor {
   /** What a viewer without the real board sees before the start: the teams, in board order, and no problems; a not-rated team keeps rank 0. */
   private[actors] def teamsOnly(b: LiveBoard): LiveBoard =
     LiveBoard(Nil, b.rows.map(r => r.copy(score = ACM.Score(0, 0, 0), cells = Map.empty, rank = if (r.rank == 0) 0 else 1)), Map.empty)
-  private val crossCheckReason = "cross-check"
 }
 
 /**
   * Owns one LiveContest per contest, applies submit events to it and streams the boards over SSE.
   *
   * Startup loads every contest before any event is handled (Stash). Each event is applied inside Try: a failure is
-  * logged and the contest is rebuilt from the database (rate-limited). The database is read only at startup, in the
-  * cross-check, for an event about a submit id the contest does not know, and after a failure.
+  * logged and the contest is rebuilt from the database (rate-limited). The database is read only at startup, for a
+  * new round (ContestChanged), for an event about a submit id the contest does not know, and after a failure. Nothing
+  * runs on an interval: the only timers are the exact deadline wake, the reload backoff and the start-up retry.
   *
   * Streams are per-connection queues registered with this actor, so the first `board` event and the later updates
   * come from the same ordered sequence and nothing is lost between the snapshot and the subscription.
@@ -249,7 +244,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
     var teamChanges: Vector[Team] = Vector.empty
   }
 
-  private class ContestState(var live: LiveContest, val throttle: StaticThrottle) {
+  private class ContestState(var live: LiveContest) {
     var loading: Option[Load] = None
     var reloadScheduled = false
     var lastLoadStart: Option[Long] = None
@@ -262,10 +257,6 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
   }
 
   private val contests = mutable.Map.empty[Int, ContestState]
-  // Counts polls started and contest changes received. A poll answers with the number it started under, and
-  // is not believed about a contest that was changed after that: its read of the database may predate the change.
-  private var generation = 0L
-  private val changedAt = mutable.Map.empty[Int, Long]
   private val adding = mutable.Set.empty[Int]
   private val subscribers = mutable.Map.empty[Int, mutable.Map[BoundedSourceQueue[Event], Viewer]]
   // Submit id -> monotonic millis of its rejudge request, until its finish arrives or the entry expires.
@@ -303,45 +294,36 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       val now = clock.now()
       loaded.foreach {
         case (c, Success(d)) => add(c, d, now)
-        case (c, Failure(e)) => log.error(e, s"live monitor: cannot load contest ${c.id}; will retry on the next contest poll")
+        case (c, Failure(e)) => log.error(e, s"live monitor: cannot load contest ${c.id}; will retry on the next change of its round")
       }
-      startTimers()
       rearm(now)
       unstashAll()
       context.become(running)
 
     case Started(Failure(e)) =>
+      // Retry-on-failure of the one start-up listing, not a poll.
       log.error(e, s"live monitor: cannot list contests; retrying in ${timings.startupRetry}")
       timers.startSingleTimer(Start, Start, timings.startupRetry)
 
     case _ => stash()
   }
 
-  private def startTimers(): Unit =
-    if (timings.scheduled) {
-      timers.startTimerWithFixedDelay(Tick, Tick, timings.heartbeat)
-      timers.startTimerWithFixedDelay(StaticCheck, StaticCheck, timings.staticCheck)
-      timers.startTimerWithFixedDelay(PollContests, PollContests, timings.contestPoll)
-      if (cfg.crosscheckInterval > Duration.Zero)
-        timers.startTimerWithFixedDelay(CrossCheck, CrossCheck, cfg.crosscheckInterval)
-    }
-
   /**
     * Adds a freshly loaded contest; its first palevo observation only records state. A contest whose data cannot be
-    * built is skipped (the others keep working) and retried on the next contest poll.
+    * built is skipped (the others keep working) and retried on the next ContestChanged of its round.
     */
   private def add(c: Contest, d: ContestData, now: DateTime): Unit =
     Try(new LiveContest(c, d.problems, d.teams, d.submits, now)) match {
       case Success(lc) =>
-        val st = new ContestState(lc, new StaticThrottle(cfg.staticInterval))
+        val st = new ContestState(lc)
         contests(c.id) = st
         observeTime(c, now)
         guarded(c.id, st) {
           observePalevo(st)
-          st.throttle.markDirty(clock.millis())
+          writeStatic(c.id, st)
         }
       case Failure(e) =>
-        log.error(e, s"live monitor: cannot build contest ${c.id}; will retry on the next contest poll")
+        log.error(e, s"live monitor: cannot build contest ${c.id}; will retry on the next change of its round")
     }
 
   private def youngRejudge(id: Int, ms: Long): Boolean =
@@ -388,7 +370,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
     case Register(cid, viewer, q) => register(cid, viewer, q)
     case Unregister(cid, q) => unregister(cid, q)
 
-    // The check against the clock: on the deadline timer, on the heartbeat, and from tests. Idempotent.
+    // The check against the clock: on the deadline timer, and from tests. Idempotent.
     case Tick =>
       expireRejudges()
       val now = clock.now()
@@ -400,14 +382,8 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
           case Failure(e) => failed(cid, st, e)
         }
       }
-      armedFor = None // the wake that brought us here, or the heartbeat: the next one is chosen afresh
+      armedFor = None // the wake that brought us here (or a 7-day cap): the next one is chosen afresh
       rearm(now)
-
-    case StaticCheck => writeStatic()
-
-    case CrossCheck =>
-      if (cfg.crosscheckInterval > Duration.Zero)
-        contests.foreach { case (cid, st) => if (st.loading.isEmpty) startLoad(cid, st, crossCheckReason) }
 
     case StartReload(cid) =>
       contests.get(cid).foreach { st =>
@@ -417,31 +393,26 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
 
     case Loaded(cid, result) => contests.get(cid).foreach(st => loaded(cid, st, result))
 
-    case PollContests =>
-      generation += 1
-      val started = generation
-      Future.fromTry(Try(contestRows())).flatten.onComplete {
-        case Success(cs) => self ! ContestsPolled(cs, started)
-        case Failure(e) => log.warning(s"live monitor: cannot poll contests: $e")
-      }
-
     case RejudgeContest(id, result) => rejudgeContest(id, result)
 
-    case ContestsPolled(cs, started) =>
-      cs.filterNot(c => changedAt.get(c.id).exists(_ > started)).foreach(contestRow)
-      rearm(clock.now())
-
     case ContestChanged(c) =>
-      generation += 1
-      changedAt.put(c.id, generation)
       contestRow(c)
       rearm(clock.now())
 
+    case ContestRemoved(cid) =>
+      adding -= cid
+      if (contests.remove(cid).isDefined) log.info(s"live monitor: round $cid is gone or no longer usable; dropped")
+      subscribers.remove(cid).foreach(_.keys.foreach(q => Try(q.complete())))
+      armedFor = None
+      rearm(clock.now())
+
     case Added(c, result) =>
+      // Not wanted any more when the round was removed while it loaded.
+      val wanted = adding(c.id)
       adding -= c.id
       result match {
         case Success(d) =>
-          if (!contests.contains(c.id)) add(c, d, clock.now())
+          if (wanted && !contests.contains(c.id)) add(c, d, clock.now())
           rearm(clock.now())
         case Failure(e) => log.warning(s"live monitor: cannot load new contest ${c.id}: $e")
       }
@@ -609,8 +580,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
 
   /**
     * The load did not produce a new state: keep its events for the next load and, when something is waiting for it
-    * (queued unknown ids or a dirty contest), ask for a reload (rate-limited). A plain cross-check that failed just
-    * waits for the next cross-check.
+    * (queued unknown ids or a dirty contest), ask for a reload (rate-limited).
     */
   private def retryLater(cid: Int, st: ContestState, l: Load): Unit = {
     st.waiting = l.waiting ++ st.waiting
@@ -643,10 +613,8 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       case Success(fresh) =>
         val old = st.live
         val diffs = old.differences(fresh)
-        if (diffs.nonEmpty) {
-          val text = s"live monitor: ${l.reason} found differences in contest $cid: ${diffs.take(20).mkString("; ")}"
-          if (l.reason == crossCheckReason) log.warning(text) else log.info(text)
-        }
+        if (diffs.nonEmpty)
+          log.info(s"live monitor: ${l.reason} found differences in contest $cid: ${diffs.take(20).mkString("; ")}")
         val wasDirty = st.dirty
         st.live = fresh
         st.dirty = false
@@ -676,11 +644,11 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       }
   }
 
-  /** After a change: stream it, mark the static file and feed palevo. */
+  /** After a change: stream it, rewrite the static file and feed palevo. */
   private def changed(cid: Int, st: ContestState, d: Delta, freezingChanged: Boolean = true): Unit =
     guarded(cid, st) {
       publish(cid, st, d)
-      if (d.freezing.nonEmpty && freezingChanged) st.throttle.markDirty(clock.millis())
+      if (d.freezing.nonEmpty && freezingChanged) writeStatic(cid, st)
       if (d.freezing.nonEmpty || d.real.nonEmpty) observePalevo(st)
     }
 
@@ -697,9 +665,14 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       val next = contests.values.flatMap(st => ContestTimeTracker.nextDeadline(st.live.contest, after, countdown))
         .reduceOption((a, b) => if (a.isBefore(b)) a else b)
       val pendingIsEnough = armedFor.exists(a => next.forall(n => !a.isAfter(n)))
-      if (!pendingIsEnough) {
-        timers.startSingleTimer(WakeKey, Tick, wakeDelay(next, clock.now(), timings.heartbeat))
-        armedFor = next
+      if (!pendingIsEnough) next match {
+        case Some(n) =>
+          timers.startSingleTimer(WakeKey, Tick, wakeDelay(n, clock.now()))
+          armedFor = next
+        case None =>
+          // Nothing can happen until a round changes, and every change re-arms: no timer at all.
+          timers.cancel(WakeKey)
+          armedFor = None
       }
     }
 
@@ -718,18 +691,15 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       .foreach(palevoSink.send)
   }
 
-  private def writeStatic(): Unit = for (dir <- staticLocation; (cid, st) <- contests if cid < 11) {
-    val ms = clock.millis()
-    if (st.throttle.due(ms))
-      Try(StaticFiles.write(dir, cid, renderStatic(st.live.contest, publicVisible(st.live, clock.now())))) match {
-        case Success(_) =>
-          st.throttle.written(ms)
-          st.staticFailing = false
-        case Failure(e) =>
-          // Stays dirty and is retried on the next check; log once per failure streak.
-          if (!st.staticFailing) log.error(e, s"live monitor: cannot write static file for contest $cid")
-          st.staticFailing = true
-      }
+  /** Rewrites the contest's static file now (on a board change; no interval). TODO(task17): render on demand instead. */
+  private def writeStatic(cid: Int, st: ContestState): Unit = for (dir <- staticLocation if cid < 11) {
+    Try(StaticFiles.write(dir, cid, renderStatic(st.live.contest, publicVisible(st.live, clock.now())))) match {
+      case Success(_) => st.staticFailing = false
+      case Failure(e) =>
+        // Written again on the next change; log once per failure streak.
+        if (!st.staticFailing) log.error(e, s"live monitor: cannot write static file for contest $cid")
+        st.staticFailing = true
+    }
   }
 
   // ---- streams ----
@@ -758,7 +728,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       val me = self
       val queueEc = ec
       val src: Source[Event, NotUsed] = Source.queue[Event](timings.connectionBuffer)
-        .merge(Source.tick(timings.ping, timings.ping, pingEvent), eagerComplete = true)
+        .merge(Source.tick(timings.ping, timings.ping, pingEvent), eagerComplete = true) // SSE keep-alive comments
         .watchTermination() { (q, done) =>
           me ! Register(cid, viewer, q)
           done.onComplete(_ => me ! Unregister(cid, q))(queueEc)

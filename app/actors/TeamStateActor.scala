@@ -12,7 +12,7 @@ object TeamStateActor {
 
   case class GetTeam(contest: Int, team: Int)
   case class GetTeams(contest: Int)
-  /** Replaces (or adds) a team in its round right away; the periodic refresh keeps it in line with the database. */
+  /** Replaces (or adds) a team in its round right away. */
   case class PutTeam(contest: Int, team: Team)
   /** The teams of one round as just read; None (the round is no longer current) drops it. */
   private case class RoundTeams(contest: Int, teams: Option[Seq[Team]])
@@ -34,9 +34,13 @@ class TeamStateActor(db: JdbcBackend#DatabaseDef) extends AnyStateActor[TeamStat
     teams = v
   }
 
+  /**
+    * Loaded once at start-up; afterwards a round is re-read on TeamsChanged (credential_changed, participant_changed,
+    * and round_changed, which also brings in a round that just became usable) and dropped on ContestRemoved.
+    */
   override def initialized: Receive = {
     case Refresh => doRefresh()
-    case State(m) => setState(m)
+    case actors.StatusActor.ContestRemoved(round) => teams = teams - round
     case actors.StatusActor.TeamsChanged(round) =>
       // The same read as the full refresh, for one round; a round that is no longer current is dropped.
       models.Rounds.currentRound(db, round).flatMap {
