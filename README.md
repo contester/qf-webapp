@@ -32,16 +32,6 @@ copies); the phase events themselves are announced for every contest. Expose-tim
 The events come from the live monitor, or from the status actor when `monitor.disable_new_monitor = true`: exactly
 one of them produces them (`LiveWiring.timeEventHost`).
 
-The query API has its own keys, independent of `palevo.url`/`palevo.token`:
-
-    palevo.query.token = "..."   # bearer token of the read-only query API; the value of PALEVO_QF_TOKEN in palevo
-    palevo.query.contests = [1,2,3,4,5,6,7,8,9,10]   # contests the query API may ever serve (default 1..10)
-
-`palevo.query.token` switches on the read-only query API under `/api/palevo/v1` that palevo's chat bot uses; when
-it is unset or blank every route answers 404. `palevo.query.contests` is the hard upper bound of the contests the
-API can ever show, whatever the request asks for (default 1 to 10, so contest 11 is never served). The contract
-is in [doc/palevo-query-api.md](doc/palevo-query-api.md).
-
 ## Database notifications
 
 Testing results, custom test results and changes to rounds, credentials and participants reach qf as PostgreSQL

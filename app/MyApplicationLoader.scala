@@ -116,12 +116,6 @@ class MyComponents(context: ApplicationLoader.Context)
 
   lazy val palevoSink: palevo.PalevoSink = palevo.PalevoSink.fromConfig(configuration, wsClient, actorSystem)(executionContext)
 
-  // Read-only query API for palevo's chat bot.
-  lazy val queryConfig: palevo.query.QueryConfig = palevo.query.QueryConfig(configuration)
-  lazy val querySource: palevo.query.QuerySource = new palevo.query.DbQuerySource(dbConfig.db, liveMonitor,
-    id => statusActorModel.problemClient.getProblems(id)(akka.util.Timeout(5, java.util.concurrent.TimeUnit.SECONDS)),
-    () => Seq.empty /* TODO(task18): printing is gone; the palevo printing endpoint goes with the query API trim */)(executionContext)
-
   // Live monitor. When monitor.disable_new_monitor = true nothing below is constructed beyond the config and the
   // no-op hooks, and Monitor starts the old MonitorActor as before.
   lazy val liveConfig: live.LiveMonitorConfig = live.LiveMonitorConfig(configuration)
@@ -164,7 +158,6 @@ class MyComponents(context: ApplicationLoader.Context)
   lazy val sseController = wire[_root_.controllers.ServerSideEval]
   lazy val adminController = wire[_root_.controllers.AdminApplication]
   lazy val publicMonitorController = wire[_root_.controllers.PublicMonitor]
-  lazy val palevoQueryController = wire[_root_.controllers.PalevoQuery]
 
   lazy val authFormsController = wire[_root_.controllers.AuthForms]
   lazy val adminAuthFormsController = wire[_root_.controllers.AdminAuthForms]
