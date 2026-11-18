@@ -25,7 +25,7 @@ object StatusActor {
                    now: org.joda.time.DateTime): Try[Seq[palevo.PalevoEvent]] =
     if (enabled) Try(observe(c, now)) else scala.util.Success(Nil)
 
-  def props(db: JdbcBackend#DatabaseDef, palevo: PalevoSink, teamLookup: (Int, Int) => Future[Option[org.stingray.contester.dbmodel.LocalTeam]],
+  def props(db: JdbcBackend#DatabaseDef, palevo: PalevoSink, teamLookup: (Int, Int) => Future[Option[org.stingray.contester.dbmodel.Team]],
             liveHooks: live.LiveHooks, timeEvents: Boolean, countdown: CountdownConfig) =
     Props(new StatusActor(db, palevo, teamLookup, liveHooks, timeEvents, countdown))
 
@@ -36,7 +36,7 @@ object StatusActor {
   /** A contest row was changed by the application; it is applied at once instead of at the next Tick. */
   case class ContestChanged(c: Contest)
   private case class RescanResult(contests: Seq[Contest], startedAt: Long)
-  case class Ack(loggedInTeam: LoggedInTeam, msgid: Int)
+  case class Ack(loggedInTeam: LoggedInTeam, msgid: Long)
   case class JoinAdmin(c: Int)
   case class JoinUser(contest: Int, team: Int)
   case class UserJoined(enumerator: Source[Event, NotUsed])
@@ -84,7 +84,7 @@ object StatusActor {
 }
 
 class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
-                  teamLookup: (Int, Int) => Future[Option[org.stingray.contester.dbmodel.LocalTeam]],
+                  teamLookup: (Int, Int) => Future[Option[org.stingray.contester.dbmodel.Team]],
                   liveHooks: live.LiveHooks,
                   // True when the live monitor is off: then this actor, not the live monitor, produces the contest time events.
                   timeEvents: Boolean, countdown: CountdownConfig) extends Actor with Stash with Logging {
@@ -95,7 +95,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
 
   implicit val msg2eventNameExtractor = EventNameExtractor[Message2](x => Some(x.kind))
   implicit val msg2eventDataExtractor = EventDataExtractor[Message2] { msg2 =>
-    Json.stringify(Json.fromJson[JsObject](msg2.data).get + ("msgid" -> JsNumber(msg2.id.getOrElse(0).toInt)))
+    Json.stringify(Json.fromJson[JsObject](msg2.data).get + ("msgid" -> JsNumber(BigDecimal(msg2.id.getOrElse(0L)))))
   }
 
   @throws[Exception](classOf[Exception])
@@ -120,7 +120,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
   private[this] val timeTracker = new ContestTimeTracker(countdown)
   private[this] val rowGuard = new ContestRowGuard
   private[this] val (msg2Out, msg2Channel) = Concur.broadcast[Message2]()
-  private[this] val unacked = mutable.Map[(Int, Int), mutable.Map[Int, Message2]]()
+  private[this] val unacked = mutable.Map[(Int, Int), mutable.Map[Long, Message2]]()
   private[this] val (rowsOut, rowsChan) = Concur.broadcast[SubmitRows]()
   private[this] val pendingClarificationRequests = mutable.Map[Long, mutable.Set[Long]]().withDefaultValue(mutable.Set[Long]())
   private[this] val (clr2Out, clr2Chan) = Concur.broadcast[ClarificationRequestState]()
@@ -135,14 +135,14 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
   }
 
   private def getUnacked(contest: Int, team: Int) =
-    unacked.getOrElseUpdate((contest, team), mutable.Map[Int, Message2]())
+    unacked.getOrElseUpdate((contest, team), mutable.Map[Long, Message2]())
 
   import org.stingray.contester.dbmodel.MyPostgresProfile.api._
   import org.stingray.contester.dbmodel.SlickModel
 
   private def pushPersistent(contest: Int, team: Int, kind: String, data: JsValue) =
     db.run(
-      SlickModel.messages2Add += Message2(None, contest, team, kind, data, seen = false)).foreach { m2 =>
+      SlickModel.addMessage(Message2(None, contest, team, kind, data, seen = false))).foreach { m2 =>
       self ! m2
     }
 
@@ -153,14 +153,14 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
     */
   private def annotateFinished(finished: FinishedTesting): Future[(AnnoSubmit, Seq[SubmitRow])] = {
     val sub = finished.submit
-    val plus = if (sub.schoolMode) "" else "+"
-    Submits.teamProblemSubmits(db, sub.schoolMode, sub.contest, sub.team, sub.problem).flatMap { described =>
+    val plus = "+"
+    Submits.teamProblemSubmits(db, sub.contest, sub.team, sub.problem).flatMap { described =>
       described.find(_.submit.submitId.id == sub.id).filter(_.submit.testingId.contains(finished.testingId)) match {
         case Some(mine) =>
           // Scoring runs forward, so only this attempt and the later ones can have changed.
           val rows = described.filter(_.index >= mine.index)
             .map(d => SubmitRow(d.submit.submitId.id, views.html.singlesubmit(d, plus).body))
-          if (mine.details.isEmpty && !sub.schoolMode && finished.compiled && !mine.result.success)
+          if (mine.details.isEmpty && finished.compiled && !mine.result.success)
             SubmitResult.annotateFinished2(db, finished).map(_ -> rows)
           else
             Future.successful(AnnoSubmit(sub.id, sub.contest, sub.team, sub.problem, mine.result) -> rows)
@@ -181,7 +181,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
         SlickModel.clarificationRequestsUnanswered.result zip
           SlickModel.clarifications.result zip
           SlickModel.clrSeen2.result zip
-          SlickModel.allContests.result
+          SlickModel.currentRounds.result.map(_.map(SlickModel.toContest))
       )
 
     f.failed.foreach(e => logger.error(s"loading status actor: $e"))
@@ -310,8 +310,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
       val q = if (orig.isDefined) {
         (SlickModel.clarifications.filter(_.id === cl.id.get).update(cl).map(_ => cl))
       } else {
-        (SlickModel.clarifications.returning(SlickModel.clarifications.map(_.id)) into((c: Clarification,id: Long) =>
-          c.copy(id=Some(id)))) += cl
+        SlickModel.insertClarification(cl)
       }
 
       db.run(q).map { next =>
@@ -348,7 +347,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
         cmap.values.map(_.arrived).max
       }.foreach { now =>
         clarificationsSeen.put((contest, team), now)
-        db.run(SlickModel.clrSeen2.insertOrUpdate(MaxSeen(contest, team, now)))
+        db.run(SlickModel.upsertMaxSeen(MaxSeen(contest, team, now)))
       }
     }
 
@@ -417,7 +416,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
 
     case Tick => {
       val started = rowGuard.beginRescan()
-      db.run(SlickModel.allContests.result).map { contests =>
+      models.Rounds.currentRounds(db).map { contests =>
         self ! RescanResult(contests, started)
       }
     }

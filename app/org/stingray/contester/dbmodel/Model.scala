@@ -4,8 +4,11 @@ import java.nio.charset.Charset
 
 import com.github.nscala_time.time.Imports._
 import com.github.tminglei.slickpg.InetString
-import play.api.libs.json.JsValue
+import play.api.libs.json.{JsValue, Json}
 import slick.lifted.MappedTo
+
+// The tables of the teacher-web schema (database `public`) that qf reads and writes. A qf "contest" is a round
+// (contest_rounds.id); a team is a participant. Everything per round also has the round's season_id.
 
 case class Clarification(id: Option[Long], contest: Int, problem: String, text: String, arrived: DateTime, hidden: Boolean)
 
@@ -18,22 +21,29 @@ case class ClarificationRequest(id: Long, contest: Int, team: Int, problem: Stri
   } else "..."
 }
 
+// TODO(task11): qf's own admin table; admins move to teacher-web's `admins`.
 case class AdminEntry(username: String, password: String, spectator: String, administrator: String,
                       locations: String, unrestricted: String)
 
+/** A language of the season (season_languages); `ext` is the module id. */
 case class Compiler(id: Int, name: String, ext: String)
 
-case class School(id: Int, shortName: String, fullName: String)
-
-case class Message2(id: Option[Int], contest: Int, team: Int, kind: String, data: JsValue, seen: Boolean)
+case class Message2(id: Option[Long], contest: Int, team: Int, kind: String, data: JsValue, seen: Boolean)
 
 case class Extrainfo(contest: Int, num: Int, heading: String, data: String)
 
-case class Contest(id: Int, name: String, startTime: DateTime, freezeTime: DateTime,
-                   endTime: DateTime, exposeTime: DateTime, polygonID: Option[String], language: String, schoolMode: Boolean) {
+/**
+  * A round of the current season, with both times set. `id` is contest_rounds.id, the "contest id" of qf's URLs.
+  * Start and end are also the freeze and expose times: there is no freeze configuration.
+  */
+case class Contest(id: Int, name: String, startTime: DateTime, endTime: DateTime, polygonId: Option[String], seasonId: Int) {
+  // Kept so that the legacy board code compiles; the scoreboard rewrite drops them.
+  def freezeTime: DateTime = startTime
+  def exposeTime: DateTime = endTime
+  def language: String = "russian"
+
   def frozen = {
     val now = DateTime.now
-    // freezeTime == endTime means "no freeze"
     freezeTime.isBefore(endTime) && now >= freezeTime && now < exposeTime
   }
   def finished = DateTime.now >= endTime
@@ -62,32 +72,49 @@ case class Contest(id: Int, name: String, startTime: DateTime, freezeTime: DateT
     formatHMS(timeval)
 }
 
-trait Team {
-  def schoolFullName: String
-  def schoolShortName: String
-  def teamNum: Int
-  def teamName: String
-  /** Out of competition. Always true for a disqualified team: the flag is the effective one, not the raw column. */
-  def notRated: Boolean
-  def disqualified: Boolean
-  /** Not on any board, and scores nothing. */
-  def disabled: Boolean
-  def id: Int
+/** round_credentials.unrated: None is a rated participant. */
+sealed trait Unrated
+/** Listed on the board, but without a place. */
+case object NotRated extends Unrated
+/** Hidden from the board. */
+case object Disqualified extends Unrated
 
-  private[this] def teamSuffix = if (teamNum != 0) {
-    s" #$teamNum"
-  } else ""
+object Unrated {
+  def toDb(u: Unrated): String = u match {
+    case NotRated => "not_rated"
+    case Disqualified => "disqualified"
+  }
 
-  def schoolFullNameWithNum: String = s"$schoolFullName$teamSuffix"
-  def teamFullName: String = {
-    if (teamName.isEmpty) schoolFullNameWithNum
-    else s"$schoolFullNameWithNum: $teamName"
+  def fromDb(s: String): Unrated = s match {
+    case "not_rated" => NotRated
+    case "disqualified" => Disqualified
+    case other => throw new IllegalArgumentException(s"unknown credential_unrated value $other")
   }
 }
 
-final case class LocalTeam(id: Int, contest: Int, schoolFullName: String, schoolShortName: String, teamNum: Int, teamName: String,
-                     notRated: Boolean, noPrint: Boolean, disabled: Boolean,
-                     disqualified: Boolean = false) extends Team
+/**
+  * A participant of a round. `number` is participants.season_seq, `name` the full name; school and city come from
+  * the participant's school.
+  */
+case class Team(participantId: Int, number: Int, name: String, school: String, city: String, unrated: Option[Unrated]) {
+  def id: Int = participantId
+
+  /** Out of competition. Always true for a disqualified participant. */
+  def notRated: Boolean = unrated.isDefined
+  def disqualified: Boolean = unrated.contains(Disqualified)
+  /** Not on any board, and scores nothing. */
+  def disabled: Boolean = disqualified
+
+  def schoolWithCity: String = s"$school, $city"
+  def teamFullName: String = s"$number. $name ($schoolWithCity)"
+
+  // Legacy accessors for the board views, until the scoreboard rewrite.
+  def teamNum: Int = number
+  def teamName: String = name
+  def schoolFullName: String = school
+  def schoolShortName: String = school
+  def schoolFullNameWithNum: String = s"$number. $schoolWithCity"
+}
 
 case class ContestTeamIds(contestId: Int, teamId: Int)
 
@@ -111,7 +138,7 @@ object Memory {
   implicit val ordering: Ordering[Memory] = Ordering.by(_.underlying)
 }
 
-case class Problem(contest: Int, id: String, name: String, tests: Int)
+case class Problem(contest: Int, id: String, name: String, tests: Int, maxPoints: Double = 0)
 
 case class EvalEntry(id: Long, contest: Int, team: Int, languageName: String, source: Array[Byte], input: Array[Byte],
                      output: Array[Byte], arrived: DateTime, finishTime: Option[DateTime], resultCode: Int,
@@ -129,21 +156,166 @@ case class EvalEntry(id: Long, contest: Int, team: Int, languageName: String, so
 
 }
 
+// TODO(task19): printing.
 case class Area(id: Int, name: String, printer: String)
+
+/** One group of a testing (testing_groups). `policy` is `complete-group` or `each-test`. */
+case class TestingGroup(testingId: Long, groupName: String, policy: String, pointsEarned: Double, pointsMax: Double,
+                        passed: Boolean, skipped: Boolean)
 
 object SlickModel {
   import MyPostgresProfile.api._
 
-  case class Team(id: Int, school: Int, num: Int, name: String)
+  // ---- teacher-web's own tables, read only ----
 
-  case class Participant(contest: Int, team: Int, disabled: Boolean, noPrint: Boolean, notRated: Boolean,
-                         disqualified: Boolean = false)
+  case class Seasons(tag: Tag) extends Table[(Int, Boolean)](tag, "seasons") {
+    def id = column[Int]("id", O.PrimaryKey)
+    def isCurrent = column[Boolean]("is_current")
 
-  case class Assignment(contest: Int, teamId: Int, username: String, password: String)
+    override def * = (id, isCurrent)
+  }
+
+  val seasons = TableQuery[Seasons]
+
+  case class TwContests(tag: Tag) extends Table[(Int, Int, String)](tag, "contests") {
+    def id = column[Int]("id", O.PrimaryKey)
+    def seasonId = column[Int]("season_id")
+    def name = column[String]("name")
+
+    override def * = (id, seasonId, name)
+  }
+
+  val twContests = TableQuery[TwContests]
+
+  case class ContestRound(id: Int, contestId: Int, seasonId: Int, name: String, startsAt: Option[DateTime],
+                          endsAt: Option[DateTime], isFinished: Boolean, testingSystemId: Option[Int])
+
+  case class ContestRounds(tag: Tag) extends Table[ContestRound](tag, "contest_rounds") {
+    def id = column[Int]("id", O.PrimaryKey)
+    def contestId = column[Int]("contest_id")
+    def seasonId = column[Int]("season_id")
+    def name = column[String]("name")
+    def startsAt = column[Option[DateTime]]("starts_at")
+    def endsAt = column[Option[DateTime]]("ends_at")
+    def isFinished = column[Boolean]("is_finished")
+    def testingSystemId = column[Option[Int]]("testing_system_id")
+
+    override def * = (id, contestId, seasonId, name, startsAt, endsAt, isFinished, testingSystemId) <>
+      (ContestRound.tupled, ContestRound.unapply)
+  }
+
+  val contestRounds = TableQuery[ContestRounds]
+
+  case class Schools(tag: Tag) extends Table[(Int, String, String)](tag, "schools") {
+    def id = column[Int]("id", O.PrimaryKey)
+    def name = column[String]("name")
+    def city = column[String]("city")
+
+    override def * = (id, name, city)
+  }
+
+  val schools = TableQuery[Schools]
+
+  case class Participants(tag: Tag) extends Table[(Int, Int, Int, Int, String, Int, Boolean)](tag, "participants") {
+    def id = column[Int]("id", O.PrimaryKey)
+    def seasonId = column[Int]("season_id")
+    def contestId = column[Int]("contest_id")
+    def seasonSeq = column[Int]("season_seq")
+    def fullName = column[String]("full_name")
+    def schoolId = column[Int]("school_id")
+    def isDeleted = column[Boolean]("is_deleted")
+
+    override def * = (id, seasonId, contestId, seasonSeq, fullName, schoolId, isDeleted)
+  }
+
+  val participants = TableQuery[Participants]
+
+  /** Read only, except `unrated`, which qf admins write. */
+  case class RoundCredentials(tag: Tag) extends Table[(Int, Int, Int, Int, Boolean, String, String, Option[Unrated])](tag, "round_credentials") {
+    def id = column[Int]("id", O.PrimaryKey)
+    def roundId = column[Int]("round_id")
+    def contestId = column[Int]("contest_id")
+    def participantId = column[Int]("participant_id")
+    def isActive = column[Boolean]("is_active")
+    def login = column[String]("login")
+    def password = column[String]("password")
+    def unrated = column[Option[Unrated]]("unrated")
+
+    override def * = (id, roundId, contestId, participantId, isActive, login, password, unrated)
+  }
+
+  val roundCredentials = TableQuery[RoundCredentials]
+
+  // ---- rounds as qf contests ----
+
+  /** The name of a round in qf: the contest's name, and the round's unless it adds nothing. */
+  def roundName(contestName: String, roundName: String): String = {
+    val r = roundName.trim
+    if (r.isEmpty || r == contestName.trim) contestName else s"$contestName — $r"
+  }
+
+  /** The times are never None: the query keeps only rounds that have both. */
+  type RoundRow = (Int, String, String, Option[DateTime], Option[DateTime], Option[String], Int)
+
+  def toContest(r: RoundRow): Contest = r match {
+    case (id, contestName, name, start, end, polygonId, seasonId) =>
+      Contest(id, roundName(contestName, name), start.get, end.get, polygonId, seasonId)
+  }
+
+  /** Rounds of the current season with both times set: the only rounds qf knows. */
+  private[this] val currentRoundRows = for {
+    r <- contestRounds if r.startsAt.isDefined && r.endsAt.isDefined
+    c <- twContests if c.id === r.contestId
+    s <- seasons if s.id === r.seasonId && s.isCurrent
+  } yield (r.id, c.name, r.name, r.startsAt, r.endsAt, r.testingSystemId.asColumnOf[Option[String]], r.seasonId)
+
+  val currentRounds = Compiled(currentRoundRows.sortBy(_._1))
+
+  val currentRoundByID = Compiled((roundID: Rep[Int]) => currentRoundRows.filter(_._1 === roundID).take(1))
+
+  /** The season of a round, for the season_id of the rows qf inserts. Fails if there is no such round. */
+  def seasonOfRound(roundID: Int): DBIO[Int] =
+    contestRounds.filter(_.id === roundID).map(_.seasonId).result.head
+
+  // ---- participants as qf teams ----
+
+  case class LiftedTeam(participantId: Rep[Int], number: Rep[Int], name: Rep[String], school: Rep[String],
+                        city: Rep[String], unrated: Rep[Option[Unrated]])
+
+  implicit object TeamShape extends CaseClassShape(LiftedTeam.tupled, (Team.apply _).tupled)
+
+  /** Participants with an active credential for a round, not soft-deleted, with the credential. */
+  val roundTeams = for {
+    rc <- roundCredentials if rc.isActive
+    p <- participants if p.id === rc.participantId && !p.isDeleted
+    s <- schools if s.id === p.schoolId
+  } yield (rc, LiftedTeam(p.id, p.seasonSeq, p.fullName, s.name, s.city, rc.unrated))
+
+  val teamsOfRound = Compiled((roundID: Rep[Int]) => roundTeams.filter(_._1.roundId === roundID).map(_._2))
+
+  /** The teams of every current round, by round. */
+  val teamsOfCurrentRounds = for {
+    (rc, t) <- roundTeams
+    r <- currentRoundRows if r._1 === rc.roundId
+  } yield (rc.roundId, t)
+
+  case class LoggedInTeam0(username: String, password: String, contest: Contest, team: Team)
+
+  /** (login, password, round, team) of the active credentials of current rounds. */
+  val loginQuery = for {
+    (rc, t) <- roundTeams
+    r <- currentRoundRows if r._1 === rc.roundId
+  } yield (rc.login, rc.password, r, t)
+
+  def toLoggedInTeam0(x: (String, String, RoundRow, Team)): LoggedInTeam0 =
+    LoggedInTeam0(x._1, x._2, toContest(x._3), x._4)
+
+  // ---- contest data, per round ----
 
   case class Clarifications(tag: Tag) extends Table[Clarification](tag, "clarifications") {
     def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
-    def contest = column[Int]("contest")
+    def seasonId = column[Int]("season_id")
+    def contest = column[Int]("round_id")
     def problem = column[String]("problem")
     def text = column[String]("text")
     def arrived = column[DateTime]("posted")
@@ -154,6 +326,13 @@ object SlickModel {
 
   val clarifications = TableQuery[Clarifications]
 
+  /** Inserts a new clarification (its id is ignored) with its round's season; returns it with the new id. */
+  def insertClarification(cl: Clarification)(implicit ec: scala.concurrent.ExecutionContext): DBIO[Clarification] =
+    seasonOfRound(cl.contest).flatMap { season =>
+      (clarifications.map(x => (x.seasonId, x.contest, x.problem, x.text, x.arrived, x.hidden))
+        returning clarifications.map(_.id)) += ((season, cl.contest, cl.problem, cl.text, cl.arrived, cl.hidden))
+    }.map(id => cl.copy(id = Some(id)))
+
   val getClarificationsForContest = Compiled((contestId: Rep[Int]) =>
     clarifications.filter(_.contest === contestId).sortBy(_.arrived.desc))
 
@@ -163,8 +342,9 @@ object SlickModel {
 
   case class ClarificationRequests(tag: Tag) extends Table[ClarificationRequest](tag, "clarification_requests") {
     def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
-    def contest = column[Int]("contest")
-    def team = column[Int]("team")
+    def seasonId = column[Int]("season_id")
+    def contest = column[Int]("round_id")
+    def team = column[Int]("participant_id")
     def problem = column[String]("problem")
     def request = column[String]("request")
     def answer = column[String]("answer")
@@ -182,8 +362,9 @@ object SlickModel {
   } yield (c.contest, c.id)
 
   case class ClrSeen2(tag: Tag) extends Table[MaxSeen](tag, "clarifications_seen") {
-    def contest = column[Int]("contest", O.PrimaryKey)
-    def team = column[Int]("team", O.PrimaryKey)
+    def seasonId = column[Int]("season_id")
+    def contest = column[Int]("round_id", O.PrimaryKey)
+    def team = column[Int]("participant_id", O.PrimaryKey)
     def timestamp = column[DateTime]("max_seen")
 
     override def * = (contest, team, timestamp) <> (MaxSeen.tupled, MaxSeen.unapply)
@@ -191,8 +372,17 @@ object SlickModel {
 
   val clrSeen2 = TableQuery[ClrSeen2]
 
-  case class Compilers(tag: Tag) extends Table[Compiler](tag, "languages") {
-    def id = column[Int]("id")
+  /** Records the newest clarification a participant has seen, with the round's season. */
+  def upsertMaxSeen(m: MaxSeen): DBIO[Int] = {
+    val ts = new java.sql.Timestamp(m.timestamp.getMillis)
+    sqlu"""insert into clarifications_seen (season_id, round_id, participant_id, max_seen)
+           select season_id, id, ${m.team}, $ts from contest_rounds where id = ${m.contest}
+           on conflict (round_id, participant_id) do update set max_seen = excluded.max_seen"""
+  }
+
+  case class Compilers(tag: Tag) extends Table[Compiler](tag, "season_languages") {
+    def id = column[Int]("id", O.PrimaryKey, O.AutoInc)
+    def seasonId = column[Int]("season_id")
     def name = column[String]("name")
     def moduleID = column[String]("module_id")
 
@@ -201,94 +391,12 @@ object SlickModel {
 
   val compilers = TableQuery[Compilers]
 
-  val sortedCompilers = Compiled(compilers.sortBy(_.name))
-
-  case class LiftedContest(id: Rep[Int], name: Rep[String], startTime: Rep[DateTime],
-                           freezeTime: Rep[DateTime], endTime: Rep[DateTime], exposeTime: Rep[DateTime],
-                           polygonId: Rep[Option[String]], language: Rep[String], schoolMode: Rep[Boolean])
-
-  implicit object ContestShape extends CaseClassShape(LiftedContest.tupled, Contest.tupled)
-
-  case class Contests(tag: Tag) extends Table[Contest](tag, "contests") {
-    def id = column[Int]("id", O.AutoInc, O.PrimaryKey)
-    def name = column[String]("name")
-    def startTime = column[DateTime]("start_time")
-    def freezeTime = column[DateTime]("freeze_time")
-    def endTime = column[DateTime]("end_time")
-    def exposeTime = column[DateTime]("expose_time")
-    def polygonId = column[Option[String]]("polygon_id")
-    def language = column[String]("language")
-    def schoolMode = column[Boolean]("school_mode")
-
-    override def * = (id, name, startTime, freezeTime, endTime, exposeTime,
-      polygonId, language, schoolMode) <> (Contest.tupled, Contest.unapply)
-  }
-
-  val contests = TableQuery[Contests]
-
-  private[this] val contests0 = for {
-    c <- contests
-  } yield LiftedContest(c.id, c.name, c.startTime, c.freezeTime, c.endTime, c.exposeTime, c.polygonId, c.language, c.schoolMode)
-
-  val allContests = Compiled(contests.sortBy(_.id))
-
-  val getContestByID = Compiled((contestID: Rep[Int]) =>
-    contests.filter(_.id === contestID).take(1)
-  )
-
-  val getContestByIDToResync = Compiled((contestID: Rep[Int]) =>
-    contests.filter(_.id === contestID).map(x => (x.name, x.schoolMode, x.startTime, x.freezeTime, x.endTime, x.exposeTime, x.polygonId, x.language))
-  )
-
-
-  case class Schools(tag: Tag) extends Table[School](tag, "schools") {
-    def id = column[Int]("id", O.AutoInc, O.PrimaryKey)
-    def shortName = column[String]("short_name")
-    def fullName = column[String]("full_name")
-
-    override def * = (id, shortName, fullName) <> (School.tupled, School.unapply)
-  }
-
-  val schools = TableQuery[Schools]
-
-  case class Teams(tag: Tag) extends Table[Team](tag, "teams") {
-    def id = column[Int]("id", O.AutoInc, O.PrimaryKey)
-    def school = column[Int]("school")
-    def num = column[Int]("num")
-    def name = column[String]("name")
-
-    override def * = (id, school, num, name) <> (Team.tupled, Team.unapply)
-  }
-
-  val teams = TableQuery[Teams]
-
-  case class Participants(tag: Tag) extends Table[Participant](tag, "participants") {
-    def contest = column[Int]("contest")
-    def team = column[Int]("team")
-    def disabled = column[Boolean]("disabled")
-    def noPrint = column[Boolean]("no_print")
-    def notRated = column[Boolean]("not_rated")
-    def disqualified = column[Boolean]("disqualified")
-
-    def pk = primaryKey("participants_pkey", (contest, team))
-    override def * = (contest, team, disabled, noPrint, notRated, disqualified) <> (Participant.tupled, Participant.unapply)
-  }
-
-  val participants = TableQuery[Participants]
-
-  case class Assignments(tag: Tag) extends Table[Assignment](tag, "logins") {
-    def contest = column[Int]("contest")
-    def team = column[Int]("team")
-    def username = column[String]("username", O.PrimaryKey)
-    def password = column[String]("password")
-
-    override def * = (contest, team, username, password) <> (Assignment.tupled, Assignment.unapply)
-  }
-
-  val assignments = TableQuery[Assignments]
+  /** The languages of a season, by name. */
+  val compilersOfSeason = Compiled((seasonId: Rep[Int]) => compilers.filter(_.seasonId === seasonId).sortBy(_.name))
 
   case class ExtraInfos(tag: Tag) extends Table[Extrainfo](tag, "extra_info") {
-    def contest = column[Int]("contest")
+    def seasonId = column[Int]("season_id")
+    def contest = column[Int]("round_id")
     def num = column[Int]("num")
     def heading = column[String]("heading")
     def data = column[String]("data")
@@ -298,65 +406,58 @@ object SlickModel {
 
   val extraInfos = TableQuery[ExtraInfos]
 
+  def insertExtraInfo(e: Extrainfo)(implicit ec: scala.concurrent.ExecutionContext): DBIO[Int] =
+    seasonOfRound(e.contest).flatMap { season =>
+      extraInfos.map(x => (x.seasonId, x.contest, x.num, x.heading, x.data)) += ((season, e.contest, e.num, e.heading, e.data))
+    }
+
   case class Messages2(tag: Tag) extends Table[Message2](tag, "messages") {
-    def id = column[Int]("id", O.AutoInc, O.PrimaryKey)
-    def contest = column[Int]("contest")
-    def team = column[Int]("team")
+    def id = column[Long]("id", O.AutoInc, O.PrimaryKey)
+    def seasonId = column[Int]("season_id")
+    def contest = column[Int]("round_id")
+    def team = column[Int]("participant_id")
     def kind = column[String]("kind")
-    def value = column[JsValue]("value")
+    def value = column[String]("value")
     def seen = column[Boolean]("seen")
 
-    override def * = (id.?, contest, team, kind, value, seen) <> (Message2.tupled, Message2.unapply)
+    override def * = (id.?, contest, team, kind, value, seen) <> (
+      (x: (Option[Long], Int, Int, String, String, Boolean)) => Message2(x._1, x._2, x._3, x._4, Json.parse(x._5), x._6),
+      (m: Message2) => Some((m.id, m.contest, m.team, m.kind, Json.stringify(m.data), m.seen)))
   }
 
   private[this] val messages2 = TableQuery[Messages2]
 
   val allMessages = Compiled(messages2.map(identity))
 
-  val messages2Add = messages2 returning messages2.map(_.id) into ((user, id) => user.copy(id=Some(id)))
+  /** Inserts a message (its id is ignored) with its round's season; returns it with the new id. */
+  def addMessage(m: Message2)(implicit ec: scala.concurrent.ExecutionContext): DBIO[Message2] =
+    seasonOfRound(m.contest).flatMap { season =>
+      (messages2.map(x => (x.seasonId, x.contest, x.team, x.kind, x.value, x.seen)) returning messages2.map(_.id)) +=
+        ((season, m.contest, m.team, m.kind, Json.stringify(m.data), m.seen))
+    }.map(id => m.copy(id = Some(id)))
 
   val messages2Unseen = Compiled(messages2.filterNot(_.seen))
 
-  val messageSeenByID = Compiled((id: Rep[Int]) => messages2.filter(_.id === id).map(_.seen))
+  val messageSeenByID = Compiled((id: Rep[Long]) => messages2.filter(_.id === id).map(_.seen))
 
-  case class LiftedLocalTeam(teamId: Rep[Int], contest: Rep[Int], schoolFullName: Rep[String], schoolShortName: Rep[String], teamNum: Rep[Int],
-                             teamName: Rep[String], notRated: Rep[Boolean], noPrint: Rep[Boolean],
-                             disabled: Rep[Boolean], disqualified: Rep[Boolean])
-
-  implicit object LocalTeamShape extends CaseClassShape(LiftedLocalTeam.tupled, LocalTeam.tupled)
-
-  val localTeamQuery = for {
-    ((p, t), s) <- participants join teams on (_.team === _.id) join schools on (_._2.school === _.id)
-  } yield LiftedLocalTeam(p.team, p.contest, s.fullName, s.shortName, t.num, t.name, p.notRated || p.disqualified, p.noPrint, p.disabled, p.disqualified)
-
-  case class LoggedInTeam0(username: String, password: String,  contest: Contest, team: LocalTeam)
-
-  case class LiftedLoggedInTeam0(username: Rep[String], password: Rep[String], contest: LiftedContest, team: LiftedLocalTeam)
-
-  implicit object LoggedInTeam0Shape extends CaseClassShape(LiftedLoggedInTeam0.tupled, LoggedInTeam0.tupled)
-
-  val joinedLoginQuery = for {
-    ((assignment, team), contest) <- assignments join
-      localTeamQuery on { case (a, lt) => (a.team === lt.teamId) && (a.contest === lt.contest) } join
-      contests0 on (_._1.contest === _.id)
-  } yield LiftedLoggedInTeam0(assignment.username, assignment.password, contest, team)
-
-  case class Submits(tag: Tag) extends Table[(Long, Int, Int, String, Int, Array[Byte], DateTime, Boolean, Boolean, Int, Option[Long], Int, Boolean)](tag, "submits") {
+  case class Submits(tag: Tag) extends Table[(Long, Int, Int, String, Int, Array[Byte], DateTime, Boolean, Int, Option[Long], Int, Boolean, Option[Double])](tag, "submits") {
     def id = column[Long]("id", O.AutoInc, O.PrimaryKey)
-    def contest = column[Int]("contest")
-    def team = column[Int]("team_id")
-    def problem = column[String]("problem")
+    def seasonId = column[Int]("season_id")
+    def contest = column[Int]("round_id")
+    def team = column[Int]("participant_id")
+    def problem = column[String]("problem_id")
     def language = column[Int]("language_id")
     def source = column[Array[Byte]]("source")
-    def arrived = column[DateTime]("submit_time_absolute")
+    def arrived = column[DateTime]("submitted_at")
+    def remoteAddr = column[Option[InetString]]("remote_addr")
     def tested = column[Boolean]("tested")
-    def success = column[Boolean]("success")
     def passed = column[Int]("passed")
     def testingID = column[Option[Long]]("testing_id")
     def taken = column[Int]("taken")
     def compiled = column[Boolean]("compiled")
+    def points = column[Option[Double]]("points")
 
-    override def * = (id, contest, team, problem, language, source, arrived, tested, success, passed, testingID, taken, compiled)
+    override def * = (id, contest, team, problem, language, source, arrived, tested, passed, testingID, taken, compiled, points)
   }
 
   val submits = TableQuery[Submits]
@@ -369,14 +470,16 @@ object SlickModel {
     submits.filter(_.id === submitID).map(x => LiftedContestTeamID(x.contest, x.team)).take(1)
 
   case class Problems(tag: Tag) extends Table[Problem](tag, "problems") {
-    def contestID = column[Int]("contest_id")
-    def id = column[String]("id")
+    def seasonId = column[Int]("season_id")
+    def contestID = column[Int]("round_id")
+    def id = column[String]("problem_id")
     def tests = column[Int]("tests")
     def name = column[String]("name")
+    def maxPoints = column[Double]("max_points")
 
     def pk = primaryKey("problems_pkey", (contestID, id))
 
-    def * = (contestID, id, name, tests) <> (Problem.tupled, Problem.unapply)
+    def * = (contestID, id, name, tests, maxPoints) <> (Problem.tupled, Problem.unapply)
   }
 
   val problems = TableQuery[Problems]
@@ -392,13 +495,16 @@ object SlickModel {
 
   implicit object SubmitShape extends CaseClassShape(LiftedSubmit.tupled, UpliftedSubmit.tupled)
 
-  val submits0 = (for {
+  /** Submits with their round's start (arrival and "after freeze" are relative to it) and language, unsorted. */
+  val submitsUnsorted = for {
     s <- submits
-    contest <- contests if s.contest === contest.id
+    round <- contestRounds if s.contest === round.id
     problem <- problems if s.problem === problem.id && s.contest === problem.contestID
     lang <- compilers if s.language === lang.id
-  } yield LiftedSubmit(s.id, s.arrived, s.arrived - contest.startTime, s.arrived > contest.freezeTime,
-    s.team, s.contest, s.problem, lang.moduleID, s.tested, s.compiled, s.passed, s.taken, s.testingID)).sortBy(_.arrived)
+  } yield LiftedSubmit(s.id, s.arrived, s.arrived - round.startsAt.ifNull(s.arrived), s.arrived > round.startsAt.ifNull(s.arrived),
+    s.team, s.contest, s.problem, lang.moduleID, s.tested, s.compiled, s.passed, s.taken, s.testingID)
+
+  val submits0 = submitsUnsorted.sortBy(_.arrived)
 
   val submits0ByContest= Compiled((contestID: Rep[Int]) =>
     submits0.filter(_.contestID === contestID))
@@ -421,17 +527,101 @@ object SlickModel {
     testings.filter(_.id === testingID).take(1)
   )
 
-  case class Testings(tag: Tag) extends Table[(Long, Long, DateTime, String, Option[DateTime])](tag, "testings") {
+  /** (id, submit, started, problem revision, finished). */
+  case class Testings(tag: Tag) extends Table[(Long, Long, DateTime, Option[Int], Option[DateTime])](tag, "testings") {
     def id = column[Long]("id", O.AutoInc, O.PrimaryKey)
-    def submit = column[Long]("submit")
-    def startTime = column[DateTime]("start_time")
-    def problemURL = column[String]("problem_url")
-    def finishTime = column[Option[DateTime]]("finish_time")
+    def submit = column[Long]("submit_id")
+    def startTime = column[DateTime]("started_at")
+    def problemRevision = column[Option[Int]]("problem_revision")
+    def finishTime = column[Option[DateTime]]("finished_at")
 
-    override def * = (id, submit, startTime, problemURL, finishTime)
+    override def * = (id, submit, startTime, problemRevision, finishTime)
   }
 
   val testings = TableQuery[Testings]
+
+  case class TestingGroups(tag: Tag) extends Table[TestingGroup](tag, "testing_groups") {
+    def testingId = column[Long]("testing_id")
+    def groupName = column[String]("group_name")
+    def policy = column[String]("policy")
+    def pointsEarned = column[Double]("points_earned")
+    def pointsMax = column[Double]("points_max")
+    def passed = column[Boolean]("passed")
+    def skipped = column[Boolean]("skipped")
+
+    def pk = primaryKey("testing_groups_pkey", (testingId, groupName))
+
+    override def * = (testingId, groupName, policy, pointsEarned, pointsMax, passed, skipped) <>
+      (TestingGroup.tupled, TestingGroup.unapply)
+  }
+
+  val testingGroups = TableQuery[TestingGroups]
+
+  case class CustomTests(tag: Tag) extends Table[(Long, Int, Int, Boolean, Int, Array[Byte], Array[Byte], Array[Byte], DateTime,
+    Option[DateTime], Int, TimeMs, Memory, Long)](tag, "custom_tests") {
+    def id = column[Long]("id", O.AutoInc, O.PrimaryKey)
+    def seasonId = column[Int]("season_id")
+    def contest = column[Int]("round_id")
+    def team = column[Int]("participant_id")
+    def tested = column[Boolean]("tested")
+    def language = column[Int]("language_id")
+    def source = column[Array[Byte]]("source")
+    def input = column[Array[Byte]]("input")
+    def output = column[Array[Byte]]("output")
+    def arrived = column[DateTime]("submit_time_absolute")
+    // finished_at, not the legacy finish_time column (which nothing writes any more).
+    def finishTime = column[Option[DateTime]]("finished_at")
+    def resultCode = column[Int]("result_code")
+    def timeMs = column[TimeMs]("time_ms")
+    def memoryBytes = column[Memory]("memory_bytes")
+    def returnCode = column[Long]("return_code")
+
+    override def * = (id, contest, team, tested, language, source, input, output, arrived,
+      finishTime, resultCode, timeMs, memoryBytes, returnCode)
+  }
+
+  val customTests = TableQuery[CustomTests]
+
+  case class LiftedCustomTest(id: Rep[Long], contest: Rep[Int], team: Rep[Int], languageName: Rep[String],
+                              source: Rep[Array[Byte]], input: Rep[Array[Byte]], output: Rep[Array[Byte]],
+                              arrived: Rep[DateTime], finishTime: Rep[Option[DateTime]], resultCode: Rep[Int],
+                              timeMs: Rep[TimeMs], memoryBytes: Rep[Memory], returnCode: Rep[Long])
+
+  implicit object CustomEntryShape extends CaseClassShape(LiftedCustomTest.tupled, EvalEntry.tupled)
+
+  val customTestWithLang = (for {
+    c <- customTests
+    l <- compilers if l.id === c.language
+  } yield LiftedCustomTest(c.id, c.contest, c.team, l.name, c.source, c.input, c.output, c.arrived, c.finishTime,
+    c.resultCode, c.timeMs, c.memoryBytes, c.returnCode)).sortBy(_.arrived.desc)
+
+  case class Results(tag: Tag) extends Table[DBResultEntry](tag, "results") {
+    def testingID = column[Long]("testing_id")
+    def testID = column[Int]("test_no")
+    def groupName = column[Option[String]]("group_name")
+    def resultCode = column[Int]("result_code")
+    def points = column[Double]("points")
+    def recordTime = column[DateTime]("recorded_at")
+    def timeMs = column[TimeMs]("time_ms")
+    def memoryBytes = column[Memory]("memory_bytes")
+    def returnCode = column[Long]("return_code")
+    def testerReturnCode = column[Long]("tester_return_code")
+
+    override def * = (testingID, testID, resultCode, recordTime, timeMs, memoryBytes, returnCode,
+      testerReturnCode, groupName, points) <> (DBResultEntry.tupled, DBResultEntry.unapply)
+  }
+
+  val results = TableQuery[Results]
+
+  val headResultByTesting = Compiled((testingID: Rep[Long]) => results.filter(_.testingID === testingID).sortBy(_.testID.desc).take(1))
+
+  case class DBResultEntry(testingID: Long, testID: Int, resultCode: Int, recordTime: DateTime, timeMs: TimeMs, memoryBytes:Memory,
+                           returnCode: Long, testerReturnCode: Long, groupName: Option[String], points: Double)
+
+  val results0 = results.sortBy(_.testID)
+
+  // ---- TODO(task19): printing, rooms and waiter tasks. These tables do not exist in the teacher-web schema; the
+  // definitions stay only so that the printing code compiles until it is deleted. ----
 
   case class DBPrintJob(id: Option[Long], contest: Int, team: Int, filename: String, data: Array[Byte],
                         computer: InetString, arrived: DateTime)
@@ -539,65 +729,6 @@ object SlickModel {
     locatedPrintJobs.filter(_.contest === contestID)
   )
 
-  case class CustomTests(tag: Tag) extends Table[(Long, Int, Int, Boolean, Int, Array[Byte], Array[Byte], Array[Byte], DateTime,
-    Option[DateTime], Int, TimeMs, Memory, Long)](tag, "custom_test") {
-    def id = column[Long]("id", O.AutoInc, O.PrimaryKey)
-    def contest = column[Int]("contest")
-    def team = column[Int]("team_id")
-    def tested = column[Boolean]("tested")
-    def language = column[Int]("language_id")
-    def source = column[Array[Byte]]("source")
-    def input = column[Array[Byte]]("input")
-    def output = column[Array[Byte]]("output")
-    def arrived = column[DateTime]("submit_time_absolute")
-    def finishTime = column[Option[DateTime]]("finish_time")
-    def resultCode = column[Int]("result_code")
-    def timeMs = column[TimeMs]("time_ms")
-    def memoryBytes = column[Memory]("memory_bytes")
-    def returnCode = column[Long]("return_code")
-
-    override def * = (id, contest, team, tested, language, source, input, output, arrived,
-      finishTime, resultCode, timeMs, memoryBytes, returnCode)
-  }
-
-  val customTests = TableQuery[CustomTests]
-
-  case class LiftedCustomTest(id: Rep[Long], contest: Rep[Int], team: Rep[Int], languageName: Rep[String],
-                              source: Rep[Array[Byte]], input: Rep[Array[Byte]], output: Rep[Array[Byte]],
-                              arrived: Rep[DateTime], finishTime: Rep[Option[DateTime]], resultCode: Rep[Int],
-                              timeMs: Rep[TimeMs], memoryBytes: Rep[Memory], returnCode: Rep[Long])
-
-  implicit object CustomEntryShape extends CaseClassShape(LiftedCustomTest.tupled, EvalEntry.tupled)
-
-  val customTestWithLang = (for {
-    c <- customTests
-    l <- compilers if l.id === c.language
-  } yield LiftedCustomTest(c.id, c.contest, c.team, l.name, c.source, c.input, c.output, c.arrived, c.finishTime,
-    c.resultCode, c.timeMs, c.memoryBytes, c.returnCode)).sortBy(_.arrived.desc)
-
-  case class Results(tag: Tag) extends Table[DBResultEntry](tag, "results") {
-    def testingID = column[Long]("testing_id")
-    def testID = column[Int]("test_id")
-    def resultCode = column[Int]("result_code")
-    def recordTime = column[DateTime]("record_time")
-    def timeMs = column[TimeMs]("time_ms")
-    def memoryBytes = column[Memory]("memory_bytes")
-    def returnCode = column[Long]("return_code")
-    def testerReturnCode = column[Long]("tester_return_code")
-
-    override def * = (testingID, testID, resultCode, recordTime, timeMs, memoryBytes, returnCode,
-      testerReturnCode) <> (DBResultEntry.tupled, DBResultEntry.unapply)
-  }
-
-  val results = TableQuery[Results]
-
-  val headResultByTesting = Compiled((testingID: Rep[Long]) => results.filter(_.testingID === testingID).sortBy(_.testID.desc).take(1))
-
-  case class DBResultEntry(testingID: Long, testID: Int, resultCode: Int, recordTime: DateTime, timeMs: TimeMs, memoryBytes:Memory,
-                           returnCode: Long, testerReturnCode: Long)
-
-  val results0 = results.sortBy(_.testID)
-
   case class Areas(tag: Tag) extends Table[Area](tag, "areas") {
     def id = column[Int]("id", O.AutoInc, O.PrimaryKey)
     def name = column[String]("name")
@@ -647,6 +778,7 @@ object SlickModel {
 
   val waiterTaskRecords = TableQuery[WaiterTaskRecords]
 
+  // TODO(task11): qf's own admin table; teacher-web's `admins` (email + bcrypt) replaces it.
   case class Admins(tag: Tag) extends Table[AdminEntry](tag, "admins") {
     def username = column[String]("username", O.PrimaryKey)
     def password = column[String]("password")

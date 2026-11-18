@@ -53,10 +53,10 @@ class ServerSideEval (cc: ControllerComponents,
     mapping("compiler" -> number, "inlinesolution" -> text, "inlinedata" -> text)(ServerSideData.apply)(ServerSideData.unapply)
   }
 
-  private[this] def insertEval(contest:Int, team:Int, lang:Int, solution: Array[Byte], data: Array[Byte]) = {
-    val q = (SlickModel.customTests.map(x => (x.contest, x.team, x.language, x.source, x.input)) returning SlickModel.customTests.map(_.id)) += (
-      contest, team, lang, solution, data
-    )
+  private[this] def insertEval(contest: Contest, team:Int, lang:Int, solution: Array[Byte], data: Array[Byte]) = {
+    val q = (SlickModel.customTests.map(x => (x.seasonId, x.contest, x.team, x.language, x.source, x.input)) returning SlickModel.customTests.map(_.id)) += ((
+      contest.seasonId, contest.id, team, lang, solution, data
+    ))
     db.run(q)
   }
 
@@ -74,10 +74,10 @@ class ServerSideEval (cc: ControllerComponents,
 
   private[this] implicit val ec = defaultExecutionContext
 
-  private[this] val getCompilers = SlickModel.sortedCompilers
+  private[this] def getCompilers(contest: Contest) = SlickModel.compilersOfSeason(contest.seasonId)
 
   def index = silhouette.SecuredAction.async { implicit request =>
-    db.run(getCompilers.result).flatMap { compilers =>
+    db.run(getCompilers(request.identity.contest).result).flatMap { compilers =>
       getEvalForm(request.identity, compilers, serverSideForm).map(Ok(_))
     }
   }
@@ -93,7 +93,7 @@ class ServerSideEval (cc: ControllerComponents,
   }
 
   def post = silhouette.SecuredAction(parse.multipartFormData).async { implicit request =>
-    db.run(getCompilers.result).flatMap { compilers =>
+    db.run(getCompilers(request.identity.contest).result).flatMap { compilers =>
         val parsed = serverSideForm.bindFromRequest
 
         parsed.fold(
@@ -101,7 +101,7 @@ class ServerSideEval (cc: ControllerComponents,
           submitData => {
             val solutionBytes = FormUtil.inlineOrFile(submitData.inlinesolution, request.body.file("file")).getOrElse(FormUtil.emptyBytes)
             val dataBytes = FormUtil.inlineOrFile(submitData.inlinedata, request.body.file("inputfile")).getOrElse(FormUtil.emptyBytes)
-            insertEval(request.identity.contest.id, request.identity.team.id, submitData.compiler, solutionBytes, dataBytes).map {  wid =>
+            insertEval(request.identity.contest, request.identity.team.id, submitData.compiler, solutionBytes, dataBytes).map {  wid =>
               rabbitMq ! Message.queue(ServerSideEvalID(wid.toInt), queue = "contester.evalrequests")
               Redirect(routes.ServerSideEval.index)
             }

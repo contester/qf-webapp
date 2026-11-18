@@ -114,14 +114,6 @@ class MyComponents(context: ApplicationLoader.Context)
 
   lazy val dbConfig: DatabaseConfig[JdbcProfile] = slickApi.dbConfig[JdbcProfile](DbName("default"))
 
-  val pwList = Try(Source.fromFile(configuration.get[String]("passwordlist")).getLines().toSeq).toOption.toSeq.flatten
-
-  lazy val externalDatabases = ExternalDatabases(
-    slickApi.dbConfig[JdbcProfile](DbName("studentWeb")),
-    slickApi.dbConfig[JdbcProfile](DbName("schoolWeb")),
-    slickApi.dbConfig[JdbcProfile](DbName("netmap")),
-    pwList)
-
   lazy val palevoSink: palevo.PalevoSink = palevo.PalevoSink.fromConfig(configuration, wsClient, actorSystem)(executionContext)
 
   // Read-only query API for palevo's chat bot.
@@ -139,12 +131,11 @@ class MyComponents(context: ApplicationLoader.Context)
   lazy val countdownConfig: palevo.CountdownConfig = palevo.CountdownConfig(configuration)
 
   private lazy val liveBuilt: live.LiveWiring.Built = live.LiveWiring.build(liveConfig, () => {
-    import org.stingray.contester.dbmodel.MyPostgresProfile.api._
     val messages = MessagesImpl(Lang("en"), messagesApi)
     actorSystem.actorOf(actors.LiveMonitorActor.props(
       dbConfig.db, liveConfig, configuration.getOptional[String]("monitor.static_location").map(new File(_)),
       statusActorModel.teamClient, statusActorModel.problemClient,
-      () => dbConfig.db.run(org.stingray.contester.dbmodel.SlickModel.allContests.result),
+      () => models.Rounds.currentRounds(dbConfig.db)(executionContext),
       (c, b) => live.StaticRender.render(c, b)(messages), palevoSink, countdownConfig,
       actors.LiveMonitorActor.DbStatusRows.fromDb(dbConfig.db, statusActorModel.teamClient, actorSystem.scheduler)(executionContext)), "live-monitor-actor")
   })

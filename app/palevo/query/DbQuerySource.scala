@@ -15,6 +15,7 @@ import scala.concurrent.{ExecutionContext, Future}
   * @param problems the problems of a contest (the problem state actor's view)
   * @param alerts the open printer problems as (agent, printer, condition)
   */
+// TODO(task18): the palevo query API is deleted; its SQL below still reads the legacy schema.
 class DbQuerySource(db: JdbcBackend#DatabaseDef, liveMonitor: Option[ActorRef],
                     problems: Int => Future[Seq[Problem]], alerts: () => Seq[(String, String, String)])
                    (implicit ec: ExecutionContext) extends QuerySource {
@@ -22,7 +23,7 @@ class DbQuerySource(db: JdbcBackend#DatabaseDef, liveMonitor: Option[ActorRef],
   import org.stingray.contester.dbmodel.MyPostgresProfile.api._
 
   def contests(): Future[Seq[Contest]] =
-    db.run(org.stingray.contester.dbmodel.SlickModel.allContests.result)
+    models.Rounds.currentRounds(db)
 
   def board(contestId: Int, real: Boolean): Future[Option[live.LiveBoard]] = {
     import actors.LiveMonitorActor.JoinPublic

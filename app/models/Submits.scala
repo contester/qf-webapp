@@ -45,66 +45,8 @@ trait CellScore[Cell] {
   def withCell(cell: Cell): CellScore[Cell]
 }
 
-object SchoolCell {
-  def calculate(base: Int, fraction: Rational, attempt: Int): Rational = {
-    val tops = {
-      val x = base - attempt + 1
-      if (x < 20)
-        20
-      else
-        x
-    }
-    if (fraction == 1)
-      tops
-    else {
-      val x = tops * 2 * fraction / 3
-      if (x < 5)
-        0
-      else
-        x
-    }
-  }
-
-  def empty = SchoolCell(0, 0, fullSolution = false)
-}
-
-object RationalToScoreStr {
-  implicit private val scale = FixedScale(100)
-
-  def apply(r: Rational): String =
-    if (r.isWhole()) r.toString
-    else FixedPoint(r).toString(scale)
-}
-
-object SchoolScorer extends SubmitScorer[SchoolCell] with Logging {
-  def apply(cell: SchoolCell, submit: Submit) =
-    if (!submit.compiled || !submit.finished || submit.taken == 0 || submit.failedOnFirst) {
-      if (submit.compiled && submit.taken == 0) {
-        logger.info(s"Compiled but taken = 0: contest ${submit.submitId.contestId} team ${submit.submitId.teamId} submit ${submit.submitId.id}")
-      }
-      (cell, None)
-    } else {
-      val newScore = SchoolCell.calculate(submit.submitId.problem.rating,
-        Rational(submit.passed, submit.taken), cell.attempt + 1)
-
-      (SchoolCell(cell.attempt + 1, cell.score.max(newScore), cell.fullSolution || submit.success),
-        if (newScore > cell.score) Some(SchoolScore(newScore))
-        else None)
-    }
-}
-
-case class SchoolScore(value: Rational) extends Score {
-  override def toString: String = RationalToScoreStr(value)
-}
-
 trait ProblemCell {
   def fullSolution: Boolean
-}
-
-case class SchoolCell(attempt: Int, score: Rational, fullSolution: Boolean) extends ProblemCell {
-  override def toString =
-    if (attempt == 0) ""
-    else RationalToScoreStr(score)
 }
 
 object ACMCell {
@@ -196,8 +138,8 @@ object Submits {
       s.compiled, s.passed, s.taken,
       s.testingID.map(_.toInt))
 
-  def getContestSubmits(contest: Long) = {
-    SlickModel.submits0ByContest(contest.toInt).result
+  def getContestSubmits(contest: Int) = {
+    SlickModel.submits0ByContest(contest).result
   }
 
   /** The contest of a submit; None if there is no such submit. */
@@ -226,24 +168,23 @@ object Submits {
   def getTestingLastResult(details: Seq[ResultEntry]) =
     trOption(details).map(_.maxBy(_.test))
 
-  private[this] def annotateGrouped(db: JdbcBackend#DatabaseDef, schoolMode: Boolean, submits: Seq[Submit])(implicit ec: ExecutionContext) = {
-    val scored = if (schoolMode) scoreGrouped[SchoolCell](submits, SchoolCell.empty, SchoolScorer)
-    else scoreGrouped(submits, ACMCell.empty, ACMScorer)
+  private[this] def annotateGrouped(db: JdbcBackend#DatabaseDef, submits: Seq[Submit])(implicit ec: ExecutionContext) = {
+    val scored = scoreGrouped(submits, ACMCell.empty, ACMScorer)
     val indexed = indexGrouped(scored._2)
 
     Future.sequence(
       indexed.map {
         case ((submit, optScore), index) =>
-          SubmitResult.annotate(db, schoolMode, submit).map {
+          SubmitResult.annotate(db, submit).map {
             case (submitResult, submitDetails, submitStats) =>
               FullyDescribedSubmit(submit, index, optScore, submitResult, submitStats, submitDetails)
           }
       })
   }
 
-  def groupAndAnnotate(db: JdbcBackend#DatabaseDef, schoolMode: Boolean, submits: Seq[Submit])(implicit ec: ExecutionContext) =
+  def groupAndAnnotate(db: JdbcBackend#DatabaseDef, submits: Seq[Submit])(implicit ec: ExecutionContext) =
     Future.sequence(groupByTP(submits).values.map { grouped =>
-      annotateGrouped(db, schoolMode, grouped)
+      annotateGrouped(db, grouped)
     }).map(_.flatten.toSeq.sortBy(-_.submit.submitId.arrived.seconds))
 
 
@@ -251,14 +192,13 @@ object Submits {
     * One team's attempts on one problem, scored in arrival order and numbered, with the results of their testings.
     * Pure, so a change to an earlier attempt (a rejudge) can be seen to change the scores of the later ones.
     */
-  def describeAttempts(schoolMode: Boolean, attempts: Seq[Submit], resultsByTesting: Map[Long, Seq[ResultEntry]]): Seq[FullyDescribedSubmit] = {
+  def describeAttempts(attempts: Seq[Submit], resultsByTesting: Map[Long, Seq[ResultEntry]]): Seq[FullyDescribedSubmit] = {
     val submits = attempts.sortBy(_.submitId.arrived.seconds)
-    val scored = (if (schoolMode) scoreGrouped[SchoolCell](submits, SchoolCell.empty, SchoolScorer)
-      else scoreGrouped(submits, ACMCell.empty, ACMScorer))._2
+    val scored = scoreGrouped(submits, ACMCell.empty, ACMScorer)._2
     indexGrouped(scored).map {
       case ((submit, optScore), index) =>
         val details = submit.testingId.flatMap(t => resultsByTesting.get(t.toLong)).getOrElse(Nil)
-        FullyDescribedSubmit(submit, index, optScore, SubmitResult.annotate2(schoolMode, submit, details),
+        FullyDescribedSubmit(submit, index, optScore, SubmitResult.annotate2(submit, details),
           getTestingStats(details), details)
     }
   }
@@ -267,7 +207,7 @@ object Submits {
     * A team's attempts on one problem, described like the rows of the team's submit list. Two queries however many
     * attempts there are: the submits, and the per-test results of all of them in one go (without the tester output).
     */
-  def teamProblemSubmits(db: JdbcBackend#DatabaseDef, schoolMode: Boolean, contest: Int, team: Int, problem: String)
+  def teamProblemSubmits(db: JdbcBackend#DatabaseDef, contest: Int, team: Int, problem: String)
                         (implicit ec: ExecutionContext): Future[Seq[FullyDescribedSubmit]] =
     db.run(getContestTeamProblemSubmits(contest, team, problem)).flatMap { rows =>
       val submits = rows.map(upliftSub)
@@ -278,7 +218,7 @@ object Submits {
           .map(x => (x.testingID, x.testID, x.resultCode, x.timeMs, x.memoryBytes)).result).map(_.map {
           case (tid, test, code, time, memory) => ResultEntry(tid, test, code, time, memory, 0, 0)
         }.groupBy(_.testingID))
-      results.map(describeAttempts(schoolMode, submits, _))
+      results.map(describeAttempts(submits, _))
     }
 
   import scala.language.implicitConversions
@@ -293,7 +233,7 @@ object Submits {
         maybeSubmit map { short =>
           db.run(getContestTeamProblemSubmits(short._1, short._2, short._3))
             .flatMap(submits =>
-              groupAndAnnotate(db, false, submits.map(upliftSub(_)))).map { submits =>
+              groupAndAnnotate(db, submits.map(upliftSub(_)))).map { submits =>
             submits.find(_.submit.submitId.id == submitId).map(SubmitDetails(_, short._4))
           }
         }

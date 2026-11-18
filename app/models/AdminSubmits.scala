@@ -50,13 +50,7 @@ object AdminSubmits {
   val PageSize = 100
 
   /** The same join as SlickModel.submits0, but unsorted so that callers choose the order. */
-  private def submitsQuery = for {
-    s <- SlickModel.submits
-    contest <- SlickModel.contests if s.contest === contest.id
-    problem <- SlickModel.problems if s.problem === problem.id && s.contest === problem.contestID
-    lang <- SlickModel.compilers if s.language === lang.id
-  } yield SlickModel.LiftedSubmit(s.id, s.arrived, s.arrived - contest.startTime, s.arrived > contest.freezeTime,
-    s.team, s.contest, s.problem, lang.moduleID, s.tested, s.compiled, s.passed, s.taken, s.testingID)
+  private def submitsQuery = SlickModel.submitsUnsorted
 
   /**
    * Per-testing aggregates over `results` without touching tester_output/tester_error.
@@ -66,11 +60,11 @@ object AdminSubmits {
     if (testingIds.isEmpty) DBIO.successful(Map.empty)
     else {
       val ids = testingIds.distinct.mkString(",") // Longs, nothing to escape
-      sql"""select testing_id, max(test_id)::int, (array_agg(result_code order by test_id desc))[1]::int,
-                   bool_and(case when test_id = 0 then result_code = 1 else result_code = 10 end),
-                   coalesce(max(time_ms) filter (where test_id <> 0), 0),
-                   coalesce(max(memory_bytes) filter (where test_id <> 0), 0),
-                   coalesce(bool_or(result_code = 11) filter (where test_id <> 0), false)
+      sql"""select testing_id, max(test_no)::int, (array_agg(result_code order by test_no desc))[1]::int,
+                   bool_and(case when test_no = 0 then result_code = 1 else result_code = 10 end),
+                   coalesce(max(time_ms) filter (where test_no <> 0), 0),
+                   coalesce(max(memory_bytes) filter (where test_no <> 0), 0),
+                   coalesce(bool_or(result_code = 11) filter (where test_no <> 0), false)
               from results where testing_id in (#$ids) group by testing_id"""
         .as[(Long, Int, Int, Boolean, Long, Long, Boolean)]
         .map(_.map { case (tid, lastTest, lastCode, allOk, time, mem, tle) =>
@@ -82,7 +76,7 @@ object AdminSubmits {
     if (submitIds.isEmpty) DBIO.successful(Map.empty)
     else {
       val ids = submitIds.mkString(",")
-      sql"select submit, count(*)::int from testings where submit in (#$ids) group by submit"
+      sql"select submit_id, count(*)::int from testings where submit_id in (#$ids) group by submit_id"
         .as[(Long, Int)].map(_.toMap)
     }
 
@@ -113,7 +107,7 @@ object AdminSubmits {
       shown.map { s =>
         val agg = s.testingId.flatMap(t => aggs.get(t.toLong))
         AdminSubmitRow(s, scores.getOrElse(s.submitId.id, None),
-          SubmitResult.fromLast(schoolMode = false, s, lastResult(agg)),
+          SubmitResult.fromLast(s, lastResult(agg)),
           agg.map(_.stats).getOrElse(SubmitStats(TimeMs(0), Memory(0))),
           counts.getOrElse(s.submitId.id.toLong, 0))
       }
@@ -178,52 +172,51 @@ object AdminSubmits {
   def runHistory(db: JdbcBackend#DatabaseDef, submitId: Long, currentTesting: Option[Long])(implicit ec: ExecutionContext): Future[Seq[RunSummary]] =
     db.run(SlickModel.testings.filter(_.submit === submitId).sortBy(_.id.desc).result.flatMap { ts =>
       aggregates(ts.map(_._1)).map { aggs =>
-        ts.map { case (id, _, start, url, finish) =>
+        ts.map { case (id, _, start, revision, finish) =>
           val agg = aggs.get(id)
           val (text, ok) = verdict(finish.isDefined, agg)
-          RunSummary(id, start, finish, url, text, ok, agg.map(_.stats).getOrElse(SubmitStats(TimeMs(0), Memory(0))),
+          RunSummary(id, start, finish, revisionKey(revision), text, ok, agg.map(_.stats).getOrElse(SubmitStats(TimeMs(0), Memory(0))),
             currentTesting.contains(id))
         }
       }
     })
 
-  /** Submits of the problem in the contest, split by whether their last testing used `problemURL`. */
+  /** How a testing's Polygon problem revision is shown and compared: "revision N", or "" when it is not known. */
+  def revisionKey(revision: Option[Int]): String = revision.fold("")(r => s"revision $r")
+
+  /** Submits of the problem in the round, split by whether their last testing used the revision `problemURL`. */
   def rejudgePlan(db: JdbcBackend#DatabaseDef, contest: Int, problem: String, problemURL: String)(implicit ec: ExecutionContext): Future[RejudgePlan] =
     db.run((for {
       s <- SlickModel.submits if s.contest === contest && s.problem === problem
       t <- SlickModel.testings if t.id === s.testingID
-    } yield (s.id, t.problemURL, t.finishTime.isDefined)).sortBy(_._1).result).map { rows =>
+    } yield (s.id, t.problemRevision, t.finishTime.isDefined)).sortBy(_._1).result).map { rows0 =>
+      val rows = rows0.map(r => (r._1, revisionKey(r._2), r._3))
       val (current, other) = rows.partition(_._2 == problemURL)
       val (done, running) = other.partition(_._3)
       RejudgePlan(done.map(r => (r._1, r._2)), running.size, current.size)
     }
 
   /**
-   * Every problem of the contest definition (polygon_contest_cache, by the contest's polygon_id) against its
-   * newest cached revision (polygon_problem_cache), with where the contest's submits were actually tested.
+   * Every problem of the round against the newest Polygon revision any of its testings used (the "latest URL" is
+   * that revision, see [[revisionKey]]), with where the round's submits were actually tested.
    * Rolling back inside a transaction is possible because this is a plain DBIO.
    */
   def revisionStatusAction(contest: Int)(implicit ec: ExecutionContext): DBIO[Seq[ProblemRevisionStatus]] = {
-    val defined = sql"""select upper(x.idx), x.url,
-                   (select max(k.problem_revision) from polygon_problem_cache k where k.problem_source_base_url = x.url)
-              from contests c
-              join polygon_contest_cache pc on pc.source_url = c.polygon_id,
-                   xmltable('/contest/problems/problem' passing pc.contest_xml
-                            columns idx text path '@index', url text path '@url') x
-             where c.id = $contest
-             order by 1""".as[(String, String, Option[Long])]
-    val counts = sql"""select s.problem, t.problem_url, t.finish_time is not null, count(*)::int
+    val defined = sql"""select upper(problem_id) from problems where round_id = $contest order by 1""".as[String]
+    val counts = sql"""select upper(s.problem_id), t.problem_revision, t.finished_at is not null, count(*)::int
               from submits s join testings t on t.id = s.testing_id
-             where s.contest = $contest group by 1, 2, 3""".as[(String, String, Boolean, Int)]
-    val totals = sql"select problem, count(*)::int from submits where contest = $contest group by 1".as[(String, Int)]
-    defined.zip(counts).zip(totals).map { case ((problems, countRows), totalRows) =>
+             where s.round_id = $contest group by 1, 2, 3""".as[(String, Option[Int], Boolean, Int)]
+    val totals = sql"select upper(problem_id), count(*)::int from submits where round_id = $contest group by 1".as[(String, Int)]
+    defined.zip(counts).zip(totals).map { case ((problems, countRows0), totalRows) =>
+      val countRows = countRows0.map(r => (r._1, revisionKey(r._2), r._2, r._3, r._4))
       val totalMap = totalRows.toMap
-      problems.map { case (problem, base, rev) =>
-        val url = rev.map(r => s"$base?revision=$r")
-        val (cur, other) = countRows.filter(_._1 == problem).partition(r => url.contains(r._2))
-        ProblemRevisionStatus(problem, url, cur.map(_._4).sum,
-          other.filter(_._3).map(_._4).sum, other.filterNot(_._3).map(_._4).sum,
-          other.groupBy(_._2).map { case (u, rs) => u -> rs.map(_._4).sum }.toSeq.sortBy(_._1),
+      problems.map { problem =>
+        val mine = countRows.filter(_._1 == problem)
+        val url = mine.flatMap(_._3).reduceOption(_ max _).map(r => revisionKey(Some(r)))
+        val (cur, other) = mine.partition(r => url.contains(r._2))
+        ProblemRevisionStatus(problem, url, cur.map(_._5).sum,
+          other.filter(_._4).map(_._5).sum, other.filterNot(_._4).map(_._5).sum,
+          other.groupBy(_._2).map { case (u, rs) => u -> rs.map(_._5).sum }.toSeq.sortBy(_._1),
           totalMap.getOrElse(problem, 0))
       }
     }

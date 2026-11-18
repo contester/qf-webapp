@@ -34,7 +34,7 @@ object AdminExtraInfo {
           (implicit ec: ExecutionContext): Future[SaveResult] = {
     val action: DBIO[SaveResult] = original match {
       case None =>
-        (SlickModel.extraInfos += page.copy(contest = contest)).map(_ => Saved: SaveResult)
+        SlickModel.insertExtraInfo(page.copy(contest = contest)).map(_ => Saved: SaveResult)
       case Some(num) =>
         SlickModel.extraInfos.filter(x => x.contest === contest && x.num === num)
           .map(x => (x.num, x.heading, x.data)).update((page.num, page.heading, page.data))

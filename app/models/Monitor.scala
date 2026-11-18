@@ -11,7 +11,6 @@ import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.MessagesApi
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
-import spire.math.Rational
 import utils.Ask
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -113,29 +112,6 @@ object Foo {
   }
 
 
-}
-
-object MonitorSchool {
-  case class Status(problems: Seq[String], rows: Seq[RankedRow[Rational, SchoolCell]]) extends AnyStatus {
-    override def anyRows: Seq[AnyRankedRow] = rows
-  }
-
-  object Cell {
-    def apply(submits: Seq[Submit]): SchoolCell =
-      Submits.indexAndScoreGrouped(submits, SchoolCell.empty, SchoolScorer)._1
-  }
-
-  object Score {
-    def apply(cells: Seq[SchoolCell]): Rational = {
-      //import spire.implicits._
-      cells.map(_.score).foldLeft(Rational(0))(_+_)
-    }
-  }
-
-    def calculateStatus(problems: Seq[Problem], teams: Seq[Team], submits: Seq[Submit]): Status = {
-      implicit val ord = Ordering[Rational].reverse
-      Status(problems.map(_.id), Foo.groupAndRank(teams, submits, Cell(_), Score(_)))
-    }
 }
 
 object ACM {

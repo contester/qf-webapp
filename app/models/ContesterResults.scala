@@ -3,8 +3,7 @@ package models
 import play.api.libs.json.Json
 
 object ContesterResults {
-  case class SubmitObject(id: Int, team: Int, contest: Int, problem: String,
-                          schoolMode: Boolean)
+  case class SubmitObject(id: Int, team: Int, contest: Int, problem: String)
 
   object SubmitObject {
     implicit val submitObjectFormat = Json.format[SubmitObject]

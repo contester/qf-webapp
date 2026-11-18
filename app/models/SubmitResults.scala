@@ -84,29 +84,27 @@ object SubmitResult extends Logging {
     )
   }
 
-  /** The verdict from the submit and, for ACM mode, its last (message, test) result. */
-  def fromLast(schoolMode: Boolean, submit: Submit, last: Option[(String, Int)]): SubmitResult =
+  /** The verdict from the submit and its last (message, test) result. */
+  def fromLast(submit: Submit, last: Option[(String, Int)]): SubmitResult =
     if (!submit.finished)
       SubmitWaiting
     else if (submit.success)
       SubmitAccepted
     else if (!submit.compiled)
       SubmitCompileError
-    else if (schoolMode)
-      SubmitPartialResult(submit.passed, submit.taken)
     else {
       val lr = last.getOrElse(("unknown", 0))
       SubmitACMPartialResult(lr._1, Some(lr._2))
     }
 
-  private[models] def annotate2(schoolMode: Boolean, submit: Submit, details: Seq[ResultEntry]): SubmitResult =
-    fromLast(schoolMode, submit, Submits.getTestingLastResult(details).map(x => (x.resultString, x.test)))
+  private[models] def annotate2(submit: Submit, details: Seq[ResultEntry]): SubmitResult =
+    fromLast(submit, Submits.getTestingLastResult(details).map(x => (x.resultString, x.test)))
 
-  def annotate(db: JdbcBackend#DatabaseDef, schoolMode: Boolean, submit: Submit)(implicit ec: ExecutionContext): Future[(SubmitResult, Seq[ResultEntry], SubmitStats)] =
+  def annotate(db: JdbcBackend#DatabaseDef, submit: Submit)(implicit ec: ExecutionContext): Future[(SubmitResult, Seq[ResultEntry], SubmitStats)] =
     submit.testingId.map { tid =>
       Submits.loadSubmitDetails(db, tid)
     }.getOrElse(Future.successful(Nil)).map { details =>
-      val sr = annotate2(schoolMode, submit, details)
+      val sr = annotate2(submit, details)
       val st = Submits.getTestingStats(details)
       (sr, details, st)
     }
@@ -122,8 +120,6 @@ object SubmitResult extends Logging {
       Future.successful(SubmitAccepted)
     else if (!finished.compiled)
       Future.successful(SubmitCompileError)
-    else if (finished.submit.schoolMode)
-      Future.successful(SubmitPartialResult(finished.passed, finished.taken))
     else {
       val xtid = finished.testingId.toLong
       db.run(SlickModel.headResultByTesting(xtid).result.headOption).map { lastResultOption =>
@@ -146,6 +142,7 @@ object SubmitResult extends Logging {
     14 -> "Wrong answer",
     15 -> "Memory limit exceeded",
     16 -> "Tester error",
+    18 -> "не запускался",
     21 -> "Rejected"
   )
 

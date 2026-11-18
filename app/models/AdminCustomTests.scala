@@ -35,17 +35,17 @@ object AdminCustomTests {
   def page(db: JdbcBackend#DatabaseDef, contest: Int, team: Option[Int], before: Option[Long], after: Option[Long],
            size: Int = PageSize)(implicit ec: ExecutionContext): Future[AdminCustomPage] = {
     // Ints and Longs only, nothing to escape.
-    val teamCond = team.fold("true")(t => s"c.team_id = $t")
+    val teamCond = team.fold("true")(t => s"c.participant_id = $t")
     val (cond, order) = after match {
       case Some(a) => (s"c.id > $a", "asc")
       case None => (before.fold("true")(b => s"c.id < $b"), "desc")
     }
     val limit = size + 1
-    val q = sql"""select c.id, c.team_id, l.name, c.submit_time_absolute, c.finish_time, c.result_code, c.time_ms,
+    val q = sql"""select c.id, c.participant_id, l.name, c.submit_time_absolute, c.finished_at, c.result_code, c.time_ms,
                          c.memory_bytes, c.return_code, octet_length(c.source), octet_length(c.input),
                          coalesce(octet_length(c.output), 0)
-                  from custom_test c join languages l on l.id = c.language_id
-                  where c.contest = #$contest and #$teamCond and #$cond
+                  from custom_tests c join season_languages l on l.id = c.language_id
+                  where c.round_id = #$contest and #$teamCond and #$cond
                   order by c.id #$order limit #$limit"""
     db.run(q.as[AdminCustomRow]).map { fetched =>
       val hasMore = fetched.size > size
@@ -72,8 +72,8 @@ object AdminCustomTests {
    * result. Only if it belongs to the contest; false if there is no such test.
    */
   def reset(db: JdbcBackend#DatabaseDef, contest: Int, id: Long)(implicit ec: ExecutionContext): Future[Boolean] =
-    db.run(sqlu"""update custom_test set tested = false, finish_time = null
-                   where id = $id and contest = $contest""").map(_ > 0)
+    db.run(sqlu"""update custom_tests set tested = false, finished_at = null
+                   where id = $id and round_id = $contest""").map(_ > 0)
 
   private def decode(b: Array[Byte]) = new String(b, "CP1251")
   def sourceText(e: EvalEntry): String = decode(e.source)

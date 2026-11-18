@@ -2,14 +2,14 @@ package models
 
 import akka.actor.ActorRef
 import com.github.nscala_time.time.Imports._
-import org.stingray.contester.dbmodel.{Contest, Problem}
+import org.stingray.contester.dbmodel.{Contest, Problem, SlickModel, Team}
 import org.stingray.qf.actors.ProblemStateActor
 import play.api.libs.EventSource.{EventDataExtractor, EventIdExtractor, EventNameExtractor}
 import play.api.libs.json.{JsValue, Json, Writes}
-import slick.jdbc.GetResult
+import slick.jdbc.JdbcBackend
 import utils.Selectable
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 object ContestWrites {
   implicit val writes = new Writes[Contest] {
@@ -64,9 +64,33 @@ object Compilers {
     Selectable.forSelect(toSelect(compilers), "Select compiler")
 }
 
+/** Rounds of the current season (qf's contests) and their participants (qf's teams). */
+object Rounds {
+  import org.stingray.contester.dbmodel.MyPostgresProfile.api._
+
+  def roundName(contestName: String, roundName: String): String = SlickModel.roundName(contestName, roundName)
+
+  /** Rounds of the current season with both start and end set, by id. */
+  def currentRounds(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[Seq[Contest]] =
+    db.run(SlickModel.currentRounds.result).map(_.map(SlickModel.toContest))
+
+  /** A round of the current season with both times set. */
+  def currentRound(db: JdbcBackend#DatabaseDef, roundId: Int)(implicit ec: ExecutionContext): Future[Option[Contest]] =
+    db.run(SlickModel.currentRoundByID(roundId).result.headOption).map(_.map(SlickModel.toContest))
+
+  /**
+    * The participants of the round: those with an active credential for it, not soft-deleted, with their school.
+    */
+  def teamsOfRound(db: JdbcBackend#DatabaseDef, roundId: Int)(implicit ec: ExecutionContext): Future[Seq[Team]] =
+    db.run(SlickModel.teamsOfRound(roundId).result)
+
+  /** The participants of every current round, by round id. */
+  def teamsOfCurrentRounds(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): Future[Map[Int, Seq[Team]]] =
+    db.run(SlickModel.teamsOfCurrentRounds.result).map(_.groupBy(_._1).map { case (k, v) => k -> v.map(_._2) })
+}
+
 object Contests {
   import org.stingray.contester.dbmodel.MyPostgresProfile.api._
-  import org.stingray.contester.dbmodel.SlickModel
 
   def formatHMS(ms: Long) = {
     val s = ms / 1000
@@ -78,8 +102,9 @@ object Contests {
     f"$hours%02d:$minutes%02d:$seconds%02d"
   }
 
-  def getCompilers(contest: Int) =
-    SlickModel.sortedCompilers
+  /** The languages of the round's season. */
+  def getCompilers(contest: Contest) =
+    SlickModel.compilersOfSeason(contest.seasonId)
 }
 
 object Problems {

@@ -59,8 +59,8 @@ class Application (cc: ControllerComponents,
   private[this] def getProblems(contest: Int)(implicit ec: ExecutionContext) =
     statusActorModel.problemClient.getProblems(contest)
 
-  private[this] def getProblemsAndCompilers(contestId: Int)(implicit ec: ExecutionContext) =
-    getProblems(contestId).zip(db.run(Contests.getCompilers(contestId).result))
+  private[this] def getProblemsAndCompilers(contest: Contest)(implicit ec: ExecutionContext) =
+    getProblems(contest.id).zip(db.run(Contests.getCompilers(contest).result))
 
   import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -92,7 +92,7 @@ class Application (cc: ControllerComponents,
 
   def index = silhouette.SecuredAction.async { implicit request =>
     getSubmits(request.identity).flatMap(x =>
-      Submits.groupAndAnnotate(db, request.identity.contest.schoolMode, x.map(Submits.upliftSub(_))
+      Submits.groupAndAnnotate(db, x.map(Submits.upliftSub(_))
       )).map { subs =>
       Ok(html.index(request.identity, subs))
     }
@@ -111,7 +111,7 @@ class Application (cc: ControllerComponents,
       Problems.forForm(problems), Compilers.forForm(compilers))
 
   def submit = silhouette.SecuredAction.async { implicit request =>
-    getProblemsAndCompilers(request.identity.contest.id).map {
+    getProblemsAndCompilers(request.identity.contest).map {
       case (problems, compilers) => {
         Ok(sendSolutionForm(request.identity, submitForm, problems,
           compilers))
@@ -119,8 +119,10 @@ class Application (cc: ControllerComponents,
     }
   }
 
-  private[this] def submitInsertQuery(contestId: Int, teamId: Int, problemId: String, srcLang: Int, source: Array[Byte], remoteAddr: String) = {
-    (SlickModel.submits.map(x => (x.contest, x.team, x.problem, x.language, x.source)) returning(SlickModel.submits.map(x => (x.id, x.arrived)))) += (contestId, teamId, problemId, srcLang, source)
+  // TODO(task12): the submit flow (round running, FK errors as form errors, remote address) is Task 12's.
+  private[this] def submitInsertQuery(contest: Contest, teamId: Int, problemId: String, srcLang: Int, source: Array[Byte], remoteAddr: String) = {
+    (SlickModel.submits.map(x => (x.seasonId, x.contest, x.team, x.problem, x.language, x.source)) returning(SlickModel.submits.map(x => (x.id, x.arrived)))) +=
+      ((contest.seasonId, contest.id, teamId, problemId, srcLang, source))
   }
 
   // Tells the live monitor about a new submit; the arrival time is the one the database assigned. Never throws.
@@ -133,7 +135,7 @@ class Application (cc: ControllerComponents,
   import com.spingo.op_rabbit.PlayJsonSupport._
 
   def submitPost = silhouette.SecuredAction(parse.multipartFormData).async { implicit request =>
-    getProblemsAndCompilers(request.identity.contest.id).flatMap {
+    getProblemsAndCompilers(request.identity.contest).flatMap {
       case (problems, compilers) =>
         val parsed = submitForm.bindFromRequest
 
@@ -148,7 +150,7 @@ class Application (cc: ControllerComponents,
             } else if (!request.identity.contest.running) {
               Future.successful(Some(parsed.withGlobalError("Contest is not running")))
             } else {
-              db.run(submitInsertQuery(request.identity.contest.id, request.identity.team.id, submitData.problem,
+              db.run(submitInsertQuery(request.identity.contest, request.identity.team.id, submitData.problem,
                 submitData.compiler, solutionBytes, request.remoteAddress)).map { case (wat, arrivedAt) =>
                 logger.info(s"Inserted submit id: $wat")
                 liveArrived(request.identity, wat.toInt, submitData.problem, arrivedAt)
@@ -166,7 +168,7 @@ class Application (cc: ControllerComponents,
   }
 
   def ackMessage = silhouette.SecuredAction.async { implicit request =>
-    request.body.asFormUrlEncoded.flatMap(_.get("msgid")).flatMap(_.headOption).flatMap(x => Try(x.toInt).toOption).foreach { msgid =>
+    request.body.asFormUrlEncoded.flatMap(_.get("msgid")).flatMap(_.headOption).flatMap(x => Try(x.toLong).toOption).foreach { msgid =>
       statusActorModel.statusActor ! StatusActor.Ack(request.identity, msgid)
     }
     Future.successful(Ok("ok"))

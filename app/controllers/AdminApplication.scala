@@ -11,8 +11,7 @@ import com.mohiva.play.silhouette.impl.authenticators.SessionAuthenticator
 import com.spingo.op_rabbit.Message
 import models._
 import org.apache.commons.io.FileUtils
-import org.stingray.contester.dbmodel.{Clarification, Problem, School}
-import org.stingray.contester.dbmodel.SlickModel.{Team, teams}
+import org.stingray.contester.dbmodel.{Clarification, Problem}
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.http.ContentTypes
@@ -25,7 +24,7 @@ import play.api.{Configuration, Logging}
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import utils.auth.AdminEnv
-import utils.{Ask, PolygonURL}
+import utils.Ask
 import views.html
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -38,19 +37,7 @@ case class ClarificationResponse(answer: String)
 
 case class PostWaiterTask(message: String, rooms: String)
 
-case class ContestDescription(id: Int)
-
-case class EditTeam(schoolID: Int, teamName: String, teamNum: Option[Int], notRated: Boolean = false, disqualified: Boolean = false,
-                    disabled: Boolean = false, noPrint: Boolean = false)
-
 case class PrintTarget(addr: String, name: String, area: String, printer: String)
-case class ServiceTeamsStatus(kind: InitialImportTools.ServiceTeamKind, schoolId: Option[Int], teams: Int)
-
-case class EditSchool(shortName: String, fullName: String)
-
-case class DisplayTeam(team: Team, school: School, login: String, password: String)
-
-case class DisplaySchool(id: Int, name: String)
 
 case class AdminPrintAttempt(id: Long, kind: String, created: DateTime, requestedBy: Option[String], printer: String,
                              status: String, pagesPrinted: Int, renderPages: Option[Int], error: String, detail: String)
@@ -69,9 +56,6 @@ object SubmitTicketLite {
   implicit val format = Json.format[SubmitTicketLite]
 }
 
-case class EditContest(name: String, schoolMode: Boolean, startTime: DateTime, freezeTime: DateTime, endTime: DateTime,
-                       exposeTime: DateTime, polygonID: Option[String], language: String)
-
 case class EditAdmin(username: String, password: String, spectator: String, administrator: String,
                      locations: String, unrestricted: String)
 
@@ -81,7 +65,6 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
                              statusActorModel: StatusActorModel,
                         printingModel: PrintingModel,
                                   configuration: Configuration,
-                        externalDatabases: ExternalDatabases,
                                   ws: WSClient,
                         liveHooks: live.LiveHooks,
                         liveConfig: live.LiveMonitorConfig,
@@ -170,12 +153,9 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
 
-  /** The submit's contest and whether it arrived after that contest's freeze time (the same rule as the status list). */
+  /** The submit's round and whether it arrived after that round's start, its freeze time (the same rule as the status list). */
   private[this] def getSubmitContestFreeze(submitId: Long)(implicit ec: ExecutionContext): Future[Option[(Int, Boolean)]] =
-    db.run((for {
-      s <- SlickModel.submits if s.id === submitId
-      c <- SlickModel.contests if c.id === s.contest
-    } yield (s.contest, s.arrived > c.freezeTime)).take(1).result.headOption)
+    db.run(SlickModel.submitsUnsorted.filter(_.id === submitId).map(x => (x.contestID, x.afterFreeze)).take(1).result.headOption)
 
   /** Spectators may open a submit of their contest; those with a restricted view only if it arrived before the freeze. */
   case class canSeeSubmit(submitId: Int) extends Authorization[Admin, SessionAuthenticator] {
@@ -315,9 +295,9 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
       case Some((submit, viewed)) =>
         val outputsF = viewed.map { tid =>
           getTestingByID(tid.toInt).flatMap {
-            case Some(t) =>
-              Outputs.getAllAssets2(ws, fileserverBase, shortn, submit.fsub.submit.submitId.id, tid.toInt,
-                Try(PolygonURL(t._4).prefix).getOrElse(""))
+            case Some(_) =>
+              // The testing records a Polygon problem revision, not the problem URL the assets used to be keyed by.
+              Outputs.getAllAssets2(ws, fileserverBase, shortn, submit.fsub.submit.submitId.id, tid.toInt, "")
             case None => Future.successful(Map[Int, ResultAssets]())
           }
         }.getOrElse(Future.successful(Map[Int, ResultAssets]()))
@@ -335,12 +315,12 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     val q = for {
       s <- SlickModel.submits if s.id === submitId.toLong
       t <- SlickModel.testings if s.testingID === t.id
-    } yield (t.id, t.problemURL)
+    } yield t.id
 
     db.run(q.take(1).result.headOption).map {
-        case Some((testingID, problemURL)) =>
-          val pprefix = Try(PolygonURL(problemURL).prefix.stripPrefix("problem/")).getOrElse("")
-          val downloadLoc = s"/fs2/?contest=$shortn&submit=${submitId}&testing=${testingID}&problem=${pprefix}"
+        case Some(testingID) =>
+          // TODO: the testing has a Polygon problem revision, not the problem URL whose path the archive was keyed by.
+          val downloadLoc = s"/fs2/?contest=$shortn&submit=${submitId}&testing=${testingID}&problem="
           logger.trace(s"download: $downloadLoc")
           Ok("download").as("application/zip").withHeaders("X-Accel-Redirect" -> downloadLoc)
         case None => NotFound
@@ -585,16 +565,9 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     db.run(q.result).map(_.map(x => PrintTarget(x._1.address, x._2, x._3, x._4)))
   }
 
-  /** The first (lowest id) jury team taking part in the contest. */
-  private def firstJuryTeam(contestID: Int): Future[Option[Int]] = {
-    import org.stingray.contester.dbmodel.MyPostgresProfile.api._
-    val q = (for {
-      s <- SlickModel.schools if s.fullName === InitialImportTools.JurySchoolFullName
-      t <- SlickModel.teams if t.school === s.id
-      p <- SlickModel.participants if (p.team === t.id && p.contest === contestID)
-    } yield t.id).sorted.take(1)
-    db.run(q.result.headOption)
-  }
+  // TODO(task19): printing goes away; there are no jury teams any more, so test prints go to the first participant.
+  private def firstJuryTeam(contestID: Int): Future[Option[Int]] =
+    statusActorModel.teamClient.getTeams(contestID).map(_.keys.toSeq.sorted.headOption)
 
   def listPrintJobs(contestID: Int)= silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
     getSelectedContests(contestID, request.identity)
@@ -649,376 +622,9 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }
 
-  /** Password slips of the contest as a PDF, without jury and coach teams; or only one school's or one team's. */
-  def passwordSheet(contestID: Int, school: Option[Int], team: Option[Int]) =
-    silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
-      if (!request.identity.canSeeTeamPasswords(contestID)) {
-        Future.successful(Forbidden("not allowed to see team passwords"))
-      } else {
-        getSelectedContests(contestID, request.identity).flatMap { contest =>
-          val q = (for {
-            t <- SlickModel.teams
-            p <- SlickModel.participants if (t.id === p.team && p.contest === contestID)
-            s <- SlickModel.schools if (s.id === t.school)
-            a <- SlickModel.assignments if (a.team === p.team && a.contest === p.contest)
-          } yield (t, s, a)).result
-
-          db.run(q).map { rows =>
-            val all = rows.map { case (t, s, a) =>
-              PasswordSheet.Row(t.id, s.id, PasswordCard(contest.contest.name, s.fullName, t.num, t.name, a.username, a.password))
-            }
-            val selected = PasswordSheet.select(all, school, team)
-            Ok(PasswordSheet.render(selected, all.map(_.card)))
-              .as("application/pdf")
-              .withHeaders("Content-Disposition" -> s"""inline; filename="passwords-$contestID.pdf"""")
-          }
-        }
-      }
-    }
-
-  def listTeams(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
-    getSelectedContests(contestID, request.identity).flatMap { contest =>
-      val teamQuery = (for {
-        t <- SlickModel.teams
-        p <- SlickModel.participants if (t.id === p.team && p.contest === contestID)
-        s <- SlickModel.schools if (s.id === t.school)
-        a <- SlickModel.assignments if (a.team === p.team && a.contest === p.contest)
-      } yield (t, p, s, a)).sortBy(_._1.id).result
-
-      val schoolQuery = SlickModel.schools.sortBy(_.fullName).result
-
-      db.run(teamQuery.zip(schoolQuery)).map { case (results, schools) =>
-        val cvt = results.map {
-          case (t, p, s, a) =>
-            DisplayTeam(t, s, a.username, a.password)
-        }
-        val dsc = schools.map(x => DisplaySchool(x.id, x.fullName))
-        Ok(html.admin.teamlist(cvt, dsc, contest, request.identity))
-      }
-    }
-  }
-
-  private val editTeamForm = Form {
-    mapping("schoolID" -> number,
-    "teamName" -> text,
-    "teamNum" -> optional(number),
-    "notRated" -> boolean,
-    "disqualified" -> boolean,
-    "disabled" -> boolean,
-    "noPrint" -> boolean
-    )(EditTeam.apply)(EditTeam.unapply)
-  }
-
-  private def displayEditTeam(form: Option[Form[EditTeam]], team: SlickModel.Team, schools: Seq[DisplaySchool], contest: SelectedContest,
-                              participant: Option[SlickModel.Participant])(implicit request: RequestHeader, ec: ExecutionContext) = {
-    Ok(html.admin.editteam(form.getOrElse(
-      editTeamForm.fill(EditTeam(team.school, team.name, if (team.num!=0) Some(team.num) else None,
-        participant.exists(_.notRated), participant.exists(_.disqualified),
-        participant.exists(_.disabled), participant.exists(_.noPrint)))), team.id, schools.map(x => x.id.toString -> x.name), contest, participant.isDefined))
-  }
-
-  private def forEditTeam(request: SecuredRequest[AdminEnv, AnyContent], contestID: Int, teamID: Int) =
-    getSelectedContests(contestID, request.identity)
-      .zip(db.run(SlickModel.teams.filter(_.id === teamID).result.headOption zip SlickModel.schools.sortBy(_.fullName).result zip
-        SlickModel.participants.filter(x => x.contest === contestID && x.team === teamID).result.headOption)).map {
-      case (contest, ((teamOpt, schools), participant)) =>
-        teamOpt match {
-          case Some(team) => Some((contest, team, schools.map(x => DisplaySchool(x.id, x.fullName)), participant))
-          case None => None
-    }}
-
-  def editTeam(contestID: Int, teamID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
-    forEditTeam(request, contestID, teamID).map {
-      case Some((contest, team, schools, participant)) => displayEditTeam(None, team, schools, contest, participant)
-      case None => NotFound
-    }
-  }
-
-  private val editSchoolForm = Form {
-    mapping("shortName" -> text,
-      "fullName" -> nonEmptyText
-    )(EditSchool.apply)(EditSchool.unapply)
-  }
-
-  private def displayEditSchool(form: Form[EditSchool], schoolID: Int, contest: SelectedContest)(implicit request: RequestHeader) =
-    Ok(html.admin.editschool(form, schoolID, contest))
-
-  def editSchool(contestID: Int, schoolID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
-    getSelectedContests(contestID, request.identity)
-      .zip(db.run(SlickModel.schools.filter(_.id === schoolID).result.headOption)).map {
-      case (contest, Some(school)) =>
-        displayEditSchool(editSchoolForm.fill(EditSchool(school.shortName, school.fullName)), schoolID, contest)
-      case _ => NotFound
-    }
-  }
-
-  def postEditSchool(contestID: Int, schoolID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
-    getSelectedContests(contestID, request.identity)
-      .zip(db.run(SlickModel.schools.filter(_.id === schoolID).result.headOption)).flatMap {
-      case (contest, Some(_)) =>
-        editSchoolForm.bindFromRequest.fold(
-          formWithErrors => Future.successful(BadRequest(html.admin.editschool(formWithErrors, schoolID, contest))),
-          data => db.run(SlickModel.schools.filter(_.id === schoolID).map(x => (x.shortName, x.fullName))
-            .update((data.shortName.trim, data.fullName.trim))).map { _ =>
-            Redirect(routes.AdminApplication.editSchool(contestID, schoolID)).flashing("success" -> "School updated.")
-          }
-        )
-      case _ => Future.successful(NotFound)
-    }
-  }
-
-  def postEditTeam(contestID: Int, teamID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
-    forEditTeam(request, contestID, teamID).flatMap {
-      case Some((contest, team, schools, participant)) =>
-            editTeamForm.bindFromRequest.fold(
-              formWithErrors => {
-                Future.successful(displayEditTeam(Some(formWithErrors), team, schools, contest, participant))
-              },
-              data => {
-                // teams (school, num) is unique: moving a team into a school that already has that number would violate it
-                val taken = if (data.schoolID != team.school) db.run(
-                  SlickModel.teams.filter(x => x.school === data.schoolID && x.num === team.num && x.id =!= team.id).exists.result)
-                else Future.successful(false)
-
-                taken.flatMap {
-                  case true =>
-                    val msg = s"That school already has a team number ${team.num}"
-                    Future.successful(displayEditTeam(Some(editTeamForm.fill(data).withError("schoolID", msg)), team, schools, contest, participant))
-                  case false =>
-                    val updateTeam = if (data.teamName != team.name || data.schoolID != team.school) {
-                      db.run(SlickModel.teams.filter(_.id === team.id).map(x => (x.name, x.school)).update((data.teamName, data.schoolID)))
-                    } else Future.successful(0)
-
-                    // Only this contest's participation changes; a team that does not take part has nothing to switch.
-                    val updateRated = if (participant.exists(p => p.notRated != data.notRated || p.disqualified != data.disqualified ||
-                      p.disabled != data.disabled || p.noPrint != data.noPrint)) {
-                      db.run(SlickModel.participants.filter(x => x.contest === contestID && x.team === teamID)
-                        .map(x => (x.notRated, x.disqualified, x.disabled, x.noPrint))
-                        .update((data.notRated, data.disqualified, data.disabled, data.noPrint)))
-                    } else Future.successful(0)
-
-                    updateTeam.zip(updateRated).flatMap { case (a, b) =>
-                      // The new details of the team in every contest it takes part in go to the team list and the live monitor.
-                      (if (a + b > 0) db.run(SlickModel.localTeamQuery.filter(_.teamId === teamID).result) else Future.successful(Seq.empty))
-                        .map { updated =>
-                          updated.foreach { t =>
-                            statusActorModel.teamClient.put(t)
-                            Try(liveHooks.teamChanged(t.contest, t))
-                          }
-                          Redirect(routes.AdminApplication.editTeam(contestID, teamID))
-                        }
-                    }
-                }
-              },
-            )
-          case None =>
-            Future.successful(NotFound)
-        }
-  }
-
   def showContestList(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
-    getSelectedContests(contestID, request.identity).flatMap { contest =>
-      db.run(SlickModel.allContests.result).map { results =>
-        val cvt = results.filter(x => request.identity.canSpectate(x.id))
-        Ok(html.admin.contestlist(cvt, contest, request.identity))
-      }
-    }}
-
-  import utils.DateParse._
-
-  private val editContestForm = Form {
-    mapping(
-      "name" -> text,
-      "schoolMode" -> boolean,
-      "startTime" -> nscalaDateTime,
-      "freezeTime" -> nscalaDateTime,
-      "endTime" -> nscalaDateTime,
-      "exposeTime" -> nscalaDateTime,
-      "polygonID" -> optional(text).transform[Option[String]](_.map(_.trim).filter(_.nonEmpty), identity),
-      "language" -> text
-    )(EditContest.apply)(EditContest.unapply)
-  }
-
-  def editContest(contestID: Int, ceditID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(ceditID)).async { implicit request =>
-    getSelectedContests(contestID, request.identity).zip(
-      db.run(SlickModel.getContestByID(ceditID).result.headOption)
-    ).map {
-      case (sc, c) =>
-        c match {
-          case Some(cedit) =>
-            val ec = EditContest(cedit.name, cedit.schoolMode, cedit.startTime, cedit.freezeTime, cedit.endTime, cedit.exposeTime, cedit.polygonID, cedit.language)
-            val cd = ContestDescription(ceditID)
-            Ok(html.admin.editcontest(editContestForm.fill(ec), cd, sc))
-          case None =>
-            NotFound
-        }
-    }
-  }
-
-  def postEditContest(contestID: Int, ceditID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(ceditID)).async { implicit request =>
-    import com.github.tototoshi.slick.PostgresJodaSupport._
-    getSelectedContests(contestID, request.identity).flatMap { sc =>
-            editContestForm.bindFromRequest.fold(
-              formWithErrors => {
-                Future.successful(Ok(html.admin.editcontest(formWithErrors, ContestDescription(ceditID), sc)))
-              },
-              data => {
-                val upd = SlickModel.getContestByIDToResync(ceditID)
-                    .update((data.name, data.schoolMode, data.startTime, data.freezeTime, data.endTime, data.exposeTime, data.polygonID, data.language))
-                db.run(upd).flatMap(_ => announceContestChanged(ceditID)).map { _ =>
-                  Redirect(routes.AdminApplication.editContest(contestID, ceditID))
-                }
-              },
-            )
-    }
-  }
-
-  /** Tells the status actor and the live monitor what the contest row is now; the database stays the truth. */
-  private def announceContestChanged(contestID: Int): Future[Unit] =
-    db.run(SlickModel.getContestByID(contestID).result.headOption).map(_.foreach(statusActorModel.contestChanged))
-      .recover { case e => logger.warn(s"cannot announce the change of contest $contestID: $e") }
-
-  // Exactly one of: `minutes` (the quick buttons) or `start` (the new start time).
-  private val shiftContestForm = Form(tuple("minutes" -> optional(number), "start" -> optional(nscalaDateTime)))
-
-  /**
-   * Moves all four times of a contest that has not started: by some minutes (negative: earlier), or so that it
-   * starts at a given time.
-   */
-  def postShiftContest(contestID: Int, ceditID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(ceditID)).async { implicit request =>
-    import com.github.tototoshi.slick.PostgresJodaSupport._
-    val back = Redirect(routes.AdminApplication.editContest(contestID, ceditID))
-    shiftContestForm.bindFromRequest.fold(
-      _ => Future.successful(back.flashing("error" -> "Give a number of minutes or a start time")),
-      {
-        case (None, None) | (Some(_), Some(_)) =>
-          Future.successful(back.flashing("error" -> "Give a number of minutes or a start time"))
-        case (minutes, start) =>
-          val action = SlickModel.getContestByID(ceditID).result.headOption.flatMap {
-            case None => slick.dbio.DBIO.successful(Left("No such contest"))
-            case Some(c) =>
-              val now = DateTime.now
-              val moved = start match {
-                case Some(s) => ContestShift.startAt(c, s, now)
-                case None => ContestShift.shift(c, org.joda.time.Duration.standardMinutes(minutes.get), now)
-              }
-              moved match {
-                case Left(error) => slick.dbio.DBIO.successful(Left(error))
-                case Right(t) =>
-                  SlickModel.contests.filter(_.id === ceditID).map(x => (x.startTime, x.freezeTime, x.endTime, x.exposeTime))
-                    .update((t.start, t.freeze, t.end, t.expose))
-                    .map(_ => Right((t.start, new org.joda.time.Duration(c.startTime, t.start))))
-              }
-          }.transactionally
-          db.run(action).flatMap {
-            case Left(error) => Future.successful(back.flashing("error" -> error))
-            case Right((newStart, delta)) => announceContestChanged(ceditID).map { _ =>
-              logger.info(s"${request.identity} moved contest $ceditID by ${delta.getStandardSeconds} s, start is now $newStart")
-              back.flashing("success" -> s"Contest moved ${ContestShift.describe(delta)}; it starts at ${utils.ShortTime.format(newStart)}")
-            }
-          }
-      }
-    )
-  }
-
-  def showImportedTeamList(contestID: Int, school: Boolean) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
-    getSelectedContests(contestID, request.identity).flatMap { contest =>
-      val sdb = if (school) externalDatabases.schoolWeb.db else externalDatabases.studentWeb.db
-      InitialImportTools.getImportedTeams(sdb, school).map { results =>
-        Ok(html.admin.importedteams(results.toSeq, contest, request.identity, school))
-      }
-    }}
-
-  def importTeams(contestID: Int, school: Boolean)= silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>
-    getSelectedContests(contestID, request.identity).flatMap { contest =>
-      val sdb = if (school) externalDatabases.schoolWeb.db else externalDatabases.studentWeb.db
-      InitialImportTools.getImportedTeams(sdb, school).flatMap { results =>
-        val contests = if(school) Seq(3,4) else Seq(1,2)
-        InitialImportTools.populateContestsWithTeams(db, results, contests, false).map { _ =>
-          Redirect(routes.AdminApplication.index)
-        }
-      }
-    }
-  }
-
-  private case class ServiceTeamsRequest(count: Int, contests: List[Int])
-
-  private val serviceTeamsForm = Form {
-    mapping("count" -> number(min = 1, max = 50), "contests" -> list(number))(ServiceTeamsRequest.apply)(ServiceTeamsRequest.unapply)
-      .verifying("Pick at least one contest", _.contests.nonEmpty)
-  }
-
-  private def addServiceTeams(contestID: Int, kind: InitialImportTools.ServiceTeamKind) =
-    silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>
-      val back = Redirect(routes.AdminApplication.miscForms(contestID))
-      serviceTeamsForm.bindFromRequest.fold(
-        formWithErrors => Future.successful(back.flashing("error" ->
-          s"${kind.fullName}: ${(formWithErrors.errors ++ formWithErrors.globalErrors).map(_.message).mkString("; ")}")),
-        data => getSelectedContests(contestID, request.identity).flatMap { selected =>
-          val known = selected.contests.map(_._1).toSet
-          val contests = data.contests.filter(known).distinct.sorted
-          if (contests.isEmpty) Future.successful(back.flashing("error" -> s"${kind.fullName}: no known contests selected"))
-          else for {
-            _ <- InitialImportTools.addServiceTeams(db, kind, data.count, contests)
-            status <- InitialImportTools.serviceTeamStatus(db, kind)
-          } yield back.flashing(
-            "success" -> s"${kind.fullName}: ${data.count} teams in contests ${contests.mkString(", ")}.",
-            "sheetContest" -> contests.head.toString,
-            "sheetSchool" -> status._1.map(_.toString).getOrElse(""))
-        }
-      )
-    }
-
-  private case class RoomAdminsRequest(letter: String, contests: List[Int])
-
-  private val roomAdminsForm = Form {
-    mapping("letter" -> nonEmptyText(maxLength = 1), "contests" -> list(number))(RoomAdminsRequest.apply)(RoomAdminsRequest.unapply)
-      .verifying("Pick at least one contest", _.contests.nonEmpty)
-  }
-
-  def postRoomAdmins(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
-    val back = Redirect(routes.AdminApplication.miscForms(contestID))
-    roomAdminsForm.bindFromRequest.fold(
-      formWithErrors => Future.successful(back.flashing("error" ->
-        s"Room admins: ${(formWithErrors.errors ++ formWithErrors.globalErrors).map(_.message).mkString("; ")}")),
-      data => getSelectedContests(contestID, request.identity).flatMap { selected =>
-        val known = selected.contests.map(_._1).toSet
-        val contests = data.contests.filter(known).distinct.sorted
-        if (contests.isEmpty) Future.successful(back.flashing("error" -> "Room admins: no known contests selected"))
-        else for {
-          rooms <- InitialImportTools.roomsWithComputers(db)
-          logins = InitialImportTools.roomLogins(rooms, data.letter)
-          _ <- InitialImportTools.upsertRoomAdmins(db, logins, contests, PasswordHash.hash)
-        } yield back.flashing(
-          "success" -> s"Room admins: ${logins.size} logins, spectating contests ${contests.mkString(", ")}.",
-          "roomLogins" -> logins.map(l => s"${l.username}\t${l.password}").mkString("\n"))
-      }
-    )
-  }
-
-  def addJuryTeams(contestID: Int) = addServiceTeams(contestID, InitialImportTools.JuryTeams)
-
-  def addCoachTeams(contestID: Int) = addServiceTeams(contestID, InitialImportTools.CoachTeams)
-
-  def importNetmapComputers = silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>
-    InitialImportTools.getNetmapComputers(externalDatabases.netmap.db).flatMap { comps =>
-      InitialImportTools.importNetmapComputers(db, comps).map { _ =>
-        Redirect(routes.AdminApplication.index)
-      }
-    }
-  }
-
-  def copyContestsForTesting(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>
-    import com.github.tototoshi.slick.PostgresJodaSupport._
-    val now = org.joda.time.DateTime.now
-    val action = SlickModel.contests.filter(_.id <= 10).sortBy(_.id).result.flatMap { originals =>
-      DBIO.sequence(originals.map { c =>
-        SlickModel.getContestByIDToResync(c.id + 10)
-          .update((c.name, c.schoolMode, now, c.freezeTime, c.endTime, c.exposeTime, c.polygonID, c.language))
-      })
-    }
-    db.run(action.transactionally).flatMap(_ => Future.traverse(1 to 10)(i => announceContestChanged(i + 10))).map { _ =>
-      Redirect(routes.AdminApplication.miscForms(contestID))
+    getSelectedContests(contestID, request.identity).zip(Rounds.currentRounds(db)).map { case (contest, rounds) =>
+      Ok(html.admin.contestlist(rounds.filter(x => request.identity.canSpectate(x.id)), contest))
     }
   }
 
@@ -1229,17 +835,6 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
       db.run(SlickModel.compLocations.filter(_.id inSet addrs.map(com.github.tminglei.slickpg.InetString(_))).delete).map { n =>
         back.flashing("success" -> s"Deleted $n computers")
       }
-  }
-
-  def miscForms(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(1)).async { implicit request =>
-    getSelectedContests(contestID, request.identity).flatMap { contest =>
-      for {
-        comps <- InitialImportTools.getNetmapComputers(externalDatabases.netmap.db)
-        statuses <- Future.sequence(InitialImportTools.ServiceTeamKinds.map { kind =>
-          InitialImportTools.serviceTeamStatus(db, kind).map { case (schoolId, count) => ServiceTeamsStatus(kind, schoolId, count) }
-        })
-      } yield Ok(html.admin.misc(comps, statuses, contest, request.identity))
-    }
   }
 
   /** Runs a custom test again: the director takes it from the queue like a fresh one and writes the result over the old. */

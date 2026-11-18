@@ -99,38 +99,7 @@ POST /admin/reprintPrintJob/:id controllers.AdminApplication.reprintJob(id: Long
 + nocsrf
 POST /admin/rerenderPrintJob/:id controllers.AdminApplication.rerenderJob(id: Long)
 
-GET /admin/:contestID/editTeam/:teamID controllers.AdminApplication.editTeam(contestID: Int, teamID: Int)
-
-GET /admin/:contestID/editSchool/:schoolID controllers.AdminApplication.editSchool(contestID: Int, schoolID: Int)
-
-GET /admin/:contestID/teams/ controllers.AdminApplication.listTeams(contestID: Int)
-GET /admin/:contestID/passwordSheet controllers.AdminApplication.passwordSheet(contestID: Int, school: Option[Int], team: Option[Int])
-
 GET /admin/:contestID/contests/ controllers.AdminApplication.showContestList(contestID: Int)
-
-+ nocsrf
-POST /admin/:contestID/editTeam/:teamID controllers.AdminApplication.postEditTeam(contestID: Int, teamID: Int)
-POST /admin/:contestID/editSchool/:schoolID controllers.AdminApplication.postEditSchool(contestID: Int, schoolID: Int)
-
-GET /admin/:contestID/contests/:cid controllers.AdminApplication.editContest(contestID: Int, cid: Int)
-
-POST /admin/:contestID/contests/:cid controllers.AdminApplication.postEditContest(contestID: Int, cid: Int)
-
-POST /admin/:contestID/contests/:cid/shift controllers.AdminApplication.postShiftContest(contestID: Int, cid: Int)
-
-GET /admin/:contestID/startImportTeams/:school controllers.AdminApplication.showImportedTeamList(contestID: Int, school:Boolean)
-
-POST /admin/:contestID/importTeams/:school controllers.AdminApplication.importTeams(contestID: Int, school:Boolean)
-
-POST /admin/:contestID/addJuryTeams controllers.AdminApplication.addJuryTeams(contestID: Int)
-
-POST /admin/:contestID/addCoachTeams controllers.AdminApplication.addCoachTeams(contestID: Int)
-
-POST /admin/:contestID/roomAdmins controllers.AdminApplication.postRoomAdmins(contestID: Int)
-
-POST /admin/mega/importComputers controllers.AdminApplication.importNetmapComputers
-
-POST /admin/:contestID/copyContestsForTesting controllers.AdminApplication.copyContestsForTesting(contestID: Int)
 
 GET /admin/:contestID/admins controllers.AdminApplication.adminsPage(contestID: Int)
 POST /admin/:contestID/admins controllers.AdminApplication.postAddAdmin(contestID: Int)
@@ -148,8 +117,6 @@ POST /admin/:contestID/areas/:areaID controllers.AdminApplication.postEditArea(c
 POST /admin/:contestID/areas/:areaID/delete controllers.AdminApplication.deleteArea(contestID: Int, areaID: Int)
 GET /admin/:contestID/computers controllers.AdminApplication.computersPage(contestID: Int)
 POST /admin/:contestID/computers/delete controllers.AdminApplication.deleteComputers(contestID: Int)
-
-GET /admin/:contestID/misc controllers.AdminApplication.miscForms(contestID: Int)
 
 GET     /assets/*file               controllers.Assets.versioned(path="/public", file: Asset)
 

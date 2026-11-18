@@ -206,9 +206,8 @@ class LiveContest(initial: Contest, problems: Seq[String], teams: Seq[Team], sub
 }
 
 object LiveContest {
-  /** The contest jury teams (see InitialImportTools.addServiceTeams) that are not rated; coach teams and rated jury teams are shown. */
-  def hiddenFromPublic(t: Team): Boolean =
-    t.schoolFullName == models.InitialImportTools.JurySchoolFullName && t.notRated
+  /** Teams the public board leaves out. There are no jury teams any more: none (the scoreboard rewrite drops this). */
+  def hiddenFromPublic(t: Team): Boolean = false
 
   private[live] def boardDifferences(kind: BoardKind, a: LiveBoard, b: LiveBoard): Seq[String] = {
     val header =

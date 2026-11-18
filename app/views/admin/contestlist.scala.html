@@ -1,34 +1,25 @@
 @import org.stingray.contester.dbmodel._
-@(contests: Seq[Contest], contest: SelectedContest, admin: Admin)(implicit request: RequestHeader, messages: Messages)
+@(contests: Seq[Contest], contest: SelectedContest)(implicit request: RequestHeader, messages: Messages)
 
 @adminmain(tab = "contests", contest=contest) {
 
 <div class="panel panel-success">
-    <div class="panel-heading"><h3 class="panel-title">Contest editor</h3></div>
+    <div class="panel-heading"><h3 class="panel-title">Rounds of the current season</h3></div>
     <div class="panel-body">
+        <p>Rounds are edited in teacher-web.</p>
 
-        <table id="printjobs" class="table table-hover table-bordered table-responsive">
+        <table id="rounds" class="table table-hover table-bordered table-responsive">
             <thead>
-            <tr><th>ID</th><th>Name</th><th>School mode</th><th>Start</th><th>Freeze</th><th>End</th><th>Expose</th><th>Polygon ID</th><th>Language</th></tr>
+            <tr><th>ID</th><th>Name</th><th>Start</th><th>End</th><th>Polygon ID</th></tr>
             </thead>
             <tbody>
             @for(s <- contests) {
             <tr id="@s.id">
-                @* The editor needs modify rights on the contest being edited. *@
-                @if(admin.canModify(s.id)) {
-                <th scope="row"><a href="@routes.AdminApplication.editContest(contest.contest.id, s.id)">@s.id</a></th>
-                <td><a href="@routes.AdminApplication.editContest(contest.contest.id, s.id)">@s.name</a></td>
-                } else {
                 <th scope="row">@s.id</th>
                 <td>@s.name</td>
-                }
-                <td>@s.schoolMode</td>
                 <td>@utils.ShortTime.format(s.startTime)</td>
-                <td>@utils.ShortTime.format(s.freezeTime)</td>
                 <td>@utils.ShortTime.format(s.endTime)</td>
-                <td>@utils.ShortTime.format(s.exposeTime)</td>
-                <td>@s.polygonID.getOrElse("")</td>
-                <td>@s.language</td>
+                <td>@s.polygonId.getOrElse("")</td>
             </tr>
             }
             </tbody>

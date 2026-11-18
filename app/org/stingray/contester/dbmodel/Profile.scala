@@ -14,7 +14,8 @@ trait MyPostgresProfile extends ExPostgresProfile
   with PgPlayJsonSupport
   with PgSearchSupport
   with PgNetSupport
-  with PgLTreeSupport {
+  with PgLTreeSupport
+  with PgEnumSupport {
   def pgjson = "jsonb" // jsonb support is in postgres 9.4.0 onward; for 9.3.x use "json"
 
   // Add back `capabilities.insertOrUpdate` to enable native `upsert` support; for postgres 9.5+
@@ -32,6 +33,9 @@ trait MyPostgresProfile extends ExPostgresProfile
     with HStoreImplicits
     with SearchImplicits
     with SearchAssistants {
+    /** `round_credentials.unrated`, the PG enum `credential_unrated`; NULL (None) is a rated participant. */
+    implicit val unratedTypeMapper: slick.jdbc.JdbcType[Unrated] =
+      createEnumJdbcType[Unrated]("credential_unrated", Unrated.toDb, Unrated.fromDb, quoteName = false)
     implicit val strListTypeMapper = new SimpleArrayJdbcType[String]("text").to(_.toList)
     implicit val playJsonArrayTypeMapper =
       new AdvancedArrayJdbcType[JsValue](pgjson,

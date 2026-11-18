@@ -3,9 +3,7 @@
 @import helper.Implicits._
 @import b3.vertical.fieldConstructor
 
-@plus = @{
-if(!loggedIn.contest.schoolMode) { "+" } else {""}
-}
+@plus = @{"+"}
 
 
 @main(loggedIn, tab = "index") {
@@ -21,7 +19,7 @@ if(!loggedIn.contest.schoolMode) { "+" } else {""}
         <table id="submits" class="table table-hover table-bordered table-responsive">
             <thead>
             <tr><th>ID</th><th>@messages("label.time")</th><th>@messages("label.problem")</th><th>@messages("label.attempt")</th><th>@messages("label.language")</th><th>@messages("label.verdict")</th>
-                <th>@if(loggedIn.contest.schoolMode) { @messages("label.points") } else { @messages("label.penalty") }</th>
+                <th>@messages("label.penalty")</th>
                 <th>@messages("label.elapsedTime"), ms</th>
             <th>@messages("label.memory"), KB</th></tr>
             </thead>

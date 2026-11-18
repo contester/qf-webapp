@@ -59,11 +59,11 @@ class QandA (cc: ControllerComponents,
     clarificationReqForm.bindFromRequest.fold(
       formWithErrors => clrForm(request.identity, formWithErrors).map(BadRequest(_)),
       clrData => {
-        val q = (SlickModel.clarificationRequests.map(x => (x.contest, x.team, x.problem, x.request)) returning SlickModel.clarificationRequests.map(_.id)) += (
-          request.identity.contest.id, request.identity.team.id, clrData.problem, clrData.text)
+        val q = (SlickModel.clarificationRequests.map(x => (x.seasonId, x.contest, x.team, x.problem, x.request)) returning SlickModel.clarificationRequests.map(_.id)) += ((
+          request.identity.contest.seasonId, request.identity.contest.id, request.identity.team.id, clrData.problem, clrData.text))
 
         db.run(q).map { clrId =>
-          statusActorModel.statusActor ! ClarificationRequested(request.identity.contest.id, clrId.toInt)
+          statusActorModel.statusActor ! ClarificationRequested(request.identity.contest.id, clrId)
           Redirect(routes.QandA.index)
         }
       }
