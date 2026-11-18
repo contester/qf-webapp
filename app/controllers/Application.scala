@@ -127,30 +127,25 @@ class Application (cc: ControllerComponents,
         val parsed = submitForm.bindFromRequest
 
         parsed.fold(
-          formWithErrors => {
-            Future.successful(Some(formWithErrors))
-          },
+          formWithErrors => Future.successful(SubmitOutcome.Invalid(formWithErrors): SubmitOutcome),
           submitData => {
             val solutionBytes = FormUtil.inlineOrFile(submitData.inline, request.body.file("file")).getOrElse(FormUtil.emptyBytes)
             if (solutionBytes.isEmpty) {
-              Future.successful(Some(parsed.withGlobalError("No solution")))
+              Future.successful(SubmitOutcome.Rejected("No solution"): SubmitOutcome)
             } else {
               val now = org.joda.time.DateTime.now
               Submits.insert(db, request.identity, submitData.problem, submitData.compiler, solutionBytes,
-                Some(request.remoteAddress), now).map {
-                case Right(id) =>
+                Some(request.remoteAddress), now).map { res =>
+                res.foreach { id =>
                   logger.info(s"Inserted submit id: $id")
                   liveArrived(request.identity, id, submitData.problem, now)
-                  None
-                case Left(e) => Some(SubmitErrors.withError(parsed, e))
+                }
+                SubmitOutcome.of(res)
               }
             }
           }
-        ).map {
-          case Some(form) => BadRequest(sendSolutionForm(request.identity, form,
-            problems, compilers))
-          case None => Redirect(routes.Application.index)
-        }
+        ).map(outcome => SubmitFlow.respond(parsed, outcome,
+          form => sendSolutionForm(request.identity, form, problems, compilers), Redirect(routes.Application.index)))
     }
   }
 

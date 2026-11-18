@@ -44,15 +44,42 @@ class SubmitFlowSpec extends AnyFunSuite {
     assert(ru.contains("submit.error.notAdmitted=Вы не допущены к этому туру"))
   }
 
-  test("the controller maps errors to a 400 form, publishes nothing to RabbitMQ and still tells the live monitor") {
-    val app = read("app/controllers/Application.scala")
-    val at = app.indexOf("def submitPost")
-    val body = app.substring(at, app.indexOf("def ackMessage"))
-    assert(body.contains("Submits.insert("))
-    assert(body.contains("SubmitErrors.withError"))
-    assert(body.contains("BadRequest("))
-    assert(body.contains("liveArrived("))
-    assert(!body.contains("rabbitMq"))
-    assert(!app.contains("rabbitMqModel"))
+  private val ruMessages = {
+    val ru = read("conf/messages.ru").linesIterator.filter(l => l.startsWith("submit.error.")).map { l =>
+      val Array(k, v) = l.split("=", 2); k -> v
+    }.toMap
+    new DefaultMessagesApi(Map("ru" -> ru), new play.api.i18n.DefaultLangs(Seq(Lang("ru")))).preferred(Seq(Lang("ru")))
   }
+  private val form = Form(play.api.data.Forms.mapping("problem" -> play.api.data.Forms.text,
+    "compiler" -> play.api.data.Forms.number, "inline" -> play.api.data.Forms.text)(SubmitData.apply)(SubmitData.unapply))
+  private val accepted = play.api.mvc.Results.SeeOther("/")
+
+  test("every SubmitError becomes Rejected with its key; a Right becomes Accepted") {
+    for (e <- all) assert(SubmitOutcome.of(Left(e)) == SubmitOutcome.Rejected(SubmitErrors.key(e)))
+    assert(SubmitOutcome.of(Right(42L)) == SubmitOutcome.Accepted(42L))
+  }
+
+  test("a refusal re-renders the form with status 400 and the Russian text; nothing is a 500") {
+    for (e <- all) {
+      var shown: Option[Form[SubmitData]] = None
+      val r = SubmitFlow.respond(form, SubmitOutcome.of(Left(e)), f => { shown = Some(f); play.twirl.api.Html("form") }, accepted)
+      assert(r.header.status == 400)
+      val f = shown.getOrElse(fail("form not rendered"))
+      assert(f.globalError.map(_.message).contains(SubmitErrors.key(e)))
+      assert(ruMessages(f.globalError.get.message) != SubmitErrors.key(e))
+    }
+  }
+
+  test("an accepted submit redirects and renders nothing; an invalid form is a 400 with its own errors") {
+    var rendered = false
+    val ok = SubmitFlow.respond(form, SubmitOutcome.Accepted(1), _ => { rendered = true; play.twirl.api.Html("") }, accepted)
+    assert(ok.header.status == 303 && ok.header.headers("Location") == "/" && !rendered)
+    val bad = form.bind(Map("problem" -> "A"))
+    val r = SubmitFlow.respond(form, SubmitOutcome.Invalid(bad), f => { assert(f.hasErrors); play.twirl.api.Html("") }, accepted)
+    assert(r.header.status == 400)
+  }
+
+  // Not tested: the full Application.submitPost path through Silhouette (FakeRequest with an authenticated team). It
+  // needs Silhouette, Slick and live-monitor fixtures well beyond a few lines; a tracked gap. Its logic is
+  // Submits.insert (DB specs) plus SubmitOutcome/SubmitFlow (above).
 }

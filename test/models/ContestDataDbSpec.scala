@@ -35,7 +35,7 @@ class ContestDataDbSpec extends AnyFunSuite with BeforeAndAfterAll {
 
   private lazy val round: Int = await(db.run(sql"select id from contest_rounds where testing_system_id = 62042".as[Int].head))
   private lazy val season: Int = await(db.run(sql"select season_id from contest_rounds where id = $round".as[Int].head))
-  private lazy val team: Int = await(db.run(sql"select participant_id from round_credentials where login = 'team1_1'".as[Int].head))
+  private lazy val team: Int = await(db.run(sql"select participant_id from round_credentials where login = 'team1_1' and round_id = $round".as[Int].head))
   private lazy val language: Int = await(db.run(sql"select id from season_languages where module_id = 'g++'".as[Int].head))
 
   private def cleanup(): Unit = {

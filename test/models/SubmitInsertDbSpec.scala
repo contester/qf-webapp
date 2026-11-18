@@ -35,12 +35,20 @@ class SubmitInsertDbSpec extends AnyFunSuite {
 
   private def exec(sql: DBIO[Int]): Int = await(db.run(sql))
 
-  private lazy val round: Int =
+  // The seed round is only read; the specs here use a round, participants and a problem of their own.
+  private lazy val seedRound: Int =
     await(db.run(sql"select id from contest_rounds where testing_system_id = 62042".as[Int].head))
-  private lazy val season: Int = await(db.run(sql"select season_id from contest_rounds where id = $round".as[Int].head))
+  private lazy val season: Int = await(db.run(sql"select season_id from contest_rounds where testing_system_id = 62042".as[Int].head))
 
-  private def participantOf(login: String): Int =
-    await(db.run(sql"select participant_id from round_credentials where login = $login".as[Int].head))
+  private var round: Int = 0
+  /** A participant with an active credential in the fixture round, and one without any credential. */
+  private var kid: Int = 0
+  private var stranger: Int = 0
+
+  private def participantOf(login: String): Int = login match {
+    case "team1_1" | "team1_3" => kid
+    case other => fail(s"unexpected $other")
+  }
 
   private def team(participant: Int): LoggedInTeam = {
     val c = await(Rounds.currentRound(db, round)).get
@@ -53,22 +61,38 @@ class SubmitInsertDbSpec extends AnyFunSuite {
   private def lang(module: String = "g++"): Int =
     await(db.run(sql"select id from season_languages where season_id = $season and module_id = $module".as[Int].head))
 
-  /** Sets the round times and a problem `Z`, runs the body, then restores everything. */
+  private def cleanup(): Unit = {
+    exec(sqlu"delete from submits where round_id in (select id from contest_rounds where name = 'Submit spec round')")
+    exec(sqlu"delete from problems where round_id in (select id from contest_rounds where name = 'Submit spec round')")
+    exec(sqlu"delete from round_credentials where round_id in (select id from contest_rounds where name = 'Submit spec round')")
+    exec(sqlu"delete from participants where full_name in ('Submit Spec Kid', 'Submit Spec Stranger')")
+    exec(sqlu"delete from contest_rounds where name = 'Submit spec round'")
+  }
+
+  /** Creates the fixture round with the given times and problem `Z`, runs the body, then deletes everything. */
   private def withRound(starts: Option[DateTime], ends: Option[DateTime], finished: Boolean = false)(body: => Unit): Unit = {
     assume(url.isDefined)
-    val (os, oe, of) = await(db.run(
-      sql"select starts_at, ends_at, is_finished from contest_rounds where id = $round".as[(Option[java.sql.Timestamp], Option[java.sql.Timestamp], Boolean)].head))
+    val season = this.season // not inside an interpolation: the lazy val awaits the database
+    val seedRound = this.seedRound
+    cleanup()
     val s = starts.map(d => new java.sql.Timestamp(d.getMillis)).orNull
     val e = ends.map(d => new java.sql.Timestamp(d.getMillis)).orNull
     try {
-      exec(sqlu"update contest_rounds set starts_at = $s, ends_at = $e, is_finished = $finished where id = $round")
+      exec(sqlu"""insert into contest_rounds (contest_id, season_id, round_seq, season_seq, name, starts_at, ends_at, is_finished)
+                  select c.id, c.season_id, 80, 80, 'Submit spec round', $s, $e, $finished
+                    from contests c where c.season_id = $season""")
+      round = await(db.run(sql"select id from contest_rounds where name = 'Submit spec round'".as[Int].head))
+      for ((name, seq) <- Seq("Submit Spec Kid" -> 98, "Submit Spec Stranger" -> 97))
+        exec(sqlu"""insert into participants (season_id, teacher_id, season_seq, full_name, school_id, grade, contest_id)
+                    select p.season_id, p.teacher_id, $seq, $name, p.school_id, 9, p.contest_id
+                      from participants p where p.id = (select participant_id from round_credentials where round_id = $seedRound and login = 'team1_1')""")
+      kid = await(db.run(sql"select id from participants where full_name = 'Submit Spec Kid'".as[Int].head))
+      stranger = await(db.run(sql"select id from participants where full_name = 'Submit Spec Stranger'".as[Int].head))
+      exec(sqlu"""insert into round_credentials (round_id, contest_id, participant_id, login, password)
+                  select r.id, r.contest_id, $kid, 'submit_kid', '777000' from contest_rounds r where r.id = $round""")
       exec(sqlu"insert into problems (season_id, round_id, problem_id, name, tests, max_points) values ($season, $round, 'Z', 'Zed', 3, 10)")
       body
-    } finally {
-      exec(sqlu"delete from submits where round_id = $round")
-      exec(sqlu"delete from problems where round_id = $round")
-      exec(sqlu"update contest_rounds set starts_at = $os, ends_at = $oe, is_finished = $of where id = $round")
-    }
+    } finally cleanup()
   }
 
   private def running(body: => Unit): Unit = withRound(Some(t0), Some(t0.plusHours(2)))(body)
@@ -175,20 +199,23 @@ class SubmitInsertDbSpec extends AnyFunSuite {
 
   test("a participant without a credential for the round, or with an inactive one, is NotAdmitted") {
     running {
-      val p = participantOf("team1_3")
+      assert(insert(stranger) == Left(NotAdmitted))
       try {
-        exec(sqlu"update round_credentials set is_active = false where participant_id = $p and round_id = $round")
-        assert(insert(p) == Left(NotAdmitted))
-        exec(sqlu"update round_credentials set is_active = true where participant_id = $p and round_id = $round")
-        assert(insert(p).isRight)
-        exec(sqlu"""insert into participants (season_id, contest_id, season_seq, full_name, school_id, teacher_id, grade)
-                    select season_id, contest_id, 99, 'Nobody', school_id, teacher_id, grade from participants where id = $p""")
-        val nobody = await(db.run(sql"select id from participants where full_name = 'Nobody'".as[Int].head))
-        assert(insert(nobody) == Left(NotAdmitted))
-      } finally {
-        exec(sqlu"update round_credentials set is_active = true where participant_id = $p and round_id = $round")
-        exec(sqlu"delete from participants where full_name = 'Nobody'")
-      }
+        exec(sqlu"update round_credentials set is_active = false where participant_id = $kid and round_id = $round")
+        assert(insert(kid) == Left(NotAdmitted))
+        exec(sqlu"update round_credentials set is_active = true where participant_id = $kid and round_id = $round")
+        assert(insert(kid).isRight)
+      } finally exec(sqlu"update round_credentials set is_active = true where participant_id = $kid and round_id = $round")
+      assert(count == 1)
+    }
+  }
+
+  test("season_id comes from the round, not from the session's Contest") {
+    running {
+      val wrong = Contest(round, "r", t0, t0.plusHours(2), None, season + 1000)
+      val id = await(Submits.insert(db, LoggedInTeam("x", wrong, Team(kid, 1, "P", "S", "C", None), Seq.empty), "Z", lang(), source, None, inside))
+        .getOrElse(fail("rejected"))
+      assert(await(db.run(sql"select season_id from submits where id = $id".as[Int].head)) == season)
     }
   }
 

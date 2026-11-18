@@ -38,7 +38,7 @@ class ContestRoundsDbSpec extends AnyFunSuite {
     await(db.run(sql"select id from contest_rounds where testing_system_id = 62042".as[Int].head))
 
   private def participantOf(login: String): Int =
-    await(db.run(sql"select participant_id from round_credentials where login = $login".as[Int].head))
+    await(db.run(sql"select participant_id from round_credentials where login = $login and round_id = $seedRound".as[Int].head))
 
   test("currentRounds lists the seeded round with its contest, times and polygon id") {
     assume(url.isDefined)

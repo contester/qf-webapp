@@ -295,7 +295,11 @@ object Submits {
              now: DateTime)(implicit ec: ExecutionContext): Future[Either[SubmitError, Long]] = {
     val roundId = team.contest.id
     val participantId = team.team.id
-    val addr = remoteAddr.flatMap(a => scala.util.Try(com.github.tminglei.slickpg.InetString(a)).toOption)
+    val addr = remoteAddr.flatMap { a =>
+      val parsed = scala.util.Try(com.github.tminglei.slickpg.InetString(a)).toOption
+      if (parsed.isEmpty) play.api.Logger("models.Submits").warn(s"unparsable remote address '$a' of team $participantId stored as NULL")
+      parsed
+    }
     def refuse(e: SubmitError): DBIO[Either[SubmitError, Long]] = DBIO.successful(Left(e))
     val action: DBIO[Either[SubmitError, Long]] =
       SlickModel.contestRounds.filter(_.id === roundId).map(r => (r.seasonId, r.startsAt, r.endsAt, r.isFinished)).result.headOption.flatMap {

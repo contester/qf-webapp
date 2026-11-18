@@ -108,3 +108,5 @@ Compile / PB.targets := Seq(
 )
 
 Compile / javacOptions ++= Seq("--release", "17")
+// The DB specs share one database; run suites one at a time.
+Test / parallelExecution := false
