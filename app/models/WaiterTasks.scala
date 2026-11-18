@@ -8,6 +8,12 @@ import scala.concurrent.{ExecutionContext, Future}
 
 // Model: stored things.
 
+// TODO(task19): dies with WaiterActor. Admins no longer have rooms or waiter rights.
+trait WaiterPermissions {
+  def canCreateTasks: Boolean
+  def filter(room: String): Boolean
+}
+
 case class StoredWaiterTask(id: Long, when: DateTime, message: String, rooms: Set[String],
                             acked: Map[String, DateTime], allRooms: Boolean = false) {
   def matches(perm: WaiterPermissions): Boolean =

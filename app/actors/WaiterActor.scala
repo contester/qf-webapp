@@ -70,8 +70,8 @@ case class WaiterTaskUpdated(inner: StoredWaiterTask) extends WaiterTaskEvent {
   override def filter(perm: WaiterPermissions): Boolean = inner.matches(perm)
 
   override def toEvent(perm: WaiterPermissions, requestHeader: RequestHeader): Event = {
-    val c = views.html.admin.singlewaitertask(inner.adapt(perm))
-    val e = WaiterTaskUpdate(inner.id, c.body)
+    // TODO(task19): WaiterActor is deleted with the waiter feature; its page and views are already gone.
+    val e = WaiterTaskUpdate(inner.id, "")
     Event(Json.stringify(Json.toJson(e)), None, Some("waiterTaskUpdated"))
   }
 }

@@ -68,7 +68,6 @@ POST /admin/toggleClarification/:clrId controllers.AdminApplication.toggleClarif
 + nocsrf
 POST /admin/deleteClarification/:contestId/:clrId controllers.AdminApplication.deleteClarification(contestId: Int, clrId: Long)
 GET /admin/qanda/:contestId controllers.AdminApplication.showQandA(contestId: Int)
-GET /admin/tasks/:contestId controllers.AdminApplication.tasks(contestId: Int)
 POST /admin/postAnswer/:clrId controllers.AdminApplication.postAnswer(clrId: Long)
 GET /admin/postAnswer/:clrId controllers.AdminApplication.postAnswerForm(clrId: Long)
 
@@ -85,14 +84,6 @@ GET /admin/publicPreview/:contestId/events controllers.AdminApplication.publicPr
 GET /admin/:contestID/printJobs controllers.AdminApplication.listPrintJobs(contestID: Int)
 POST /admin/:contestID/printJobs/inject controllers.AdminApplication.injectPrintJob(contestID: Int)
 
-GET /admin/:contestId/postNewWaiterForm controllers.AdminApplication.postNewWaiterTaskForm(contestId: Int)
-POST /admin/:contestId/postWaiterTask controllers.AdminApplication.postWaiterTask(contestId: Int, id: Option[Int])
-+ nocsrf
-POST /admin/ackWaiterTask/:id/:room controllers.AdminApplication.ackWaiterTask(id: Long, room: String)
-+ nocsrf
-POST /admin/unackWaiterTask/:id/:room controllers.AdminApplication.unackWaiterTask(id: Long, room: String)
-+ nocsrf
-POST /admin/deleteWaiterTask/:id controllers.AdminApplication.deleteWaiterTask(id: Long)
 
 + nocsrf
 POST /admin/reprintPrintJob/:id controllers.AdminApplication.reprintJob(id: Long)
@@ -101,11 +92,6 @@ POST /admin/rerenderPrintJob/:id controllers.AdminApplication.rerenderJob(id: Lo
 
 GET /admin/:contestID/contests/ controllers.AdminApplication.showContestList(contestID: Int)
 
-GET /admin/:contestID/admins controllers.AdminApplication.adminsPage(contestID: Int)
-POST /admin/:contestID/admins controllers.AdminApplication.postAddAdmin(contestID: Int)
-GET /admin/:contestID/admins/:username controllers.AdminApplication.editAdmin(contestID: Int, username: String)
-POST /admin/:contestID/admins/:username controllers.AdminApplication.postEditAdmin(contestID: Int, username: String)
-POST /admin/:contestID/admins/:username/delete controllers.AdminApplication.deleteAdmin(contestID: Int, username: String)
 GET /admin/:contestID/extrainfo controllers.AdminApplication.extraInfoPage(contestID: Int)
 GET /admin/:contestID/extrainfo/new controllers.AdminApplication.newExtraInfo(contestID: Int)
 POST /admin/:contestID/extrainfo controllers.AdminApplication.postExtraInfo(contestID: Int, original: Option[Int] ?= None)

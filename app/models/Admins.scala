@@ -1,64 +1,41 @@
 package models
 
-import com.mohiva.play.silhouette.api.{Authorization, Identity, LoginInfo, Provider}
+import com.mohiva.play.silhouette.api.{Authorization, Identity, LoginInfo}
 import com.mohiva.play.silhouette.api.services.IdentityService
 import com.mohiva.play.silhouette.api.util.Credentials
 import com.mohiva.play.silhouette.impl.authenticators.SessionAuthenticator
-import com.mohiva.play.silhouette.impl.exceptions.InvalidPasswordException
 import controllers.{PasswordHash, routes}
 import play.api.mvc.Request
 import slick.basic.DatabaseConfig
-import slick.jdbc.{GetResult, JdbcBackend, JdbcProfile}
-import slick.lifted.ProvenShape
+import slick.jdbc.{JdbcBackend, JdbcProfile}
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Try
 
 /** What the session cookie carries: the username and a fingerprint of the stored hash (never the hash). */
 case class AdminId(username: String, fingerprint: String) {
   override def toString = s"$username:$fingerprint"
 }
 
-trait WaiterPermissions {
-  def canCreateTasks: Boolean
-  def filter(room: String): Boolean
-}
+/**
+  * An administrator of teacher-web (admins table). Every admin may do everything in every round, so the permission
+  * methods are constants; they stay methods so that the pages keep asking the same questions.
+  */
+case class Admin(email: String, passwordHash: String) extends Identity {
+  override def toString = s"$email:${PasswordHash.fingerprint(passwordHash)}"
 
-case class Admin(username: String, passwordHash: String, spectator: Set[Int], administrator: Set[Int],
-                 locations: Set[String], unrestricted: Set[Int]) extends Identity with WaiterPermissions {
-  override def toString = s"$username:$passwordHash"
+  def toId = AdminId(email, PasswordHash.fingerprint(passwordHash))
 
-  def toId = AdminId(username, PasswordHash.fingerprint(passwordHash))
+  def canSpectate(contestId: Int) = true
 
-  def canSpectate(contestId: Int) =
-    spectator.contains(contestId) || spectator.contains(-1) || canModify(contestId)
+  def canSeeAll(contestId: Int) = true
 
-  def canSeeAll(contestId: Int) =
-    unrestricted.contains(contestId) || unrestricted.contains(-1) || canModify(contestId)
+  def canSeeSubmit(contestId: Int, afterFreeze: Boolean) = true
 
-  /** One submit of the contest, opened by id: a restricted view stops at the freeze, like the status list. */
-  def canSeeSubmit(contestId: Int, afterFreeze: Boolean) =
-    canSpectate(contestId) && (!afterFreeze || canSeeAll(contestId))
+  def canModify(contestId: Int) = true
 
-  def canModify(contestId: Int) =
-    administrator.contains(contestId) || administrator.contains(-1)
+  def isSuperAdmin = true
 
-  def isSuperAdmin =
-    administrator.contains(-1)
-
-  def canSeeTeamPasswords(contestId: Int) =
-    canModify(contestId)
-
-  lazy val defaultContest = {
-    val t = spectator.union(administrator).min
-    if (t == -1) 1 else t
-  }
-
-  val canCreateTasks =
-    locations.contains("*")
-
-  override def filter(room: String): Boolean =
-    canCreateTasks || locations.contains(room)
+  def canSeeTeamPasswords(contestId: Int) = true
 }
 
 object AdminId {
@@ -69,34 +46,27 @@ object AdminId {
   }
 }
 
-object Admin {
+object Admins {
   import org.stingray.contester.dbmodel.MyPostgresProfile.api._
-  import org.stingray.contester.dbmodel._
-  import org.stingray.contester.dbmodel.SlickModel._
+  import org.stingray.contester.dbmodel.SlickModel
 
-  private[this] def parseSingleAcl(s: String): Option[Int] =
-    if (s == "*")
-      Some(-1)
-    else Try(s.toInt).toOption
+  // teacher-web enforces uniqueness on LOWER(BTRIM(email)).
+  private[this] def normalize(email: String) = email.trim.toLowerCase
 
-  private[this] def parseAcl(s: String): Set[Int] =
-    s.split(',').flatMap(parseSingleAcl).toSet
+  private[this] val byEmailQ = Compiled((email: Rep[String]) =>
+    SlickModel.admins.filter(_.email.trim.toLowerCase === email).take(1))
 
-  private[this] def parseStringAcl(s: String): Set[String] =
-    s.split(',').toSet
+  def byEmail(db: JdbcBackend#DatabaseDef, email: String)(implicit ec: ExecutionContext): Future[Option[Admin]] =
+    db.run(byEmailQ(normalize(email)).result.headOption).map(_.map(x => Admin(x._1, x._2)))
 
-  private[this] def buildAdmin(x: AdminEntry): Admin =
-    Admin(x.username, x.password, parseAcl(x.spectator), parseAcl(x.administrator), parseStringAcl(x.locations),
-      parseAcl(x.unrestricted))
-
-  private[this] val byUsername = Compiled((username: Rep[String]) => admins.filter(_.username === username).take(1))
-
-  def byName(db: JdbcBackend#DatabaseDef, username: String)(implicit ec: ExecutionContext): Future[Option[Admin]] =
-    db.run(byUsername(username).result.headOption).map(_.map(buildAdmin))
-
-  /** Rewrites a legacy SHA-1 value as bcrypt; false if the stored value changed in the meantime. */
-  def upgradeHash(db: JdbcBackend#DatabaseDef, username: String, oldHash: String, newHash: String)(implicit ec: ExecutionContext): Future[Boolean] =
-    db.run(admins.filter(a => a.username === username && a.password === oldHash).map(_.password).update(newHash)).map(_ == 1)
+  def authenticate(db: JdbcBackend#DatabaseDef, email: String, password: String)(implicit ec: ExecutionContext): Future[Option[Admin]] =
+    byEmail(db, email).map {
+      case Some(a) if PasswordHash.verify(password, a.passwordHash) => Some(a)
+      case Some(_) => None
+      case None =>
+        PasswordHash.verifyDummy(password)
+        None
+    }
 }
 
 object AdminPermissions {
@@ -115,10 +85,6 @@ object AdminPermissions {
       Future.successful(identity.isSuperAdmin)
   }
 
-  case object withCreateTasks extends Authorization[Admin, SessionAuthenticator] {
-    override def isAuthorized[B](identity: Admin, authenticator: SessionAuthenticator)(implicit request: Request[B]): Future[Boolean] =
-      Future.successful(identity.canCreateTasks)
-  }
 }
 
 
@@ -131,7 +97,6 @@ object AdminNavlinkMatch {
       case "monitor" => routes.AdminApplication.monitor(_)
       case "qanda" => routes.AdminApplication.showQandA(_)
       case "rejudge" => routes.AdminApplication.rejudgePage(_)
-      case "tasks" => routes.AdminApplication.tasks(_)
       case "print" => routes.AdminApplication.listPrintJobs(_)
       case "contests" => routes.AdminApplication.showContestList(_)
       case "extrainfo" => routes.AdminApplication.extraInfoPage(_)
@@ -146,27 +111,13 @@ class AdminsServiceImpl(dbConfig: DatabaseConfig[JdbcProfile])(implicit val ec: 
   override def retrieve(loginInfo: LoginInfo): Future[Option[Admin]] =
     AdminId.fromString(loginInfo.providerKey) match {
       case Some(adminId) =>
-        Admin.byName(dbConfig.db, adminId.username).map(_.filter(_.toId == adminId))
+        Admins.byEmail(dbConfig.db, adminId.username).map(_.filter(_.toId == adminId))
       case None => Future.successful(None)
     }
 }
 
 class AdminsProvider(dbConfig: DatabaseConfig[JdbcProfile]) extends OneUserProvider {
   override def id: String = "admin"
-  def authenticate(credentials: Credentials)(implicit ec: ExecutionContext): Future[Option[LoginInfo]] = {
-    Admin.byName(dbConfig.db, credentials.identifier).flatMap {
-      case Some(a) if PasswordHash.verify(credentials.password, a.passwordHash) =>
-        if (PasswordHash.isLegacy(a.passwordHash)) {
-          val upgraded = PasswordHash.hash(credentials.password)
-          Admin.upgradeHash(dbConfig.db, a.username, a.passwordHash, upgraded).map {
-            case true => Some(LoginInfo(id, a.copy(passwordHash = upgraded).toId.toString))
-            case false => None
-          }
-        } else Future.successful(Some(LoginInfo(id, a.toId.toString)))
-      case Some(_) => Future.successful(None)
-      case None =>
-        PasswordHash.verifyDummy(credentials.password)
-        Future.successful(None)
-    }
-  }
+  def authenticate(credentials: Credentials)(implicit ec: ExecutionContext): Future[Option[LoginInfo]] =
+    Admins.authenticate(dbConfig.db, credentials.identifier, credentials.password).map(_.map(a => LoginInfo(id, a.toId.toString)))
 }

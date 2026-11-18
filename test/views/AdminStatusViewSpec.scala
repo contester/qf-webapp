@@ -76,8 +76,7 @@ class AdminStatusViewSpec extends AnyFunSuite {
   private val contest =
     Contest(3, "C", DateTime.now.minusHours(1), DateTime.now.plusHours(4), None, 1)
 
-  private def admin(modify: Boolean) =
-    Admin("a", "h", Set(3), if (modify) Set(3) else Set.empty, Set.empty, Set(3))
+  private def admin(modify: Boolean) = Admin("a@example.org", "h")
 
   private def page(live: Boolean, newest: Boolean = true, team: Option[Int] = None, modify: Boolean = true) =
     html.admin.submits(AdminSubmitPage(Seq(row), None, None), Map.empty[Int, org.stingray.contester.dbmodel.Team],
@@ -104,7 +103,8 @@ class AdminStatusViewSpec extends AnyFunSuite {
   }
 
   test("the script is told what the viewer may do and which page this is") {
-    assert(page(live = true, modify = false).contains("listenOnStatus('/admin/submits/3/events', false, true, 0);"))
+    // every admin may rejudge, so the rejudge right passed to the script is always true
+    assert(page(live = true, modify = false).contains("listenOnStatus('/admin/submits/3/events', true, true, 0);"))
     assert(page(live = true, newest = false).contains("listenOnStatus('/admin/submits/3/events', true, false, 0);"))
     assert(page(live = true, team = Some(7777)).contains("listenOnStatus('/admin/submits/3/events', true, true, 7777);"))
   }

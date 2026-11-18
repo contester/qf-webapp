@@ -21,10 +21,6 @@ case class ClarificationRequest(id: Long, contest: Int, team: Int, problem: Stri
   } else "..."
 }
 
-// TODO(task11): qf's own admin table; admins move to teacher-web's `admins`.
-case class AdminEntry(username: String, password: String, spectator: String, administrator: String,
-                      locations: String, unrestricted: String)
-
 /** A language of the season (season_languages); `ext` is the module id. */
 case class Compiler(id: Int, name: String, ext: String)
 
@@ -778,16 +774,12 @@ object SlickModel {
 
   val waiterTaskRecords = TableQuery[WaiterTaskRecords]
 
-  // TODO(task11): qf's own admin table; teacher-web's `admins` (email + bcrypt) replaces it.
-  case class Admins(tag: Tag) extends Table[AdminEntry](tag, "admins") {
-    def username = column[String]("username", O.PrimaryKey)
-    def password = column[String]("password")
-    def spectator = column[String]("spectator")
-    def administrator = column[String]("administrator")
-    def locations = column[String]("locations")
-    def unrestricted = column[String]("unrestricted_view")
+  /** teacher-web's admins (read only); the password hash is bcrypt. */
+  case class Admins(tag: Tag) extends Table[(String, String)](tag, "admins") {
+    def email = column[String]("email")
+    def passwordHash = column[String]("password_hash")
 
-    override def * = (username, password, spectator, administrator, locations, unrestricted) <> (AdminEntry.tupled, AdminEntry.unapply)
+    override def * = (email, passwordHash)
   }
 
   val admins = TableQuery[Admins]

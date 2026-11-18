@@ -33,8 +33,12 @@ class TeamsProvider(dbConfig: DatabaseConfig[JdbcProfile]) extends OneUserProvid
   }
 }
 
-// TODO(task11): login rules (case-insensitive login, current season only) are Task 11's; this only keeps the
-// legacy lookup working on round_credentials.
+/**
+  * Team login against teacher-web's round_credentials. loginQuery already restricts to active credentials of
+  * non-deleted participants in the rounds of the current season. The login is matched like teacher-web's
+  * uniqueness index (LOWER(BTRIM(login))); the password is the stored plaintext, compared exactly (teacher-web
+  * prints it on slips). The round need not be running: teams may log in to see their results after it ends.
+  */
 object Users {
   import org.stingray.contester.dbmodel.MyPostgresProfile.api._
   import org.stingray.contester.dbmodel.SlickModel
@@ -42,22 +46,24 @@ object Users {
   private[this] def extraInfoQuery(contest: Int) =
     SlickModel.extraInfos.filter(_.contest === contest).sortBy(_.num).result
 
+  private[this] def normalize(login: String) = login.trim.toLowerCase
+
   private[this] val resolveQ = Compiled((username: Rep[String]) =>
-    SlickModel.loginQuery.filter(_._1 === username).take(1)
+    SlickModel.loginQuery.filter(_._1.trim.toLowerCase === username).take(1)
   )
 
   def resolveQuery(username: String) =
-    resolveQ(username).result.headOption
+    resolveQ(normalize(username)).result.headOption
 
   def toLoginInfo(x: SlickModel.LoggedInTeam0): LoggedInTeam =
     LoggedInTeam(x.username, x.contest, x.team, Seq())
 
   private[this] val authQ = Compiled((username: Rep[String], password: Rep[String]) =>
-    SlickModel.loginQuery.filter(a => (a._1 === username) && (a._2 === password)).take(1)
+    SlickModel.loginQuery.filter(a => (a._1.trim.toLowerCase === username) && (a._2 === password)).take(1)
   )
 
   def authQuery(username: String, password: String) =
-    authQ(username, password).result.headOption
+    authQ(normalize(username), password).result.headOption
 
   def authenticate(db: JdbcBackend#DatabaseDef, username: String, password: String)(implicit ec: ExecutionContext): Future[Option[LoggedInTeam]] =
     db.run(authQuery(username, password)).map(_.map(x => toLoginInfo(SlickModel.toLoggedInTeam0(x))))

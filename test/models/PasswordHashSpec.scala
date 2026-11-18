@@ -1,6 +1,6 @@
 package models
 
-import controllers.{Hasher, PasswordHash}
+import controllers.PasswordHash
 import org.scalatest.funsuite.AnyFunSuite
 
 class PasswordHashSpec extends AnyFunSuite {
@@ -16,7 +16,6 @@ class PasswordHashSpec extends AnyFunSuite {
     assert(a != b)
     assert(PasswordHash.verify("hunter2", a) && PasswordHash.verify("hunter2", b))
     assert(!PasswordHash.verify("hunter3", a))
-    assert(!PasswordHash.isLegacy(a))
   }
 
   test("accepts hashes produced by Java and by Go") {
@@ -25,13 +24,14 @@ class PasswordHashSpec extends AnyFunSuite {
     assert(!PasswordHash.verify("wrong", goHash))
   }
 
-  test("legacy sha1 still verifies, in either hex case") {
-    val legacy = "e5e9fa1ba31ecd1ae84f75caaa474f3a663f05f4"
-    assert(Hasher.getSha1("secret") == legacy)
-    assert(PasswordHash.isLegacy(legacy))
-    assert(PasswordHash.verify("secret", legacy))
-    assert(PasswordHash.verify("secret", legacy.toUpperCase))
-    assert(!PasswordHash.verify("Secret", legacy))
+  test("a Go bcrypt hash of cost 12 (teacher-web) verifies") {
+    val seed = "$2a$12$LAgcv5L5iIfgMlMmLuaHNO4wpaeZB5T7TaSPOZTJFKNANrrMLVFmC"
+    assert(PasswordHash.verify("secret", seed))
+    assert(!PasswordHash.verify("Secret", seed))
+  }
+
+  test("a SHA-1 value or other non-bcrypt text never verifies") {
+    assert(!PasswordHash.verify("secret", "e5e9fa1ba31ecd1ae84f75caaa474f3a663f05f4"))
   }
 
   test("garbage stored values never verify") {
