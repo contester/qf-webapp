@@ -32,17 +32,17 @@ class TeamProblemSubmitsDbSpec extends AnyFunSuite {
   private def summary(fs: FullyDescribedSubmit) =
     (fs.submit.submitId.id, fs.index, fs.score.map(_.toString), fs.result.success, fs.result.message, fs.stats)
 
-  for (schoolMode <- Seq(false, true)) test(s"every team and problem agrees with the full pipeline (schoolMode = $schoolMode)") {
+  test("every team and problem agrees with the full pipeline") {
     import org.stingray.contester.dbmodel.MyPostgresProfile.api._
     assume(url.isDefined)
-    val contests = await(db.run(org.stingray.contester.dbmodel.SlickModel.allContests.result)).map(_.id)
+    val contests = await(models.Rounds.currentRounds(db)).map(_.id)
     var groups = 0
     for (contest <- contests) {
       val all = await(db.run(Submits.getContestSubmits(contest))).map(Submits.upliftSub(_))
-      val old = await(Submits.groupAndAnnotate(db, schoolMode, all))
+      val old = await(Submits.groupAndAnnotate(db, all))
         .groupBy(x => (x.submit.submitId.teamId, x.submit.submitId.problem.id))
       for (((team, problem), expected) <- old) {
-        val got = await(Submits.teamProblemSubmits(db, schoolMode, contest, team, problem))
+        val got = await(Submits.teamProblemSubmits(db, contest, team, problem))
         assert(got.map(summary) == expected.sortBy(_.index).map(summary), s"contest $contest team $team problem $problem")
         groups += 1
       }
@@ -52,6 +52,6 @@ class TeamProblemSubmitsDbSpec extends AnyFunSuite {
 
   test("a team and problem without submits have no rows") {
     assume(url.isDefined)
-    assert(await(Submits.teamProblemSubmits(db, schoolMode = false, 14, 99999, "A")).isEmpty)
+    assert(await(Submits.teamProblemSubmits(db, 14, 99999, "A")).isEmpty)
   }
 }

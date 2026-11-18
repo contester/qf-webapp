@@ -270,6 +270,6 @@ class DbQuerySourceSpec extends TestKit(ActorSystem("DbQuerySourceSpec", ConfigF
   test("contests lists every contest") {
     assume(url.isDefined)
     assert(await(dbSource.contests()).map(_.id).sorted ==
-      await(db.run(org.stingray.contester.dbmodel.SlickModel.allContests.result)).map(_.id).sorted)
+      await(models.Rounds.currentRounds(db)).map(_.id).sorted)
   }
 }

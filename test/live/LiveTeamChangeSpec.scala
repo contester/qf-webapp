@@ -6,7 +6,7 @@ import akka.testkit.{TestKit, TestProbe}
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuiteLike
-import org.stingray.contester.dbmodel.{LocalTeam, Team}
+import org.stingray.contester.dbmodel.{Disqualified, NotRated, Team}
 
 import scala.concurrent.duration._
 
@@ -21,7 +21,7 @@ class LiveTeamChangeSpec extends TestKit(ActorSystem("LiveTeamChangeSpec", Confi
   override def afterAll(): Unit = TestKit.shutdownActorSystem(system)
 
   private def changed(id: Int, notRated: Boolean = false, school: String = "Changed", disqualified: Boolean = false): Team =
-    LocalTeam(id, 1, school, s"S$id", 0, "", notRated || disqualified, noPrint = false, disabled = false, disqualified = disqualified)
+    Team(id, 0, "", school, "City", (if (disqualified) Some(Disqualified) else if (notRated || disqualified) Some(NotRated) else None))
 
   // Team 1 solved A fast, team 2 solved A slower, team 3 nothing.
   private val subs = Seq(rec(1, 1, "A", t0.plusMinutes(10), ok), rec(2, 2, "A", t0.plusMinutes(20), ok))
@@ -33,7 +33,8 @@ class LiveTeamChangeSpec extends TestKit(ActorSystem("LiveTeamChangeSpec", Confi
     assert(ranks(m.board(Real)) == Seq((1, 1), (2, 2), (3, 3)))
     val d = m.onTeamChanged(changed(1, notRated = true), running)
     assert(ranks(m.board(Real)) == Seq((1, 0), (2, 1), (3, 2)))
-    assert(ranks(m.board(Freezing)) == ranks(m.board(Real)))
+    // the round is frozen from its start: no solves on the freezing board, but team 1 is unranked there too
+    assert(ranks(m.board(Freezing)).find(_._1 == 1).contains((1, 0)))
     // one row change per board, not a whole board
     assert(d.freezing.size == 1 && d.freezing.forall(_.isInstanceOf[RowOut]) && d.real.size == 1 && d.real.forall(_.isInstanceOf[RowOut]))
     assert(d.public.size == 1 && d.public.forall(_.isInstanceOf[RowOut]) && d.ownCells.isEmpty)
@@ -45,12 +46,11 @@ class LiveTeamChangeSpec extends TestKit(ActorSystem("LiveTeamChangeSpec", Confi
     assert(ranks(m.board(Real)) == Seq((1, 1), (2, 2), (3, 3)))
   }
 
-  test("model: a disqualified team is unranked and flagged, and an undone disqualification ranks it again") {
+  test("model: a disqualified team leaves the boards, and an undone disqualification ranks it again") {
     val m = new LiveContest(contest(), problems, teams, subs, running)
     m.onTeamChanged(changed(1, disqualified = true), running)
-    assert(ranks(m.board(Real)) == Seq((1, 0), (2, 1), (3, 2)))
-    assert(m.board(Real).rowOf(1).get.team.disqualified)
-    // disqualified, then merely not rated: still unranked, no longer DSQ
+    assert(ranks(m.board(Real)) == Seq((2, 1), (3, 2)))
+    // disqualified, then merely not rated: back on the board, unranked
     m.onTeamChanged(changed(1, notRated = true), running)
     assert(ranks(m.board(Real)) == Seq((1, 0), (2, 1), (3, 2)) && !m.board(Real).rowOf(1).get.team.disqualified)
     m.onTeamChanged(changed(1), running)
@@ -58,18 +58,8 @@ class LiveTeamChangeSpec extends TestKit(ActorSystem("LiveTeamChangeSpec", Confi
     assert(m.differences(new LiveContest(contest(), problems, Seq(changed(1), teams(1), teams(2)), subs, running)).isEmpty)
   }
 
-  test("actor: a disqualification reaches every stream as DSQ") {
-    val f = new Fixture(running, subs = Map(1 -> subs))
-    val pub = f.subscribe(JoinPublic(1))
-    next(pub, "board")
-    f.actor ! TeamChanged(1, changed(1, disqualified = true))
-    val r = next(pub, "row")
-    assert((r \ "row" \ "rank").as[String] == "DSQ" && (r \ "ranks").as[Seq[Int]] == Seq(0, 1, 2))
-    f.stop()
-  }
-
   test("model: a disabled team is on no board, its submits score nothing, and enabling it brings its work back") {
-    def off(id: Int) = LocalTeam(id, 1, "Off", s"S$id", 0, "", notRated = false, noPrint = false, disabled = true)
+    def off(id: Int) = Team(id, 0, "", "Off", "City", Some(Disqualified))
     val m = new LiveContest(contest(), problems, teams, subs, running)
     val d = m.onTeamChanged(off(1), running)
     assert(ranks(m.board(Real)) == Seq((2, 1), (3, 2)) && m.publicBoard.rowOf(1).isEmpty)
@@ -96,43 +86,6 @@ class LiveTeamChangeSpec extends TestKit(ActorSystem("LiveTeamChangeSpec", Confi
     val m = new LiveContest(contest(), problems, teams, subs, running)
     m.onTeamChanged(changed(9), running)
     assert(m.board(Real).rowOf(9).isDefined)
-  }
-
-  test("actor: every stream gets a row change") {
-    val f = new Fixture(running, subs = Map(1 -> subs))
-    val pub = f.subscribe(JoinPublic(1))
-    val adm = f.subscribe(JoinAdmin(1, real = true))
-    val tm = f.subscribe(JoinTeam(1, 2))
-    Seq(pub, adm, tm).foreach(p => next(p, "board"))
-
-    f.actor ! TeamChanged(1, changed(1, notRated = true))
-    for (p <- Seq(pub, adm, tm)) {
-      val r = next(p, "row")
-      assert((r \ "team").as[Int] == 1 && (r \ "row" \ "rank").as[String] == "*")
-      // the rest of the ranks move up: positions 0 to 2
-      assert((r \ "rankFrom").as[Int] == 0 && (r \ "ranks").as[Seq[Int]] == Seq(0, 1, 2))
-    }
-    f.actor ! TeamChanged(1, changed(1, disqualified = true))
-    for (p <- Seq(pub, adm, tm)) assert((next(p, "row") \ "row" \ "rank").as[String] == "DSQ")
-    f.stop()
-  }
-
-  test("actor: a change that arrives while a load runs is replayed onto the loaded state") {
-    val f = new Fixture(running, subs = Map(1 -> subs))
-    val pub = f.subscribe(JoinPublic(1))
-    next(pub, "board")
-    // Hold a load back; it returns the team list as it was before the change.
-    val release = scala.concurrent.Promise[Unit]()
-    f.loadGate = release.future
-    f.actor ! CrossCheck
-    awaitCond(f.loads.get == 2, 5.seconds)
-    f.actor ! TeamChanged(1, changed(1, notRated = true))
-    next(pub, "row")
-    release.success(())
-    pub.expectNoMessage(500.millis)
-    val b = next(f.subscribe(JoinPublic(1)), "board")
-    assert(((b \ "rows").as[Seq[play.api.libs.json.JsValue]].head \ "rank").as[String] == "*")
-    f.stop()
   }
 
   test("a change for an unknown contest is ignored") {

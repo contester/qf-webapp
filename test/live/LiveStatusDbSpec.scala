@@ -44,7 +44,7 @@ class LiveStatusDbSpec extends TestKit(ActorSystem("LiveStatusDbSpec", ConfigFac
        |      connectionPool = disabled }""".stripMargin)).db
 
   private lazy val teamClient = new TeamClient(system.actorOf(Props(new Actor {
-    def receive = { case TeamStateActor.GetTeams(_) => sender() ! Map.empty[Int, org.stingray.contester.dbmodel.LocalTeam] }
+    def receive = { case TeamStateActor.GetTeams(_) => sender() ! Map.empty[Int, org.stingray.contester.dbmodel.Team] }
   })))
 
   /** Counts the reads, so that the number of viewers can be told apart from the number of events. */
@@ -63,10 +63,7 @@ class LiveStatusDbSpec extends TestKit(ActorSystem("LiveStatusDbSpec", ConfigFac
 
   // A finished submit of the biggest contest.
   private lazy val sample: AdminSubmitRow = {
-    val all = await(db.run({
-      import org.stingray.contester.dbmodel.MyPostgresProfile.api._
-      org.stingray.contester.dbmodel.SlickModel.allContests.result
-    })).flatMap(c => pageRows(c.id, canSeeAll = true))
+    val all = await(models.Rounds.currentRounds(db)).flatMap(c => pageRows(c.id, canSeeAll = true))
     all.filter(_.submit.finished).maxBy(_.submit.submitId.id)
   }
 
@@ -129,10 +126,7 @@ class LiveStatusDbSpec extends TestKit(ActorSystem("LiveStatusDbSpec", ConfigFac
 
   test("db: after the freeze only the real board's viewer gets the row") {
     assume(url.isDefined)
-    val contests = await(db.run({
-      import org.stingray.contester.dbmodel.MyPostgresProfile.api._
-      org.stingray.contester.dbmodel.SlickModel.allContests.result
-    })).map(_.id)
+    val contests = await(models.Rounds.currentRounds(db)).map(_.id)
     val split = contests.map(c => (c, pageRows(c, canSeeAll = true))).find { case (_, all) =>
       all.exists(_.submit.submitId.arrived.afterFreeze) && all.exists(!_.submit.submitId.arrived.afterFreeze)
     }

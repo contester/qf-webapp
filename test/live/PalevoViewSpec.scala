@@ -3,18 +3,18 @@ package live
 import models.{ACM, ACMCell, AnyStatus, Foo}
 import org.joda.time.DateTime
 import org.scalatest.funsuite.AnyFunSuite
-import org.stingray.contester.dbmodel.{Contest, LocalTeam, Team}
+import org.stingray.contester.dbmodel.{Contest, NotRated, Team}
 import palevo._
 
 class PalevoViewSpec extends AnyFunSuite {
   private val t0 = new DateTime(2026, 11, 1, 10, 0)
   // starts 10:00, freezes 14:00, ends 15:00, exposed 16:00
-  private val contest = Contest(1, "C", t0, t0.plusHours(4), t0.plusHours(5), t0.plusHours(6), None, "en", schoolMode = false)
+  private val contest = Contest(1, "C", t0, t0.plusHours(5), None, 1)
   private val problems = Seq("A", "B")
   private val during = t0.plusHours(4).plusMinutes(30)
 
   private def team(id: Int, notRated: Boolean = false): Team =
-    LocalTeam(id, 1, s"School$id", s"S$id", 0, "", notRated = notRated, noPrint = false, disabled = false)
+    Team(id, 0, "", s"School$id", "City", (if (notRated) Some(NotRated) else None))
 
   private val teams = Seq(team(1), team(2))
 

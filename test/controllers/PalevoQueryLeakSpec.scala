@@ -7,7 +7,7 @@ import live.{LiveBoard, LiveCell}
 import org.joda.time.{DateTime, DateTimeZone}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuite
-import org.stingray.contester.dbmodel.{Contest, LocalTeam, Team}
+import org.stingray.contester.dbmodel.{Contest, Team}
 import palevo.query._
 import play.api.http.{DefaultFileMimeTypes, FileMimeTypesConfiguration}
 import play.api.i18n.{DefaultLangs, DefaultMessagesApi}
@@ -43,10 +43,10 @@ class PalevoQueryLeakSpec extends AnyFunSuite with BeforeAndAfterAll {
   private def h(n: Double) = fixedNow.plusMinutes((n * 60).toInt)
 
   private def contest(id: Int, freeze: Double, expose: Double) =
-    Contest(id, s"Contest $id", h(-2), h(freeze), h(1), h(expose), None, "en", schoolMode = false)
+    Contest(id, s"Contest $id", h(-2), h(1), None, 1)
 
   private def team(id: Int, short: String, num: Int, name: String): Team =
-    LocalTeam(id, 1, s"School $short", short, num, name, notRated = false, noPrint = false, disabled = false)
+    Team(id, num, name, s"School $short", "City", None)
 
   import LiveCell._
 
@@ -77,7 +77,8 @@ class PalevoQueryLeakSpec extends AnyFunSuite with BeforeAndAfterAll {
   private case object NoFreeze0 extends Freeze("none", 1, 2)       // freeze time not before the end
   private case object InEffect extends Freeze("in effect", -1, 2)  // frozen now
   private case object Exposed extends Freeze("exposed", -1.5, -0.5) // freeze over, results exposed
-  private val freezes = Seq(NoFreeze0, InEffect, Exposed)
+  // The freeze is the round's start and lasts until its end: only "in effect" is left of the freeze configurations.
+  private val freezes = Seq(InEffect)
 
   private def source(f: Freeze) = new FakeSource(
     contestList = Seq(contest(1, f.freeze, f.expose), contest(11, f.freeze, f.expose)),

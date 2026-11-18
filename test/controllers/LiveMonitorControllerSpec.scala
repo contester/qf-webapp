@@ -11,7 +11,7 @@ import org.joda.time.DateTime
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.funsuite.AnyFunSuiteLike
-import org.stingray.contester.dbmodel.Contest
+import org.stingray.contester.dbmodel.{Contest, Team}
 import play.api.http.{DefaultFileMimeTypes, FileMimeTypesConfiguration}
 import play.api.i18n.{DefaultLangs, DefaultMessagesApi}
 import play.api.libs.EventSource.Event
@@ -45,7 +45,7 @@ class LiveMonitorControllerSpec extends TestKit(ActorSystem("LiveMonitorControll
     LiveMonitorConfig(enabled, 30.seconds, 60.seconds, (1 to 10).toSet, max)
 
   private val t0 = DateTime.now.minusHours(1)
-  private def contest(id: Int) = Contest(id, s"C$id", t0, t0.plusHours(4), t0.plusHours(5), t0.plusHours(6), None, "en", schoolMode = false)
+  private def contest(id: Int) = Contest(id, s"C$id", t0, t0.plusHours(5), None, 1)
   private val lookup = LiveContestLookup(id => Future.successful(Some(contest(id))))
 
   private val boardEvent = Event("{}", None, Some("board"))
@@ -132,7 +132,7 @@ class LiveMonitorControllerSpec extends TestKit(ActorSystem("LiveMonitorControll
 
   test("public page: renders the snapshot board into the page when the live monitor answers") {
     val probe = TestProbe()
-    val board = live.LiveBoard.build(Seq("A"), Seq(org.stingray.contester.dbmodel.LocalTeam(7, 1, "School07", "S7", 0, "", notRated = false, noPrint = false, disabled = false)), Map.empty)
+    val board = live.LiveBoard.build(Seq("A"), Seq(Team(7, 0, "", "School07", "City", None)), Map.empty)
     probe.setAutoPilot((sender: ActorRef, msg: Any) => {
       msg match {
         case actors.LiveMonitorActor.Snapshot(JoinPublic(1)) => sender ! board

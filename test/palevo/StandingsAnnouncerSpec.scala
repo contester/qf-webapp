@@ -3,19 +3,19 @@ package palevo
 import models.{ACM, ACMCell, AnyStatus, Foo}
 import org.joda.time.DateTime
 import org.scalatest.funsuite.AnyFunSuite
-import org.stingray.contester.dbmodel.{Contest, LocalTeam}
+import org.stingray.contester.dbmodel.{Contest, Team}
 
 class StandingsAnnouncerSpec extends AnyFunSuite {
   private val start = new DateTime(2026, 11, 1, 10, 0)
   // starts 10:00, freezes 14:00, ends 15:00, exposed 16:00
-  private val contest = Contest(1, "C", start, start.plusHours(4), start.plusHours(5), start.plusHours(6), None, "en", schoolMode = false)
+  private val contest = Contest(1, "C", start, start.plusHours(5), None, 1)
   private val beforeFreeze = start.plusHours(2)
   private val duringFreeze = start.plusHours(4).plusMinutes(30)
   private val afterExpose = start.plusHours(7)
 
-  private def team(id: Int) = LocalTeam(id, 1, s"School$id", s"S$id", 0, "", notRated = false, noPrint = false, disabled = false)
+  private def team(id: Int) = Team(id, 0, "", s"School$id", "City", None)
 
-  private def row(rank: Int, t: LocalTeam, solves: Map[String, Int]) =
+  private def row(rank: Int, t: Team, solves: Map[String, Int]) =
     Foo.RankedRow(rank, t, ACM.Score(solves.size, solves.values.sum / 60, 0),
       solves.map { case (p, sec) => p -> ACMCell(1, sec, fullSolution = true) })
 
@@ -71,18 +71,4 @@ class StandingsAnnouncerSpec extends AnyFunSuite {
     assert(a.observe(contest, nobody, t1A_t2B, afterExpose).isEmpty)
   }
 
-  test("no jury events for a contest that has no freeze") {
-    val noFreeze = contest.copy(freezeTime = contest.endTime)
-    val a = primed(noFreeze)
-    val es = a.observe(noFreeze, t1A, t1A, start.plusHours(5).plusMinutes(10)) // after the end, late judging
-    assert(es.forall(_.audience == PublicAudience), types(es).toString)
-  }
-
-  test("liveWindow boundaries") {
-    assert(!StandingsTracker.liveWindow(contest, start.plusHours(3)))
-    assert(StandingsTracker.liveWindow(contest, start.plusHours(4)))
-    assert(StandingsTracker.liveWindow(contest, start.plusHours(6).minusSeconds(1)))
-    assert(!StandingsTracker.liveWindow(contest, start.plusHours(6)))
-    assert(!StandingsTracker.liveWindow(contest.copy(freezeTime = contest.endTime), start.plusHours(5).plusMinutes(5)))
-  }
 }

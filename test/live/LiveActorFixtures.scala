@@ -10,7 +10,7 @@ import akka.actor.ActorRef
 import akka.stream.scaladsl.Source
 import akka.testkit.{TestKit, TestProbe}
 import org.joda.time.DateTime
-import org.stingray.contester.dbmodel.{Contest, LocalTeam, Team}
+import org.stingray.contester.dbmodel.{Contest, Team}
 import palevo.PalevoSink
 import play.api.libs.EventSource.Event
 import play.api.libs.json.{JsValue, Json}
@@ -25,10 +25,10 @@ trait LiveActorFixtures { this: TestKit =>
   val frozen = t0.plusHours(4).plusMinutes(10)
 
   def contest(id: Int = 1, freeze: DateTime = t0.plusHours(4)): Contest =
-    Contest(id, s"C$id", t0, freeze, t0.plusHours(5), t0.plusHours(6), None, "ru", schoolMode = false)
+    Contest(id, s"C$id", t0, t0.plusHours(5), None, 1)
 
   def team(id: Int): Team =
-    LocalTeam(id, 1, f"School$id%02d", s"S$id", 0, "", notRated = false, noPrint = false, disabled = false)
+    Team(id, 0, "", f"School$id%02d", "City", None)
 
   val problems = Seq("A", "B", "C")
   val teams = Seq(team(1), team(2), team(3))

@@ -30,7 +30,7 @@ class AdminSubmitsDbSpec extends AnyFunSuite {
   private def oldPipeline(contest: Int, team: Option[Int] = None) = {
     import org.stingray.contester.dbmodel.MyPostgresProfile.api._
     // the old page scored with all of the team's submits, so only filter after annotating
-    await(Submits.groupAndAnnotate(db, false, await(db.run(Submits.getContestSubmits(contest))).map(Submits.upliftSub(_))))
+    await(Submits.groupAndAnnotate(db, await(db.run(Submits.getContestSubmits(contest))).map(Submits.upliftSub(_))))
       .filter(f => team.forall(_ == f.submit.submitId.teamId)).sortBy(-_.submit.submitId.id)
   }
 

@@ -7,7 +7,7 @@ import live.{LiveBoard, LiveCell}
 import org.joda.time.{DateTime, DateTimeZone}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuite
-import org.stingray.contester.dbmodel.{Contest, LocalTeam, Team}
+import org.stingray.contester.dbmodel.{Contest, Team}
 import palevo.query.{FakeSource, QueryConfig, QuerySource}
 import play.api.http.{DefaultFileMimeTypes, FileMimeTypesConfiguration}
 import play.api.i18n.{DefaultLangs, DefaultMessagesApi}
@@ -42,10 +42,10 @@ class PalevoQueryTeamSpec extends AnyFunSuite with BeforeAndAfterAll {
   private def h(n: Int) = fixedNow.plusHours(n)
 
   private def contest(id: Int, start: Int, freeze: Int, end: Int, expose: Int) =
-    Contest(id, s"Contest $id", h(start), h(freeze), h(end), h(expose), None, "en", schoolMode = false)
+    Contest(id, s"Contest $id", h(start), h(end), None, 1)
 
   private def team(id: Int, short: String, num: Int, name: String): Team =
-    LocalTeam(id, 1, s"School $short", short, num, name, notRated = false, noPrint = false, disabled = false)
+    Team(id, num, name, short, "City", None)
 
   import LiveCell._
 

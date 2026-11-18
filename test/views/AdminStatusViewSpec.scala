@@ -6,7 +6,7 @@ import java.nio.file.{Files, Paths}
 import models._
 import org.joda.time.DateTime
 import org.scalatest.funsuite.AnyFunSuite
-import org.stingray.contester.dbmodel.{Contest, LocalTeam, Memory, TimeMs}
+import org.stingray.contester.dbmodel.{Contest, Memory, Team, TimeMs}
 import play.api.http.HttpConfiguration
 import play.api.i18n.{DefaultMessagesApi, Lang, MessagesImpl}
 import play.api.mvc.{Headers, RequestHeader}
@@ -74,7 +74,7 @@ class AdminStatusViewSpec extends AnyFunSuite {
   }
 
   private val contest =
-    Contest(3, "C", DateTime.now.minusHours(1), DateTime.now.plusHours(3), DateTime.now.plusHours(4), DateTime.now.plusHours(5), None, "en", schoolMode = false)
+    Contest(3, "C", DateTime.now.minusHours(1), DateTime.now.plusHours(4), None, 1)
 
   private def admin(modify: Boolean) =
     Admin("a", "h", Set(3), if (modify) Set(3) else Set.empty, Set.empty, Set(3))

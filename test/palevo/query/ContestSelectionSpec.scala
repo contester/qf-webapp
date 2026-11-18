@@ -9,40 +9,7 @@ class ContestSelectionSpec extends AnyFunSuite {
   private def h(n: Int) = now.plusHours(n)
 
   private def contest(id: Int, start: Int, freeze: Int, end: Int, expose: Int) =
-    Contest(id, s"c$id", h(start), h(freeze), h(end), h(expose), None, "en", schoolMode = false)
-
-  test("freezeInEffect rules") {
-    // freeze >= end: never
-    assert(!ContestSelection.freezeInEffect(contest(1, -5, 2, 2, 10), now))
-    assert(!ContestSelection.freezeInEffect(contest(1, -5, 3, 2, 10), now))
-    // freeze already passed but freeze >= end: still never
-    assert(!ContestSelection.freezeInEffect(contest(1, -5, -1, -1, 10), now))
-    assert(!ContestSelection.freezeInEffect(contest(1, -5, -1, -2, 10), now))
-    // before freeze
-    assert(!ContestSelection.freezeInEffect(contest(1, -5, 1, 3, 10), now))
-    // in effect (during freeze and after end, before expose)
-    assert(ContestSelection.freezeInEffect(contest(1, -5, -1, 3, 10), now))
-    assert(ContestSelection.freezeInEffect(contest(1, -5, -3, -1, 10), now))
-    // now == freezeTime counts
-    assert(ContestSelection.freezeInEffect(contest(1, -5, 0, 3, 10), now))
-    // now == exposeTime: over
-    assert(!ContestSelection.freezeInEffect(contest(1, -5, -3, -1, 0), now))
-    // after expose
-    assert(!ContestSelection.freezeInEffect(contest(1, -5, -3, -2, -1), now))
-  }
-
-  test("viewOf for both audiences") {
-    val inEffect = contest(1, -5, -1, 3, 10)
-    val notInEffect = contest(2, -5, 1, 3, 10)
-    assert(ContestSelection.viewOf(inEffect, Public, now) == Frozen)
-    assert(ContestSelection.viewOf(inEffect, Jury, now) == LiveJury)
-    assert(ContestSelection.viewOf(notInEffect, Public, now) == NoFreeze)
-    assert(ContestSelection.viewOf(notInEffect, Jury, now) == NoFreeze)
-    val freezeNotBeforeEnd = contest(3, -5, -1, -1, 10)
-    assert(ContestSelection.viewOf(freezeNotBeforeEnd, Public, now) == NoFreeze)
-    assert(ContestSelection.viewOf(freezeNotBeforeEnd, Jury, now) == NoFreeze)
-    assert(Seq(Frozen, LiveJury, NoFreeze).map(_.json) == Seq("frozen", "live-jury", "no-freeze"))
-  }
+    Contest(id, s"c$id", h(start), h(end), None, 1)
 
   test("status") {
     assert(ContestSelection.status(contest(1, 1, 2, 3, 4), now) == "before")

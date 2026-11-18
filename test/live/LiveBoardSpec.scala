@@ -3,7 +3,7 @@ package live
 import models.{ACM, Foo}
 import org.joda.time.DateTime
 import org.scalatest.funsuite.AnyFunSuite
-import org.stingray.contester.dbmodel.{LocalTeam, Problem, Team}
+import org.stingray.contester.dbmodel.{NotRated, Problem, Team}
 
 class LiveBoardSpec extends AnyFunSuite {
   import LiveCell._
@@ -13,7 +13,7 @@ class LiveBoardSpec extends AnyFunSuite {
   private val problems = Seq("A", "B", "C")
 
   private def team(id: Int, notRated: Boolean = false): Team =
-    LocalTeam(id, 1, f"School$id%02d", s"S$id", 0, "", notRated, noPrint = false, disabled = false)
+    Team(id, 0, "", f"School$id%02d", "City", (if (notRated) Some(NotRated) else None))
 
   private def solved(sec: Int, attempts: Int = 1): LiveCell = Solved(attempts, sec)
 

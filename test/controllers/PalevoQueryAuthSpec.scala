@@ -40,8 +40,7 @@ class PalevoQueryAuthSpec extends AnyFunSuite with BeforeAndAfterAll {
   private val token = "s3cret-token"
 
   private def controller(token: Option[String]) =
-    new PalevoQuery(cc, QueryConfig(token, (1 to 10).toSet), new FakeSource(contestList = Seq(Contest(1, "Contest 1", now.minusHours(2), now.minusHours(1), now.plusHours(1),
-      now.plusHours(2), None, "en", schoolMode = false))))
+    new PalevoQuery(cc, QueryConfig(token, (1 to 10).toSet), new FakeSource(contestList = Seq(Contest(1, "Contest 1", now.minusHours(2), now.plusHours(1), None, 1))))
 
   private def get(path: String, headers: (String, String)*): Request[AnyContent] =
     RequestFactory.plain.createRequest(RemoteConnection("127.0.0.1", secure = false, None), "GET",

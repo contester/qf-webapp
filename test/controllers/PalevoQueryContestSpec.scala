@@ -7,7 +7,7 @@ import live.{LiveBoard, LiveCell}
 import org.joda.time.{DateTime, DateTimeZone}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuite
-import org.stingray.contester.dbmodel.{Contest, LocalTeam, Team}
+import org.stingray.contester.dbmodel.{Contest, NotRated, Team}
 import palevo.query.{FakeSource, QueryConfig, QuerySource, TeamCounts}
 import play.api.http.{DefaultFileMimeTypes, FileMimeTypesConfiguration}
 import play.api.i18n.{DefaultLangs, DefaultMessagesApi}
@@ -42,11 +42,10 @@ class PalevoQueryContestSpec extends AnyFunSuite with BeforeAndAfterAll {
   private def h(n: Int) = fixedNow.plusHours(n)
 
   private def contest(id: Int, start: Int, freeze: Int, end: Int, expose: Int) =
-    Contest(id, s"Contest $id", h(start), h(freeze), h(end), h(expose), None, "en", schoolMode = false)
+    Contest(id, s"Contest $id", h(start), h(end), None, 1)
 
   private def team(id: Int): Team =
-    LocalTeam(id, 1, s"School $id", s"S$id", 1, s"Team$id: Ivanov, Petrov", notRated = false, noPrint = false,
-      disabled = false)
+    Team(id, 1, s"Team$id: Ivanov, Petrov", s"School $id", "City", None)
 
   import LiveCell._
 
@@ -117,8 +116,7 @@ class PalevoQueryContestSpec extends AnyFunSuite with BeforeAndAfterAll {
   // Between contests: 3 is over (results exposed), 4 starts tomorrow.
   private val finished3 = contest(3, -6, -3, -2, -1)
   private val next4 = contest(4, 20, 23, 25, 26)
-  private def betweenFake() = fake(Seq(frozenRunning.copy(id = 1, startTime = h(-30), freezeTime = h(-29),
-      endTime = h(-28), exposeTime = h(-27)), finished3, next4),
+  private def betweenFake() = fake(Seq(frozenRunning.copy(id = 1, startTime = h(-30), endTime = h(-28)), finished3, next4),
     Map(3 -> frozenBoard, 4 -> frozenBoard), Map(3 -> realBoard, 4 -> realBoard), Map(3 -> names, 4 -> names),
     Map(1 -> TeamCounts(9, 9), 3 -> TeamCounts(2, 1), 4 -> TeamCounts(40, 3)))
 
@@ -158,18 +156,10 @@ class PalevoQueryContestSpec extends AnyFunSuite with BeforeAndAfterAll {
   }
 
   test("rank 0 (not rated) is shown as *") {
-    val nr = LocalTeam(9, 1, "Guests", "G", 0, "", notRated = true, noPrint = false, disabled = false)
+    val nr = Team(9, 0, "", "Guests", "City", Some(NotRated))
     val b = LiveBoard.build(problemIds, Seq(team(1), nr), Map(9 -> Map("A" -> Solved(1, 60))))
     val r = standingsReq(new Ctl(fake(Seq(plainRunning), Map(2 -> b))), pub: _*)
     assert(rowTuples(r.only).map(_._1) == Seq("*", "1"))
-  }
-
-  test("no freeze configured: view no-freeze for both audiences") {
-    val src = fake(Seq(plainRunning), Map(2 -> frozenBoard), Map(2 -> realBoard), Map(2 -> names))
-    for (p <- Seq(pub, jury)) {
-      assert((standingsReq(new Ctl(src), p: _*).only \ "view").as[String] == "no-freeze")
-      assert((contestReq(new Ctl(src), p: _*).only \ "view").as[String] == "no-freeze")
-    }
   }
 
   test("contest: times, elapsed/remaining and problems in board order with names") {
@@ -177,18 +167,13 @@ class PalevoQueryContestSpec extends AnyFunSuite with BeforeAndAfterAll {
     val c = contestReq(new Ctl(src), pub: _*).only
     assert(c == Json.obj(
       "id" -> 1, "name" -> "Contest 1", "status" -> "running", "view" -> "frozen",
-      "start" -> "2026-11-06T10:00:00Z", "end" -> "2026-11-06T13:00:00Z", "freeze" -> "2026-11-06T11:00:00Z",
+      "start" -> "2026-11-06T10:00:00Z", "end" -> "2026-11-06T13:00:00Z", "freeze" -> "2026-11-06T10:00:00Z",
       "elapsed_seconds" -> 7200, "remaining_seconds" -> 3600,
       "teams" -> teamsObj(2, 1),
       "problems" -> Json.arr(
         Json.obj("id" -> "A", "name" -> "Apples"),
         Json.obj("id" -> "B", "name" -> "Bananas"),
         Json.obj("id" -> "C", "name" -> "Cherries"))))
-  }
-
-  test("contest: no freeze configured gives freeze null") {
-    val c = contestReq(new Ctl(fake(Seq(plainRunning), problems = Map(2 -> names))), pub: _*).only
-    assert((c \ "freeze").get == play.api.libs.json.JsNull)
   }
 
   test("contest, all: no board falls back to the problem names, sorted by id") {
@@ -246,23 +231,6 @@ class PalevoQueryContestSpec extends AnyFunSuite with BeforeAndAfterAll {
     assert((none \ "teams").get == teamsObj(0, 0))
   }
 
-  test("contest between contests: the finished one with problems, the upcoming one with times and teams only") {
-    val src = betweenFake()
-    val r = contestReq(new Ctl(src), pub: _*)
-    info(r.body)
-    assert(r.json == Json.obj("as_of" -> "2026-11-06T12:00:00Z", "contests" -> Json.arr(
-      Json.obj("id" -> 3, "name" -> "Contest 3", "status" -> "over", "view" -> "no-freeze",
-        "start" -> "2026-11-06T06:00:00Z", "end" -> "2026-11-06T10:00:00Z", "freeze" -> "2026-11-06T09:00:00Z",
-        "elapsed_seconds" -> 14400, "remaining_seconds" -> 0, "teams" -> teamsObj(2, 1),
-        "problems" -> Json.arr(Json.obj("id" -> "A", "name" -> "Apples"), Json.obj("id" -> "B", "name" -> "Bananas"),
-          Json.obj("id" -> "C", "name" -> "Cherries"))),
-      Json.obj("id" -> 4, "name" -> "Contest 4", "status" -> "before", "view" -> "no-freeze",
-        "start" -> "2026-11-07T08:00:00Z", "end" -> "2026-11-07T13:00:00Z", "freeze" -> "2026-11-07T11:00:00Z",
-        "elapsed_seconds" -> 0, "remaining_seconds" -> 18000, "teams" -> teamsObj(40, 3)))))
-    assert(!src.calls.exists(x => x.startsWith("board(4") || x.startsWith("problemNames(4")), src.calls)
-    assert(!src.calls.exists(_.contains("(1")), src.calls)
-  }
-
   test("standings between contests: rows for the finished one, only the base object for the upcoming one") {
     val src = betweenFake()
     val r = standingsReq(new Ctl(src), pub :+ ("top" -> "2"): _*)
@@ -299,15 +267,6 @@ class PalevoQueryContestSpec extends AnyFunSuite with BeforeAndAfterAll {
     }
     val c = contestReq(new Ctl(up), pub: _*).only
     assert((c \ "status").as[String] == "before" && (c \ "teams").toOption.isEmpty && (c \ "start").isDefined, c)
-  }
-
-  test("over: elapsed is the duration, remaining 0") {
-    val over = contest(4, -5, -2, -1, 3)
-    val c = contestReq(new Ctl(fake(Seq(over))), pub: _*).only
-    assert((c \ "status").as[String] == "over")
-    assert((c \ "view").as[String] == "frozen")
-    assert((c \ "elapsed_seconds").as[Int] == 4 * 3600)
-    assert((c \ "remaining_seconds").as[Int] == 0)
   }
 
   test("top: default 10, capped at 30, invalid values are 400") {

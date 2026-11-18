@@ -2,7 +2,7 @@ package live
 
 import akka.actor.ActorRef
 import org.joda.time.DateTime
-import org.stingray.contester.dbmodel.{Contest, LocalTeam, Team}
+import org.stingray.contester.dbmodel.{Contest, NotRated, Team}
 import org.scalatest.funsuite.AnyFunSuite
 
 import scala.concurrent.duration._
@@ -43,7 +43,7 @@ class LiveWiringSpec extends AnyFunSuite {
     hooks.submitArrived(1, SubmitRec(1, 2, "A", new DateTime(0), 0, Pending))
     hooks.finished(1, 1, compiled = true, 3, 100)
     hooks.rejudged(1)
-    hooks.teamChanged(1, LocalTeam(2, 1, "School", "S", 0, "", notRated = true, noPrint = false, disabled = false))
+    hooks.teamChanged(1, Team(2, 0, "", "School", "City", Some(NotRated)))
   }
 
   test("deferred hooks resolve their target only on first use and forward every call") {
@@ -62,8 +62,8 @@ class LiveWiringSpec extends AnyFunSuite {
     hooks.submitArrived(1, SubmitRec(5, 2, "A", new DateTime(0), 0, Pending))
     hooks.finished(1, 5, compiled = true, 3, 100)
     hooks.rejudged(5)
-    hooks.teamChanged(1, LocalTeam(7, 1, "School", "S", 0, "", notRated = false, noPrint = false, disabled = false))
-    hooks.contestChanged(Contest(3, "c", new DateTime(0), new DateTime(0), new DateTime(0), new DateTime(0), None, "ru", schoolMode = false))
+    hooks.teamChanged(1, Team(7, 0, "", "School", "City", None))
+    hooks.contestChanged(Contest(3, "c", new DateTime(0), new DateTime(0), None, 1))
     assert(resolved == 1)
     assert(calls == Seq("arrived 1 5", "finished 1 5 true 3 100", "rejudged 5", "team 1 7", "contest 3"))
   }
@@ -73,7 +73,7 @@ class LiveWiringSpec extends AnyFunSuite {
     hooks.submitArrived(1, SubmitRec(5, 2, "A", new DateTime(0), 0, Pending))
     hooks.finished(1, 5, compiled = true, 3, 100)
     hooks.rejudged(5)
-    hooks.teamChanged(1, LocalTeam(7, 1, "School", "S", 0, "", notRated = false, noPrint = false, disabled = false))
-    hooks.contestChanged(Contest(3, "c", new DateTime(0), new DateTime(0), new DateTime(0), new DateTime(0), None, "ru", schoolMode = false))
+    hooks.teamChanged(1, Team(7, 0, "", "School", "City", None))
+    hooks.contestChanged(Contest(3, "c", new DateTime(0), new DateTime(0), None, 1))
   }
 }

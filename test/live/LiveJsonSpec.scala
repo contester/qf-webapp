@@ -2,14 +2,14 @@ package live
 
 import models.ACM
 import org.scalatest.funsuite.AnyFunSuite
-import org.stingray.contester.dbmodel.{LocalTeam, Team}
+import org.stingray.contester.dbmodel.{Disqualified, NotRated, Team}
 import play.api.libs.json.Json
 
 class LiveJsonSpec extends AnyFunSuite {
   import LiveCell._
 
   private def team(id: Int, notRated: Boolean = false): Team =
-    LocalTeam(id, 1, f"School$id%02d", s"S$id", 0, "", notRated, noPrint = false, disabled = false)
+    Team(id, 0, "", f"School$id%02d", "City", (if (notRated) Some(NotRated) else None))
 
   private val problems = Seq("A", "B", "C", "D")
   private val c7: Map[String, LiveCell] = Map("A" -> Solved(2, 600), "B" -> Failed(3), "C" -> Pending(1), "D" -> Empty)
@@ -38,7 +38,7 @@ class LiveJsonSpec extends AnyFunSuite {
   }
 
   test("a disqualified team is unranked like a not-rated one, but its rank reads DSQ") {
-    val dsq = LocalTeam(9, 1, "School09", "S9", 0, "", notRated = true, noPrint = false, disabled = false, disqualified = true)
+    val dsq = Team(9, 0, "", "School09", "City", Some(Disqualified))
     val board = LiveBoard.build(problems, Seq(team(7), team(8), dsq),
       Map(7 -> c7, 8 -> c8, 9 -> Map("A" -> Solved(1, 50))))
     val rows = (LiveJson.board(board) \ "rows").as[Seq[play.api.libs.json.JsObject]]

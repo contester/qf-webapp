@@ -12,7 +12,7 @@ import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuiteLike
-import org.stingray.contester.dbmodel.{LocalTeam, Team}
+import org.stingray.contester.dbmodel.Team
 import play.api.libs.EventSource.Event
 
 import scala.concurrent.duration._
@@ -39,7 +39,7 @@ class LiveFanoutBenchSpec extends TestKit(ActorSystem("LiveFanoutBench", ConfigF
 
   private val benchProblems = ('A' to 'J').map(_.toString)
   private val benchTeams: Seq[Team] = (1 to 160).map(i =>
-    LocalTeam(i, 1, f"School $i%03d with a longish name", s"S$i", i % 7, "", notRated = false, noPrint = false, disabled = false))
+    Team(i, i % 7, "", f"School $i%03d with a longish name", "City", None))
   private val benchSubs = for {
     t <- 1 to 160
     (p, i) <- benchProblems.zipWithIndex

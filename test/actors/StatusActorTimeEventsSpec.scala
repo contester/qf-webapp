@@ -9,7 +9,7 @@ import scala.util.{Failure, Success}
 
 class StatusActorTimeEventsSpec extends AnyFunSuite {
   private val now = new DateTime(2026, 11, 1, 10, 0)
-  private val c = Contest(1, "C", now, now.plusHours(4), now.plusHours(5), now.plusHours(6), None, "en", schoolMode = false)
+  private val c = Contest(1, "C", now, now.plusHours(5), None, 1)
   private val event: PalevoEvent = ContestStarting(PContest(1, "C"), now)
 
   test("with the switch off the tracker is not asked at all") {

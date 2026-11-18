@@ -10,7 +10,7 @@ import models._
 import org.joda.time.DateTime
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuiteLike
-import org.stingray.contester.dbmodel.{LocalTeam, Memory, TimeMs}
+import org.stingray.contester.dbmodel.{Memory, Team, TimeMs}
 import org.stingray.qf.actors.TeamStateActor
 import org.stingray.qf.models.TeamClient
 import slick.basic.DatabaseConfig
@@ -36,12 +36,12 @@ class DbStatusRowsSpec extends TestKit(ActorSystem("DbStatusRowsSpec", ConfigFac
   private def await[T](f: Future[T]) = Await.result(f, 120.seconds)
 
   // Answers the team list of any contest with the given teams.
-  private def teamClient(teams: LocalTeam*): TeamClient = new TeamClient(system.actorOf(Props(new Actor {
+  private def teamClient(teams: Team*): TeamClient = new TeamClient(system.actorOf(Props(new Actor {
     def receive = { case TeamStateActor.GetTeams(_) => sender() ! teams.map(t => t.id -> t).toMap }
   })))
 
   private def team(id: Int, school: String = "Lyceum & Co") =
-    LocalTeam(id, 1, school, "L", 2, "<Alpha>", notRated = false, noPrint = false, disabled = false)
+    Team(id, 2, "<Alpha>", school, "City", None)
 
   private val noTeams = teamClient()
 
@@ -124,7 +124,7 @@ class DbStatusRowsSpec extends TestKit(ActorSystem("DbStatusRowsSpec", ConfigFac
 
   private lazy val contests: Seq[Int] = {
     import org.stingray.contester.dbmodel.MyPostgresProfile.api._
-    await(db.run(org.stingray.contester.dbmodel.SlickModel.allContests.result)).map(_.id)
+    await(models.Rounds.currentRounds(db)).map(_.id)
   }
 
   private lazy val real = DbStatusRows.fromDb(db, noTeams, system.scheduler)

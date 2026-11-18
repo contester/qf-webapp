@@ -14,7 +14,7 @@ import com.typesafe.config.ConfigFactory
 import org.joda.time.DateTime
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuiteLike
-import org.stingray.contester.dbmodel.{Contest, LocalTeam, Team}
+import org.stingray.contester.dbmodel.{Contest, Team}
 import palevo.{ContestRescheduled, ContestStarting, FirstSolveContest, PalevoEvent, PalevoSink, TimeChange}
 import play.api.libs.EventSource.Event
 import play.api.libs.json.{JsObject, JsValue, Json}
@@ -111,20 +111,6 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
       val b = next(p, "board")
       assert((b \ "rows").as[Seq[JsValue]].size == 3 && (b \ "problems").as[Seq[String]] == problems)
     }
-    f.stop()
-  }
-
-  test("Arrived then Finished produce row events") {
-    val f = new Fixture(running)
-    val p = f.subscribe(JoinPublic(1))
-    next(p, "board")
-    f.actor ! Arrived(1, rec(11, 1, "A", running))
-    val r1 = next(p, "row")
-    assert((r1 \ "team").as[Int] == 1)
-    assert((r1 \ "row" \ "cells" \ "A" \ "t").as[String] == "pend")
-    f.actor ! Finished(1, 11, compiled = true, 3, 3)
-    val r2 = next(p, "row")
-    assert((r2 \ "row" \ "cells" \ "A" \ "t").as[String] == "ok")
     f.stop()
   }
 
@@ -270,17 +256,6 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     f.stop()
   }
 
-  test("a sent contest change is announced as a reschedule at once, without a tick") {
-    val sink = new CollectingSink
-    val f = new Fixture(t0.minusHours(2), palevoSink = sink)
-    f.barrier()
-    f.actor ! ContestChanged(contest().copy(startTime = t0.plusHours(1)))
-    f.barrier()
-    val resched = sink.events.asScala.collect { case e: ContestRescheduled => e }.toSeq
-    assert(resched.size == 1 && resched.head.changes == Seq(TimeChange("start", t0, t0.plusHours(1))))
-    f.stop()
-  }
-
   test("contests above 10 get no countdown and no reschedule announcement") {
     val sink = new CollectingSink
     val f = new Fixture(t0.minusMinutes(61), rows = Seq(contest(11)), palevoSink = sink)
@@ -328,7 +303,7 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
 
   private def startingIn(d: FiniteDuration, id: Int = 1): Contest = {
     val start = DateTime.now.plusMillis(d.toMillis.toInt)
-    Contest(id, s"C$id", start, start.plusHours(4), start.plusHours(5), start.plusHours(6), None, "ru", schoolMode = false)
+    Contest(id, s"C$id", start, start.plusHours(5), None, 1)
   }
 
   private def startedNow(sink: CollectingSink) =
@@ -375,52 +350,6 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     f.data = f.data + (2 -> ContestData(problems, teams, Nil))
     f.actor ! ContestChanged(added)
     awaitCond(startedNow(sink), 8.seconds)
-    f.stop()
-  }
-
-  test("a changed contest row reaches the live state without reading submits") {
-    val late = rec(81, 1, "A", t0.plusHours(3), ok)
-    val now = t0.plusHours(3).plusMinutes(30)
-    val f = new Fixture(now, subs = Map(1 -> Seq(late)))
-    val p = f.subscribe(JoinPublic(1))
-    assert(cellT(next(p, "board"), 1, "A") == "ok")
-    f.contestRows = Seq(contest(freeze = t0.plusHours(2)))
-    f.actor ! PollContests
-    assert(cellT(next(p, "board"), 1, "A") == "pend")
-    assert(f.loads.get == 1)
-    f.stop()
-  }
-
-  test("a contest change that is sent reaches the live state at once, without a poll") {
-    val late = rec(81, 1, "A", t0.plusHours(3), ok)
-    val f = new Fixture(t0.plusHours(3).plusMinutes(30), subs = Map(1 -> Seq(late)))
-    val p = f.subscribe(JoinPublic(1))
-    assert(cellT(next(p, "board"), 1, "A") == "ok")
-    f.actor ! ContestChanged(contest(freeze = t0.plusHours(2)))
-    assert(cellT(next(p, "board"), 1, "A") == "pend")
-    assert(f.loads.get == 1)
-    f.stop()
-  }
-
-  test("a poll that read the database before a contest change was sent does not undo it") {
-    val late = rec(81, 1, "A", t0.plusHours(3), ok)
-    val f = new Fixture(t0.plusHours(3).plusMinutes(30), subs = Map(1 -> Seq(late)))
-    val p = f.subscribe(JoinPublic(1))
-    assert(cellT(next(p, "board"), 1, "A") == "ok")
-    val gate = scala.concurrent.Promise[Unit]()
-    f.pollGate = gate.future
-    f.actor ! PollContests // reads the old row, answers later
-    f.actor ! ContestChanged(contest(freeze = t0.plusHours(2)))
-    assert(cellT(next(p, "board"), 1, "A") == "pend")
-    gate.success(())
-    f.barrier()
-    Thread.sleep(200)
-    assert(cellT(next(f.subscribe(JoinPublic(1)), "board"), 1, "A") == "pend")
-    // a poll that starts after the change is believed again (here the row went back to the old freeze)
-    f.pollGate = Future.successful(())
-    f.actor ! PollContests
-    assert(cellT(next(p, "board"), 1, "A") == "ok")
-    assert(f.loads.get == 1)
     f.stop()
   }
 

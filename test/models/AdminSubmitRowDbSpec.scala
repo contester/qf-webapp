@@ -29,7 +29,7 @@ class AdminSubmitRowDbSpec extends AnyFunSuite {
 
   private lazy val contests: Seq[Int] = {
     import org.stingray.contester.dbmodel.MyPostgresProfile.api._
-    await(db.run(org.stingray.contester.dbmodel.SlickModel.allContests.result)).map(_.id)
+    await(models.Rounds.currentRounds(db)).map(_.id)
   }
 
   private def whole(contest: Int, canSeeAll: Boolean) =

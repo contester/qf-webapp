@@ -27,7 +27,7 @@ class AdminCustomTestsDbSpec extends AnyFunSuite {
 
   private def contestWithTests: Option[Int] = {
     import org.stingray.contester.dbmodel.MyPostgresProfile.api._
-    await(db.run(sql"select contest from custom_test group by contest order by count(*) desc limit 1".as[Int])).headOption
+    await(db.run(sql"select round_id from custom_tests group by round_id order by count(*) desc limit 1".as[Int])).headOption
   }
 
   test("list rows match the full rows, in every page size") {

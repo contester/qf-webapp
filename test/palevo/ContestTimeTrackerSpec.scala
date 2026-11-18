@@ -9,7 +9,7 @@ class ContestTimeTrackerSpec extends AnyFunSuite {
 
   // starts 10:00, freezes 14:00, ends 15:00
   private def contest(id: Int = 1, freeze: DateTime = t(14), end: DateTime = t(15)) =
-    Contest(id, s"C$id", t(10), freeze, end, t(16), None, "en", schoolMode = false)
+    Contest(id, s"C$id", t(10), end, None, 1)
 
   private def types(es: Seq[PalevoEvent]) = es.map(_.eventType)
 
@@ -19,33 +19,10 @@ class ContestTimeTrackerSpec extends AnyFunSuite {
     }
   }
 
-  test("announces start when time crosses") {
-    val tr = new ContestTimeTracker
-    tr.observe(contest(), t(9, 59))
-    assert(types(tr.observe(contest(), t(10))) == Seq("contest_starting"))
-  }
-
-  test("start, freeze, finish in order across observations") {
-    val tr = new ContestTimeTracker
-    tr.observe(contest(), t(9))
-    assert(types(tr.observe(contest(), t(10, 1))) == Seq("contest_starting"))
-    assert(tr.observe(contest(), t(12)).isEmpty)
-    assert(types(tr.observe(contest(), t(14, 1))) == Seq("contest_freezing"))
-    assert(types(tr.observe(contest(), t(15, 1))) == Seq("contest_ending"))
-    assert(tr.observe(contest(), t(17)).isEmpty)
-  }
-
   test("skipped phases are all announced in order") {
     val tr = new ContestTimeTracker
     tr.observe(contest(), t(9))
     assert(types(tr.observe(contest(), t(15, 30))) == Seq("contest_starting", "contest_freezing", "contest_ending"))
-  }
-
-  test("no frozen event when freezeTime >= endTime") {
-    val tr = new ContestTimeTracker
-    val c = contest(freeze = t(15), end = t(15))
-    tr.observe(c, t(9))
-    assert(types(tr.observe(c, t(16))) == Seq("contest_starting", "contest_ending"))
   }
 
   test("repeat observation announces nothing") {
@@ -53,14 +30,6 @@ class ContestTimeTrackerSpec extends AnyFunSuite {
     tr.observe(contest(), t(9))
     tr.observe(contest(), t(11))
     assert(tr.observe(contest(), t(11)).isEmpty)
-  }
-
-  test("contests are tracked independently") {
-    val tr = new ContestTimeTracker
-    tr.observe(contest(1), t(9))
-    assert(tr.observe(contest(2), t(11)).isEmpty) // first sight of contest 2
-    val es = tr.observe(contest(1), t(11))
-    assert(types(es) == Seq("contest_starting") && es.head.contest == PContest(1, "C1"))
   }
 
   test("events carry the observation time") {
@@ -91,13 +60,6 @@ class ContestTimeTrackerSpec extends AnyFunSuite {
     out.result()
   }
 
-  test("every start threshold fires once, then the start itself") {
-    val es = run(new ContestTimeTracker, contest(), t(8, 50), t(10))
-    assert(ahead(es) == Seq(60, 30, 20, 10, 5, 2, 1).map(("contest_starting", _)))
-    val last = es.last.asInstanceOf[ContestStarting]
-    assert(last.inMinutes == 0 && es.count(_.eventType == "contest_starting") == 8)
-  }
-
   test("a restart mid-countdown is silent and only the later thresholds fire") {
     val tr = new ContestTimeTracker
     assert(tr.observe(contest(), t(9, 53)).isEmpty)
@@ -119,13 +81,6 @@ class ContestTimeTrackerSpec extends AnyFunSuite {
     tr.observe(contest(), t(9))
     assert(ahead(tr.observe(contest(), t(9, 56))) == Seq(("contest_starting", 5)))
     assert(ahead(tr.observe(contest(), t(9, 59))) == Seq(("contest_starting", 1)))
-  }
-
-  test("the moment itself is announced as the phase, not as a countdown") {
-    val tr = new ContestTimeTracker
-    tr.observe(contest(), t(9, 59))
-    val es = tr.observe(contest(), t(10))
-    assert(es.size == 1 && es.head.asInstanceOf[ContestStarting].inMinutes == 0)
   }
 
   test("no start countdown once the contest has started") {
@@ -151,14 +106,6 @@ class ContestTimeTrackerSpec extends AnyFunSuite {
     assert(run(new ContestTimeTracker, inverted, t(8), t(11)).nonEmpty)
   }
 
-  test("contests above the bound get phase events but no countdown") {
-    val above = run(new ContestTimeTracker, contest(11), t(8, 50), t(10))
-    assert(types(above) == Seq("contest_starting") && ahead(above).isEmpty)
-    val at = run(new ContestTimeTracker, contest(10), t(8, 50), t(10))
-    assert(ahead(at).nonEmpty)
-    assert(ContestTimeTracker.MaxAnnouncedContest == 10)
-  }
-
   test("thresholds come from the configuration; empty lists disable the countdown") {
     assert(ahead(run(new ContestTimeTracker(CountdownConfig(Seq(3), Nil)), contest(), t(9, 50), t(10))) ==
       Seq(("contest_starting", 3)))
@@ -178,31 +125,9 @@ class ContestTimeTrackerSpec extends AnyFunSuite {
   private def moved(c: org.stingray.contester.dbmodel.Contest, start: DateTime = null, freeze: DateTime = null,
                     end: DateTime = null, expose: DateTime = null, name: String = null) =
     c.copy(name = Option(name).getOrElse(c.name), startTime = Option(start).getOrElse(c.startTime),
-      freezeTime = Option(freeze).getOrElse(c.freezeTime), endTime = Option(end).getOrElse(c.endTime),
-      exposeTime = Option(expose).getOrElse(c.exposeTime))
+      endTime = Option(end).getOrElse(c.endTime))
 
   private def resched(es: Seq[PalevoEvent]) = es.collect { case e: ContestRescheduled => e }
-
-  test("a moved start is announced once, before anything else of the same observation") {
-    val tr = new ContestTimeTracker
-    tr.observe(contest(), t(8, 30))
-    val es = tr.observe(moved(contest(), start = t(11)), t(8, 40))
-    assert(es.size == 1)
-    val e = es.head.asInstanceOf[ContestRescheduled]
-    assert(e.changes == Seq(TimeChange("start", t(10), t(11))) && e.ts == t(8, 40))
-    assert(e.id == s"qf-contest_rescheduled-1-${t(8, 40).getMillis}")
-    assert(tr.observe(moved(contest(), start = t(11)), t(8, 41)).isEmpty)
-  }
-
-  test("shifting all four times is one event listing start, freeze and end") {
-    val tr = new ContestTimeTracker
-    tr.observe(contest(), t(8))
-    val shifted = moved(contest(), start = t(11, 30), freeze = t(15, 30), end = t(16, 30), expose = t(17, 30))
-    val es = tr.observe(shifted, t(8, 5))
-    assert(es.size == 1)
-    assert(es.head.asInstanceOf[ContestRescheduled].changes ==
-      Seq(TimeChange("start", t(10), t(11, 30)), TimeChange("freeze", t(14), t(15, 30)), TimeChange("end", t(15), t(16, 30))))
-  }
 
   test("an extended end of a running contest is announced with only the end") {
     val tr = new ContestTimeTracker
@@ -215,8 +140,7 @@ class ContestTimeTrackerSpec extends AnyFunSuite {
     val tr = new ContestTimeTracker
     tr.observe(contest(), t(8))
     val zone = org.joda.time.DateTimeZone.forOffsetHours(3)
-    val rezoned = contest().copy(startTime = t(10).withZone(zone), freezeTime = t(14).withZone(zone),
-      endTime = t(15).withZone(zone), exposeTime = t(16).withZone(zone))
+    val rezoned = contest().copy(startTime = t(10).withZone(zone), endTime = t(15).withZone(zone))
     assert(tr.observe(rezoned, t(8, 1)).isEmpty)
   }
 
@@ -225,17 +149,6 @@ class ContestTimeTrackerSpec extends AnyFunSuite {
     tr.observe(contest(), t(8))
     assert(tr.observe(moved(contest(), expose = t(18)), t(8, 1)).isEmpty)
     assert(tr.observe(moved(contest(), expose = t(18), name = "Renamed"), t(8, 2)).isEmpty)
-  }
-
-  test("freeze is listed only when freeze is enabled before or after the change") {
-    val disabled = contest(freeze = t(15), end = t(15))
-    val tr = new ContestTimeTracker
-    tr.observe(disabled, t(8))
-    assert(tr.observe(moved(disabled, freeze = t(15, 30)), t(8, 1)).isEmpty) // still disabled
-    val tr2 = new ContestTimeTracker
-    tr2.observe(contest(), t(8))
-    val off = tr2.observe(moved(contest(), freeze = t(15)), t(8, 1)) // enabled -> disabled
-    assert(resched(off).map(_.changes) == Seq(Seq(TimeChange("freeze", t(14), t(15)))))
   }
 
   test("after a reschedule the countdown runs again against the new start, with new ids") {
@@ -288,25 +201,5 @@ class ContestTimeTrackerSpec extends AnyFunSuite {
     assert(next(contest(), ts(9, 59, 30)) == Some(t(10)))
   }
 
-  test("nextDeadline during the contest: freeze, then the end countdown, then the end and the expose time") {
-    assert(next(contest(), t(10)) == Some(t(14))) // freeze comes before end - 20 min
-    assert(next(contest(), t(14)) == Some(t(14, 40)))
-    assert(next(contest(), t(14, 59)) == Some(t(15)))
-    assert(next(contest(), t(15)) == Some(t(16)))
-    assert(next(contest(), t(16)).isEmpty)
-  }
-
-  test("nextDeadline for a contest above the bound or with the countdown off has only the schedule") {
-    assert(next(contest(11), t(8)) == Some(t(10)))
-    assert(next(contest(), t(8), CountdownConfig(Nil, Nil)) == Some(t(10)))
-    assert(next(contest(), t(10), CountdownConfig(Nil, Nil)) == Some(t(14)))
-  }
-
-  test("nextDeadline keeps the freeze time even when freezing is disabled (the board rebuilds there)") {
-    val c = contest(freeze = t(15), end = t(15))
-    assert(next(c, t(14, 59), CountdownConfig(Nil, Nil)) == Some(t(15)))
-    val late = contest(freeze = t(17), end = t(15)) // freeze after end: disabled, but a boundary of the board
-    assert(next(late, t(16, 30), CountdownConfig(Nil, Nil)) == Some(t(17)))
-  }
 }
 

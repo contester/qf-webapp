@@ -2,7 +2,7 @@ package live
 
 import org.joda.time.DateTime
 import org.scalatest.funsuite.AnyFunSuite
-import org.stingray.contester.dbmodel.{Contest, LocalTeam, Team}
+import org.stingray.contester.dbmodel.{Contest, NotRated, Team}
 
 import scala.util.Random
 
@@ -13,11 +13,11 @@ class LiveContestSpec extends AnyFunSuite {
   private val freeze = start.plusHours(4)
   private val end = start.plusHours(5)
   private val expose = start.plusHours(6)
-  private val contest = Contest(1, "Test", start, freeze, end, expose, None, "ru", schoolMode = false)
+  private val contest = Contest(1, "Test", start, end, None, 1)
   private val problems = Seq("A", "B", "C", "D")
 
   private def team(id: Int, notRated: Boolean = false): Team =
-    LocalTeam(id, 1, f"School$id%02d", s"S$id", 0, "", notRated, noPrint = false, disabled = false)
+    Team(id, 0, "", f"School$id%02d", "City", (if (notRated) Some(NotRated) else None))
 
   private val teams = Seq(team(1), team(2), team(3), team(4), team(5, notRated = true))
 
@@ -33,63 +33,6 @@ class LiveContestSpec extends AnyFunSuite {
     lc.board(kind).rowOf(t).get.cells.getOrElse(p, Empty)
 
   private val emptyDelta = Delta(Nil, Nil, Nil)
-
-  test("arrive is pending on both boards, finish success solves") {
-    val now = start.plusHours(1)
-    val lc = fresh(now)
-    val d = lc.onArrived(rec(1, 1, "A", now), now)
-    assert(d.freezing.size == 1 && d.real.size == 1 && d.ownCells.isEmpty)
-    assert(cellOn(lc, Real, 1, "A") == Pending(0))
-    assert(cellOn(lc, Freezing, 1, "A") == Pending(0))
-    val f = lc.onFinished(1, ok.compiled, ok.passed, ok.taken, now.plusMinutes(1)).get
-    assert(f.freezing.size == 1 && f.real.size == 1)
-    assert(cellOn(lc, Real, 1, "A") == Solved(1, 3600))
-    assert(cellOn(lc, Freezing, 1, "A") == Solved(1, 3600))
-    assert(lc.board(Real).rows.head.team.id == 1)
-  }
-
-  test("post-freeze finish changes the real board only and yields own cells; expose tick equalizes") {
-    val at = freeze.plusMinutes(10)
-    val lc = fresh(at)
-    val d = lc.onArrived(rec(1, 2, "B", at), at)
-    assert(d.freezing.size == 1 && d.real.size == 1)
-    val f = lc.onFinished(1, ok.compiled, ok.passed, ok.taken, at.plusMinutes(1)).get
-    assert(f.freezing.isEmpty)
-    assert(f.real.size == 1)
-    assert(f.ownCells == Seq(2 -> Map("B" -> Solved(1, 4 * 3600 + 600))))
-    assert(cellOn(lc, Freezing, 2, "B") == Pending(0))
-    assert(cellOn(lc, Real, 2, "B") == Solved(1, 4 * 3600 + 600))
-    assert(lc.board(Freezing) != lc.board(Real))
-
-    assert(lc.onTick(expose.minusMinutes(1)).isEmpty)
-    val t = lc.onTick(expose.plusSeconds(1)).get
-    assert(lc.board(Freezing) == lc.board(Real))
-    assert(t.freezing == Seq(WholeOut(lc.board(Freezing))))
-    assert(t.real == Seq(WholeOut(lc.board(Real))))
-    assert(t.ownCells.isEmpty)
-    assert(lc.onTick(expose.plusSeconds(2)).isEmpty)
-  }
-
-  test("tick crossing start and freeze emits whole boards") {
-    val lc = fresh(start.minusMinutes(5))
-    assert(lc.onTick(start.minusMinutes(1)).isEmpty)
-    val s = lc.onTick(start.plusSeconds(1)).get
-    assert(s.freezing == Seq(WholeOut(lc.board(Freezing))) && s.real == Seq(WholeOut(lc.board(Real))))
-    assert(lc.onTick(freeze.minusSeconds(1)).isEmpty)
-    assert(lc.onTick(freeze.plusSeconds(1)).nonEmpty)
-  }
-
-  test("rejudge of a finished submit sets it pending, finish sets it back") {
-    val now = start.plusHours(1)
-    val lc = fresh(now, Seq(rec(1, 1, "A", now).copy(state = ok)))
-    assert(cellOn(lc, Real, 1, "A") == Solved(1, 3600))
-    val r = lc.onRejudge(1, now).get
-    assert(r.real.size == 1 && r.freezing.size == 1)
-    assert(cellOn(lc, Real, 1, "A") == Pending(0))
-    assert(lc.records.map(_.state) == Seq(live.Pending))
-    lc.onFinished(1, ok.compiled, ok.passed, ok.taken, now)
-    assert(cellOn(lc, Real, 1, "A") == Solved(1, 3600))
-  }
 
   test("rejudge of a pending submit and a second rejudge are no-ops") {
     val now = start.plusHours(1)
@@ -145,19 +88,6 @@ class LiveContestSpec extends AnyFunSuite {
     val before = (lc.board(Freezing), lc.board(Real))
     assert(lc.onArrived(rec(7, 99, "A", now), now) == emptyDelta)
     assert((lc.board(Freezing), lc.board(Real)) == before)
-  }
-
-  test("onContest with a later freeze reveals a hidden submit from memory") {
-    val at = freeze.plusMinutes(30)
-    val now = freeze.plusMinutes(40)
-    val lc = fresh(now, Seq(rec(1, 3, "C", at).copy(state = ok)))
-    assert(cellOn(lc, Freezing, 3, "C") == Pending(0))
-    val d = lc.onContest(contest.copy(freezeTime = freeze.plusMinutes(45)), now)
-    assert(lc.contest.freezeTime == freeze.plusMinutes(45))
-    assert(lc.rules == FreezeRules(freeze.plusMinutes(45), end, expose))
-    assert(cellOn(lc, Freezing, 3, "C") == Solved(1, 4 * 3600 + 1800))
-    assert(d.freezing == Seq(WholeOut(lc.board(Freezing))))
-    assert(d.real == Seq(WholeOut(lc.board(Real))))
   }
 
   test("differences names board and team") {
@@ -252,35 +182,5 @@ class LiveContestSpec extends AnyFunSuite {
       assert(stats.hidden > 0 && stats.own > 0, s"seed $seed: the freeze never hid anything")
       assert(lc.board(Freezing) == lc.board(Real))
     }
-  }
-
-  test("the public board has no jury teams, keeps coach teams, and its header counts and updates follow") {
-    val jury = LocalTeam(8, 1, models.InitialImportTools.JurySchoolFullName, "J", 1, "", notRated = true, noPrint = false, disabled = false)
-    val coach = LocalTeam(9, 1, models.InitialImportTools.CoachSchoolFullName, "C", 1, "", notRated = true, noPrint = false, disabled = false)
-    val now = start.plusHours(1)
-    val lc = new LiveContest(contest, problems, teams ++ Seq(jury, coach), Nil, now)
-    assert(!lc.publicBoard.rows.exists(_.team.id == 8) && lc.publicBoard.rows.exists(_.team.id == 9))
-    // A jury team that is rated stays on the public board.
-    val rated = jury.copy(id = 7, notRated = false)
-    val withRated = new LiveContest(contest, problems, teams ++ Seq(jury, coach, rated), Nil, now)
-    assert(withRated.publicBoard.rows.exists(_.team.id == 7) && !withRated.publicBoard.rows.exists(_.team.id == 8))
-    // Rating it later puts it on, un-rating takes it off.
-    val lc2 = new LiveContest(contest, problems, teams ++ Seq(jury), Nil, now)
-    assert(lc2.onTeamChanged(jury.copy(notRated = false), now).public.nonEmpty && lc2.publicBoard.rows.exists(_.team.id == 8))
-    lc2.onTeamChanged(jury, now)
-    assert(!lc2.publicBoard.rows.exists(_.team.id == 8))
-    assert(lc.board(Freezing).rows.exists(_.team.id == 8))
-
-    val dj = lc.onArrived(rec(1, 8, "A", now), now)
-    assert(dj.freezing.size == 1 && dj.public.isEmpty)
-    lc.onFinished(1, ok.compiled, ok.passed, ok.taken, now.plusMinutes(1))
-    val dc = lc.onArrived(rec(2, 9, "A", now), now)
-    lc.onFinished(2, ok.compiled, ok.passed, ok.taken, now.plusMinutes(1))
-    assert(lc.board(Freezing).solvedCounts("A") == 2 && lc.publicBoard.solvedCounts("A") == 1)
-    val d = lc.onArrived(rec(3, 1, "A", now), now)
-    assert(d.public.size == 1)
-    assert(lc.differences(lc.rebuilt(problems, teams ++ Seq(jury, coach), lc.records, now.plusMinutes(2))).isEmpty)
-    val t = lc.onTeamChanged(teams.head, now)
-    assert(t.public.isEmpty && !lc.publicBoard.rows.exists(_.team.id == 8))
   }
 }

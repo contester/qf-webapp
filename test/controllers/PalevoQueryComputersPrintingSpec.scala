@@ -40,7 +40,7 @@ class PalevoQueryComputersPrintingSpec extends AnyFunSuite with BeforeAndAfterAl
   private val fixedNow = new DateTime(2026, 11, 6, 12, 0, 0, DateTimeZone.UTC)
   private def h(n: Int) = fixedNow.plusHours(n)
 
-  private def contest(id: Int) = Contest(id, s"Contest $id", h(-2), h(-1), h(1), h(2), None, "en", schoolMode = false)
+  private def contest(id: Int) = Contest(id, s"Contest $id", h(-2), h(1), None, 1)
 
   /** Remembers the contest lists `printJobs` was asked for, and the other arguments. */
   private class Spy(inner: FakeSource) extends QuerySource {

@@ -26,8 +26,7 @@ class DescribeAttemptsSpec extends AnyFunSuite {
   private val results = Map(wrongAnswer(1), wrongAnswer(2), accepted(3))
 
   test("a late accepted attempt is scored after the failures before it") {
-    val rows = Submits.describeAttempts(schoolMode = false,
-      Seq(attempt(11, 600, 3, testing = 1), attempt(12, 1200, 3, testing = 2), attempt(13, 1800, 5, testing = 3)), results)
+    val rows = Submits.describeAttempts(Seq(attempt(11, 600, 3, testing = 1), attempt(12, 1200, 3, testing = 2), attempt(13, 1800, 5, testing = 3)), results)
     assert(rows.map(_.index) == Seq(1, 2, 3))
     assert(rows.map(_.score.map(_.toString)) == Seq(None, None, Some("70")))
     assert(rows.map(_.result.message) == Seq("Wrong answer on test 3", "Wrong answer on test 3", "ACCEPTED"))
@@ -36,8 +35,7 @@ class DescribeAttemptsSpec extends AnyFunSuite {
 
   test("rejudging the first attempt to accepted takes the score away from the later ones") {
     val rejudged = Map(accepted(4), wrongAnswer(2), accepted(3))
-    val rows = Submits.describeAttempts(schoolMode = false,
-      Seq(attempt(11, 600, 5, testing = 4), attempt(12, 1200, 3, testing = 2), attempt(13, 1800, 5, testing = 3)), rejudged)
+    val rows = Submits.describeAttempts(Seq(attempt(11, 600, 5, testing = 4), attempt(12, 1200, 3, testing = 2), attempt(13, 1800, 5, testing = 3)), rejudged)
     assert(rows.map(_.index) == Seq(1, 2, 3))
     assert(rows.map(_.score.map(_.toString)) == Seq(Some("10"), None, None))
     // the last attempt is accepted but no longer scores: its rendered row must change, not only the first one's
@@ -46,23 +44,13 @@ class DescribeAttemptsSpec extends AnyFunSuite {
   }
 
   test("attempts are taken in arrival order whatever order they are given") {
-    val rows = Submits.describeAttempts(schoolMode = false,
-      Seq(attempt(13, 1800, 5, testing = 3), attempt(11, 600, 3, testing = 1), attempt(12, 1200, 3, testing = 2)), results)
+    val rows = Submits.describeAttempts(Seq(attempt(13, 1800, 5, testing = 3), attempt(11, 600, 3, testing = 1), attempt(12, 1200, 3, testing = 2)), results)
     assert(rows.map(_.submit.submitId.id) == Seq(11, 12, 13))
   }
 
   test("time and memory come from the testing's results; a submit without results has none") {
-    val rows = Submits.describeAttempts(schoolMode = false,
-      Seq(attempt(11, 600, 5, testing = 3), attempt(12, 1200, 5, testing = 9)), results)
+    val rows = Submits.describeAttempts(Seq(attempt(11, 600, 5, testing = 3), attempt(12, 1200, 5, testing = 9)), results)
     assert(rows.head.stats.timeMs == TimeMs(40) && rows.head.stats.memory == Memory(4096))
     assert(rows(1).stats.timeMs == TimeMs(0) && rows(1).details.isEmpty)
-  }
-
-  test("school mode scores each attempt by the tests it passed") {
-    val rows = Submits.describeAttempts(schoolMode = true,
-      Seq(attempt(11, 600, 2, testing = 1), attempt(12, 1200, 5, testing = 3)), results)
-    assert(rows.map(_.result.message) == Seq("2 из 5", "ACCEPTED"))
-    assert(rows.forall(_.score.isDefined))
-    assert(row(rows.head, plus = "").contains("<td id=\"score-11\">"))
   }
 }
