@@ -22,13 +22,6 @@ case class RatedProblem(id: String, rating: Int)
 
 case class SubmitId(id: Int, arrived: Arrived, teamId: Int, contestId: Int, problem: RatedProblem, ext: String)
 
-case class ProblemData(id: String, name: String, rating: Int)
-case class TeamData(id: Long, name: String)
-case class UntestedSubmit(id: Long, arrived: Arrived, team: TeamData, contest: Long, problem: ProblemData, ext: String)
-case class SubmitTestingData(testingId: Long, finished: Boolean, compiled: Boolean, passed: Int, taken: Int,
-                             maxTimeMs: Long, maxMemory: Long)
-case class DatabaseSubmitRow(submit: UntestedSubmit, testingData: Option[SubmitTestingData])
-
 case class Submit(submitId: SubmitId, finished: Boolean, compiled: Boolean, passed: Int, taken: Int, testingId: Option[Int],
                   points: Option[Double] = None, maxPoints: Double = 0) {
   val success = finished && compiled && taken > 0 && passed == taken
@@ -50,6 +43,8 @@ trait ProblemCell {
   def fullSolution: Boolean
 }
 
+// TODO(task17): ACMCell/ACMScorer remain for the live monitor cells and the per-submit score of the submit lists;
+// the scoreboard uses PointsCell/PointsScorer (Monitor.scala).
 object ACMCell {
   def empty = ACMCell(0, 0, fullSolution = false)
 }
@@ -199,9 +194,6 @@ object Submits {
       SubmitStats(detlist.map(_.time).max, detlist.map(_.memory).max, detlist.exists(_.timeLimitExceeded))
     }.getOrElse(SubmitStats(TimeMs(0), Memory(0)))
 
-  def getTestingLastResult(details: Seq[ResultEntry]) =
-    trOption(details).map(_.maxBy(_.test))
-
   private[this] def annotateGrouped(db: JdbcBackend#DatabaseDef, submits: Seq[Submit])(implicit ec: ExecutionContext) = {
     val scored = scoreGrouped(submits, ACMCell.empty, ACMScorer)
     val indexed = indexGrouped(scored._2)
@@ -290,13 +282,6 @@ object Submits {
     loadSubmitDetails(db, testingId.toInt).zip(loadGroups(db, testingId)).map { case (details, groups) =>
       TestRows.describe(details.map(TestRows.fromEntry), groups)
     }
-
-  def dbsub2sub(s: DatabaseSubmitRow): Submit = {
-    Submit(SubmitId(s.submit.id.toInt, s.submit.arrived, s.submit.team.id.toInt, s.submit.contest.toInt, RatedProblem(s.submit.problem.id, s.submit.problem.rating), s.submit.ext),
-      s.testingData.exists(_.finished), s.testingData.exists(_.compiled),
-      s.testingData.map(_.passed).getOrElse(0), s.testingData.map(_.taken).getOrElse(0),
-      s.testingData.map(_.testingId.toInt))
-  }
 
   /**
     * Inserts a submit for the team, after checking in this order: the round runs at `now` (read from the database,

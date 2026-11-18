@@ -106,3 +106,5 @@ label.points=Points
 label.compile=Compilation
 policy.completeGroup=all tests
 policy.eachTest=each test
+label.total=Total
+monitor.notPublished=Results will be published after the round ends

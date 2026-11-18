@@ -109,17 +109,17 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     LiveStreams.response(stats.events())
   }
 
+  // The points board of the round, rendered from the database; admins see it always.
+  // TODO(task17): restore the live admin board (SSE deltas) over the points cells; until then the page is static.
   def monitor(id: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(id)).async { implicit request =>
-    if (liveConfig.enabled)
-      getSelectedContests(id, request.identity).flatMap { contest =>
-        LiveStreams.snapshot(liveMonitor.ref, LiveStreams.adminJoin(id, request.identity.canSeeAll(id))).map { initial =>
-          Ok(html.admin.livemonitor(contest, initial)).withHeaders(LiveStreams.pageHeaders: _*)
-        }
+    monitorModel.source.round(id).flatMap { round =>
+      BoardAccess.decide(round, AdminViewer, org.joda.time.DateTime.now) match {
+        case Left(result) => Future.successful(result)
+        case Right(contest) =>
+          getSelectedContests(id, request.identity).zip(monitorModel.source.board(contest.id)).map {
+            case (selected, board) => Ok(html.admin.monitor(selected.copy(contest = contest), board))
+          }
       }
-    else getSelectedContests(id, request.identity).zip(monitorModel.getMonitor(id, request.identity.canSeeAll(id))).map {
-      case (contest, Some(status)) =>
-        Ok(html.admin.monitor(contest, status.status))
-      case (_, None) => NotFound
     }
   }
 

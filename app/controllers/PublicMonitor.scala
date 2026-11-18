@@ -3,16 +3,19 @@ package controllers
 import java.util.concurrent.atomic.AtomicInteger
 
 import actors.LiveMonitorActor
-import live.{ConnectionStats, FeedKind, LiveContestLookup, LiveMonitorConfig, LiveMonitorRef}
+import live.{ConnectionStats, FeedKind, LiveMonitorConfig, LiveMonitorRef}
+import models.{Anonymous, BoardSource}
+import org.joda.time.DateTime
+import play.api.i18n.Messages
 import play.api.mvc._
 import views.html
 
 import scala.concurrent.Future
 
-/** The unauthenticated live monitor: a page and a stream of the freezing board for the public contests.
- * No session or cookie is read or created here. */
+/** The unauthenticated scoreboard: a static page of any round once it is over, and the live stream of the public
+ * contests (Task 17). No session or cookie is read or created here. */
 class PublicMonitor(cc: ControllerComponents, liveConfig: LiveMonitorConfig, liveMonitor: LiveMonitorRef,
-                    contests: LiveContestLookup, stats: ConnectionStats) extends AbstractController(cc) {
+                    boards: BoardSource, stats: ConnectionStats) extends AbstractController(cc) {
   private implicit val ec = defaultExecutionContext
 
   private val connections = new AtomicInteger(0)
@@ -23,22 +26,20 @@ class PublicMonitor(cc: ControllerComponents, liveConfig: LiveMonitorConfig, liv
   private def liveFor(contestId: Int) =
     liveMonitor.ref.filter(_ => liveConfig.enabled && liveConfig.publicContests.contains(contestId))
 
-  def page(contestId: Int) = Action.async { implicit request =>
-    liveFor(contestId) match {
-      case None => Future.successful(NotFound)
-      case Some(_) =>
-        val messages = messagesApi.preferred(request.acceptLanguages)
-        contests.get(contestId).flatMap {
-          case Some(contest) =>
-            LiveStreams.snapshot(liveFor(contestId), actors.LiveMonitorActor.JoinPublic(contestId)).map { initial =>
-              Ok(html.publiclive(contest, routes.PublicMonitor.events(contestId).url, initial)(messages))
-                .withHeaders(LiveStreams.pageHeaders: _*)
-            }
-          case None => Future.successful(NotFound)
-        }
+  /** The public scoreboard of a round: 403 until the round is over, then the points board rendered from the DB. */
+  def page(contestId: Int): Action[AnyContent] = pageAt(contestId, () => DateTime.now)
+
+  private[controllers] def pageAt(contestId: Int, now: () => DateTime): Action[AnyContent] = Action.async { implicit request =>
+    implicit val messages: Messages = messagesApi.preferred(request.acceptLanguages) // no cookie is read here
+    boards.round(contestId).flatMap { round =>
+      BoardAccess.decide(round, Anonymous, now()) match {
+        case Left(result) => Future.successful(result)
+        case Right(contest) => boards.board(contest.id).map(b => Ok(html.staticmonitor(contest, b)))
+      }
     }
   }
 
+  // TODO(task17): enforce Visibility on this stream (the public live board is removed by Task 17).
   def events(contestId: Int) = Action.async {
     liveFor(contestId) match {
       case None => Future.successful(NotFound)

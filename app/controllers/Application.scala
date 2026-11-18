@@ -59,18 +59,20 @@ class Application (cc: ControllerComponents,
 
   import scala.concurrent.ExecutionContext.Implicits.global
 
+  // The scoreboard of the team's round, rendered from the database once the round is over (re-read, so a round
+  // finished early is seen at once); 403 while it runs. Contestants have no live board.
   def monitorDefault = silhouette.SecuredAction.async { implicit request =>
-    if (liveConfig.enabled)
-      LiveStreams.snapshot(liveMonitor.ref, actors.LiveMonitorActor.JoinTeam(request.identity.contest.id, request.identity.team.id)).map { initial =>
-        Ok(html.livemonitor(request.identity.contest, request.identity, initial)).withHeaders(LiveStreams.pageHeaders: _*)
+    val team = request.identity
+    monitorModel.source.round(team.contest.id).flatMap { round =>
+      BoardAccess.decide(round, TeamViewer(team.team.id, team.contest.id), org.joda.time.DateTime.now) match {
+        case Left(result) => Future.successful(result)
+        case Right(contest) => monitorModel.source.board(contest.id).map(b => Ok(html.loggedinmonitor(contest, b, team)))
       }
-    else monitorModel.getMonitor(request.identity.contest.id, overrideFreeze = false).map {
-      case Some(x) => Ok(html.loggedinmonitor(x.contest, x.status, request.identity))
-      case None => NotFound
     }
   }
 
   // The team's live stream: the freezing board with the team's own row overlay.
+  // TODO(task17): enforce Visibility (or drop the contestant stream: contestants have no live board).
   def monitorEvents = silhouette.SecuredAction.async { implicit request =>
     LiveStreams.stream(liveMonitor.ref.filter(_ => liveConfig.enabled),
       actors.LiveMonitorActor.JoinTeam(request.identity.contest.id, request.identity.team.id), stats)

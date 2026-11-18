@@ -46,11 +46,6 @@ case object SubmitWaiting extends SubmitResult {
   override val message: String = "Running..."
 }
 
-case object SubmitAccepted extends SubmitResult {
-  override val success = true
-  override val message = "ACCEPTED"
-}
-
 case object SubmitCompileError extends SubmitResult {
   override val success = false
   override val message = "Compilation error"
@@ -76,14 +71,17 @@ object SubmitResult extends Logging {
     )
   }
 
-  /** The verdict from the submit: waiting, a compile error, or the points it earned of the problem's maximum. */
+  /**
+    * The verdict from the submit: waiting, a compile error, or the points it earned of the problem's maximum. Points
+    * still NULL on a finished, compiled submit mean its (re)testing is in flight: in progress, as in annotateFinished2.
+    */
   def fromSubmit(submit: Submit): SubmitResult =
     if (!submit.finished)
       SubmitWaiting
     else if (!submit.compiled)
       SubmitCompileError
     else
-      SubmitPointsResult(submit.points.getOrElse(0.0), submit.maxPoints)
+      submit.points.map(SubmitPointsResult(_, submit.maxPoints)).getOrElse(BeingRetestedResult)
 
   private[models] def annotate2(submit: Submit): SubmitResult = fromSubmit(submit)
 

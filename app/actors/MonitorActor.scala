@@ -4,121 +4,67 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, StandardCopyOption}
 
-import akka.actor.{Actor, Props, Stash}
+import akka.actor.{Actor, Props}
 import models._
-import palevo.{PalevoSink, StandingsAnnouncer}
 import org.apache.commons.io.FileUtils
+import org.joda.time.DateTime
 import org.stingray.contester.dbmodel.Contest
-import org.stingray.qf.models.TeamClient
-import play.api.i18n.{Lang, Messages, MessagesApi, MessagesImpl}
+import play.api.i18n.{Lang, MessagesApi, MessagesImpl}
 import slick.jdbc.JdbcBackend
 
-import scala.collection.mutable
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Try
+import scala.concurrent.Future
 
+/**
+  * The fallback static board writer, run only when the live monitor is off: writes `<round>.html` with the points
+  * board into monitor.static_location, and only for rounds that are over, since the files are public.
+  * The pages do not ask this actor; they render the board on demand (BoardSource).
+  * TODO(task18): palevo standings were fed from here (ACM status); with the live monitor off they are not sent now.
+  */
 object MonitorActor {
-  def props(db: JdbcBackend#DatabaseDef, staticLocation: Option[String],
-            teamClient: TeamClient, problemClient: ProblemClient, messagesApi: MessagesApi,
-            palevo: PalevoSink) =
-    Props(new MonitorActor(db, staticLocation, teamClient, problemClient, messagesApi, palevo))
+  def props(db: JdbcBackend#DatabaseDef, staticLocation: Option[String], messagesApi: MessagesApi) =
+    Props(new MonitorActor(db, staticLocation, messagesApi))
 
-  case class Get(contest: Int)
-  case object Start
-  case class State(monitors: Seq[StoredContestStatus])
+  case class State(boards: Seq[(Contest, MonitorPoints)])
   case object Refresh
 }
 
-class MonitorActor(db: JdbcBackend#DatabaseDef,
-                   staticLocation: Option[String],
-                   teamClient: TeamClient,
-                   problemClient: ProblemClient,
-                   messagesApi: MessagesApi,
-                   palevo: PalevoSink) extends Actor with Stash {
+class MonitorActor(db: JdbcBackend#DatabaseDef, staticLocation: Option[String], messagesApi: MessagesApi) extends Actor {
   import MonitorActor._
   import context.dispatcher
 
   import scala.concurrent.duration._
   import scala.language.postfixOps
 
-  private implicit val messages = MessagesImpl(Lang("en"), messagesApi)
+  private implicit val messages: MessagesImpl = MessagesImpl(Lang("ru"), messagesApi)
 
   private val staticLocationFile = staticLocation.map(x => new File(x))
 
-  @throws[Exception](classOf[Exception])
   override def preStart(): Unit = {
     super.preStart()
     self ! Refresh
   }
 
-  private implicit val standardTimeout: akka.util.Timeout = {
-    import scala.concurrent.duration._
-    Duration(5, SECONDS)
-  }
-
-  private def getContestMonitor(contest: Contest)(implicit ec: ExecutionContext) = {
-    val cid = contest.id
-
-    problemClient.getProblems(cid)
-      .zip(teamClient.getTeams(cid))
-      .zip(db.run(Submits.getContestSubmits(cid)))
-      .map {
-      case ((problems, teams), submits) =>
-        val calcStatus: (Seq[Submit]) => AnyStatus with Product with Serializable =
-            ACM.calculateStatus(problems, teams.values.toSeq, _)
-
-        val subs0 = submits.filter(_.finished).map(Submits.upliftSub(_))
-
-        StoredContestStatus(contest, calcStatus(subs0.filter(!_.afterFreeze)), calcStatus(subs0))
-    }
-  }
-
-  private def loadMonitors()(implicit ec: ExecutionContext) = {
-    val fu = Rounds.currentRounds(db).flatMap { contests =>
-      Future.sequence(contests.map(getContestMonitor))
+  private def loadBoards(): Unit = {
+    val now = DateTime.now
+    val fu = Rounds.currentRounds(db).flatMap { rounds =>
+      Future.sequence(rounds.filter(Visibility.canSeeBoard(_, Anonymous, now)).map { r =>
+        MonitorPoints.load(db, r.id).map(r -> _)
+      })
     }
     fu.foreach(st => self ! State(st))
-    fu.onComplete { _ =>
-      context.system.scheduler.scheduleOnce(20 seconds, self, Refresh)
+    // TODO(task16): periodic refresh is polling; re-render on testing_finished/round_changed notifications instead.
+    fu.onComplete(_ => context.system.scheduler.scheduleOnce(20 seconds, self, Refresh))
+  }
+
+  private def write(contest: Contest, board: MonitorPoints): Unit =
+    for (location <- staticLocationFile) {
+      val tmpFile = new File(location, s"${contest.id}.html.new")
+      FileUtils.writeStringToFile(tmpFile, Compressor(views.html.staticmonitor(contest, board).body), StandardCharsets.UTF_8)
+      Files.move(tmpFile.toPath, new File(location, s"${contest.id}.html").toPath, StandardCopyOption.ATOMIC_MOVE)
     }
-    fu
-  }
-
-  private val monitors = mutable.HashMap[Int, StoredContestStatus]()
-  private val standings = new StandingsAnnouncer
-
-  private def updateMonitors(state: Seq[StoredContestStatus]) = {
-    state.map(_.contest.id).foreach(monitors.remove)
-    state.foreach { st =>
-      monitors.put(st.contest.id, st)
-      // Public events come from the pre-freeze status only (it cannot change after the freeze, so nothing leaks);
-      // the jury additionally hears the real standings while the public scoreboard is frozen.
-      standings.observe(st.contest, _root_.palevo.StandingsView.of(st.frozen), _root_.palevo.StandingsView.of(st.exposed), org.joda.time.DateTime.now).foreach(palevo.send)
-      if (st.contest.id <11) {
-        for (location <- staticLocationFile) {
-          val tmpFile = new File(location, s"${st.contest.id}.html.new")
-          FileUtils.writeStringToFile(tmpFile,
-            Compressor(views.html.staticmonitor(st.contest, st.monitor(false).status).body), StandardCharsets.UTF_8)
-          Files.move(tmpFile.toPath, new File(location, s"${st.contest.id}.html").toPath, StandardCopyOption.ATOMIC_MOVE)
-        }
-      }
-    }
-  }
-
-  def initialized: Receive = {
-    case Refresh => loadMonitors()
-    case State(state) => updateMonitors(state)
-    case Get(id) => sender ! Try(monitors.get(id))
-  }
 
   override def receive: Receive = {
-    case Refresh => loadMonitors()
-    case State(state) => {
-      updateMonitors(state)
-      unstashAll()
-      context.become(initialized)
-    }
-    case _ =>
-      stash()
+    case Refresh => loadBoards()
+    case State(boards) => boards.foreach { case (c, b) => write(c, b) }
   }
 }

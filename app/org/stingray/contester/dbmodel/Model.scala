@@ -613,8 +613,6 @@ object SlickModel {
 
   val results = TableQuery[Results]
 
-  val headResultByTesting = Compiled((testingID: Rep[Long]) => results.filter(_.testingID === testingID).sortBy(_.testID.desc).take(1))
-
   case class DBResultEntry(testingID: Long, testID: Int, resultCode: Int, recordTime: DateTime, timeMs: TimeMs, memoryBytes:Memory,
                            returnCode: Long, testerReturnCode: Long, groupName: Option[String], points: Double)
 

@@ -1,19 +1,13 @@
-@(contest: SelectedContest, status: models.AnyStatus)(implicit request: RequestHeader, messages: Messages)
+@(contest: SelectedContest, status: models.MonitorPoints)(implicit request: RequestHeader, messages: Messages)
 
-@myScripts = {
-<script>
-    setTimeout(function() { location.reload() }, 60000);
-</script>
-}
-
-@adminmain(tab = "monitor", contest=contest, scripts = myScripts) {
+@adminmain(tab = "monitor", contest=contest) {
 
 
 <h3>@contest.contest.name</h3>
 @contestinfoshort(contest.contest)
 
 <div class="well">
-@monitortable(contest.contest, status, 0, true)
+@monitortable(status, 0)
 </div>
 
 }

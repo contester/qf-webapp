@@ -2,186 +2,135 @@ package models
 
 import actors.MonitorActor
 import akka.actor.{ActorRef, ActorSystem}
-import models.Foo.RankedRow
-import org.stingray.contester.dbmodel.{Contest, Problem, Team}
-import org.stingray.qf.actors.{ProblemStateActor, TeamStateActor}
-import org.stingray.qf.models.TeamClient
+import org.joda.time.DateTime
+import org.stingray.contester.dbmodel.{Contest, Disqualified, NotRated, SlickModel, Team}
 import play.api.Configuration
-import play.api.db.slick.DatabaseConfigProvider
 import play.api.i18n.MessagesApi
 import slick.basic.DatabaseConfig
-import slick.jdbc.JdbcProfile
-import utils.Ask
+import slick.jdbc.{JdbcBackend, JdbcProfile}
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.math.Ordered.orderingToOrdered
 
-case class ContestMonitor(contest: Contest, status: AnyStatus)
+/**
+  * One team's result on one problem. `best`: the most points of the team's finished, compiled submits whose points
+  * are set (None when there is none); `attempts`: all the team's submits for the problem, in flight ones included;
+  * `full`: best is the problem's maximum, and that maximum is above 0.
+  */
+case class PointsCell(best: Option[Double], attempts: Int, full: Boolean)
 
-case class MonitorDisplayOptions(admin: Boolean, teamEditor: Boolean)
-
-trait AnyStatus {
-  def problems: Seq[String]
-  def anyRows: Seq[AnyRankedRow]
-
-  def solvedProblems: Map[String, Int] =
-    anyRows.flatMap { row =>
-      row.anyCells.filter(_._2.fullSolution).keys
-    }.groupBy(x => x).mapValues(_.size)
+object PointsCell {
+  val empty: PointsCell = PointsCell(None, 0, full = false)
 }
 
-trait AnyRankedRow {
-  def rank: Int
-  def team: Team
-
-  def anyScore: Any
-  def anyCells: Map[String, ProblemCell]
-
-  def rankStr =
-    if (team.disqualified) "DSQ" else if (rank == 0) "*" else rank.toString
+object PointsScorer {
+  /**
+    * The cell of one team's submits for one problem. A submit's points are those of its current testing: a rejudge
+    * writes new points into the same submits row (old and new are never added), and while a testing is in flight
+    * the points are NULL, so such a submit counts as an attempt but not for the best.
+    */
+  def cell(submits: Seq[Submit], maxPoints: Double): PointsCell = {
+    val scored = submits.filter(s => s.finished && s.compiled).flatMap(_.points)
+    val best = if (scored.isEmpty) None else Some(scored.max)
+    PointsCell(best, submits.size, full = maxPoints > 0 && best.contains(maxPoints))
+  }
 }
 
-object Foo {
-  trait MonitorRow[ScoreType, CellType] {
-    def team: Team
-    def score: ScoreType
-    def cells: Map[String, CellType]
+/** A team and its cells, one per problem in the board's problem order. */
+case class TeamRow(team: Team, cells: Seq[PointsCell])
+
+/** A row of the board as shown: the place (None for an unrated team), the team, its cells and total. */
+case class RankedRow(place: Option[Int], team: Team, cells: Seq[PointsCell], total: Double)
+
+object Board {
+  /** The sum of the cells' best (a cell without one counts 0), added exactly so that equal totals compare equal. */
+  def total(cells: Seq[PointsCell]): Double =
+    cells.flatMap(_.best).map(BigDecimal(_)).sum.toDouble
+
+  /**
+    * Ranked by total descending; equal totals share a place and the next place skips (1, 1, 3); equal totals are
+    * ordered by team number. Not rated teams follow the ranked ones, ordered the same way, with no place and without
+    * affecting anyone's place. Disqualified teams are left out.
+    */
+  def rank(rows: Seq[TeamRow]): Seq[RankedRow] = {
+    val withTotals = rows.filterNot(_.team.unrated.contains(Disqualified))
+      .map(r => RankedRow(None, r.team, r.cells, total(r.cells)))
+      .sortBy(r => (-r.total, r.team.number))
+    val (unrated, rated) = withTotals.partition(_.team.unrated.contains(NotRated))
+    val placed = rated.zipWithIndex.foldLeft(Vector.empty[RankedRow]) { case (acc, (r, i)) =>
+      val place = acc.lastOption.filter(_.total == r.total).flatMap(_.place).getOrElse(i + 1)
+      acc :+ r.copy(place = Some(place))
+    }
+    placed ++ unrated
   }
-
-  case class RankedRow[ScoreType, CellType <: ProblemCell](rank: Int, team: Team, score: ScoreType, cells: Map[String, CellType]) extends AnyRankedRow {
-    override def anyScore: Any = score
-
-    override def anyCells: Map[String, ProblemCell] = cells
-  }
-
-  def rowLess[S](a: (Team, S), b: (Team, S))(implicit ord: Ordering[S]): Boolean =
-    ord.compare(a._2, b._2) match {
-      case c if c < 0 => true
-      case c if c > 0 => false
-      case _ =>
-        if ((!a._1.notRated) && b._1.notRated) true
-        else if (a._1.notRated && !b._1.notRated) false
-        else a._1.teamFullName < b._1.teamFullName
-    }
-
-  // Ranks for rows already sorted by rowLess: ties share a rank, the next rank skips; not rated is 0.
-  def ranks[S](sorted: Seq[(Team, S)]): Seq[Int] = {
-    var position = 0
-    var last: Option[(Int, S)] = None
-    sorted.map { case (team, score) =>
-      val r =
-        if (team.notRated) 0
-        else {
-          val shared = last.collect { case (lr, ls) if ls == score => lr }
-          position += 1
-          shared.getOrElse(position)
-        }
-      if (!team.notRated) last = Some((r, score))
-      r
-    }
-  }
-
-  private case class SomeRow[ScoreType, CellType](team: Team, score: ScoreType,
-                                                  cells: Map[String, CellType]) extends MonitorRow[ScoreType, CellType]
-
-  def groupAndRank[ScoreType, CellType <: ProblemCell](teams: Seq[Team], submits: Seq[Submit],
-                                                       getCell: (Seq[Submit]) => CellType,
-                                                       getScore: (Seq[CellType]) => ScoreType)(implicit ord: Ordering[ScoreType]): Seq[RankedRow[ScoreType, CellType]] = {
-    val rows = submits.groupBy(_.submitId.teamId).map {
-      case (teamId, s0) =>
-        val cells: Map[String, CellType] = s0.groupBy(_.submitId.problem.id).map {
-          case (problemId, s1) =>
-            problemId -> getCell(s1)
-        }
-
-        teamId -> cells
-    }
-
-    // A disabled team is on no board: it neither shows nor affects the ranks.
-    val teamRows = teams.filterNot(_.disabled).map { team =>
-      val cells = rows.getOrElse(team.id, Seq()).toMap
-      val score = getScore(cells.values.toSeq)
-
-      SomeRow(team, score, cells)
-    }
-
-    val sorted = teamRows.sortWith((a, b) => rowLess((a.team, a.score), (b.team, b.score)))
-    sorted.zip(ranks(sorted.map(r => (r.team, r.score)))).map {
-      case (r, rank) => RankedRow(rank, r.team, r.score, r.cells)
-    }
-  }
-
-
 }
 
-object ACM {
-  case class Status(problems: Seq[String], rows: Seq[RankedRow[Score, ACMCell]]) extends AnyStatus {
-    override def anyRows: Seq[AnyRankedRow] = rows
-  }
+/** A problem column of the board. */
+case class ProblemColumn(id: String, name: String, maxPoints: Double)
 
-  case class Score(solved: Int, penalty: Int, lastSubmitPenalty: Int) extends Ordered[Score] {
-    override def compare(that: Score): Int = {
-      val r = that.solved.compare(solved)
-      if (r == 0) {
-        val r2 = penalty.compare(that.penalty)
-        if (r2 == 0) {
-          lastSubmitPenalty.compare(that.lastSubmitPenalty)
-        } else r2
-      } else r
+/** The points board of a round: its problems and its ranked rows. */
+case class MonitorPoints(problems: Seq[ProblemColumn], rows: Seq[RankedRow])
+
+object MonitorPoints {
+  /** The board from the round's problems, participants and submits; submits of other teams are ignored. */
+  def build(problems: Seq[ProblemColumn], teams: Seq[Team], submits: Seq[Submit]): MonitorPoints = {
+    val byTeamProblem = submits.groupBy(s => (s.submitId.teamId, s.submitId.problem.id))
+    val rows = teams.map { t =>
+      TeamRow(t, problems.map(p => PointsScorer.cell(byTeamProblem.getOrElse((t.participantId, p.id), Nil), p.maxPoints)))
     }
+    MonitorPoints(problems, Board.rank(rows))
   }
 
-  private def getCell(submits: Seq[Submit]): ACMCell =
-    Submits.indexAndScoreGrouped(submits, ACMCell.empty, ACMScorer)._1
-
-  private def cellFold(state: Score, cell: ACMCell) =
-    if (cell.fullSolution)
-        Score(state.solved + 1, state.penalty + cell.score, state.lastSubmitPenalty.max(cell.score))
-    else
-        state
-
-  private def getScore(cells: Seq[ACMCell]) =
-    cells.foldLeft(Score(0, 0, 0))(cellFold)
-
-  def calculateStatus(problems: Seq[Problem], teams: Seq[Team], submits: Seq[Submit]): Status =
-    Status(problems.map(_.id), Foo.groupAndRank(teams, submits, getCell, getScore))
+  /** Loads the board of a round from the database: three queries, problems ordered by id. */
+  def load(db: JdbcBackend#DatabaseDef, roundId: Int)(implicit ec: ExecutionContext): Future[MonitorPoints] = {
+    import org.stingray.contester.dbmodel.MyPostgresProfile.api._
+    val problems = db.run(SlickModel.problems.filter(_.contestID === roundId).sortBy(_.id).result)
+      .map(_.map(p => ProblemColumn(p.id, p.name, p.maxPoints)))
+    val teams = Rounds.teamsOfRound(db, roundId)
+    val submits = db.run(Submits.getContestSubmits(roundId)).map(_.map(Submits.upliftSub))
+    for {
+      p <- problems
+      t <- teams
+      s <- submits
+    } yield build(p, t, s)
+  }
 }
 
-case class StoredContestStatus(contest: Contest, frozen: AnyStatus, exposed: AnyStatus) {
-  private[this] def status(overrideFreeze: Boolean) =
-    if (contest.frozen && !overrideFreeze)
-      frozen
-    else
-      exposed
+/** Who looks at a scoreboard. */
+sealed trait Viewer
+case object AdminViewer extends Viewer
+case class TeamViewer(participantId: Int, roundId: Int) extends Viewer
+case object Anonymous extends Viewer
 
-  def monitor(overrideFreeze: Boolean) =
-    ContestMonitor(contest, status(overrideFreeze))
+object Visibility {
+  /** A round is over once it is finished or its end has come (ends_at inclusive). */
+  def isOver(round: Contest, now: DateTime): Boolean = round.isFinished || !now.isBefore(round.endTime)
+
+  /** Admins see the board always; teams and the public only once the round is over. */
+  def canSeeBoard(round: Contest, viewer: Viewer, now: DateTime): Boolean = viewer match {
+    case AdminViewer => true
+    case _ => isOver(round, now)
+  }
+}
+
+/** Where the monitor pages read rounds and boards from; functions so that the controllers can be tested without a DB. */
+case class BoardSource(round: Int => Future[Option[Contest]], board: Int => Future[MonitorPoints])
+
+object BoardSource {
+  /** Rounds as currently stored (so is_finished is never stale) and boards rendered on demand. */
+  def fromDb(db: JdbcBackend#DatabaseDef)(implicit ec: ExecutionContext): BoardSource =
+    BoardSource(id => Rounds.currentRound(db, id), id => MonitorPoints.load(db, id))
 }
 
 class Monitor(dbConfig: DatabaseConfig[JdbcProfile], system: ActorSystem, configuration: Configuration,
-              messagesApi: MessagesApi, statusActorModel: StatusActorModel, palevoSink: palevo.PalevoSink,
-              liveConfig: live.LiveMonitorConfig) {
+              messagesApi: MessagesApi, liveConfig: live.LiveMonitorConfig) {
   private val db = dbConfig.db
 
-  // Not started when the live monitor is on: it writes the static files and feeds palevo instead.
+  val source: BoardSource = BoardSource.fromDb(db)(system.dispatcher)
+
+  // Not started when the live monitor is on: that one writes the static files instead.
   private[this] val monitorActor: Option[ActorRef] =
     if (live.LiveWiring.startOldMonitor(liveConfig))
-      Some(system.actorOf(MonitorActor.props(
-        db, configuration.getOptional[String]("monitor.static_location"),
-        statusActorModel.teamClient, statusActorModel.problemClient, messagesApi, palevoSink), "monitor-actor"))
+      Some(system.actorOf(MonitorActor.props(db, configuration.getOptional[String]("monitor.static_location"), messagesApi),
+        "monitor-actor"))
     else None
-
-  private implicit val monitorTimeout: akka.util.Timeout = {
-    import scala.concurrent.duration._
-    Duration(30, SECONDS)
-  }
-
-  def getMonitor(id: Int, overrideFreeze: Boolean)(implicit ec: ExecutionContext): Future[Option[ContestMonitor]] = {
-    monitorActor match {
-      case Some(actor) =>
-        Ask[Option[StoredContestStatus]](actor, MonitorActor.Get(id))
-          .map(_.map(_.monitor(overrideFreeze)))
-      case None => Future.successful(None)
-    }
-  }
 }

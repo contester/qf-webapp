@@ -1,5 +1,5 @@
 @import org.stingray.contester.dbmodel._
-@(contest: Contest, status: models.AnyStatus, loggedIn: LoggedInTeam)(implicit request: RequestHeader, messages: Messages)
+@(contest: Contest, status: models.MonitorPoints, loggedIn: LoggedInTeam)(implicit request: RequestHeader, messages: Messages)
 
 
 @main(loggedIn, tab = "monitor") {
@@ -7,6 +7,6 @@
 <h3>@contest.name</h3>
 @contestinfoshort(contest)
 <div class="well">
-@monitortable(contest, status, loggedIn.team.id)
+@monitortable(status, loggedIn.team.id)
 </div>
 }

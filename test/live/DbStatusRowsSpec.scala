@@ -49,7 +49,7 @@ class DbStatusRowsSpec extends TestKit(ActorSystem("DbStatusRowsSpec", ConfigFac
                         teamId: Int = 5): AdminSubmitRow = {
     val s = Submit(SubmitId(id, Arrived(new DateTime(2026, 11, 1, 10, 0), 600, afterFreeze), teamId, 3, RatedProblem("A", 30), "cpp"),
       finished, compiled = finished, passed = if (success) 3 else 1, taken = if (finished) 3 else 0, None)
-    AdminSubmitRow(s, None, if (!finished) SubmitWaiting else if (success) SubmitAccepted else SubmitPointsResult(1, 3),
+    AdminSubmitRow(s, None, if (!finished) SubmitWaiting else if (success) SubmitPointsResult(3, 3) else SubmitPointsResult(1, 3),
       SubmitStats(TimeMs(31), Memory(2048)), runs = 1)
   }
 
@@ -61,7 +61,7 @@ class DbStatusRowsSpec extends TestKit(ActorSystem("DbStatusRowsSpec", ConfigFac
     assert(r.contest == 3 && r.id == 42 && r.team == 5 && !r.afterFreeze)
     assert(r.rw.startsWith("<tr id=\"result-row-42\"") && r.ro.startsWith("<tr id=\"result-row-42\""))
     assert(r.rw.contains("rejudge-42") && !r.ro.contains("rejudge-42"))
-    assert(r.rw.contains("ACCEPTED") && r.ro.contains("ACCEPTED"))
+    assert(r.rw.contains("3 из 3") && r.ro.contains("3 из 3"))
     assert(r.rw.contains("class=\"team-link\"") && r.rw.contains("Team 5"))
   }
 
@@ -91,7 +91,7 @@ class DbStatusRowsSpec extends TestKit(ActorSystem("DbStatusRowsSpec", ConfigFac
     val reads = new AtomicInteger
     val r = await(rows(id => Future.successful(Some(submitRow(id, finished = reads.incrementAndGet() >= 3)))).render(42, None)).get
     assert(reads.get == 3)
-    assert(r.rw.contains("ACCEPTED") && !r.rw.contains("Running..."))
+    assert(r.rw.contains("3 из 3") && !r.rw.contains("Running..."))
   }
 
   test("a result that never shows up is given up on after the retries, and the row is still sent") {

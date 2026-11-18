@@ -6,12 +6,12 @@ import akka.stream.Materializer
 import akka.stream.scaladsl.{Sink, Source}
 import akka.testkit.{TestActor, TestKit, TestProbe}
 import com.typesafe.config.ConfigFactory
-import live.{LiveContestLookup, LiveMonitorConfig, LiveMonitorRef}
+import live.{LiveMonitorConfig, LiveMonitorRef}
 import org.joda.time.DateTime
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.funsuite.AnyFunSuiteLike
-import org.stingray.contester.dbmodel.{Contest, Team}
+import org.stingray.contester.dbmodel.Contest
 import play.api.http.{DefaultFileMimeTypes, FileMimeTypesConfiguration}
 import play.api.i18n.{DefaultLangs, DefaultMessagesApi}
 import play.api.libs.EventSource.Event
@@ -46,7 +46,7 @@ class LiveMonitorControllerSpec extends TestKit(ActorSystem("LiveMonitorControll
 
   private val t0 = DateTime.now.minusHours(1)
   private def contest(id: Int) = Contest(id, s"C$id", t0, t0.plusHours(5), None, 1)
-  private val lookup = LiveContestLookup(id => Future.successful(Some(contest(id))))
+  private val boards = models.BoardSource(id => Future.successful(Some(contest(id))), _ => Future.successful(models.MonitorPoints(Nil, Nil)))
 
   private val boardEvent = Event("{}", None, Some("board"))
 
@@ -65,7 +65,7 @@ class LiveMonitorControllerSpec extends TestKit(ActorSystem("LiveMonitorControll
   }
 
   private def controller(probe: Option[TestProbe], config: LiveMonitorConfig = cfg()) =
-    new PublicMonitor(cc, config, LiveMonitorRef(probe.map(_.ref)), lookup, new live.ConnectionStats)
+    new PublicMonitor(cc, config, LiveMonitorRef(probe.map(_.ref)), boards, new live.ConnectionStats)
 
   private def get(path: String): Request[AnyContent] =
     RequestFactory.plain.createRequest(RemoteConnection("127.0.0.1", secure = false, None), "GET",
@@ -75,17 +75,15 @@ class LiveMonitorControllerSpec extends TestKit(ActorSystem("LiveMonitorControll
 
   private def run(c: PublicMonitor, action: Action[AnyContent], path: String): Result = await(action(get(path)))
 
-  test("public page and stream: 404 for a contest that is not public, without asking the live monitor") {
+  test("public stream: 404 for a contest that is not public, without asking the live monitor") {
     val probe = liveProbe()
     val c = controller(Some(probe))
-    assert(run(c, c.page(11), "/public/monitor/11").header.status == 404)
     assert(run(c, c.events(11), "/public/monitor/11/events").header.status == 404)
     probe.expectNoMessage(100.millis)
   }
 
-  test("public page and stream: 404 when the live monitor is disabled") {
+  test("public stream: 404 when the live monitor is disabled") {
     val c = controller(None, cfg(enabled = false))
-    assert(run(c, c.page(1), "/public/monitor/1").header.status == 404)
     assert(run(c, c.events(1), "/public/monitor/1/events").header.status == 404)
   }
 
@@ -114,40 +112,7 @@ class LiveMonitorControllerSpec extends TestKit(ActorSystem("LiveMonitorControll
     assert(body.startsWith("event: board\n"))
   }
 
-  test("public page: 200 shell without a session, pointing at the public stream") {
-    val c = controller(Some(liveProbe()))
-    val r = run(c, c.page(1), "/public/monitor/1")
-    assert(r.header.status == 200)
-    assert(r.newSession.isEmpty && r.newCookies.isEmpty && !r.header.headers.contains("Set-Cookie"))
-    val body = await(r.body.consumeData).utf8String
-    assert(body.contains("/public/monitor/1/events"))
-    assert(body.contains("liveMonitor("))
-    // No feed on this page: the countdown is started from the page itself.
-    assert(body.contains("publicContestTimer("))
-    assert(!body.contains("location.reload"))
-    // The live monitor did not answer the snapshot in time: the shell is served empty and the stream fills it.
-    assert(!body.contains("<table"))
-    assert(r.header.headers.get("Cache-Control").contains("no-store"))
-  }
-
-  test("public page: renders the snapshot board into the page when the live monitor answers") {
-    val probe = TestProbe()
-    val board = live.LiveBoard.build(Seq("A"), Seq(Team(7, 0, "", "School07", "City", None)), Map.empty)
-    probe.setAutoPilot((sender: ActorRef, msg: Any) => {
-      msg match {
-        case actors.LiveMonitorActor.Snapshot(JoinPublic(1)) => sender ! board
-        case _ =>
-      }
-      TestActor.KeepRunning
-    })
-    val c = controller(Some(probe))
-    val r = run(c, c.page(1), "/public/monitor/1")
-    assert(r.header.status == 200)
-    val body = await(r.body.consumeData).utf8String
-    assert(body.contains("""<tr data-team="7""""))
-    assert(body.contains("liveMonitor("))
-    assert(r.header.headers.get("Cache-Control").contains("no-store"))
-  }
+  // The public page is no longer live: it is the static points board, 403 until the round is over (BoardAccessSpec).
 
   test("public stream: the (max + 1)-th concurrent stream gets 503; a finished stream frees its slot") {
     val c = controller(Some(liveProbe(endless = true)), cfg(max = 2))

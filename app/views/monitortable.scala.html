@@ -1,56 +1,34 @@
-@import org.stingray.contester.dbmodel._
-@(contest: Contest, status: models.AnyStatus, current: Int, admin: Boolean=false)(implicit messages: Messages)
+@(status: models.MonitorPoints, current: Int)(implicit messages: Messages)
+@* The points board: place, team, one cell per problem (points of the maximum; full-score at the maximum; «—» when
+   there are no points), total. Unrated teams follow the ranked ones without a place. *@
 
-@sm = @{status.solvedProblems}
-
-@if(contest.started || admin) {
-
-
-<table class="table table-hover table-bordered table-responsive">
+@boardstyle()
+<table class="table table-hover table-bordered table-responsive points-board">
     <thead>
-    <tr><th>@messages("label.rank")</th><th>ID</th><th>@messages("label.team")</th>
-    @status match {
-    case st: ACM.Status => {
-    <th>=</th><th>@messages("label.penalty")</th>
-        }
-        }
+    <tr><th>@messages("label.rank")</th><th>№</th><th>@messages("label.team")</th>
         @for(p <- status.problems) {
-        <th style="text-align: center;">@p<div style="font-size: 65%;@if(sm.getOrElse(p, 0)==0){color:#ccc;}">(@sm.getOrElse(p, 0))</div></th>
+        <th style="text-align: center;" title="@p.name">@p.id<div style="font-size: 65%;">@p.name (@models.TestRows.formatPoints(p.maxPoints))</div></th>
         }
+        <th style="text-align: center;">@messages("label.total")</th>
     </tr>
     </thead>
     <tbody>
-
-    @for(r <- status.anyRows) {
-    <tr @if(r.team.disqualified) { class="danger" } else { @if(current == r.team.id) { class="info" } } >
-        <th scope="row">@r.rankStr</th><td>@r.team.id</td>
-        <td>@r.team.schoolFullNameWithNum<br/><small>@r.team.teamName</small></td>
-        @r.anyScore match {
-        case sc: ACM.Score => {
-        <td>@sc.solved</td><td>@sc.penalty</td>
-        }
-        }
-
-        @for(p <- status.problems.map(r.anyCells.get)) {
-        <td class="text-center">
-            @for(anyCell <- p) {
-            @anyCell match {
-                case cell: ACMCell => {
-                    @if(cell.fullSolution) {
-                    <span class="text-success"><strong>@cell</strong></span><br/>
-                    <span class="text-info"><small>@SecondsToTimeStr(cell.arrivedSeconds)</small></span>
-                    } else {
-                    <span class="text-muted">@cell</span>
-                    }
-                }
+    @for(r <- status.rows) {
+    <tr@if(current == r.team.participantId) { class="info"}>
+        <th scope="row">@r.place.map(_.toString).getOrElse("")</th><td>@r.team.number</td>
+        <td>@r.team.name<br/><small>@r.team.schoolWithCity</small></td>
+        @for((cell, p) <- r.cells.zip(status.problems)) {
+        @cell.best match {
+            case Some(points) => {
+        <td class="text-center points-cell@if(cell.full) { full-score}">@models.TestRows.formatPoints(points)<br/><small class="text-muted">из @models.TestRows.formatPoints(p.maxPoints)</small></td>
             }
+            case None => {
+        <td class="text-center points-cell text-muted">—</td>
             }
-        </td>
         }
-
-        </tr>
+        }
+        <td class="text-center"><strong>@models.TestRows.formatPoints(r.total)</strong></td>
+    </tr>
     }
-
     </tbody>
 </table>
-}

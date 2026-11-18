@@ -20,7 +20,8 @@ object TestRows {
 
   /** Up to two decimals, trailing zeros trimmed, '.' separator. */
   def formatPoints(x: Double): String =
-    BigDecimal(x).setScale(2, RoundingMode.HALF_UP).bigDecimal.stripTrailingZeros.toPlainString
+    if (x.isNaN || x.isInfinite) "0" // never stored, but a page must not fail on one
+    else BigDecimal(x).setScale(2, RoundingMode.HALF_UP).bigDecimal.stripTrailingZeros.toPlainString
 
   def fromEntry(e: ResultEntry): ResultRow = ResultRow(e.test, e.result, e.time, e.memory, e.group, e.points)
 

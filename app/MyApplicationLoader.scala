@@ -148,6 +148,7 @@ class MyComponents(context: ApplicationLoader.Context)
     live.LiveContestLookup(id => statusActorModel.getContest(id)(akka.util.Timeout(5, java.util.concurrent.TimeUnit.SECONDS), executionContext))
 
   lazy val monitorModel = wire[Monitor]
+  lazy val boardSource: models.BoardSource = monitorModel.source
   lazy val rabbitModel = wire[RabbitMqModel]
   // Deferred: the live monitor itself needs statusActorModel's team and problem clients.
   lazy val statusActorModel = new StatusActorModel(dbConfig, actorSystem, palevoSink, live.LiveWiring.deferred(liveHooks),

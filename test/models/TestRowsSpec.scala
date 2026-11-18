@@ -85,6 +85,21 @@ class TestRowsSpec extends AnyFunSuite {
     assert(TestRows.formatPoints(545) == "545")
   }
 
+  test("number format: NaN and infinities never throw, they read 0") {
+    assert(TestRows.formatPoints(Double.NaN) == "0")
+    assert(TestRows.formatPoints(Double.PositiveInfinity) == "0")
+    assert(TestRows.formatPoints(Double.NegativeInfinity) == "0")
+  }
+
+  test("a finished, compiled submit whose points are NULL is in progress, not 0 of max") {
+    val s = Submit(SubmitId(1, Arrived(new org.joda.time.DateTime(2030, 1, 1, 0, 0), 0, afterFreeze = false), 1, 1,
+      RatedProblem("A", 30), "cpp"), finished = true, compiled = true, 0, 0, None, None, 20)
+    assert(SubmitResult.fromSubmit(s) == BeingRetestedResult)
+    assert(SubmitResult.fromSubmit(s.copy(points = Some(0))) == SubmitPointsResult(0, 20))
+    assert(SubmitResult.fromSubmit(s.copy(compiled = false)) == SubmitCompileError)
+    assert(SubmitResult.fromSubmit(s.copy(finished = false)) == SubmitWaiting)
+  }
+
   test("SubmitPointsResult reads points of max") {
     assert(SubmitPointsResult(2.5, 10).message == "2.5 из 10")
     assert(SubmitPointsResult(10, 10).success)

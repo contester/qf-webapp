@@ -76,3 +76,5 @@ label.points=Баллы
 label.compile=Компиляция
 policy.completeGroup=все тесты
 policy.eachTest=каждый тест
+label.total=Итого
+monitor.notPublished=Результаты будут опубликованы после окончания тура

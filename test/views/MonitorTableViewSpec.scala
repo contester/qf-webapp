@@ -1,0 +1,51 @@
+package views
+
+import models._
+import org.joda.time.DateTime
+import org.scalatest.funsuite.AnyFunSuite
+import org.stingray.contester.dbmodel.{Contest, NotRated, Team}
+import play.api.i18n.{DefaultMessagesApi, Lang, MessagesImpl}
+
+import scala.io.Source
+
+/** The points board renders: problem columns with their maximum, points, the full-score class, totals and places. */
+class MonitorTableViewSpec extends AnyFunSuite {
+  private def ruMessages: Map[String, String] = {
+    val s = Source.fromFile("conf/messages.ru", "UTF-8")
+    try s.getLines().map(_.trim).filter(l => l.contains("=") && !l.startsWith("#"))
+      .map { l => val i = l.indexOf('='); l.substring(0, i).trim -> l.substring(i + 1).trim }.toMap
+    finally s.close()
+  }
+
+  private implicit val messages: MessagesImpl = MessagesImpl(Lang("ru"), new DefaultMessagesApi(Map("ru" -> ruMessages)))
+
+  private val problems = Seq(ProblemColumn("A", "Alpha", 20), ProblemColumn("B", "Beta", 25))
+  private val status = MonitorPoints(problems, Seq(
+    RankedRow(Some(1), Team(11, 7, "Seven", "Lyceum 1", "Town", None),
+      Seq(PointsCell(Some(20), 2, full = true), PointsCell(Some(12.5), 1, full = false)), 32.5),
+    RankedRow(None, Team(12, 8, "Eight", "School 2", "Village", Some(NotRated)),
+      Seq(PointsCell(None, 0, full = false), PointsCell(None, 1, full = false)), 0)))
+
+  test("cells, the full-score class, totals, places and team data are on the table") {
+    val h = html.monitortable(status, current = 11).body
+    assert("points-cell full-score".r.findAllMatchIn(h).size == 1, "only the full cell carries the class")
+    assert("points-cell".r.findAllMatchIn(h).size == 4)
+    for (t <- Seq(">32.5<", "12.5", "Seven", "Lyceum 1, Town", "Eight", "Alpha", "Beta", "(20)", "(25)", "—", "Место", "Итого"))
+      assert(h.contains(t), t)
+    // the unrated row has no place; the ranked row's place is 1
+    assert(h.contains("<th scope=\"row\">1</th>"))
+    assert(h.contains("<th scope=\"row\"></th>"))
+    assert(h.indexOf("Seven") < h.indexOf("Eight"))
+  }
+
+  test("the stylesheet gives full-score a colour") {
+    val css = html.boardstyle().body
+    assert(css.contains(".full-score"))
+  }
+
+  test("the static page wraps the table with the round name and the style") {
+    val c = Contest(3, "Round Three", new DateTime(2030, 1, 1, 10, 0), new DateTime(2030, 1, 1, 13, 0), None, 1)
+    val h = html.staticmonitor(c, status).body
+    assert(h.contains("Round Three") && h.contains("points-cell full-score") && h.contains(".full-score"))
+  }
+}
