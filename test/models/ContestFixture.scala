@@ -52,6 +52,11 @@ class ContestFixture(tag: String)(implicit ec: ExecutionContext) {
       exec(sqlu"delete from testings where submit_id in (select id from submits where round_id = $r)")
       exec(sqlu"delete from submits where round_id = $r")
       exec(sqlu"delete from custom_tests where round_id = $r")
+      exec(sqlu"delete from extra_info where round_id = $r")
+      exec(sqlu"delete from clarifications where round_id = $r")
+      exec(sqlu"delete from clarification_requests where round_id = $r")
+      exec(sqlu"delete from clarifications_seen where round_id = $r")
+      exec(sqlu"delete from messages where round_id = $r")
       exec(sqlu"delete from problems where round_id = $r")
       exec(sqlu"delete from round_credentials where round_id = $r")
       exec(sqlu"delete from contest_rounds where id = $r")
@@ -93,8 +98,43 @@ class ContestFixture(tag: String)(implicit ec: ExecutionContext) {
     try body finally cleanup()
   }
 
-  def insertSubmit(): Long = {
-    val (s, r, k, l) = (season, round, kid, language)
+  /**
+    * Another participant (same school and teacher as the first, named `kidName` so cleanup removes it) with an active
+    * credential for the round; `n` from 1 to 9.
+    */
+  def addParticipant(n: Int): Int = {
+    val (r, k, kn) = (round, kid, kidName)
+    val seq = 960 + n
+    exec(sqlu"""insert into participants (season_id, teacher_id, season_seq, full_name, school_id, grade, contest_id)
+                select season_id, teacher_id, $seq, $kn, school_id, grade, contest_id from participants where id = $k""")
+    val id = one(sql"select id from participants where season_seq = $seq and full_name = $kn".as[Int])
+    val login = s"${tag.toLowerCase.replaceAll("[^a-z]", "")}_kid$n"
+    exec(sqlu"""insert into round_credentials (round_id, contest_id, participant_id, login, password)
+                select r.id, r.contest_id, $id, $login, '777000' from contest_rounds r where r.id = $r""")
+    id
+  }
+
+  /**
+    * Gives the submit a finished testing at `revision`: compiled, then problem Z's three tests, of which the first
+    * `passed` are OK (wrong answer after that); points are 10 / 3 per passed test. Returns the testing id.
+    */
+  def finishSubmit(submit: Long, passed: Int, revision: Int = 1): Long = {
+    val testing = one(sql"insert into testings (submit_id, problem_revision, finished_at) values ($submit, $revision, now()) returning id".as[Long])
+    exec(sqlu"insert into results (testing_id, test_no, result_code, points, time_ms, memory_bytes) values ($testing, 0, 1, 0, 0, 0)")
+    for (t <- 1 to 3) {
+      val (code, pts) = if (t <= passed) (10, 10.0 / 3) else (13, 0.0)
+      exec(sqlu"insert into results (testing_id, test_no, result_code, points, time_ms, memory_bytes) values ($testing, $t, $code, $pts, ${t * 10}, 1024)")
+    }
+    val points = passed * 10.0 / 3
+    exec(sqlu"""update submits set testing_id = $testing, tested = true, compiled = true, passed = $passed, taken = 3,
+                points = $points where id = $submit""")
+    testing
+  }
+
+  def insertSubmit(): Long = insertSubmitBy(kid)
+
+  def insertSubmitBy(participant: Int): Long = {
+    val (s, r, k, l) = (season, round, participant, language)
     one(sql"""insert into submits (season_id, round_id, participant_id, problem_id, language_id, source)
               values ($s, $r, $k, 'Z', $l, decode('00', 'hex')) returning id""".as[Long])
   }

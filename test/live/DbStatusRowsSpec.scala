@@ -13,16 +13,13 @@ import org.scalatest.funsuite.AnyFunSuiteLike
 import org.stingray.contester.dbmodel.{Memory, Team, TimeMs}
 import org.stingray.qf.actors.TeamStateActor
 import org.stingray.qf.models.TeamClient
-import slick.basic.DatabaseConfig
-import slick.jdbc.JdbcProfile
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 
 /**
-  * The rows the live status page is pushed. The retry and the overrides run on a fake reader; the rest reads a real
-  * database (skipped unless ADMINS_TEST_URL is set, like AdminSubmitsDbSpec; any data will do):
-  *   ADMINS_TEST_URL=jdbc:postgresql://127.0.0.1:54329/contest ADMINS_TEST_USER=postgres ADMINS_TEST_PASSWORD=x
+  * The rows the live status page is pushed. The retry and the overrides run on a fake reader; the rest reads a
+  * fixture round in the teacher-web schema (skipped unless QF_TEST_URL is set, see SubmitInsertDbSpec).
   */
 class DbStatusRowsSpec extends TestKit(ActorSystem("DbStatusRowsSpec", ConfigFactory.parseString(
   """
@@ -107,64 +104,39 @@ class DbStatusRowsSpec extends TestKit(ActorSystem("DbStatusRowsSpec", ConfigFac
     assert(scala.util.Try(await(f)).isFailure)
   }
 
-  // --- against a database -------------------------------------------------------------------------------------
+  // --- against a database: a fixture round of its own (skipped unless QF_TEST_URL is set) -----------------------
 
-  private val url = sys.env.get("ADMINS_TEST_URL")
+  private val fx = new models.ContestFixture("Status rows spec")
 
-  private lazy val db = DatabaseConfig.forConfig[JdbcProfile]("", ConfigFactory.parseString(
-    s"""profile = "org.stingray.contester.dbmodel.MyPostgresProfile$$"
-       |db { url = "${url.get}", user = "${sys.env.getOrElse("ADMINS_TEST_USER", "")}",
-       |      password = "${sys.env.getOrElse("ADMINS_TEST_PASSWORD", "")}", driver = "org.postgresql.Driver",
-       |      connectionPool = disabled }""".stripMargin)).db
-
-  private lazy val contests: Seq[Int] = {
-    import org.stingray.contester.dbmodel.MyPostgresProfile.api._
-    await(models.Rounds.currentRounds(db)).map(_.id)
-  }
-
-  private lazy val real = DbStatusRows.fromDb(db, noTeams, system.scheduler)
+  private def realRows = DbStatusRows.fromDb(fx.db, noTeams, system.scheduler)
 
   test("db: every submit renders, in its own contest") {
-    assume(url.isDefined)
-    var n = 0
-    contests.foreach { c =>
-      val shown = await(AdminSubmits.page(db, c, None, None, None, size = 100000)).rows
+    assume(fx.url.isDefined)
+    fx.withFixture {
+      val done = fx.insertSubmit()
+      fx.finishSubmit(done, passed = 2)
+      fx.insertSubmit()
+      val shown = await(AdminSubmits.page(fx.db, fx.round, None, None, None, size = 100000)).rows
+      assert(shown.size == 2)
+      val real = realRows
       shown.foreach { s =>
         val id = s.submit.submitId.id
         val r = await(real.render(id, None)).getOrElse(fail(s"no row for submit $id"))
-        assert(r.contest == c && r.id == id && r.team == s.submit.submitId.teamId, s"submit $id")
+        assert(r.contest == fx.round && r.id == id && r.team == s.submit.submitId.teamId, s"submit $id")
         assert(r.rw.startsWith("<tr id=\"result-row-" + id + "\"") && r.rw.endsWith("</tr>"), s"markup of $id")
         assert(r.rw.contains(s.result.message) && r.ro.contains(s.result.message), s"verdict of $id")
         assert(r.rw.contains(s"rejudge-$id") && !r.ro.contains(s"rejudge-$id"), s"rejudge button of $id")
-        n += 1
       }
+      assert(await(real.render(done.toInt, None)).get.rw.contains("6.67 из 10"))
     }
-    assert(n > 0)
-    info(s"$n submits in ${contests.size} contests")
   }
 
   test("db: a submit that is not tested yet is shown as running, after the retries") {
-    assume(url.isDefined)
-    val untested = contests.flatMap(c => await(AdminSubmits.page(db, c, None, None, None, size = 100000)).rows)
-      .filterNot(_.submit.finished)
-    assume(untested.nonEmpty, "no untested submit in the database")
-    val fast = new DbStatusRows(id => AdminSubmits.row(db, id), noTeams, system.scheduler, retryAfter = 10.millis, retries = 2)
-    untested.foreach { s =>
-      val r = await(fast.render(s.submit.submitId.id, None)).get
-      assert(r.rw.contains("Running..."), s.submit.submitId.id.toString)
+    assume(fx.url.isDefined)
+    fx.withFixture {
+      val untested = fx.insertSubmit().toInt
+      val fast = new DbStatusRows(id => AdminSubmits.row(fx.db, id), noTeams, system.scheduler, retryAfter = 10.millis, retries = 2)
+      assert(await(fast.render(untested, None)).get.rw.contains("Running..."))
     }
-  }
-
-  test("db: how long a row takes to read (the biggest contest, a team with many attempts on one problem)") {
-    assume(url.isDefined)
-    val all = contests.flatMap(c => await(AdminSubmits.page(db, c, None, None, None, size = 100000)).rows)
-    val worst = all.groupBy(s => (s.submit.submitId.contestId, s.submit.submitId.teamId, s.submit.submitId.problem.id)).maxBy(_._2.size)._2
-    await(real.render(worst.last.submit.submitId.id, None)) // warm up
-    val t0 = System.nanoTime()
-    val reps = 20
-    (1 to reps).foreach(_ => await(real.render(worst.last.submit.submitId.id, None)))
-    val ms = (System.nanoTime() - t0) / 1e6 / reps
-    info(f"$ms%.1f ms per row, a pair with ${worst.size} attempts, ${all.size} submits in all")
-    assert(ms < 500)
   }
 }

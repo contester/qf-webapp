@@ -12,17 +12,13 @@ import org.scalatest.funsuite.AnyFunSuiteLike
 import org.stingray.qf.actors.TeamStateActor
 import org.stingray.qf.models.TeamClient
 import play.api.libs.json.JsValue
-import slick.basic.DatabaseConfig
-import slick.jdbc.JdbcProfile
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 
 /**
-  * The status page stream with the real rows: the live monitor actor fed with hook events for the submits of a
-  * database, the rows read and rendered from it (skipped unless ADMINS_TEST_URL is set, like AdminSubmitsDbSpec;
-  * needs a contest with submits):
-  *   ADMINS_TEST_URL=jdbc:postgresql://127.0.0.1:54329/contest ADMINS_TEST_USER=postgres ADMINS_TEST_PASSWORD=x
+  * The status page stream with the real rows: the live monitor actor fed with hook events for a submit of a fixture
+  * round, the rows read and rendered from the database (skipped unless QF_TEST_URL is set, see SubmitInsertDbSpec).
   */
 class LiveStatusDbSpec extends TestKit(ActorSystem("LiveStatusDbSpec", ConfigFactory.parseString(
   """
@@ -35,13 +31,7 @@ class LiveStatusDbSpec extends TestKit(ActorSystem("LiveStatusDbSpec", ConfigFac
   private implicit val ec: ExecutionContext = ExecutionContext.global
   private def await[T](f: Future[T]) = Await.result(f, 120.seconds)
 
-  private val url = sys.env.get("ADMINS_TEST_URL")
-
-  private lazy val db = DatabaseConfig.forConfig[JdbcProfile]("", ConfigFactory.parseString(
-    s"""profile = "org.stingray.contester.dbmodel.MyPostgresProfile$$"
-       |db { url = "${url.get}", user = "${sys.env.getOrElse("ADMINS_TEST_USER", "")}",
-       |      password = "${sys.env.getOrElse("ADMINS_TEST_PASSWORD", "")}", driver = "org.postgresql.Driver",
-       |      connectionPool = disabled }""".stripMargin)).db
+  private val fx = new models.ContestFixture("Live status spec")
 
   private lazy val teamClient = new TeamClient(system.actorOf(Props(new Actor {
     def receive = { case TeamStateActor.GetTeams(_) => sender() ! Map.empty[Int, org.stingray.contester.dbmodel.Team] }
@@ -56,15 +46,13 @@ class LiveStatusDbSpec extends TestKit(ActorSystem("LiveStatusDbSpec", ConfigFac
     }
   }
 
-  private def realRows = new CountingRows(DbStatusRows.fromDb(db, teamClient, system.scheduler))
+  private def realRows = new CountingRows(DbStatusRows.fromDb(fx.db, teamClient, system.scheduler))
 
-  private def pageRows(contest: Int): Seq[AdminSubmitRow] =
-    await(AdminSubmits.page(db, contest, None, None, None, size = 100000)).rows
-
-  // A finished submit of the biggest contest.
-  private lazy val sample: AdminSubmitRow = {
-    val all = await(models.Rounds.currentRounds(db)).flatMap(c => pageRows(c.id))
-    all.filter(_.submit.finished).maxBy(_.submit.submitId.id)
+  // A finished submit of the fixture round (created inside withFixture).
+  private def sample(): AdminSubmitRow = {
+    val id = fx.insertSubmit()
+    fx.finishSubmit(id, passed = 1)
+    Await.result(AdminSubmits.row(fx.db, id.toInt), 60.seconds).get
   }
 
   private def hookRec(s: AdminSubmitRow) =
@@ -73,7 +61,9 @@ class LiveStatusDbSpec extends TestKit(ActorSystem("LiveStatusDbSpec", ConfigFac
   private def rowOf(p: TestProbe): JsValue = next(p, "statusRow")
 
   test("db: an arrival, a finish and a rejudge each push the submit's own row") {
-    assume(url.isDefined)
+    assume(fx.url.isDefined)
+    fx.withFixture {
+    val sample = this.sample()
     val cid = sample.submit.submitId.contestId
     val id = sample.submit.submitId.id
     val f = new Fixture(running, rows = Seq(contest(cid)), statusRows = realRows)
@@ -94,10 +84,13 @@ class LiveStatusDbSpec extends TestKit(ActorSystem("LiveStatusDbSpec", ConfigFac
     f.actor ! RejudgeRequested(id)
     assert((rowOf(p) \ "rw").as[String].contains("Testing in progress..."))
     f.stop()
+    }
   }
 
   test("db: a submit of a team or a problem the board does not know still gets its row") {
-    assume(url.isDefined)
+    assume(fx.url.isDefined)
+    fx.withFixture {
+    val sample = this.sample()
     val cid = sample.submit.submitId.contestId
     // The fixture's board has teams 1-3 and problems A-C; this one is neither.
     val f = new Fixture(running, rows = Seq(contest(cid)), statusRows = realRows)
@@ -106,10 +99,13 @@ class LiveStatusDbSpec extends TestKit(ActorSystem("LiveStatusDbSpec", ConfigFac
     f.actor ! Arrived(cid, rec(sample.submit.submitId.id, 99999, "ZZ", running))
     assert((rowOf(p) \ "id").as[Int] == sample.submit.submitId.id)
     f.stop()
+    }
   }
 
   test("db: any number of viewers cost one read per event") {
-    assume(url.isDefined)
+    assume(fx.url.isDefined)
+    fx.withFixture {
+    val sample = this.sample()
     val cid = sample.submit.submitId.contestId
     val rows = realRows
     val f = new Fixture(running, rows = Seq(contest(cid)), statusRows = rows)
@@ -122,5 +118,6 @@ class LiveStatusDbSpec extends TestKit(ActorSystem("LiveStatusDbSpec", ConfigFac
     viewers.foreach(rowOf)
     assert(rows.reads.get == 2)
     f.stop()
+    }
   }
 }
