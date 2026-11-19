@@ -43,6 +43,22 @@ object ContestWrites {
 
 case class SelectedContest(contest: Contest, contests: Seq[(Int, String)], canModify: Boolean = true, isSuperAdmin: Boolean = false)
 
+/** There is no current round to select: the admin pages say so instead of failing. */
+case object NoCurrentRounds extends Exception("there are no current rounds") with scala.util.control.NoStackTrace
+
+object SelectedContest {
+  /**
+    * The round `contestId` among the rounds the admin may spectate, or the first of them when it is not one; None when
+    * there are none at all.
+    */
+  def choose(all: Seq[Contest], contestId: Int, account: Admin): Option[SelectedContest] = {
+    val contests = all.filter(c => account.canSpectate(c.id)).sortBy(_.id)
+    contests.find(_.id == contestId).orElse(contests.headOption).map { selected =>
+      SelectedContest(selected, contests.map(x => x.id -> x.name), account.canModify(selected.id), account.isSuperAdmin)
+    }
+  }
+}
+
 class ProblemClient(problemStateActor: ActorRef) {
   import akka.pattern.ask
   def getProblems(contest: Int)(implicit timeout: akka.util.Timeout): Future[Seq[Problem]] =

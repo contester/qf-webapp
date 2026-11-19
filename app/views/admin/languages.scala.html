@@ -1,0 +1,50 @@
+@(season: Option[(Int, String)], langs: Seq[SeasonLanguage], sources: Seq[SeasonWithLanguages])(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@navlinks = {
+<li><a href="@controllers.routes.AdminApplication.index">@messages("status")</a></li>
+<li class="active"><a href="#">@messages("admin.languages")</a></li>
+}
+@base(messages("admin.languages")) {
+@navbar(Some(routes.AdminAuthForms.logout), "navbar-warning")(navlinks)
+<div class="container">
+@flash.get("success").map { message =>
+<div class="alert alert-success" role="alert">@message</div>
+}
+@flash.get("error").map { message =>
+<div class="alert alert-danger" role="alert">@message</div>
+}
+@season match {
+case None => {
+<p class="lead">@messages("admin.languages.noCurrentSeason")</p>
+}
+case Some((seasonId, seasonName)) => {
+<div class="panel panel-success">
+    <div class="panel-heading"><h3 class="panel-title">@messages("admin.languages.heading", seasonName)</h3></div>
+    <div class="panel-body">
+        <table id="languages" class="table table-condensed table-bordered">
+            <thead><tr><th>@messages("admin.languages.id")</th><th>@messages("admin.languages.name")</th><th>@messages("admin.languages.module")</th></tr></thead>
+            <tbody>
+            @for(l <- langs) {
+            <tr><td>@l.id</td><td>@l.name</td><td>@l.moduleId</td></tr>
+            }
+            </tbody>
+        </table>
+        @if(langs.isEmpty) { <p class="text-danger">@messages("admin.languages.none")</p> }
+        <p class="text-muted">@messages("admin.languages.copyHint")</p>
+        @if(sources.isEmpty) {
+        <p class="text-muted">@messages("admin.languages.noSources")</p>
+        } else {
+        @helper.form(controllers.routes.AdminApplication.copyLanguages, 'class -> "form-inline") {
+            @helper.CSRF.formField
+            <label for="from">@messages("admin.languages.copyFrom")</label>
+            <select id="from" name="from" class="form-control">
+                @for(s <- sources) { <option value="@s.id">@s.name (@s.languages)</option> }
+            </select>
+            <button type="submit" class="btn btn-primary">@messages("admin.languages.copy")</button>
+        }
+        }
+    </div>
+</div>
+}
+}
+</div>
+}

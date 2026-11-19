@@ -96,6 +96,8 @@ object AdminNavlinkMatch {
       case "contests" => routes.AdminApplication.showContestList(_)
       case "extrainfo" => routes.AdminApplication.extraInfoPage(_)
       case "contester" => routes.AdminApplication.contester(_)
+      case "participants" => routes.AdminApplication.participants(_)
+      case "languages" => _ => routes.AdminApplication.languages
       case _ => routes.AdminApplication.submits(_, None, None, None)
     }
 }

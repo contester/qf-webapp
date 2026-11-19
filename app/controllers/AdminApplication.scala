@@ -63,20 +63,20 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   private def getAllContests(implicit ec: ExecutionContext) =
     Ask[StatusActor.AllContests](statusActorModel.statusActor, StatusActor.GetAllContests).map(_.contests)
 
+  /** Fails with NoCurrentRounds when there is no round to select; the pages render that with [[withRounds]]. */
   private def getSelectedContests(contestId: Int, account: Admin)(implicit ec: ExecutionContext): Future[SelectedContest] =
-    getAllContests.map(_.filter(c => account.canSpectate(c.id)).sortBy(_.id)).map { contests =>
-      val cmap = contests.map(x => x.id -> x).toMap
-      val selected = cmap.getOrElse(contestId, contests.headOption.getOrElse(
-        throw new NoSuchElementException("there are no current rounds")))
-      SelectedContest(selected, cmap.mapValues(_.name).toSeq, account.canModify(selected.id), account.isSuperAdmin)
-    }
+    getAllContests.map(all => SelectedContest.choose(all, contestId, account).getOrElse(throw NoCurrentRounds))
+
+  /** A page that needs a selected round: with no current rounds it is the plain «no current rounds» page, not a 500. */
+  private def withRounds(page: => Future[Result])(implicit request: RequestHeader): Future[Result] =
+    page.recover { case NoCurrentRounds => Ok(html.admin.norounds()) }
 
   // How many connections each feed has, for global admins: the page, and the stream it is updated by.
-  def contester(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
+  def contester(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request => withRounds {
     getSelectedContests(contestId, request.identity).map { contest =>
       Ok(html.admin.contester(contest)).withHeaders(LiveStreams.pageHeaders: _*)
     }
-  }
+  }}
 
   def contesterEvents = silhouette.SecuredAction(AdminPermissions.withSuperAdmin) { implicit request =>
     LiveStreams.response(stats.events())
@@ -85,7 +85,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   // The live points board of the round: admins see it always, the real one, while the round runs too. The page
   // carries the board the stream starts with; when the live monitor cannot give one (it does not hold the round),
   // the board is rendered from the database instead.
-  def monitor(id: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(id)).async { implicit request =>
+  def monitor(id: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(id)).async { implicit request => withRounds {
     monitorModel.source.round(id).flatMap { round =>
       BoardAccess.decide(round, AdminViewer, org.joda.time.DateTime.now) match {
         case Left(result) => Future.successful(result)
@@ -99,7 +99,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
           }
       }
     }
-  }
+  }}
 
   // The admin live board's stream (deltas of the points board); admins only.
   def monitorEvents(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
@@ -136,7 +136,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
   def submits(contestId: Int, team: Option[Int], before: Option[Long], after: Option[Long]) =
-    silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
+    silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request => withRounds {
       val account = request.identity
       getSelectedContests(contestId, account).zip(statusActorModel.teamClient.getTeams(contestId)).flatMap {
         case (contest, teamMap) =>
@@ -145,20 +145,20 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
               live = liveMonitor.ref.isDefined, newest = before.isEmpty && page.newer.isEmpty))
           }
       }
-    }
+    }}
 
   def customTests(contestId: Int, team: Option[Int], before: Option[Long], after: Option[Long]) =
-    silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
+    silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request => withRounds {
       getSelectedContests(contestId, request.identity).zip(statusActorModel.teamClient.getTeams(contestId)).flatMap {
         case (contest, teamMap) =>
           AdminCustomTests.page(db, contestId, team, before, after).map { page =>
             Ok(html.admin.customtests(page, teamMap, contest, team))
           }
       }
-    }
+    }}
 
   def showCustomTest(contestId: Int, id: Long) =
-    silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
+    silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request => withRounds {
       AdminCustomTests.get(db, contestId, id).flatMap {
         case Some(ev) =>
           getSelectedContests(contestId, request.identity).zip(statusActorModel.teamClient.getTeams(contestId)).map {
@@ -166,17 +166,17 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
           }
         case None => Future.successful(NotFound)
       }
-    }
+    }}
 
   val rejudgeProblemForm = Form {
     mapping("problem" -> nonEmptyText, "all" -> default(boolean, false))(RejudgeProblem.apply)(RejudgeProblem.unapply)
   }
 
-  def rejudgePage(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request =>
+  def rejudgePage(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request => withRounds {
     getSelectedContests(contestId, request.identity).zip(AdminSubmits.revisionStatus(db, contestId)).map { case (contest, status) =>
       Ok(html.admin.rejudge(contest, status))
     }
-  }
+  }}
 
   /**
    * Rejudges the finished submits of one problem whose last testing is not against the problem's current
@@ -241,7 +241,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
       case None => Future.successful(None)
     }
 
-  def showSubmit(contestId: Int, submitId: Int, testing: Option[Long]) = silhouette.SecuredAction(canSeeSubmit(submitId)).async { implicit request =>
+  def showSubmit(contestId: Int, submitId: Int, testing: Option[Long]) = silhouette.SecuredAction(canSeeSubmit(submitId)).async { implicit request => withRounds {
     getSubmitAtTesting(submitId, testing).flatMap {
       case Some((submit, viewed)) =>
         val outputsF = viewed.map { tid =>
@@ -260,7 +260,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
       case None =>
         Future.successful(NotFound)
     }
-  }
+  }}
 
   def downloadArchiveSubmit(contestId: Int, submitId: Int) = silhouette.SecuredAction(canSeeSubmit(submitId)).async { implicit request =>
     val q = for {
@@ -278,7 +278,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }
 
-  def showQandA(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
+  def showQandA(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request => withRounds {
     db.run(SlickModel.getClarificationsForContest(contestId).result)
       .zip(ClarificationModel.getClarificationReqs(db, contestId))
       .zip(getSelectedContests(contestId, request.identity))
@@ -286,7 +286,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
       case ((clarifications, clReqs), contest) =>
         Ok(html.admin.qanda(clarifications, clReqs, contest))
     }
-  }
+  }}
 
   // TODO: do just toggle instead of full update
   def toggleClarification(clrId: Long) = silhouette.SecuredAction.async { implicit request =>
@@ -332,15 +332,15 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
   private[this] def selectableProblems(problems: Seq[Problem]) = Seq[(String, String)](("", "Выберите задачу")) ++ Problems.toSelect(problems)
 
-  def postNewClarification(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request =>
+  def postNewClarification(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request => withRounds {
     getSelectedContests(contestId, request.identity).flatMap { contest =>
       statusActorModel.problemClient.getProblems(contest.contest.id).map { problems =>
         Ok(html.admin.postclarification(None, postClarificationForm, selectableProblems(problems), contest))
       }
     }
-  }
+  }}
 
-  def postUpdateClarification(clarificationId: Long) = silhouette.SecuredAction.async { implicit request =>
+  def postUpdateClarification(clarificationId: Long) = silhouette.SecuredAction.async { implicit request => withRounds {
     db.run(SlickModel.clarificationByID(clarificationId).result.headOption).flatMap { clOpt =>
       clOpt.map { cl =>
         if (!request.identity.canModify(cl.contest)) Future.successful(Forbidden) else {
@@ -355,9 +355,9 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
         }
       }.getOrElse(Future.successful(Redirect(routes.AdminApplication.index)))
     }
-  }
+  }}
 
-  def postClarification(contestId: Int, clarificationId: Option[Long]) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request =>
+  def postClarification(contestId: Int, clarificationId: Option[Long]) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request => withRounds {
     // an existing clarification may only be edited within its own contest
     val ownedByContest = clarificationId match {
       case Some(id) => db.run(SlickModel.clarificationByID(id).result.headOption).map(_.exists(_.contest == contestId))
@@ -380,7 +380,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
       }
     )
     }
-  }
+  }}
 
   private val clarificationResponseForm = Form {
     mapping("answer" -> text)(ClarificationResponse.apply)(ClarificationResponse.unapply)
@@ -396,7 +396,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   private[this] def getClarificationReq(id: Long)(implicit ec: ExecutionContext) =
     db.run(ClarificationModel.getClarificationReq(id).result.headOption)
 
-  def postAnswerForm(clrId: Long) = silhouette.SecuredAction.async { implicit request =>
+  def postAnswerForm(clrId: Long) = silhouette.SecuredAction.async { implicit request => withRounds {
     getClarificationReq(clrId).flatMap { optClr =>
       optClr.map { clr =>
         if (!request.identity.canModify(clr.contest)) Future.successful(Forbidden) else
@@ -406,9 +406,9 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
         }
       }.getOrElse(Future.successful(Redirect(routes.AdminApplication.index)))
     }
-  }
+  }}
 
-  def postAnswer(clrId: Long) = silhouette.SecuredAction(parse.multipartFormData).async { implicit request =>
+  def postAnswer(clrId: Long) = silhouette.SecuredAction(parse.multipartFormData).async { implicit request => withRounds {
     getClarificationReq(clrId).flatMap { optClr =>
       optClr.map { clr =>
         if (!request.identity.canModify(clr.contest)) Future.successful(Forbidden) else
@@ -425,20 +425,14 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
         )
       }.getOrElse(Future.successful(Redirect(routes.AdminApplication.index)))
     }
-  }
+  }}
 
-  def showContestList(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request =>
-    Rounds.currentRounds(db).flatMap { rounds =>
-      if (rounds.isEmpty)
-        // no round, so no page chrome (it needs a selected round): say so instead of failing
-        Future.successful(Ok(play.twirl.api.Html("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>No rounds</title></head>" +
-          "<body><p>There are no rounds with a start and an end in the current season.</p></body></html>")))
-      else
-        getSelectedContests(contestID, request.identity).map { contest =>
-          Ok(html.admin.contestlist(rounds.filter(x => request.identity.canSpectate(x.id)), contest))
-        }
+  /** The rounds of the current season, read only (they are edited in teacher-web). */
+  def showContestList(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestID)).async { implicit request => withRounds {
+    Rounds.currentRounds(db).zip(getSelectedContests(contestID, request.identity)).map { case (rounds, contest) =>
+      Ok(html.admin.contestlist(rounds.filter(x => request.identity.canSpectate(x.id)), contest))
     }
-  }
+  }}
 
   private val extraInfoForm = Form(
     mapping(
@@ -448,29 +442,29 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     )((num, heading, data) => org.stingray.contester.dbmodel.Extrainfo(0, num, heading, data))(x => Some((x.num, x.heading, x.data)))
   )
 
-  def extraInfoPage(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
+  def extraInfoPage(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request => withRounds {
     getSelectedContests(contestID, request.identity).zip(AdminExtraInfo.list(db, contestID)).map {
       case (contest, pages) => Ok(html.admin.extrainfo(pages, contest))
     }
-  }
+  }}
 
-  def newExtraInfo(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
+  def newExtraInfo(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request => withRounds {
     getSelectedContests(contestID, request.identity).zip(AdminExtraInfo.list(db, contestID)).map {
       case (contest, pages) =>
         val next = if (pages.isEmpty) 1 else pages.map(_.num).max + 1
         Ok(html.admin.editextrainfo(extraInfoForm.fill(org.stingray.contester.dbmodel.Extrainfo(contestID, next, "", "")), None, contest))
     }
-  }
+  }}
 
-  def editExtraInfo(contestID: Int, num: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
+  def editExtraInfo(contestID: Int, num: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request => withRounds {
     getSelectedContests(contestID, request.identity).zip(AdminExtraInfo.get(db, contestID, num)).map {
       case (contest, Some(page)) => Ok(html.admin.editextrainfo(extraInfoForm.fill(page), Some(num), contest))
       case _ => NotFound
     }
-  }
+  }}
 
   /** Adds a page when `original` is empty, otherwise saves the page that has that number now. */
-  def postExtraInfo(contestID: Int, original: Option[Int]) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
+  def postExtraInfo(contestID: Int, original: Option[Int]) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request => withRounds {
     getSelectedContests(contestID, request.identity).flatMap { contest =>
       extraInfoForm.bindFromRequest.fold(
         formWithErrors => Future.successful(BadRequest(html.admin.editextrainfo(formWithErrors, original, contest))),
@@ -484,13 +478,57 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
         }
       )
     }
-  }
+  }}
 
   def deleteExtraInfo(contestID: Int, num: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
     AdminExtraInfo.delete(db, contestID, num).map { found =>
       Redirect(routes.AdminApplication.extraInfoPage(contestID))
         .flashing(if (found) "success" -> s"Deleted page $num" else "error" -> s"No page $num")
     }
+  }
+
+  /** The current season's languages, and copying them from another season. */
+  def languages = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
+    SeasonLanguages.currentSeason(db).flatMap {
+      case None => Future.successful(Ok(html.admin.languages(None, Nil, Nil)))
+      case Some(season) =>
+        SeasonLanguages.list(db, season._1).zip(SeasonLanguages.seasonsWithLanguages(db)).map { case (langs, seasons) =>
+          Ok(html.admin.languages(Some(season), langs, seasons.filterNot(_.id == season._1)))
+        }
+    }
+  }
+
+  private val copyLanguagesForm = Form(single("from" -> number))
+
+  /** Copies the languages of the season `from` into the current season (never into any other). */
+  def copyLanguages = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
+    val back = Redirect(routes.AdminApplication.languages)
+    copyLanguagesForm.bindFromRequest.fold(
+      _ => Future.successful(back.flashing("error" -> request2Messages(request)("admin.languages.badSource"))),
+      from => SeasonLanguages.currentSeason(db).flatMap {
+        case None => Future.successful(back.flashing("error" -> request2Messages(request)("admin.languages.noCurrentSeason")))
+        case Some((to, _)) => SeasonLanguages.copyLanguages(db, from, to).map {
+          case CopyLanguagesResult.SameSeason => back.flashing("error" -> request2Messages(request)("admin.languages.sameSeason"))
+          case CopyLanguagesResult.Copied(n) => back.flashing("success" -> request2Messages(request)("admin.languages.copied", n))
+        }
+      }
+    )
+  }
+
+  /** The round's participants with their credential state and the unrated toggle. */
+  def participants(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request => withRounds {
+    getSelectedContests(contestID, request.identity).flatMap { contest =>
+      if (contest.contest.id != contestID) Future.successful(Redirect(routes.AdminApplication.participants(contest.contest.id)))
+      else RoundParticipants.list(db, contestID).map(ps => Ok(html.admin.participants(ps, contest)))
+    }
+  }}
+
+  /** Sets round_credentials.unrated of the participant in the round: `none`, `not_rated` or `disqualified`. */
+  def setUnrated(contestID: Int, participantID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
+    val value = request.body.asFormUrlEncoded.flatMap(_.get("value")).flatMap(_.headOption)
+    UnratedToggle.respond(value, RoundParticipants.setUnrated(db, contestID, participantID, _),
+      u => Redirect(routes.AdminApplication.participants(contestID)).flashing("success" ->
+        request2Messages(request)("admin.participants.saved", participantID, request2Messages(request)(UnratedToggle.labelKey(u)))))
   }
 
   /** Runs a custom test again as a copy with a new id (the bridge picks it up like a fresh one); shows the copy. */

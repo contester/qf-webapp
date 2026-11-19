@@ -1,0 +1,43 @@
+@(participants: Seq[RoundParticipant], contest: SelectedContest)(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@adminmain(tab = "participants", contest = contest) {
+@flash.get("success").map { message =>
+<div class="alert alert-success" role="alert">@message</div>
+}
+@flash.get("error").map { message =>
+<div class="alert alert-danger" role="alert">@message</div>
+}
+<div class="panel panel-success">
+    <div class="panel-heading"><h3 class="panel-title">@messages("admin.participants.heading", contest.contest.name)</h3></div>
+    <div class="panel-body">
+        <p class="text-muted">@messages("admin.participants.hint")</p>
+        <table id="participants" class="table table-condensed table-bordered">
+            <thead><tr>
+                <th>@messages("admin.participants.number")</th><th>@messages("admin.participants.name")</th>
+                <th>@messages("admin.participants.school")</th><th>@messages("admin.participants.city")</th>
+                <th>@messages("admin.participants.login")</th><th>@messages("admin.participants.active")</th>
+                <th>@messages("admin.participants.state")</th>
+            </tr></thead>
+            <tbody>
+            @for(p <- participants) {
+            <tr id="participant-@p.participantId" class="@if(!p.isActive){text-muted} @if(p.unrated.isDefined){warning}">
+                <td>@p.number</td><td>@p.name</td><td>@p.school</td><td>@p.city</td><td>@p.login</td>
+                <td>@if(p.isActive){@messages("admin.yes")}else{@messages("admin.no")}</td>
+                <td>
+                    @helper.form(controllers.routes.AdminApplication.setUnrated(contest.contest.id, p.participantId), 'class -> "form-inline") {
+                        @helper.CSRF.formField
+                        <select name="value" class="form-control input-sm">
+                            @for(u <- UnratedChoice.all) {
+                            <option value="@UnratedChoice.value(u)" @if(u == p.unrated){selected}>@messages(controllers.UnratedToggle.labelKey(u))</option>
+                            }
+                        </select>
+                        <button type="submit" class="btn btn-xs btn-primary">@messages("admin.participants.set")</button>
+                    }
+                </td>
+            </tr>
+            }
+            @if(participants.isEmpty) { <tr><td colspan="7">@messages("admin.participants.none")</td></tr> }
+            </tbody>
+        </table>
+    </div>
+</div>
+}
