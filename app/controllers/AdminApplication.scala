@@ -304,8 +304,14 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
   def deleteClarification(contestId: Int, clrId: Long) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request =>
-    Ask.apply[Option[Clarification]](statusActorModel.statusActor, StatusActor.DeleteClarification(clrId)).map { _ =>
-      Ok("ok")
+    // a clarification may only be deleted within its own contest (the permission is checked for contestId)
+    db.run(SlickModel.clarificationByID(clrId).result.headOption).flatMap {
+      case Some(clr) if clr.contest == contestId =>
+        Ask.apply[Option[Clarification]](statusActorModel.statusActor, StatusActor.DeleteClarification(clrId)).map { _ =>
+          Ok("ok")
+        }
+      case Some(_) => Future.successful(Forbidden)
+      case None => Future.successful(NotFound)
     }
   }
 

@@ -120,6 +120,11 @@ function formatSeconds(s) {
         countdownState.contest.prevState = countdownState.contest.state;
     }
 
+// The state-changing POSTs below carry no CSRF token: the application's CSRF filter lets a request with
+// "X-Requested-With: XMLHttpRequest" through (MyApplicationLoader.csrfConfig), which a cross-site form cannot
+// send. jQuery adds it to same-origin requests; it is set explicitly so it never depends on that.
+$.ajaxSetup({headers: {'X-Requested-With': 'XMLHttpRequest'}});
+
 function btn(target, btnid) {
     var b = $('#' + btnid);
     b.html('...');

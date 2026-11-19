@@ -68,6 +68,18 @@ class MyComponents(context: ApplicationLoader.Context)
 
   import com.softwaremill.macwire.wire
 
+  /**
+    * CSRF: a form POST must carry the token. The admin buttons and the message ack post through jQuery with an
+    * `X-Requested-With: XMLHttpRequest` header instead (main.js); a cross-site page cannot send that header without a
+    * CORS preflight, which this application never grants, so such a request is let through. Play's own
+    * `play.filters.csrf.header.bypassHeaders` is empty by default, hence the rule is set here, not in the deployment.
+    */
+  override lazy val csrfConfig: play.filters.csrf.CSRFConfig = {
+    val base = play.filters.csrf.CSRFConfig.fromConfiguration(configuration)
+    base.copy(shouldProtect = rh =>
+      base.shouldProtect(rh) && !rh.headers.get("X-Requested-With").exists(_.equalsIgnoreCase("XMLHttpRequest")))
+  }
+
   lazy val clock = wire[Clock]
   lazy val authenticatorDecoder = wire[Base64AuthenticatorEncoder]
   lazy val idGenerator = new SecureRandomIDGenerator()

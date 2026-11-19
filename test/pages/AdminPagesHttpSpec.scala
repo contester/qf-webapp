@@ -185,4 +185,36 @@ class AdminPagesHttpSpec extends AnyFunSuite with BeforeAndAfterAll {
     assert(ok(s"/admin/${fx.round}/contests/").contains(fx.roundName))
     ok(s"/admin/monitor/${fx.round}")
   }
+
+  test("CSRF: an admin POST carrying the session cookie but no token is refused; the AJAX bypass header passes") {
+    assume(fx.url.isDefined)
+    def bare(uri: String) = asAdmin(FakeRequest(POST, uri).withFormUrlEncodedBody("x" -> "1"))
+    lazy val adminCookieHeader: String = {
+      val r = run(form(POST, "/admin/login", "username" -> "admin@example.org", "password" -> "secret"))
+      assert(status(r) == SEE_OTHER)
+      new play.api.mvc.DefaultCookieHeaderEncoding().encodeCookieHeader(cookies(r).toSeq)
+    }
+    for (uri <- Seq("/admin/toggleClarification/999999999", s"/admin/deleteClarification/${fx.round}/999999999",
+      "/admin/rejudgeSubmit/999999999")) {
+      // the session travels in the Cookie header, as from a browser
+      val req = FakeRequest(POST, uri).withFormUrlEncodedBody("x" -> "1").withHeaders("Cookie" -> adminCookieHeader)
+      assert(status(run(req)) == FORBIDDEN, s"$uri without a token")
+      assert(status(run(req.withHeaders("X-Requested-With" -> "XMLHttpRequest"))) != FORBIDDEN, s"$uri with the jQuery header")
+    }
+    // the clarification really is unknown: the request got past the filter
+    assert(status(run(bare("/admin/toggleClarification/999999999").withHeaders("X-Requested-With" -> "XMLHttpRequest"))) == NOT_FOUND)
+  }
+
+  test("deleteClarification refuses a clarification of another round") {
+    assume(fx.url.isDefined)
+    val other = one(sql"select id from contest_rounds where id <> ${fx.round} and season_id = ${fx.season} order by id limit 1".as[Int])
+    val clr = one(sql"insert into clarifications (season_id, round_id, problem, text) values (${fx.season}, $other, 'A', 'foreign') returning id".as[Long])
+    try {
+      val r = run(asAdmin(form(POST, s"/admin/deleteClarification/${fx.round}/$clr")))
+      assert(status(r) == FORBIDDEN)
+      assert(one(sql"select count(*) from clarifications where id = $clr".as[Int]) == 1)
+      val own = one(sql"insert into clarifications (season_id, round_id, problem, text) values (${fx.season}, ${fx.round}, 'A', 'own') returning id".as[Long])
+      assert(status(run(asAdmin(form(POST, s"/admin/deleteClarification/${fx.round}/$own")))) == OK)
+    } finally fx.exec(sqlu"delete from clarifications where id = $clr")
+  }
 }

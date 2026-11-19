@@ -9,7 +9,6 @@ GET /sendwithinput controllers.ServerSideEval.index
 POST /sendwithinput controllers.ServerSideEval.post
 GET /evaldetails/:id controllers.ServerSideEval.details(id: Long)
 
-+ nocsrf
 POST /ackMessage controllers.Application.ackMessage
 
 GET /monitor controllers.Application.monitorDefault
@@ -41,17 +40,14 @@ GET /public/monitor/:contestId controllers.PublicMonitor.page(contestId: Int)
 GET /admin/rejudge/:contestId controllers.AdminApplication.rejudgePage(contestId: Int)
 POST /admin/rejudgeProblem/:contestId controllers.AdminApplication.rejudgeProblem(contestId: Int)
 
-+ nocsrf
 POST /admin/rejudgeSubmit/:submitId controllers.AdminApplication.rejudgeSubmit(submitId: Int)
 
 GET /admin/postNewClarification/:contestId controllers.AdminApplication.postNewClarification(contestId: Int)
 GET /admin/updateClarification/:clrId controllers.AdminApplication.postUpdateClarification(clrId: Long)
 POST /admin/postClarification/:contestId controllers.AdminApplication.postClarification(contestId: Int, clarificationId: Option[Long])
 
-+ nocsrf
 POST /admin/toggleClarification/:clrId controllers.AdminApplication.toggleClarification(clrId: Long)
 
-+ nocsrf
 POST /admin/deleteClarification/:contestId/:clrId controllers.AdminApplication.deleteClarification(contestId: Int, clrId: Long)
 GET /admin/qanda/:contestId controllers.AdminApplication.showQandA(contestId: Int)
 POST /admin/postAnswer/:clrId controllers.AdminApplication.postAnswer(clrId: Long)
