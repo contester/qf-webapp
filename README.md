@@ -33,8 +33,8 @@ Optional: `notify.keepalive.*` (database notifications, below) and `palevo.*` (I
 
 `play.http.secret.key` MUST be set to a long random secret in every deployment (e.g. `openssl rand -base64 48`),
 never a default or a value from a repository: it signs the Play session and the CSRF token, which carry the admin
-and contestant logins. The Silhouette crypter key `"bar"` in `MyApplicationLoader` is only a sub-key mixed with it
-and is not a secret.
+and contestant logins. The Silhouette crypter key `"bar"` in `MyApplicationLoader` only encrypts the authenticator
+stored inside that signed session; it is not a secret and does not replace the Play secret.
 
 CSRF: forms carry Play's token. The JavaScript POSTs of the admin buttons (rejudge, hide/show and delete of a
 clarification) and of the contestant's message acknowledgement send `X-Requested-With: XMLHttpRequest` instead, which
