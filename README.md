@@ -31,6 +31,16 @@ Besides the usual Play keys (`play.http.secret.key`, `play.application.loader = 
 
 Optional: `notify.keepalive.*` (database notifications, below) and `palevo.*` (IRC announcements, below).
 
+`play.http.secret.key` MUST be set to a long random secret in every deployment (e.g. `openssl rand -base64 48`),
+never a default or a value from a repository: it signs the Play session and the CSRF token, which carry the admin
+and contestant logins. The Silhouette crypter key `"bar"` in `MyApplicationLoader` is only a sub-key mixed with it
+and is not a secret.
+
+CSRF: forms carry Play's token. The JavaScript POSTs of the admin buttons (rejudge, hide/show and delete of a
+clarification) and of the contestant's message acknowledgement send `X-Requested-With: XMLHttpRequest` instead, which
+the application's CSRF configuration accepts (a cross-site page cannot send that header without a CORS preflight,
+and no CORS is enabled).
+
 ## Admin pages
 
 `/admin` (log in with a teacher-web admin): the submit status (live), custom tests (with rerun), the live points
@@ -95,8 +105,10 @@ Testing results, custom test results and changes to rounds, credentials and part
 notifications (`LISTEN testing_finished, eval_finished, round_changed, credential_changed, participant_changed`;
 the triggers are teacher-web's migrations). `NotifyListener` holds one connection of its own, opened from
 `slick.dbs.default.db.url` / `user` / `password` (not from the pool) with `ApplicationName=qf-notify-listener`,
-and reconnects with a backoff of 1 s doubling to 30 s. A notification missed while it is disconnected is not
-replayed: the pages read the database, so it only delays a live update until a reload.
+and reconnects with a backoff of 1 s doubling to 30 s. After every connect (the first one included) it catches up
+once, instead of replaying the notifications it missed: it drops the whole public board cache, makes the admin live
+monitor reload every round, re-reads the current rounds (as if each had a `round_changed`) and drops rounds that are
+gone. No timer is involved.
 
 A silently dropped connection (NAT or firewall timeout, dead server) is detected by TCP keep-alive, set on our
 socket and, through the `options` startup parameter, on the server too (optional, seconds):
