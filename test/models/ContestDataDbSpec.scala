@@ -88,7 +88,7 @@ class ContestDataDbSpec extends AnyFunSuite with BeforeAndAfterAll {
 
     val m = await(db.run(SlickModel.addMessage(Message2(None, round, team, "custom", Json.obj("x" -> 1), seen = false))))
     assert(await(db.run(SlickModel.messages2Unseen.result)).exists(x => x.id == m.id && x.data == Json.obj("x" -> 1)))
-    await(db.run(SlickModel.messageSeenByID(m.id.get).update(true)))
+    await(db.run(SlickModel.messageSeenByID((m.id.get, round, team)).update(true)))
     assert(!await(db.run(SlickModel.messages2Unseen.result)).exists(_.id == m.id))
 
     assert(await(AdminExtraInfo.save(db, round, None, Extrainfo(0, 1, "Rules", "Be nice"))) == AdminExtraInfo.Saved)

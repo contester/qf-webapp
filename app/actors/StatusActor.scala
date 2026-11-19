@@ -428,7 +428,8 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
 
     case Ack(loggedInTeam, msgid) => {
       getUnacked(loggedInTeam.contest.id, loggedInTeam.team.id) -= msgid
-      val loc = SlickModel.messageSeenByID(msgid)
+      // only the identity's own message: another participant's message id updates nothing
+      val loc = SlickModel.messageSeenByID((msgid, loggedInTeam.contest.id, loggedInTeam.team.id))
       val upd = loc.update(true)
       db.run(upd)
     }

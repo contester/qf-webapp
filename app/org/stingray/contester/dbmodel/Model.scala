@@ -429,7 +429,9 @@ object SlickModel {
 
   val messages2Unseen = Compiled(messages2.filterNot(_.seen))
 
-  val messageSeenByID = Compiled((id: Rep[Long]) => messages2.filter(_.id === id).map(_.seen))
+  /** The seen flag of message `id`, only if it belongs to the participant in the round (an ack is the owner's own). */
+  val messageSeenByID = Compiled((id: Rep[Long], round: Rep[Int], participant: Rep[Int]) =>
+    messages2.filter(m => m.id === id && m.contest === round && m.team === participant).map(_.seen))
 
   case class Submits(tag: Tag) extends Table[(Long, Int, Int, String, Int, Array[Byte], DateTime, Boolean, Int, Option[Long], Int, Boolean, Option[Double])](tag, "submits") {
     def id = column[Long]("id", O.AutoInc, O.PrimaryKey)
