@@ -9,7 +9,6 @@ class AdminPermissionsSpec extends AnyFunSuite {
     for (c <- Seq(-1, 0, 1, 3, 42)) {
       assert(a.canSpectate(c))
       assert(a.canModify(c))
-      assert(a.canSeeTeamPasswords(c))
     }
     assert(a.isSuperAdmin)
   }

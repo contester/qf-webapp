@@ -30,8 +30,6 @@ case class Admin(email: String, passwordHash: String) extends Identity {
   def canModify(contestId: Int) = true
 
   def isSuperAdmin = true
-
-  def canSeeTeamPasswords(contestId: Int) = true
 }
 
 object AdminId {
