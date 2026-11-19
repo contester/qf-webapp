@@ -68,9 +68,9 @@ object SubmitErrors {
 /** What a foreign key violation (SQLState 23503) on submits means to the contestant. */
 object SubmitConstraints {
   def errorOf(constraint: String): Option[SubmitError] =
-    if (constraint == "fk_submits_credential") Some(NotAdmitted)
+    if (constraint == "fk_submits_credential" || constraint == "fk_custom_tests_credential") Some(NotAdmitted)
     else if (constraint.startsWith("fk_submits_problem")) Some(UnknownProblem)
-    else if (constraint.startsWith("fk_submits_language")) Some(UnknownLanguage)
+    else if (constraint.startsWith("fk_submits_language") || constraint.startsWith("fk_custom_tests_language")) Some(UnknownLanguage)
     else None
 
   def fromException(e: Throwable): Option[SubmitError] = e match {
@@ -233,23 +233,52 @@ object Submits {
       if (parsed.isEmpty) play.api.Logger("models.Submits").warn(s"unparsable remote address '$a' of team $participantId stored as NULL")
       parsed
     }
-    def refuse(e: SubmitError): DBIO[Either[SubmitError, Long]] = DBIO.successful(Left(e))
     val action: DBIO[Either[SubmitError, Long]] =
-      SlickModel.contestRounds.filter(_.id === roundId).map(r => (r.seasonId, r.startsAt, r.endsAt, r.isFinished)).result.headOption.flatMap {
-        case Some((seasonId, Some(start), Some(end), false)) if !now.isBefore(start) && now.isBefore(end) =>
-          for {
-            problem <- SlickModel.problems.filter(p => p.contestID === roundId && p.id === problemId).exists.result
-            language <- SlickModel.compilers.filter(l => l.id === languageId && l.seasonId === seasonId).exists.result
-            admitted <- SlickModel.roundCredentials.filter(c => c.roundId === roundId && c.participantId === participantId && c.isActive).exists.result
-            r <- if (!problem) refuse(UnknownProblem)
-              else if (!language) refuse(UnknownLanguage)
-              else if (!admitted) refuse(NotAdmitted)
-              else ((SlickModel.submits.map(x => (x.seasonId, x.contest, x.team, x.problem, x.language, x.source, x.arrived,
-                      x.remoteAddr, x.tested, x.compiled, x.passed, x.taken)) returning SlickModel.submits.map(_.id)) +=
-                ((seasonId, roundId, participantId, problemId, languageId, source, now, addr, false, false, 0, 0))).map (Right(_): Either[SubmitError, Long])
-          } yield r
-        case _ => refuse(RoundNotRunning)
+      admitted(team, languageId, now, Some(problemId)) { seasonId =>
+        ((SlickModel.submits.map(x => (x.seasonId, x.contest, x.team, x.problem, x.language, x.source, x.arrived,
+          x.remoteAddr, x.tested, x.compiled, x.passed, x.taken)) returning SlickModel.submits.map(_.id)) +=
+          ((seasonId, roundId, participantId, problemId, languageId, source, now, addr, false, false, 0, 0)))
       }
+    db.run(action).recover {
+      case e => SubmitConstraints.fromException(e).map(x => Left(x): Either[SubmitError, Long]).getOrElse(throw e)
+    }
+  }
+
+  /**
+    * Runs `insert` (given the round's season) only if the round runs at `now`, the problem (when given) is the round's,
+    * the language is the round season's and the team's credential is active; otherwise the first failed check.
+    */
+  private def admitted(team: LoggedInTeam, languageId: Int, now: DateTime, problemId: Option[String])(insert: Int => DBIO[Long])
+                      (implicit ec: ExecutionContext): DBIO[Either[SubmitError, Long]] = {
+    val roundId = team.contest.id
+    val participantId = team.team.id
+    def refuse(e: SubmitError): DBIO[Either[SubmitError, Long]] = DBIO.successful(Left(e))
+    SlickModel.contestRounds.filter(_.id === roundId).map(r => (r.seasonId, r.startsAt, r.endsAt, r.isFinished)).result.headOption.flatMap {
+      case Some((seasonId, Some(start), Some(end), false)) if !now.isBefore(start) && now.isBefore(end) =>
+        for {
+          problem <- problemId.fold[DBIO[Boolean]](DBIO.successful(true))(pid =>
+            SlickModel.problems.filter(p => p.contestID === roundId && p.id === pid).exists.result)
+          language <- SlickModel.compilers.filter(l => l.id === languageId && l.seasonId === seasonId).exists.result
+          admitted <- SlickModel.roundCredentials.filter(c => c.roundId === roundId && c.participantId === participantId && c.isActive).exists.result
+          r <- if (!problem) refuse(UnknownProblem)
+            else if (!language) refuse(UnknownLanguage)
+            else if (!admitted) refuse(NotAdmitted)
+            else insert(seasonId).map(Right(_): Either[SubmitError, Long])
+        } yield r
+      case _ => refuse(RoundNotRunning)
+    }
+  }
+
+  /**
+    * Inserts a custom test (its insert trigger notifies the bridge) with the same checks as a submit, except the
+    * problem: the round runs at `now`, the language is the round season's, the credential is active.
+    */
+  def insertCustomTest(db: JdbcBackend#DatabaseDef, team: LoggedInTeam, languageId: Int, source: Array[Byte], input: Array[Byte],
+                       now: DateTime)(implicit ec: ExecutionContext): Future[Either[SubmitError, Long]] = {
+    val action = admitted(team, languageId, now, None) { seasonId =>
+      (SlickModel.customTests.map(x => (x.seasonId, x.contest, x.team, x.language, x.source, x.input)) returning SlickModel.customTests.map(_.id)) +=
+        ((seasonId, team.contest.id, team.team.id, languageId, source, input))
+    }
     db.run(action).recover {
       case e => SubmitConstraints.fromException(e).map(x => Left(x): Either[SubmitError, Long]).getOrElse(throw e)
     }

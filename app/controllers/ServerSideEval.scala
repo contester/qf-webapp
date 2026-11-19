@@ -43,13 +43,6 @@ class ServerSideEval (cc: ControllerComponents,
     mapping("compiler" -> number, "inlinesolution" -> text, "inlinedata" -> text)(ServerSideData.apply)(ServerSideData.unapply)
   }
 
-  private[this] def insertEval(contest: Contest, team:Int, lang:Int, solution: Array[Byte], data: Array[Byte]) = {
-    val q = (SlickModel.customTests.map(x => (x.seasonId, x.contest, x.team, x.language, x.source, x.input)) returning SlickModel.customTests.map(_.id)) += ((
-      contest.seasonId, contest.id, team, lang, solution, data
-    ))
-    db.run(q)
-  }
-
   private[this] def getEvalForm(loggedInTeam: LoggedInTeam, compilers:Seq[Compiler],
                           form: Form[ServerSideData])(implicit request: RequestHeader, ec: ExecutionContext) =
     db.run(SlickModel.customTestWithLang.filter(x => (x.contest === loggedInTeam.contest.id && x.team === loggedInTeam.team.id)).result).map { evals =>
@@ -93,8 +86,12 @@ class ServerSideEval (cc: ControllerComponents,
             val dataBytes = FormUtil.inlineOrFile(submitData.inlinedata, request.body.file("inputfile")).getOrElse(FormUtil.emptyBytes)
             // The row (finished_at NULL) is the request: its insert trigger notifies the bridge (eval_new),
             // and the list shows it as running until the result is written.
-            insertEval(request.identity.contest, request.identity.team.id, submitData.compiler, solutionBytes, dataBytes).map { _ =>
-              Redirect(routes.ServerSideEval.index)
+            // Same checks as a submit (the round runs now, the language is the round season's, the credential is
+            // active); a refusal is a form error, not a 500.
+            Submits.insertCustomTest(db, request.identity, submitData.compiler, solutionBytes, dataBytes, DateTime.now).flatMap {
+              case Right(_) => Future.successful(Redirect(routes.ServerSideEval.index))
+              case Left(e) =>
+                getEvalForm(request.identity, compilers, SubmitErrors.withError(serverSideForm.fill(submitData), e)).map(BadRequest(_))
             }
           }
         )
