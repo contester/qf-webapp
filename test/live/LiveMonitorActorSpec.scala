@@ -388,6 +388,26 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     f.stop()
   }
 
+  test("ReloadAll (the listener reconnected) reloads every contest once; a loading one once more after its load") {
+    val f = new Fixture(running, rows = Seq(contest(), contest(2)))
+    f.barrier()
+    assert(f.loads.get == 2)
+    f.actor ! ReloadAll
+    f.barrier()
+    awaitCond(f.loads.get == 4, 5.seconds)
+    val gate = Promise[Unit]()
+    f.loadGate = gate.future
+    f.actor ! ReloadAll
+    f.actor ! ReloadAll
+    f.barrier()
+    assert(f.loads.get == 6)
+    gate.success(())
+    awaitCond(f.loads.get == 8, 5.seconds)
+    Thread.sleep(300)
+    assert(f.loads.get == 8, "a burst during a load causes one more load per contest")
+    f.stop()
+  }
+
   test("a removed round is dropped: its streams end, joins fail, and later events for it are ignored") {
     val f = new Fixture(running, rows = Seq(contest(), contest(2)))
     val p = TestProbe()

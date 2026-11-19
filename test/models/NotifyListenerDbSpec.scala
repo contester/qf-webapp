@@ -36,7 +36,9 @@ class NotifyListenerDbSpec extends TestKit(ActorSystem("NotifyListenerDbSpec")) 
                  teamsHook: ConcurrentLinkedQueue[Int] = new ConcurrentLinkedQueue[Int]())
 
   /** Starts a listener with probes as targets, waits until it listens, runs the body, then stops it. */
-  private def withListener(body: Rig => Unit): Unit = {
+  private def withListener(body: Rig => Unit): Unit = withListenerCatchingUp(None)(body)
+
+  private def withListenerCatchingUp(catchUp: Option[NotifyListener.CatchUp])(body: Rig => Unit): Unit = {
     assume(fx.url.isDefined)
     fx.withFixture {
       val status = TestProbe()
@@ -49,7 +51,7 @@ class NotifyListenerDbSpec extends TestKit(ActorSystem("NotifyListenerDbSpec")) 
       val settings = NotifyListener.ConnectionSettings(fx.url.get, fx.user, fx.password, appName)
       val listener = system.actorOf(NotifyListener.props(settings, fx.db,
         NotifyListener.Targets(status.ref, teams.ref, c => { contests.add(c); () }, id => { removed.add(id); () },
-          id => { teamsHook.add(id); () })))
+          id => { teamsHook.add(id); () }, catchUp)))
       try {
         listening.expectMsgType[NotifyListener.Listening](10.seconds)
         body(Rig(listener, status, teams, contests, listening, removed, teamsHook))
@@ -263,6 +265,52 @@ class NotifyListenerDbSpec extends TestKit(ActorSystem("NotifyListenerDbSpec")) 
         system.stop(teams)
         system.stop(problems)
       }
+    }
+  }
+
+  test("after every (re)connect the listener catches up: board cache dropped, live monitor reloaded, rounds re-sent") {
+    val reconnects = new java.util.concurrent.atomic.AtomicInteger
+    val cache = new PublicBoardCache
+    val live = TestProbe()
+    val ghost = 2000000000 // a round the status actor still holds that is gone from the database
+    val catchUp = NotifyListener.CatchUp(() => scala.concurrent.Future.successful(Seq(fx.round, ghost)), () => {
+      reconnects.incrementAndGet()
+      cache.invalidateAll()
+      live.ref ! actors.LiveMonitorActor.ReloadAll
+    })
+    withListenerCatchingUp(Some(catchUp)) { rig =>
+      val r = fx.round
+      // The first connect catches up too.
+      live.expectMsg(5.seconds, actors.LiveMonitorActor.ReloadAll)
+      rig.status.fishForMessage(5.seconds) { case StatusActor.ContestRemoved(`ghost`) => true; case _ => false }
+      rig.teams.fishForMessage(5.seconds) { case StatusActor.TeamsChanged(`ghost`) => true; case _ => false }
+      awaitCond(rig.removed.contains(ghost), 2.seconds)
+
+      fx.await(cache.getOrRender(r, "ru")(scala.concurrent.Future.successful("page")))
+      assert(cache.cachedRounds == Set(r))
+      val submit = fx.insertSubmit()
+      val testing = fx.insertTesting(submit)
+      exec(sqlu"update submits set testing_id = $testing where id = $submit")
+
+      val pid = backends().head
+      assert(one(sql"select pg_terminate_backend($pid)".as[Boolean]))
+      awaitCond(!backends().contains(pid), 5.seconds, 10.millis)
+      // Down (the reconnect waits 1 s): these notifications are lost.
+      val newEnd = new org.joda.time.DateTime(2031, 2, 3, 4, 5, org.joda.time.DateTimeZone.UTC)
+      exec(sqlu"update contest_rounds set ends_at = timestamptz '2031-02-03 04:05:00+00' where id = $r")
+      exec(sqlu"update submits set tested = true, compiled = true, points = 3 where id = $submit")
+      exec(sqlu"update testings set finished_at = now() where id = $testing")
+      assert(backends().isEmpty, "the changes must happen while the listener is disconnected")
+
+      rig.listening.expectMsgType[NotifyListener.Listening](10.seconds)
+      live.expectMsg(5.seconds, actors.LiveMonitorActor.ReloadAll)
+      rig.status.fishForMessage(5.seconds) {
+        case StatusActor.ContestChanged(c) => c.id == r && c.endTime.getMillis == newEnd.getMillis
+        case _ => false
+      }
+      awaitCond(rig.contests.toArray.exists { case c: Contest => c.id == r && c.endTime.getMillis == newEnd.getMillis }, 2.seconds)
+      assert(cache.cachedRounds.isEmpty, "the public board cache is dropped")
+      assert(reconnects.get == 2)
     }
   }
 }

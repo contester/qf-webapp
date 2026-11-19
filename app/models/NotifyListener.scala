@@ -28,8 +28,12 @@ import scala.util.control.NonFatal
   * aborts the connection, which ends the blocked read and the thread.
   *
   * On a lost connection the thread reconnects with exponential backoff (1 s doubling to 30 s, reset by a successful
-  * connect). That is the only timer. There is no recovery query after a reconnect: the database is the truth and every
-  * page reads it, so a notification missed while disconnected only delays a live update until the page is reloaded.
+  * connect). That is the only timer. After every connect (the first one included) the listener catches up once, when
+  * the targets ask for it (`Targets.catchUp`): notifications sent while it was disconnected are lost, so it runs the
+  * `reconnected` hook (the application drops the whole public board cache and makes the live monitor reload every
+  * contest), re-reads the current rounds and delivers each as a round_changed would (ContestChanged, TeamsChanged and
+  * the hooks), and removes the rounds the status actor still knows that are gone. The catch-up is queued before any
+  * notification of the new connection, so a later notification's round reload never gets overtaken by it.
   *
   * Each notification is turned into the message the actors already understand, one at a time in arrival order;
   * a malformed payload or a failed lookup is logged and skipped.
@@ -103,7 +107,14 @@ object NotifyListener {
     * problems, the public board cache) and of every TeamsChanged (the live monitor, the public board cache).
     */
   case class Targets(status: ActorRef, teams: ActorRef, contestChanged: Contest => Unit = _ => (),
-                     contestRemoved: Int => Unit = _ => (), teamsChanged: Int => Unit = _ => ())
+                     contestRemoved: Int => Unit = _ => (), teamsChanged: Int => Unit = _ => (),
+                     catchUp: Option[CatchUp] = None)
+
+  /**
+    * The catch-up after each (re)connect. `knownRounds`: the rounds the status actor holds (those not current any
+    * more are removed); `reconnected`: runs first, to drop caches and reload the live monitor.
+    */
+  case class CatchUp(knownRounds: () => Future[Seq[Int]], reconnected: () => Unit)
 
   /** Published on the event stream each time the listener has (re)connected and issued its LISTENs. */
   case class Listening(applicationName: String)
@@ -112,6 +123,7 @@ object NotifyListener {
     Props(new NotifyListener(settings, db, targets))
 
   private case class Notified(channel: String, payload: String)
+  private case object Connected
 
   /** What a notification asks for, from its channel and text payload; None for an unknown channel or a bad payload. */
   sealed trait Event
@@ -214,6 +226,7 @@ class NotifyListener(settings: NotifyListener.ConnectionSettings, db: JdbcBacken
         else {
           backoff = minBackoffMs
           logger.info(s"listening on ${Channels.mkString(", ")}")
+          self ! Connected // ahead of this connection's notifications
           eventStream.publish(Listening(settings.applicationName))
           val pg = c.get.unwrap(classOf[PGConnection])
           while (running) {
@@ -240,7 +253,39 @@ class NotifyListener(settings: NotifyListener.ConnectionSettings, db: JdbcBacken
       last = last.flatMap(_ => handle(channel, payload)).recover {
         case NonFatal(e) => logger.error(s"handling $channel '$payload': $e")
       }
+    case Connected =>
+      targets.catchUp.foreach { cu =>
+        last = last.flatMap(_ => catchUp(cu)).recover {
+          case NonFatal(e) => logger.error(s"catching up after a reconnect: $e")
+        }
+      }
     case () => // the status actor's acknowledgement of a result; nothing waits for it
+  }
+
+  private def catchUp(cu: CatchUp): Future[Unit] = {
+    Try(cu.reconnected()).failed.foreach(e => logger.warn(s"reconnect hook: $e"))
+    val known = Future.fromTry(Try(cu.knownRounds())).flatten.recover {
+      case NonFatal(e) =>
+        logger.warn(s"rounds known to the status actor: $e")
+        Seq.empty[Int]
+    }
+    for (rounds <- Rounds.currentRounds(db); held <- known) yield {
+      logger.info(s"catching up after (re)connect: ${rounds.size} current rounds")
+      rounds.foreach(roundChanged)
+      (held.toSet -- rounds.map(_.id)).toSeq.sorted.foreach(roundRemoved)
+    }
+  }
+
+  private def roundChanged(c: Contest): Unit = {
+    targets.status.tell(StatusActor.ContestChanged(c), self)
+    teamsChanged(c.id)
+    Try(targets.contestChanged(c)).failed.foreach(e => logger.warn(s"contest change hook for round ${c.id}: $e"))
+  }
+
+  private def roundRemoved(id: Int): Unit = {
+    targets.status.tell(StatusActor.ContestRemoved(id), self)
+    teamsChanged(id)
+    Try(targets.contestRemoved(id)).failed.foreach(e => logger.warn(s"contest removal hook for round $id: $e"))
   }
 
   private def teamsChanged(round: Int): Unit = {
@@ -269,16 +314,11 @@ class NotifyListener(settings: NotifyListener.ConnectionSettings, db: JdbcBacken
         }
       case Some(RoundChanged(id)) =>
         Rounds.currentRound(db, id).map {
-          case Some(c) =>
-            targets.status.tell(StatusActor.ContestChanged(c), self)
-            teamsChanged(id)
-            Try(targets.contestChanged(c)).failed.foreach(e => logger.warn(s"contest change hook for round $id: $e"))
+          case Some(c) => roundChanged(c)
           case None =>
             // Gone, of another season, or without times: such a round is unusable and is dropped everywhere.
             logger.info(s"round $id is not a current round with times; removing it")
-            targets.status.tell(StatusActor.ContestRemoved(id), self)
-            teamsChanged(id)
-            Try(targets.contestRemoved(id)).failed.foreach(e => logger.warn(s"contest removal hook for round $id: $e"))
+            roundRemoved(id)
         }
       case Some(CredentialChanged(round, _)) =>
         teamsChanged(round)

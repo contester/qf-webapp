@@ -140,7 +140,19 @@ class MyComponents(context: ApplicationLoader.Context)
   lazy val notifyListener: ActorRef = actorSystem.actorOf(NotifyListener.props(
     NotifyListener.ConnectionSettings.fromConfig(configuration), dbConfig.db,
     NotifyListener.Targets(statusActorModel.statusActor, statusActorModel.teamStateActor,
-      statusActorModel.contestChanged, statusActorModel.contestRemoved, statusActorModel.teamsChanged)), "notify-listener")
+      statusActorModel.contestChanged, statusActorModel.contestRemoved, statusActorModel.teamsChanged,
+      // After every (re)connect: notifications missed while disconnected must not leave caches stale.
+      Some(NotifyListener.CatchUp(knownStatusRounds, () => {
+        publicBoardCache.invalidateAll()
+        liveMonitor ! actors.LiveMonitorActor.ReloadAll
+      })))), "notify-listener")
+
+  /** The rounds the status actor holds (for the listener's catch-up). */
+  private def knownStatusRounds(): scala.concurrent.Future[Seq[Int]] = {
+    implicit val timeout: akka.util.Timeout = akka.util.Timeout(scala.concurrent.duration.Duration(10, "seconds"))
+    utils.Ask[actors.StatusActor.AllContests](statusActorModel.statusActor, actors.StatusActor.GetAllContests)
+      .map(_.contests.map(_.id))
+  }
 
   lazy val homeController = wire[_root_.controllers.Application]
   lazy val qAndAController = wire[_root_.controllers.QandA]

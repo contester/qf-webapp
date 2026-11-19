@@ -35,6 +35,11 @@ object LiveMonitorActor {
   case class ContestChanged(contest: Contest)
   /** A round vanished or became unusable: dropped, and its streams end. */
   case class ContestRemoved(contest: Int)
+  /**
+    * Reload every contest held (the notification listener reconnected: anything of any round may have changed while
+    * it was down). A contest that is loading reloads once more after the load, like a burst of round changes.
+    */
+  case object ReloadAll
 
   // Each join is answered with a Source[Event, NotUsed] whose first element is the `board` event (`ready` for the
   // status rows), or with Status.Failure when the contest is unknown. There are only admin joins: nobody else gets a
@@ -371,6 +376,10 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
 
     case ContestChanged(c) =>
       contestRow(c)
+
+    case ReloadAll =>
+      for ((cid, st) <- contests)
+        if (st.loading.isEmpty) startLoad(cid, st, roundChangedReason) else st.reloadAgain = true
 
     case ContestRemoved(cid) =>
       adding -= cid
