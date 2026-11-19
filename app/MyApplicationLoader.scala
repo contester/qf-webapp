@@ -8,10 +8,8 @@ import com.mohiva.play.silhouette.impl.authenticators.{SessionAuthenticator, Ses
 import com.mohiva.play.silhouette.impl.util.{DefaultFingerprintGenerator, SecureRandomIDGenerator}
 import akka.actor.ActorRef
 import info.faljse.SDNotify.SDNotify
-import java.io.File
 import models._
 import play.api._
-import play.api.i18n.{Lang, MessagesImpl}
 import play.api.db.slick.{DbName, SlickComponents}
 import play.api.libs.ws.ahc.AhcWSComponents
 import play.api.mvc.{BodyParsers, DefaultSessionCookieBaker}
@@ -116,42 +114,32 @@ class MyComponents(context: ApplicationLoader.Context)
 
   lazy val palevoSink: palevo.PalevoSink = palevo.PalevoSink.fromConfig(configuration, wsClient, actorSystem)(executionContext)
 
-  // Live monitor. When monitor.disable_new_monitor = true nothing below is constructed beyond the config and the
-  // no-op hooks, and Monitor starts the old MonitorActor as before.
-  lazy val liveConfig: live.LiveMonitorConfig = live.LiveMonitorConfig(configuration)
-
-  // Minutes before the start and the end at which palevo is told "in N minutes"; produced by the live monitor, or by
-  // the StatusActor when the live monitor is off (see LiveWiring.timeEventHost).
+  // Minutes before the start and the end at which palevo is told "in N minutes"; produced by the live monitor.
   lazy val countdownConfig: palevo.CountdownConfig = palevo.CountdownConfig(configuration)
 
-  private lazy val liveBuilt: live.LiveWiring.Built = live.LiveWiring.build(liveConfig, () => {
-    val messages = MessagesImpl(Lang("en"), messagesApi)
-    actorSystem.actorOf(actors.LiveMonitorActor.props(
-      dbConfig.db, liveConfig, configuration.getOptional[String]("monitor.static_location").map(new File(_)),
-      statusActorModel.teamClient, statusActorModel.problemClient,
-      () => models.Rounds.currentRounds(dbConfig.db)(executionContext),
-      (c, b) => live.StaticRender.render(c, b)(messages), palevoSink, countdownConfig,
-      actors.LiveMonitorActor.DbStatusRows.fromDb(dbConfig.db, statusActorModel.teamClient, actorSystem.scheduler)(executionContext)), "live-monitor-actor")
-  })
-
-  lazy val liveHooks: live.LiveHooks = liveBuilt.hooks
-  lazy val liveMonitor: Option[ActorRef] = liveBuilt.monitor
-  lazy val liveMonitorRef: live.LiveMonitorRef = live.LiveMonitorRef(liveMonitor)
+  // The admin live monitor (the only live board) and the public board cache; both hear every change of a board
+  // through the live hooks. Nothing writes static files.
+  lazy val liveMonitor: ActorRef = actorSystem.actorOf(actors.LiveMonitorActor.props(dbConfig.db,
+    () => models.Rounds.currentRounds(dbConfig.db)(executionContext), palevoSink, countdownConfig,
+    actors.LiveMonitorActor.DbStatusRows.fromDb(dbConfig.db, statusActorModel.teamClient, actorSystem.scheduler)(executionContext)),
+    "live-monitor-actor")
+  lazy val publicBoardCache: PublicBoardCache = new PublicBoardCache
+  lazy val liveHooks: live.LiveHooks = live.LiveHooks.all(new live.ActorLiveHooks(liveMonitor), publicBoardCache.hooks)
+  lazy val liveMonitorRef: live.LiveMonitorRef = live.LiveMonitorRef(Some(liveMonitor))
   lazy val connectionStats: live.ConnectionStats = new live.ConnectionStats
-  lazy val liveContestLookup: live.LiveContestLookup =
-    live.LiveContestLookup(id => statusActorModel.getContest(id)(akka.util.Timeout(5, java.util.concurrent.TimeUnit.SECONDS), executionContext))
 
   lazy val monitorModel = wire[Monitor]
   lazy val boardSource: models.BoardSource = monitorModel.source
-  // Deferred: the live monitor itself needs statusActorModel's team and problem clients.
+  // Deferred: the live monitor itself needs statusActorModel's team client (status rows).
+  // The live monitor produces palevo's time events, so the status actor does not (timeEvents = false).
   lazy val statusActorModel = new StatusActorModel(dbConfig, actorSystem, palevoSink, live.LiveWiring.deferred(liveHooks),
-    live.LiveWiring.timeEventHost(liveConfig) == live.StatusActorHost, countdownConfig)
+    false, countdownConfig)
 
   // Database notifications (testing/eval results, round and team changes) for the actors; see NotifyListener.
   lazy val notifyListener: ActorRef = actorSystem.actorOf(NotifyListener.props(
     NotifyListener.ConnectionSettings.fromConfig(configuration), dbConfig.db,
     NotifyListener.Targets(statusActorModel.statusActor, statusActorModel.teamStateActor,
-      statusActorModel.contestChanged, statusActorModel.contestRemoved)), "notify-listener")
+      statusActorModel.contestChanged, statusActorModel.contestRemoved, statusActorModel.teamsChanged)), "notify-listener")
 
   lazy val homeController = wire[_root_.controllers.Application]
   lazy val qAndAController = wire[_root_.controllers.QandA]
@@ -166,7 +154,7 @@ class MyComponents(context: ApplicationLoader.Context)
 
   lazy val router: Router = wire[_root_.router.Routes]
 
-  // Start the live monitor (when enabled) with the application, not on the first event.
+  // Start the live monitor with the application, not on the first event.
   liveMonitor
   // Listen from the start. The actor system stops with the application, and the listener's postStop closes its connection.
   notifyListener

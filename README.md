@@ -29,8 +29,7 @@ A late or restarted application announces only the latest threshold it has cross
 passed when it started. Countdowns and reschedules are announced only for contests 1 to 10 (the others are test
 copies); the phase events themselves are announced for every contest. Expose-time changes alone are not announced.
 
-The events come from the live monitor, or from the status actor when `monitor.disable_new_monitor = true`: exactly
-one of them produces them (`LiveWiring.timeEventHost`).
+The events come from the live monitor.
 
 ## Database notifications
 
@@ -51,48 +50,31 @@ socket and, through the `options` startup parameter, on the server too (optional
 Submits and custom tests are requests by themselves: the insert triggers notify the bridge. An admin rejudge sets
 `submits.testing_id` to NULL (the bridge hears `submit_new` again); a custom test rerun inserts a copy of the test.
 
-## Live monitor
+## Scoreboard and live monitor
 
-The scoreboard is pushed to browsers over server-sent events and replaces the polling monitor. Configuration
-(all optional):
+The scoreboard is a points board: per problem the best points of a team's finished, compiled submits (the points of
+each submit's current testing: a rejudge replaces them, never adds), the total, and places by total (equal totals
+share a place, the next one skips: 1, 1, 3). Not rated participants are listed after the ranked ones without a place;
+disqualified ones are not listed. There is no freeze: admins always see the real board, everybody else sees it once the
+round is over (`is_finished`, or `ends_at` has come).
 
-    monitor.disable_new_monitor = false  # true switches the live monitor off (restart qf); the old monitor runs instead
-    monitor.public_contests = [1,...,10] # contests served on /public/monitor
-    monitor.public_max_connections = 1000
-    monitor.static_location = "/path"    # directory for the static pages; unset = no static files
+- `/admin/monitor/:id` (admins): the live board. The page carries the board the stream at `/admin/monitor/:id/events`
+  starts with; the stream then sends a `row` event for each changed row (a finished testing, an arrival or a rejudge:
+  `?N` marks N submits in flight, never counted as the best) and a whole `board` event when a row appears or goes
+  (a credential deactivated, a participant disqualified). Credential and participant edits (`credential_changed`,
+  `participant_changed`) re-read the round's participants and update the rows without a reload; a change of the
+  round's problems (`round_changed`) reloads the round. The page is sent `Cache-Control: no-store`.
+- `/monitor` (a participant) and `/public/monitor/:id` (anyone, no session): 403 «Результаты будут опубликованы после
+  окончания тура» while the round runs, then the final board rendered from the database. The navbar shows the
+  scoreboard tab to participants only once their round is over. There is no live stream for them.
+- The public page is rendered on demand and kept per round and language until a notification can have changed it:
+  a finished testing, a rejudge, a credential or participant change, a round change or removal (`PublicBoardCache`).
+  It never expires by time, and only rounds that are over are ever cached.
 
-Static files are written only for contests with id < 11 (hardcoded, independent of `monitor.public_contests`), when
-the board changes. The old keys `monitor.static_interval` and `monitor.crosscheck_interval` are ignored: nothing in qf
-runs on an interval (see "No polling" below).
-With the live monitor on, the live actor feeds palevo's standings events; with it off, the old monitor does.
-
-Three audiences, each page with an `/events` stream next to it:
-
-- `/monitor` (and `/monitor/events`): a team, which sees its own cells.
-- `/admin/monitor/:id`: admins. There is no switch: the server picks the stream. An admin with `canSeeAll` for the
-  contest gets the real board; other admins with spectate permission get the freezing board.
-- `/public/monitor/:id`: anyone. The freezing board (identical to the static file); it is empty before the contest
-  starts and becomes the real board at expose_time.
-
-Each page already contains the table, rendered on the server from the same board its stream starts with (so it
-shows up before the stream connects); the stream then replaces it. If the live monitor does not answer within a
-second the page is served with an empty box and the stream fills it. These pages are sent `Cache-Control: no-store`.
-
-Editing a team (not rated, name, school, number) updates the team list in memory and tells the live monitor, which
-rebuilds the boards and sends every stream a whole `board` event.
-
-A change of a round in teacher-web (`round_changed`) reaches the status actor, its round clock and the live monitor at
-once; a round whose times are cleared, or that is no longer in the current season, is dropped from all of them.
-
-Between freeze_time and expose_time a submit that arrived after the freeze is shown as `?` on the freezing board
-(a contest with freeze_time >= end_time has no freeze). A `?` also appears on every board for a submit that is not
-judged yet. It is yellow and numbered by attempt: `?1` for a team's first try, `?2` after one failure; it turns into `+`/`+N` or `-N` when judged. A team sees the real result of its own cells, but not its rank, the solved and penalty columns or any
-other team. At expose_time the public and team boards become the real board; `canSeeAll` admins always see it.
-
-Rollback: set `monitor.disable_new_monitor = true` and restart qf. No live actor is created, the hooks do
-nothing, and the old monitor (palevo and static files) starts again. Remove the key and restart to go back.
-With the live monitor on, a malformed `public_contests` or `public_max_connections` stops qf at boot (fail-fast).
-`monitor.disable_new_monitor = true` ignores all the other live keys, so it always works as the rollback switch.
+There are no static monitor files and no `monitor.*` settings any more (`monitor.disable_new_monitor`,
+`monitor.public_contests`, `monitor.public_max_connections`, `monitor.static_location` and the old interval keys are
+ignored). The live actor feeds palevo's time and standings events; standings events reach the public audience only
+once the round is over.
 
 ## No polling
 

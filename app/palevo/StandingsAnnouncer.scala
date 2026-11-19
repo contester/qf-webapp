@@ -1,26 +1,24 @@
 package palevo
 
+import models.Visibility
 import org.joda.time.DateTime
 import org.stingray.contester.dbmodel.Contest
 
 /**
-  * Standings announcements for both audiences. The public tracker watches the pre-freeze scoreboard, which cannot
-  * change after the freeze, so nothing leaks. The jury tracker watches the real scoreboard and is heard only while
-  * the public one is frozen; it is fed at all times so its state is current when the freeze starts. A fact that
-  * both trackers see in the same refresh (a submit that arrived before the freeze and was judged after it) is
-  * announced once, publicly. Not thread-safe: call it from one actor.
+  * Standings announcements from the one (real) points board. While the round runs only the jury hears them: the
+  * public must learn nothing of the board before the end. Once the round is over the public tracker takes over; its
+  * first observation only records the state, so the end itself announces nothing. Not thread-safe: call it from one
+  * actor.
+  *
+  * TODO(task18): rework the public standings events for after the round (spec: public standings events only once the
+  * round has ended) and the countdown edges.
   */
 final class StandingsAnnouncer {
   private val publicTracker = new StandingsTracker
   private val juryTracker = new StandingsTracker(JuryAudience)
 
-  def observe(contest: Contest, frozen: StandingsView, exposed: StandingsView, now: DateTime): Seq[PalevoEvent] = {
-    val publicEvents = publicTracker.observe(contest, frozen, now)
-    val juryEvents = juryTracker.observe(contest, exposed, now)
-    val live =
-      if (StandingsTracker.liveWindow(contest, now))
-        juryEvents.filterNot(j => publicEvents.exists(p => p.eventType == j.eventType && p.data == j.data))
-      else Nil
-    publicEvents ++ live
+  def observe(contest: Contest, board: StandingsView, now: DateTime): Seq[PalevoEvent] = {
+    val jury = juryTracker.observe(contest, board, now)
+    if (Visibility.isOver(contest, now)) publicTracker.observe(contest, board, now) else jury
   }
 }

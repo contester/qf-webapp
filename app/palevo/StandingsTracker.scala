@@ -8,9 +8,8 @@ import scala.collection.mutable
 /**
   * Derives first_solve_contest / first_solve_problem / new_leader events from successive scoreboards.
   *
-  * Feed it only the pre-freeze status (StoredContestStatus.frozen): that status cannot change after the
-  * freeze, which is what keeps scoreboard information from leaking. The first observation of a contest only
-  * records its state, so a restart mid-contest announces nothing. Teams that are not rated are ignored.
+  * Who hears it is the audience's business (StandingsAnnouncer feeds the public tracker only once the round is over).
+  * The first observation of a contest only records its state, so a restart mid-contest announces nothing. Teams that are not rated are ignored.
   * Not thread-safe: call it from one actor.
   */
 final class StandingsTracker(audience: Audience = PublicAudience) {
@@ -67,13 +66,6 @@ final class StandingsTracker(audience: Audience = PublicAudience) {
 }
 
 object StandingsTracker {
-  /**
-    * True while the public scoreboard is frozen and the real one is not yet exposed. Contests without a freeze
-    * (freezeTime >= endTime) have no such window.
-    */
-  def liveWindow(c: Contest, now: DateTime): Boolean =
-    c.freezeTime.isBefore(c.endTime) && !now.isBefore(c.freezeTime) && now.isBefore(c.exposeTime)
-
   private final class State(var problems: Set[String], var contestFirst: Boolean, var leader: Option[Int])
 
   private final case class Solve(team: PTeam, problem: String, seconds: Int)

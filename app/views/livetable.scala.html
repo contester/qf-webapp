@@ -1,26 +1,26 @@
-@(board: live.LiveBoard, currentTeam: Int)(implicit messages: Messages)
+@(board: live.LiveBoard)(implicit messages: Messages)
 @*
-  Live table markup contract. liveTableHtml() in app/assets/js/main.js builds the SAME string from a `board`
+  Admin live board markup contract. liveTableHtml() in app/assets/js/main.js builds the SAME string from a `board`
   event; test/resources/live/livetable.html pins it (views.LiveTableSpec, test/js/livetable-check.js).
-  - <table class="table table-hover table-bordered table-responsive"><thead><tr>, then
-    <th>rank</th><th>ID</th><th>team</th><th>=</th><th>penalty</th>, then per problem P with N solves:
-    <th style="text-align: center;">P<div style="font-size: 65%;">(N)</div></th>, with "color:#ccc;" after
-    "65%;" when N is 0; then </tr></thead><tbody> and a newline.
+  - <table class="table table-hover table-bordered table-responsive points-board"><thead><tr>, then
+    <th>rank</th><th>№</th><th>team</th>, then per problem
+    <th style="text-align: center;" title="NAME">ID<div style="font-size: 65%;">NAME (MAX)</div></th>, then
+    <th style="text-align: center;">total</th></tr></thead><tbody> and a newline.
   - One line per row, in board order, each followed by a newline:
-    <tr data-team="ID"> (class="info" added for the current team) <th scope="row">RANK</th> (* if not rated)
-    <td>ID</td><td>SCHOOL<br/><small>TEAM NAME</small></td><td>SOLVED</td><td>PENALTY</td>, then per problem
-    <td class="text-center">CELL</td>, then </tr>.
-  - CELL: solved <span class="text-success"><strong>+X</strong></span><br/><span class="text-info"><small>HH:MM</small></span>;
-    failed <span class="text-muted">-X</span>; pending <span class="text-warning">?X</span> (X = the attempt, 1 for the first); empty: nothing.
+    <tr data-team="ID"><th scope="row">PLACE</th> (empty for a team that is not rated) <td>NUMBER</td>
+    <td>NAME<br/><small>SCHOOL, CITY</small></td>, then per problem <td class="CLASSES">CELL</td>, then
+    <td class="text-center"><strong>TOTAL</strong></td></tr>.
+  - CLASSES: "text-center points-cell", plus " full-score" at the maximum, plus " text-muted" without points.
+  - CELL: points BEST<br/><small class="text-muted">из MAX</small>, or — without points; then, when submits are in
+    flight, <br/><span class="text-warning">?N</span> (N of them; never counted as the best).
   - Then </tbody></table>. Text is HTML-escaped (& < > " ').
 *@
-@cell(c: live.LiveCell) = {@c match {
-case live.LiveCell.Solved(_, s) => {<span class="text-success"><strong>@c.text</strong></span><br/><span class="text-info"><small>@SecondsToTimeStr(s)</small></span>}
-case live.LiveCell.Failed(_) => {<span class="text-muted">@c.text</span>}
-case live.LiveCell.Pending(_, _) => {<span class="text-warning">@c.text</span>}
-case _ => {}
-}}
-@count(p: String) = @{board.solvedCounts.getOrElse(p, 0)}
-<table class="table table-hover table-bordered table-responsive"><thead><tr><th>@messages("label.rank")</th><th>ID</th><th>@messages("label.team")</th><th>=</th><th>@messages("label.penalty")</th>@for(p <- board.problems) {<th style="text-align: center;">@p<div style="font-size: 65%;@if(count(p) == 0){color:#ccc;}">(@count(p))</div></th>}</tr></thead><tbody>
-@for(r <- board.rows) {<tr data-team="@r.team.id"@if(r.team.disqualified){ class="danger"}else{@if(r.team.id == currentTeam){ class="info"}}><th scope="row">@if(r.team.disqualified){DSQ}else{@if(r.rank == 0){*}else{@r.rank}}</th><td>@r.team.id</td><td>@r.team.schoolFullNameWithNum<br/><small>@r.team.teamName</small></td><td>@r.score.solved</td><td>@r.score.penalty</td>@for(p <- board.problems) {<td class="text-center">@cell(r.cells.getOrElse(p, live.LiveCell.Empty))</td>}</tr>
+@fmt(x: Double) = @{models.TestRows.formatPoints(x)}
+@cellClass(c: live.LiveCell) = @{"text-center points-cell" + (if (c.full) " full-score" else "") + (if (c.best.isEmpty) " text-muted" else "")}
+@cell(c: live.LiveCell, p: models.ProblemColumn) = {@c.best match {
+case Some(b) => {@fmt(b)<br/><small class="text-muted">из @fmt(p.maxPoints)</small>}
+case None => {—}
+}@if(c.pending > 0){<br/><span class="text-warning">?@c.pending</span>}}
+<table class="table table-hover table-bordered table-responsive points-board"><thead><tr><th>@messages("label.rank")</th><th>№</th><th>@messages("label.team")</th>@for(p <- board.problems) {<th style="text-align: center;" title="@p.name">@p.id<div style="font-size: 65%;">@p.name (@fmt(p.maxPoints))</div></th>}<th style="text-align: center;">@messages("label.total")</th></tr></thead><tbody>
+@for(r <- board.rows) {<tr data-team="@r.team.id"><th scope="row">@r.place.map(_.toString).getOrElse("")</th><td>@r.team.number</td><td>@r.team.name<br/><small>@r.team.schoolWithCity</small></td>@for(p <- board.problems) {<td class="@cellClass(r.cell(p.id))">@cell(r.cell(p.id), p)</td>}<td class="text-center"><strong>@fmt(r.total)</strong></td></tr>
 }</tbody></table>

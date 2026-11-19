@@ -1,53 +1,5 @@
-@* Look of a public scoreboard, pure CSS. Frozen: a very light blue card and table, and low-key snow over the page, while <html> has the
-   frozen-board class. Not started: a gray card and table, while <html> has the not-started class. Both classes are set
-   by main.js on the live page and by the server on the static file. *@
+@* Look of a points scoreboard, pure CSS. *@
 <style>
-html.not-started .container { filter: grayscale(1); }
-html.not-started .well { background-color: #e8e8e8; }
-html.not-started .well .table,
-html.not-started .well .table > thead > tr > th,
-html.not-started .well .table > tbody > tr > th,
-html.not-started .well .table > tbody > tr > td { background-color: #e8e8e8; border-color: #d3d3d3; }
-html.frozen-board .well { background-color: #f1f7fd; }
-html.frozen-board .well .table,
-html.frozen-board .well .table > thead > tr > th,
-html.frozen-board .well .table > tbody > tr > th,
-html.frozen-board .well .table > tbody > tr > td { background-color: #f1f7fd; border-color: #d9e7f6; }
-html.frozen-board .well .table-hover > tbody > tr:hover > th,
-html.frozen-board .well .table-hover > tbody > tr:hover > td { background-color: #e1edfa; }
-html.not-started .well .table-hover > tbody > tr:hover > th,
-html.not-started .well .table-hover > tbody > tr:hover > td { background-color: #dcdcdc; }
-/* A disqualified row stays red on the tinted boards (the rules above would paint it over). */
-html.frozen-board .well .table > tbody > tr.danger > th,
-html.frozen-board .well .table > tbody > tr.danger > td { background-color: #f2dede; }
-html.frozen-board .well .table-hover > tbody > tr.danger:hover > th,
-html.frozen-board .well .table-hover > tbody > tr.danger:hover > td { background-color: #ebcccc; }
-html.not-started .well .table > tbody > tr.danger > th,
-html.not-started .well .table > tbody > tr.danger > td { background-color: #f2dede; }
-html.not-started .well .table-hover > tbody > tr.danger:hover > th,
-html.not-started .well .table-hover > tbody > tr.danger:hover > td { background-color: #ebcccc; }
-html.frozen-board body::before {
-    content: "";
-    position: fixed;
-    top: 0; right: 0; bottom: 0; left: 0;
-    z-index: 1000;
-    pointer-events: none;
-    opacity: 0.5;
-    background-image:
-        radial-gradient(circle at 20% 30%, #a9c8ec 1.5px, transparent 2.5px),
-        radial-gradient(circle at 70% 75%, #a9c8ec 1px, transparent 2px),
-        radial-gradient(circle at 40% 60%, #a9c8ec 2px, transparent 3px),
-        radial-gradient(circle at 85% 15%, #a9c8ec 1px, transparent 2px);
-    background-size: 137px 137px, 211px 211px, 293px 293px, 359px 359px;
-    animation: frozen-snow 60s linear infinite;
-}
-@@keyframes frozen-snow {
-    from { background-position: 0 0, 0 0, 0 0, 0 0; }
-    to { background-position: 0 685px, 0 844px, 0 879px, 0 1077px; }
-}
-@@media (prefers-reduced-motion: reduce) {
-    html.frozen-board body::before { animation: none; }
-}
 /* Points board: a cell at the problem's maximum. */
 .points-board td.full-score { background-color: #dff0d8; color: #2b6a2b; font-weight: bold; }
 .points-board td.full-score small { color: #3c763d; }

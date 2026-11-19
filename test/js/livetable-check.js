@@ -13,25 +13,28 @@ vm.runInContext(fs.readFileSync(path.join(root, 'app/assets/js/main.js'), 'utf8'
 
 const fixture = (name) => fs.readFileSync(path.join(root, 'test/resources/live', name), 'utf8').trim();
 const board = JSON.parse(fixture('livetable.json'));
-const labels = {rank: 'label.rank', team: 'label.team', penalty: 'label.penalty'};
+const labels = {rank: 'label.rank', team: 'label.team', total: 'label.total'};
 
-assert.strictEqual(ctx.liveTableHtml(board, labels, 1), fixture('livetable.html'));
+assert.strictEqual(ctx.liveTableHtml(board, labels), fixture('livetable.html'));
 
-// A `row` event omits empty problems: they render as empty cells.
-const row = {team: 2, school: 'S', name: 'N', rank: '3', solved: 0, penalty: 0, cells: {B: {t: 'fail', s: '-1'}}};
-assert.strictEqual(ctx.liveRowHtml(['A', 'B'], row, 0),
-  '<tr data-team="2"><th scope="row">3</th><td>2</td><td>S<br/><small>N</small></td><td>0</td><td>0</td>' +
-  '<td class="text-center"></td><td class="text-center"><span class="text-muted">-1</span></td></tr>');
-// `ranks` in a row event are numbers, 0 for not rated.
-assert.strictEqual(ctx.liveRankText(0), '*');
+// A `row` event omits empty problems: they render as cells without points.
+const problems = [{id: 'A', name: 'a', max: '10'}, {id: 'B', name: 'b', max: '20'}];
+const row = {team: 2, number: 7, name: 'N', school: 'S, C', place: 3, total: '5', cells: {B: {n: 1, f: false, p: 0, b: '5'}}};
+assert.strictEqual(ctx.liveRowHtml(problems, row),
+  '<tr data-team="2"><th scope="row">3</th><td>7</td><td>N<br/><small>S, C</small></td>' +
+  '<td class="text-center points-cell text-muted">—</td>' +
+  '<td class="text-center points-cell">5<br/><small class="text-muted">из 20</small></td>' +
+  '<td class="text-center"><strong>5</strong></td></tr>');
+// Places in a row event are numbers, null for a team that is not rated.
+assert.strictEqual(ctx.liveRankText(null), '');
 assert.strictEqual(ctx.liveRankText(4), '4');
 
 // Flash: a changed cell flashes by what it became, an unchanged one not at all; the row when it moved.
-const cell = (cls, t) => `<span class="${cls}">${t}</span>`;
+const td = (cls, h) => `<td class="text-center points-cell${cls}">${h}</td>`;
 const plan = ctx.liveFlashPlan(
-  ['', cell('text-warning', '?2'), cell('text-muted', '-1'), cell('text-success', '+')],
-  [cell('text-muted', '-1'), cell('text-success', '+1'), cell('text-muted', '-1'), ''], true);
-assert.deepStrictEqual(Array.from(plan.cells), ['fail', 'ok', null, null]);
+  [td(' text-muted', '—'), td('', '3<br/><small class="text-muted">из 10</small>'), td(' text-muted', '—')],
+  [td(' text-muted', '—<br/><span class="text-warning">?1</span>'), td(' full-score', '10<br/><small class="text-muted">из 10</small>'), td(' text-muted', '—')], true);
+assert.deepStrictEqual(Array.from(plan.cells), ['pend', 'ok', null]);
 assert.strictEqual(plan.row, true);
 assert.strictEqual(ctx.liveFlashPlan(['a'], ['a'], false).row, false);
 

@@ -31,7 +31,7 @@ class StatusActorModel (dbConfig: DatabaseConfig[JdbcProfile], system: ActorSyst
 
   /**
     * The round-change hooks of the notification listener, besides the status actor (which feeds its round clock) and
-    * the team state actor it tells itself: the problems and the live monitor.
+    * the team state actor it tells itself: the problems, and the live hooks (the live monitor, the public board cache).
     */
   def contestChanged(c: Contest): Unit = {
     problemStateActor ! StatusActor.ContestChanged(c)
@@ -42,6 +42,12 @@ class StatusActorModel (dbConfig: DatabaseConfig[JdbcProfile], system: ActorSyst
   def contestRemoved(roundId: Int): Unit = {
     problemStateActor ! StatusActor.ContestRemoved(roundId)
     scala.util.Try(liveHooks.contestRemoved(roundId))
+    ()
+  }
+
+  /** The listener's hook for every TeamsChanged it sends the team state actor: the live monitor and the public board cache. */
+  def teamsChanged(roundId: Int): Unit = {
+    scala.util.Try(liveHooks.teamsChanged(roundId))
     ()
   }
 }

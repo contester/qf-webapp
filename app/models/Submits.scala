@@ -1,6 +1,5 @@
 package models
 
-import com.google.common.math.IntMath
 
 import java.nio.charset.StandardCharsets
 import org.joda.time.DateTime
@@ -11,7 +10,6 @@ import slick.lifted.MappedTo
 import spire.math.Rational
 import spire.math.extras.{FixedPoint, FixedScale}
 
-import java.math.RoundingMode
 import scala.concurrent.{ExecutionContext, Future}
 
 case class Arrived(timestamp: DateTime, seconds: Int, afterFreeze: Boolean) {
@@ -29,51 +27,8 @@ case class Submit(submitId: SubmitId, finished: Boolean, compiled: Boolean, pass
   val failedOnFirst = taken == 1 && passed == 0
 }
 
-trait SubmitScorer[Cell] {
-  def apply(cell: Cell, submit: Submit): (Cell, Option[Score])
-}
-
-trait Score
-
-trait CellScore[Cell] {
-  def withCell(cell: Cell): CellScore[Cell]
-}
-
-trait ProblemCell {
-  def fullSolution: Boolean
-}
-
-// TODO(task17): ACMCell/ACMScorer remain for the live monitor cells and the per-submit score of the submit lists;
-// the scoreboard uses PointsCell/PointsScorer (Monitor.scala).
-object ACMCell {
-  def empty = ACMCell(0, 0, fullSolution = false)
-}
-
 object SecondsToTimeStr {
   def apply(time: Int) = "%02d:%02d".format(time / 3600, (time / 60) % 60)
-}
-
-case class ACMScore(value: Int) extends Score {
-  override def toString: String = value.toString
-}
-
-object ACMScorer extends SubmitScorer[ACMCell] {
-  def apply(cell: ACMCell, submit: Submit) =
-    if (!submit.compiled || submit.failedOnFirst || cell.fullSolution)
-      (cell, None)
-    else {
-      val result = ACMCell(cell.attempt + 1, submit.submitId.arrived.seconds, submit.success)
-      (result, if (submit.success) Some(ACMScore(result.score)) else None)
-    }
-}
-
-case class ACMCell(attempt: Int, arrivedSeconds: Int, fullSolution: Boolean) extends ProblemCell {
-  def score = if (fullSolution) (IntMath.divide(arrivedSeconds, 60, RoundingMode.FLOOR) + (attempt - 1) * 20) else 0
-
-  override def toString =
-    if (attempt == 0) ""
-    else if (fullSolution) ("+" + (if (attempt == 1) "" else (attempt - 1).toString))
-    else s"-$attempt"
 }
 
 case class ResultEntry(testingID: Long, test: Int, result: Int, time: TimeMs, memory: Memory, info: Long, testerExitCode: Long,
@@ -91,7 +46,7 @@ case class SubmitDetails(fsub: FullyDescribedSubmit, source: Array[Byte]) {
   def sourceStr = new String(source, StandardCharsets.UTF_8)
 }
 
-case class FullyDescribedSubmit(submit: Submit, index: Int, score: Option[Score], result: SubmitResult,
+case class FullyDescribedSubmit(submit: Submit, index: Int, result: SubmitResult,
                                 stats: SubmitStats, details: Seq[ResultEntry])
 
 sealed trait SubmitError
@@ -131,8 +86,6 @@ object Submits {
   import org.stingray.contester.dbmodel.SlickModel
   import org.stingray.contester.dbmodel.SlickModel.UpliftedSubmit
 
-  case class ScoredSubmit[Sc](submit: Submit, score: Score, index: Int)
-
   def groupByTP(submits: Seq[Submit]) =
     submits.groupBy(x => (x.submitId.teamId, x.submitId.problem.id))
       .mapValues(_.sortBy(_.submitId.arrived.seconds))
@@ -144,21 +97,6 @@ object Submits {
     groupByTP(submits)
       .mapValues(indexGrouped)
       .values.flatten.toSeq
-
-  def scoreGrouped[Cell](submits: Seq[Submit], empty: Cell, scorer: SubmitScorer[Cell]): (Cell, Seq[(Submit, Option[Score])]) =
-    submits.foldLeft((empty, Seq[(Submit, Option[Score])]())) {
-      case (state, submit) =>
-        val next = scorer(state._1, submit)
-        (next._1, state._2 :+ ((submit, next._2)))
-    }
-
-  def indexAndScoreGrouped[Cell](submits: Seq[Submit], empty: Cell, scorer: SubmitScorer[Cell]) = {
-    val scored = scoreGrouped(submits, empty, scorer)
-    val indexed = indexGrouped(scored._2).map {
-      case ((submit, score), index) => (submit, score, index)
-    }
-    scored._1 -> indexed
-  }
 
   def upliftSub(s: UpliftedSubmit): Submit =
     Submit(
@@ -195,15 +133,14 @@ object Submits {
     }.getOrElse(SubmitStats(TimeMs(0), Memory(0)))
 
   private[this] def annotateGrouped(db: JdbcBackend#DatabaseDef, submits: Seq[Submit])(implicit ec: ExecutionContext) = {
-    val scored = scoreGrouped(submits, ACMCell.empty, ACMScorer)
-    val indexed = indexGrouped(scored._2)
+    val indexed = indexGrouped(submits)
 
     Future.sequence(
       indexed.map {
-        case ((submit, optScore), index) =>
+        case (submit, index) =>
           SubmitResult.annotate(db, submit).map {
             case (submitResult, submitDetails, submitStats) =>
-              FullyDescribedSubmit(submit, index, optScore, submitResult, submitStats, submitDetails)
+              FullyDescribedSubmit(submit, index, submitResult, submitStats, submitDetails)
           }
       })
   }
@@ -220,11 +157,10 @@ object Submits {
     */
   def describeAttempts(attempts: Seq[Submit], resultsByTesting: Map[Long, Seq[ResultEntry]]): Seq[FullyDescribedSubmit] = {
     val submits = attempts.sortBy(_.submitId.arrived.seconds)
-    val scored = scoreGrouped(submits, ACMCell.empty, ACMScorer)._2
-    indexGrouped(scored).map {
-      case ((submit, optScore), index) =>
+    indexGrouped(submits).map {
+      case (submit, index) =>
         val details = submit.testingId.flatMap(t => resultsByTesting.get(t.toLong)).getOrElse(Nil)
-        FullyDescribedSubmit(submit, index, optScore, SubmitResult.annotate2(submit),
+        FullyDescribedSubmit(submit, index, SubmitResult.annotate2(submit),
           getTestingStats(details), details)
     }
   }

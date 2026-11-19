@@ -4,10 +4,7 @@ import org.joda.time.DateTime
 import org.scalatest.funsuite.AnyFunSuite
 import org.stingray.contester.dbmodel.{Memory, TimeMs}
 
-/**
-  * A team's attempts on a problem are scored in arrival order, so rejudging an earlier attempt changes the score of
-  * the later ones. The live submit table gets all of them re-rendered after each finished testing.
-  */
+/** A team's attempts on a problem, numbered in arrival order; each row shows the attempt's own verdict and points. */
 class DescribeAttemptsSpec extends AnyFunSuite {
   private val t0 = new DateTime(2026, 11, 5, 10, 0)
 
@@ -24,26 +21,22 @@ class DescribeAttemptsSpec extends AnyFunSuite {
   private def accepted(testing: Int) =
     testing.toLong -> Seq(ResultEntry(testing, 1, 10, TimeMs(40), Memory(4096), 0, 0))
 
-  private def row(fs: FullyDescribedSubmit, plus: String = "+") = views.html.singlesubmit(fs, plus).body
+  private def row(fs: FullyDescribedSubmit) = views.html.singlesubmit(fs).body
 
   private val results = Map(wrongAnswer(1), wrongAnswer(2), accepted(3))
 
-  test("a late accepted attempt is scored after the failures before it") {
+  test("attempts are numbered in arrival order and each shows its own points, with no ACM score") {
     val rows = Submits.describeAttempts(Seq(attempt(11, 600, 3, testing = 1), attempt(12, 1200, 3, testing = 2), attempt(13, 1800, 5, testing = 3)), results)
     assert(rows.map(_.index) == Seq(1, 2, 3))
-    assert(rows.map(_.score.map(_.toString)) == Seq(None, None, Some("70")))
     assert(rows.map(_.result.message) == Seq("3 из 10", "3 из 10", "10 из 10"))
-    assert(row(rows(2)).contains("+70") && row(rows(2)).contains("class=\"success\""))
+    assert(row(rows(2)).contains("class=\"success\"") && !row(rows(2)).contains("+70") && !row(rows(2)).contains("score-"))
   }
 
-  test("rejudging the first attempt to accepted takes the score away from the later ones") {
+  test("rejudging the first attempt changes only that attempt's row") {
     val rejudged = Map(accepted(4), wrongAnswer(2), accepted(3))
     val rows = Submits.describeAttempts(Seq(attempt(11, 600, 5, testing = 4), attempt(12, 1200, 3, testing = 2), attempt(13, 1800, 5, testing = 3)), rejudged)
-    assert(rows.map(_.index) == Seq(1, 2, 3))
-    assert(rows.map(_.score.map(_.toString)) == Seq(Some("10"), None, None))
-    // the last attempt is accepted but no longer scores: its rendered row must change, not only the first one's
-    assert(!row(rows(2)).contains("+70") && !row(rows(2)).contains("+10"))
-    assert(row(rows.head).contains("+10"))
+    assert(rows.map(_.result.message) == Seq("10 из 10", "3 из 10", "10 из 10"))
+    assert(row(rows(2)) == row(Submits.describeAttempts(Seq(attempt(13, 1800, 5, testing = 3)), results).head.copy(index = 3)))
   }
 
   test("attempts are taken in arrival order whatever order they are given") {

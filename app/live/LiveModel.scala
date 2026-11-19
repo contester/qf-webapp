@@ -1,21 +1,28 @@
 package live
 
-import models.{ACMCell, ACMScorer, Arrived, RatedProblem, Submit, SubmitId}
+import models.{Arrived, PointsCell, RatedProblem, Submit, SubmitId}
 import org.joda.time.DateTime
-import org.stingray.contester.dbmodel.Contest
 
+/** Where a submit stands: in flight (`Pending`), or finished with its current testing's points (None: no points). */
 sealed trait SubmitState
 case object Pending extends SubmitState
-case class Done(compiled: Boolean, passed: Int, taken: Int) extends SubmitState
+case class Done(compiled: Boolean, points: Option[Double]) extends SubmitState
 
 case class SubmitRec(id: Int, team: Int, problem: String, arrivedAt: DateTime, arrivedSeconds: Int, state: SubmitState) {
-  private[live] def toSubmit: Submit = {
-    val (finished, compiled, passed, taken) = state match {
-      case Done(c, p, t) => (true, c, p, t)
-      case Pending => (false, false, 0, 0)
+  /** The submit as the board's PointsScorer sees it (for comparing the live cells with the static board). */
+  def toSubmit: Submit = {
+    val (finished, compiled, points) = state match {
+      case Done(c, p) => (true, c, p)
+      case Pending => (false, false, None)
     }
     Submit(SubmitId(id, Arrived(arrivedAt, arrivedSeconds, afterFreeze = false), team, 0, RatedProblem(problem, 0), ""),
-      finished, compiled, passed, taken, None)
+      finished, compiled, 0, 0, None, points)
+  }
+
+  /** In flight: not finished yet, or finished and compiled without points (a rejudge reset, a testing being redone). */
+  def inFlight: Boolean = state match {
+    case Pending => true
+    case Done(compiled, points) => compiled && points.isEmpty
   }
 }
 
@@ -23,68 +30,35 @@ object SubmitRec {
   def fromSubmit(s: Submit): SubmitRec =
     SubmitRec(s.submitId.id, s.submitId.teamId, s.submitId.problem.id, s.submitId.arrived.timestamp,
       s.submitId.arrived.seconds,
-      if (s.finished) Done(s.compiled, s.passed, s.taken) else Pending)
+      if (s.finished) Done(s.compiled, s.points) else Pending)
 }
 
-sealed trait BoardKind
-case object Freezing extends BoardKind
-case object Real extends BoardKind
-
-case class FreezeRules(freezeTime: DateTime, endTime: DateTime, exposeTime: DateTime) {
-  def hides(arrivedAt: DateTime, now: DateTime): Boolean =
-    freezeTime.isBefore(endTime) && arrivedAt.isAfter(freezeTime) && now.isBefore(exposeTime)
-}
-
-object FreezeRules {
-  def of(c: Contest): FreezeRules = FreezeRules(c.freezeTime, c.endTime, c.exposeTime)
-}
-
-sealed trait LiveCell {
-  def solved: Boolean
-  def text: String
+/**
+  * One team's cell of the live board: the points board's cell (`best`, `attempts`, `full`, the same rules as
+  * PointsScorer) plus `pending`, the number of the team's submits for the problem that are in flight (shown as a
+  * marker, never as the best), and `fullAt`, the seconds from the start of the earliest submit that reached the
+  * maximum (for palevo's first-solve announcements).
+  */
+case class LiveCell(best: Option[Double], attempts: Int, full: Boolean, pending: Int, fullAt: Option[Int]) {
+  def points: PointsCell = PointsCell(best, attempts, full)
+  def isEmpty: Boolean = attempts == 0
 }
 
 object LiveCell {
-  case object Empty extends LiveCell {
-    val solved = false
-    val text = ""
-  }
-  case class Failed(attempts: Int) extends LiveCell {
-    val solved = false
-    def text: String = ACMCell(attempts, 0, fullSolution = false).toString
-  }
-  case class Solved(attempts: Int, seconds: Int) extends LiveCell {
-    val solved = true
-    def text: String = ACMCell(attempts, seconds, fullSolution = true).toString
-  }
-  /** `queued` = submits from the first unresolved one onward that the board may not judge (1 unless frozen). */
-  case class Pending(failures: Int, queued: Int = 1) extends LiveCell {
-    val solved = false
-    def text: String = s"?${failures + queued}"   // the attempts so far: ?1 for the first, ?2 after one failure
-  }
+  val Empty: LiveCell = LiveCell(None, 0, full = false, 0, None)
 }
 
 object LiveCells {
-  import LiveCell._
-
-  def cellOf(recs: Seq[SubmitRec], kind: BoardKind, rules: FreezeRules, now: DateTime): LiveCell = {
-    val sorted = recs.sortBy(r => (r.arrivedAt.getMillis, r.id))
-    var cell = ACMCell.empty
-    val it = sorted.iterator
-    var idx = 0
-    while (it.hasNext && !cell.fullSolution) {
-      val r = it.next()
-      if (r.state == live.Pending || (kind == Freezing && rules.hides(r.arrivedAt, now))) {
-        // frozen board: each hidden submit counts as a try whatever its verdict (the first one is r itself if it is
-        // hidden, else r is a pending pre-freeze submit and counts as one more); no freeze active gives 1, as on the real board
-        val hidden = if (kind == Freezing) sorted.drop(idx).count(x => rules.hides(x.arrivedAt, now)) else 0
-        return LiveCell.Pending(cell.attempt, if (hidden > 0 && rules.hides(r.arrivedAt, now)) hidden else hidden + 1)
-      }
-      idx += 1
-      cell = ACMScorer(cell, r.toSubmit)._1
+  def cellOf(recs: Seq[SubmitRec], maxPoints: Double): LiveCell =
+    if (recs.isEmpty) LiveCell.Empty
+    else {
+      val scored = recs.flatMap(r => r.state match {
+        case Done(true, Some(p)) => Some(r -> p)
+        case _ => None
+      })
+      val best = if (scored.isEmpty) None else Some(scored.map(_._2).max)
+      val full = maxPoints > 0 && best.contains(maxPoints)
+      val fullAt = if (full) Some(scored.filter(_._2 == maxPoints).map(_._1.arrivedSeconds).min) else None
+      LiveCell(best, recs.size, full, recs.count(_.inFlight), fullAt)
     }
-    if (cell.attempt == 0) Empty
-    else if (cell.fullSolution) Solved(cell.attempt, cell.arrivedSeconds)
-    else Failed(cell.attempt)
-  }
 }

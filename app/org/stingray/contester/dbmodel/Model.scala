@@ -46,7 +46,8 @@ case class Contest(id: Int, name: String, startTime: DateTime, endTime: DateTime
     val now = DateTime.now
     freezeTime.isBefore(endTime) && now >= freezeTime && now < exposeTime
   }
-  def finished = DateTime.now >= endTime
+  /** The round is over: finished early, or its end has come. */
+  def finished = isFinished || DateTime.now >= endTime
   def started = DateTime.now >= startTime
   def running = started && !finished
 

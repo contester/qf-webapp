@@ -33,8 +33,6 @@ class Application (cc: ControllerComponents,
                             statusActorModel: StatusActorModel,
                             configuration: Configuration,
                             liveHooks: live.LiveHooks,
-                            liveConfig: live.LiveMonitorConfig,
-                            liveMonitor: live.LiveMonitorRef,
                             stats: live.ConnectionStats,
                             ws: WSClient) extends AbstractController(cc) with I18nSupport with Logging {
 
@@ -63,13 +61,6 @@ class Application (cc: ControllerComponents,
         case Right(contest) => monitorModel.source.board(contest.id).map(b => Ok(html.loggedinmonitor(contest, b, team)))
       }
     }
-  }
-
-  // The team's live stream: the freezing board with the team's own row overlay.
-  // TODO(task17): enforce Visibility (or drop the contestant stream: contestants have no live board).
-  def monitorEvents = silhouette.SecuredAction.async { implicit request =>
-    LiveStreams.stream(liveMonitor.ref.filter(_ => liveConfig.enabled),
-      actors.LiveMonitorActor.JoinTeam(request.identity.contest.id, request.identity.team.id), stats)
   }
 
   private[this] def getSubmits(team: LoggedInTeam) = {

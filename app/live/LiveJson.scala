@@ -1,55 +1,43 @@
 package live
 
-import models.SecondsToTimeStr
+import models.TestRows.formatPoints
 import play.api.libs.EventSource.Event
-import play.api.libs.json.{JsObject, JsValue, Json}
+import play.api.libs.json.{JsNull, JsObject, JsValue, Json}
 
+/**
+  * The admin live monitor's JSON. A cell: `b` the best points as shown (absent: none), `n` the attempts, `f` the
+  * cell is at the problem's maximum, `p` how many submits are in flight. A place is a number, or null for a team that
+  * is not rated.
+  */
 object LiveJson {
-  private def cell(c: LiveCell): JsObject = c match {
-    case LiveCell.Solved(_, seconds) => Json.obj("t" -> "ok", "s" -> c.text, "at" -> SecondsToTimeStr(seconds))
-    case LiveCell.Failed(_) => Json.obj("t" -> "fail", "s" -> c.text)
-    case LiveCell.Pending(_, _) => Json.obj("t" -> "pend", "s" -> c.text)
-    case LiveCell.Empty => Json.obj("t" -> "empty", "s" -> "")
-  }
+  def cell(c: LiveCell): JsObject =
+    Json.obj("n" -> c.attempts, "f" -> c.full, "p" -> c.pending) ++
+      c.best.fold(Json.obj())(b => Json.obj("b" -> formatPoints(b)))
 
-  private def cellsObj(keys: Seq[String], cells: Map[String, LiveCell]): JsObject =
-    JsObject(keys.map(p => p -> cell(cells.getOrElse(p, LiveCell.Empty))))
+  private def place(p: Option[Int]): JsValue = p.fold[JsValue](JsNull)(Json.toJson(_))
 
-  private def rowObj(r: LiveRow, cells: Map[String, LiveCell], keys: Seq[String]): JsObject =
+  private def rowObj(r: LiveRow): JsObject =
     Json.obj(
       "team" -> r.team.id,
-      "school" -> r.team.schoolFullNameWithNum,
-      "name" -> r.team.teamName,
-      "rank" -> (if (r.team.disqualified) "DSQ" else if (r.rank == 0) "*" else r.rank.toString),
-      "solved" -> r.score.solved,
-      "penalty" -> r.score.penalty,
-      "cells" -> cellsObj(keys, cells))
+      "number" -> r.team.number,
+      "name" -> r.team.name,
+      "school" -> r.team.schoolWithCity,
+      "place" -> place(r.place),
+      "total" -> formatPoints(r.total),
+      "cells" -> JsObject(r.cells.toSeq.sortBy(_._1).map { case (p, c) => p -> cell(c) }))
 
-  private def counts(m: Map[String, Int]): JsObject = JsObject(m.toSeq.map { case (k, v) => k -> Json.toJson(v) })
-
-  def board(b: LiveBoard, own: Option[(Int, Map[String, LiveCell])] = None): JsValue =
+  def board(b: LiveBoard): JsValue =
     Json.obj(
-      "problems" -> b.problems,
-      "solved" -> counts(b.solvedCounts),
-      "rows" -> b.rows.map { r =>
-        val cs = own.collect { case (id, c) if id == r.team.id => c }.getOrElse(r.cells)
-        rowObj(r, cs, b.problems)
-      })
+      "problems" -> b.problems.map(p => Json.obj("id" -> p.id, "name" -> p.name, "max" -> formatPoints(p.maxPoints))),
+      "rows" -> b.rows.map(rowObj))
 
-  def row(c: RowChange, own: Option[Map[String, LiveCell]] = None): JsValue = {
-    val cs = own.getOrElse(c.row.cells)
-    val keys = (c.row.cells.keys ++ cs.keys).toSeq.distinct.sorted
+  def row(c: RowChange): JsValue =
     Json.obj(
       "team" -> c.team,
       "pos" -> c.position,
-      "row" -> rowObj(c.row, cs, keys),
+      "row" -> rowObj(c.row),
       "rankFrom" -> c.rankFrom,
-      "ranks" -> c.ranks,
-      "solved" -> counts(c.solved))
-  }
-
-  def cells(team: Int, cells: Map[String, LiveCell]): JsValue =
-    Json.obj("team" -> team, "cells" -> cellsObj(cells.keys.toSeq.sorted, cells))
+      "ranks" -> c.ranks.map(place))
 
   def event(name: String, js: JsValue): Event = Event(Json.stringify(js), None, Some(name))
 }

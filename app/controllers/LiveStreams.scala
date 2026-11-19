@@ -12,7 +12,7 @@ import play.api.mvc.{Result, Results}
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 
-/** Joins a live monitor stream and turns it into an SSE response; shared by the team, admin and public routes. */
+/** Joins a live monitor stream and turns it into an SSE response; for the admin routes only. */
 object LiveStreams extends Results {
   private val askTimeout = 3.seconds
   private val snapshotTimeout = 1.second
@@ -41,32 +41,23 @@ object LiveStreams extends Results {
   /** The page is a snapshot of a moving board; nothing may cache it. */
   val pageHeaders: Seq[(String, String)] = Seq(HeaderNames.CACHE_CONTROL -> "no-store")
 
-  /** Only an account that can see everything gets the real board; every other admin gets the freezing one. */
-  def adminJoin(contestId: Int, canSeeAll: Boolean): actors.LiveMonitorActor.JoinAdmin =
-    actors.LiveMonitorActor.JoinAdmin(contestId, real = canSeeAll)
+  /** The admin live board of a round (admins only: nobody else gets a live board). */
+  def adminJoin(contestId: Int): actors.LiveMonitorActor.JoinAdmin = actors.LiveMonitorActor.JoinAdmin(contestId)
 
   /** The rows of the admin status page: an account that cannot see everything gets none of the submits after the freeze. */
   def adminStatusJoin(contestId: Int, canSeeAll: Boolean): actors.LiveMonitorActor.JoinAdminStatus =
     actors.LiveMonitorActor.JoinAdminStatus(contestId, real = canSeeAll)
-
-  /** The public board of a contest whether or not it is public: only for routes behind an admin session. */
-  def publicPreviewJoin(contestId: Int): actors.LiveMonitorActor.JoinPublicPreview =
-    actors.LiveMonitorActor.JoinPublicPreview(contestId)
 
   def response(source: Source[Event, _]): Result =
     Ok.chunked(source).as(ContentTypes.EVENT_STREAM).withHeaders(streamHeaders: _*)
 
   /** The kind of feed and the contest a join is counted under on the contester page. */
   def feedOf(j: actors.LiveMonitorActor.Join): (FeedKind, Int) = j match {
-    case actors.LiveMonitorActor.JoinPublic(c) => (FeedKind.PublicMonitor, c)
-    case actors.LiveMonitorActor.JoinPublicPreview(c) => (FeedKind.PublicPreview, c)
-    case actors.LiveMonitorActor.JoinTeam(c, _) => (FeedKind.TeamMonitor, c)
-    case actors.LiveMonitorActor.JoinAdmin(c, real) =>
-      (if (real) FeedKind.AdminMonitorUnrestricted else FeedKind.AdminMonitorRestricted, c)
+    case actors.LiveMonitorActor.JoinAdmin(c) => (FeedKind.AdminMonitor, c)
     case actors.LiveMonitorActor.JoinAdminStatus(c, _) => (FeedKind.StatusRows, c)
   }
 
-  /** The whole route body for the team and admin streams, counted in `stats`; 404 when the live monitor is disabled. */
+  /** The whole route body for the admin streams, counted in `stats`; 404 without a live monitor. */
   def stream(ref: Option[ActorRef], msg: actors.LiveMonitorActor.Join, stats: ConnectionStats)(implicit ec: ExecutionContext): Future[Result] =
     ref match {
       case None => Future.successful(NotFound)

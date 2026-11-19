@@ -1,7 +1,7 @@
 package models
 
 import models.ContesterResults.FinishedTesting
-import models.Submits.{indexGrouped, scoreGrouped}
+import models.Submits.indexGrouped
 import org.stingray.contester.dbmodel.{Memory, TimeMs}
 import play.api.{Logger, Logging}
 import play.api.i18n.Messages

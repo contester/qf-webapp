@@ -181,19 +181,16 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
     }
 
   /**
-    * The result of a finished testing together with the rendered rows of this attempt and the later ones on that
-    * problem: a rejudge of an earlier attempt changes the score of the later ones. If the rows cannot be
-    * built, or the database does not show this testing yet, the result alone is sent.
+    * The result of a finished testing together with the rendered row of this attempt. If the row cannot be built, or
+    * the database does not show this testing yet, the result alone is sent.
     */
   private def annotateFinished(finished: FinishedTesting): Future[(AnnoSubmit, Seq[SubmitRow])] = {
     val sub = finished.submit
-    val plus = "+"
     Submits.teamProblemSubmits(db, sub.contest, sub.team, sub.problem).flatMap { described =>
       described.find(_.submit.submitId.id == sub.id).filter(_.submit.testingId.contains(finished.testingId)) match {
         case Some(mine) =>
-          // Scoring runs forward, so only this attempt and the later ones can have changed.
-          val rows = described.filter(_.index >= mine.index)
-            .map(d => SubmitRow(d.submit.submitId.id, views.html.singlesubmit(d, plus).body))
+          // Only this attempt's row changed: there is no per-attempt score that depends on the earlier ones.
+          val rows = Seq(SubmitRow(mine.submit.submitId.id, views.html.singlesubmit(mine).body))
           if (mine.details.isEmpty && finished.compiled && !mine.result.success)
             SubmitResult.annotateFinished2(db, finished).map(_ -> rows)
           else
@@ -422,7 +419,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
       }
 
       // Fire-and-forget; the hooks never throw, the Try is a second guard so the ack below is always sent.
-      Try(liveHooks.finished(finished.submit.contest, finished.submit.id, finished.compiled, finished.passed, finished.taken))
+      Try(liveHooks.finished(finished.submit.contest, finished.submit.id, finished.compiled, finished.points))
 
       sender() ! {}
     }

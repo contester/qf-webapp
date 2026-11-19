@@ -3,7 +3,6 @@
 @import helper.Implicits._
 @import b3.vertical.fieldConstructor
 
-@plus = @{"+"}
 
 
 @main(loggedIn, tab = "index") {
@@ -19,13 +18,12 @@
         <table id="submits" class="table table-hover table-bordered table-responsive">
             <thead>
             <tr><th>ID</th><th>@messages("label.time")</th><th>@messages("label.problem")</th><th>@messages("label.attempt")</th><th>@messages("label.language")</th><th>@messages("label.verdict")</th>
-                <th>@messages("label.penalty")</th>
                 <th>@messages("label.elapsedTime"), ms</th>
             <th>@messages("label.memory"), KB</th></tr>
             </thead>
             <tbody>
             @for(s <- subs) {
-            @singlesubmit(s, plus)
+            @singlesubmit(s)
             }
             </tbody>
         </table>

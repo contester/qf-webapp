@@ -1,130 +1,90 @@
 package live
 
-import models.{ACM, Foo}
-import org.joda.time.DateTime
+import models.{Board, ProblemColumn, TeamRow}
 import org.scalatest.funsuite.AnyFunSuite
-import org.stingray.contester.dbmodel.{NotRated, Problem, Team}
+import org.stingray.contester.dbmodel.{Disqualified, NotRated, Team}
 
+/** The live board ranks by Board.rank and reports a change of one row as a row with the places that moved. */
 class LiveBoardSpec extends AnyFunSuite {
-  import LiveCell._
-
-  private val t0 = new DateTime(2026, 11, 1, 12, 0)
-  private val rules = FreezeRules(t0.plusHours(4), t0.plusHours(5), t0.plusHours(6))
-  private val problems = Seq("A", "B", "C")
+  private val problems = Seq(ProblemColumn("A", "a", 10), ProblemColumn("B", "b", 20))
 
   private def team(id: Int, notRated: Boolean = false): Team =
-    Team(id, 0, "", f"School$id%02d", "City", (if (notRated) Some(NotRated) else None))
+    Team(id, id, s"T$id", f"School$id%02d", "City", if (notRated) Some(NotRated) else None)
 
-  private def solved(sec: Int, attempts: Int = 1): LiveCell = Solved(attempts, sec)
+  private def c(p: Double, max: Double = 10): LiveCell = LiveCell(Some(p), 1, full = p == max, 0, None)
 
-  private def rec(id: Int, t: Int, p: String, sec: Int, passed: Int): SubmitRec =
-    SubmitRec(id, t, p, t0.plusSeconds(sec), sec, Done(compiled = true, passed = passed, taken = 10))
+  private def board(rows: (Team, Map[String, LiveCell])*): LiveBoard = LiveBoard.of(problems, rows)
 
-  private def board(rows: (Int, Map[String, LiveCell])*): LiveBoard =
-    LiveBoard.build(problems, rows.map(r => team(r._1)), rows.map(r => r._1 -> r._2).toMap)
+  test("build ranks exactly as Board.rank: shared places 1, 1, 3, not rated last without a place, disqualified out") {
+    val ts = Seq(team(1), team(2), team(3), team(4, notRated = true), team(5).copy(unrated = Some(Disqualified)))
+    val cells = Map(1 -> Map("A" -> c(10)), 2 -> Map("B" -> c(10, 20)), 3 -> Map("A" -> c(5)), 4 -> Map("A" -> c(10), "B" -> c(20, 20)),
+      5 -> Map("B" -> c(20, 20)))
+    val b = LiveBoard.build(problems, ts, cells)
+    assert(b.rows.map(r => (r.team.id, r.place, r.total)) ==
+      Seq((1, Some(1), 10.0), (2, Some(1), 10.0), (3, Some(3), 5.0), (4, None, 30.0)))
+    val expected = Board.rank(ts.map(t => TeamRow(t, problems.map(p => cells.getOrElse(t.id, Map.empty[String, LiveCell]).getOrElse(p.id, LiveCell.Empty).points))))
+    assert(b.rows.map(r => (r.place, r.team, r.total)) == expected.map(r => (r.place, r.team, r.total)))
+  }
 
-  test("build equals ACM.calculateStatus for submit sets without pending cells") {
-    val teams = Seq(team(1), team(2), team(3, notRated = true), team(4), team(5), team(6))
-    val sets = Seq(
-      Seq(rec(1, 1, "A", 600, 10), rec(2, 2, "A", 600, 10), rec(3, 3, "A", 100, 10), rec(4, 4, "B", 1200, 10)),
-      Seq(rec(1, 1, "A", 100, 3), rec(2, 1, "A", 700, 10), rec(3, 2, "A", 600, 10), rec(4, 2, "B", 650, 10),
-        rec(5, 4, "C", 3000, 10), rec(6, 5, "C", 3000, 10), rec(7, 6, "A", 50, 1)),
-      Seq(),
-      Seq(rec(1, 3, "A", 10, 10), rec(2, 1, "B", 10, 10), rec(3, 2, "B", 10, 10), rec(4, 5, "A", 60, 10), rec(5, 5, "A", 70, 10)))
-    sets.foreach { recs =>
-      val expected = ACM.calculateStatus(problems.map(Problem(1, _, "", 10)), teams, recs.map(_.toSubmit))
-      val cells = recs.groupBy(_.team).map { case (tid, rs) =>
-        tid -> rs.groupBy(_.problem).map { case (p, ps) => p -> LiveCells.cellOf(ps, Real, rules, t0) }
-      }
-      val got = LiveBoard.build(problems, teams, cells)
-      assert(got.rows.map(r => (r.team.id, r.rank, r.score)) ==
-        expected.rows.map(r => (r.team.id, r.rank, r.score)))
+  test("empty cells are not stored") {
+    val b = board(team(1) -> Map("A" -> LiveCell.Empty, "B" -> c(3, 20)))
+    assert(b.rowOf(1).get.cells.keySet == Set("B"))
+  }
+
+  test("update moving a team up reports the new position and the places that moved") {
+    val b = board(team(1) -> Map("A" -> c(10)), team(2) -> Map("A" -> c(5)), team(3) -> Map.empty)
+    val (nb, out) = b.update(team(3), Map("A" -> c(10), "B" -> c(5, 20)))
+    assert(nb.rows.map(_.team.id) == Seq(3, 1, 2))
+    out match {
+      case Some(RowOut(ch)) =>
+        assert(ch.team == 3 && ch.position == 0 && ch.rankFrom == 0 && ch.ranks == Seq(Some(1), Some(2), Some(3)))
+        assert(ch.row.total == 15.0)
+      case other => fail(other.toString)
     }
   }
 
-  test("ties share rank and next rank skips") {
-    val b = board(1 -> Map("A" -> solved(600)), 2 -> Map("A" -> solved(600)), 3 -> Map("A" -> solved(1200)))
-    assert(b.rows.map(r => (r.team.id, r.rank)) == Seq((1, 1), (2, 1), (3, 3)))
+  test("update that changes a cell but not the order yields a one-element range") {
+    val b = board(team(1) -> Map("A" -> c(10)), team(2) -> Map("A" -> c(5)))
+    val (_, out) = b.update(team(1), Map("A" -> c(10), "B" -> LiveCell(None, 1, full = false, 1, None)))
+    out match {
+      case Some(RowOut(ch)) => assert(ch.position == 0 && ch.rankFrom == 0 && ch.ranks == Seq(Some(1)))
+      case other => fail(other.toString)
+    }
   }
 
-  test("not rated team has rank 0 and sorts after rated with equal score") {
-    val teams = Seq(team(1, notRated = true), team(2), team(3))
-    val c = Map("A" -> solved(600))
-    val b = LiveBoard.build(problems, teams, Map(1 -> c, 2 -> c, 3 -> c))
-    assert(b.rows.map(r => (r.team.id, r.rank)) == Seq((2, 1), (3, 1), (1, 0)))
+  test("update with unchanged cells and team yields None") {
+    val b = board(team(1) -> Map("A" -> c(10)))
+    assert(b.update(team(1), Map("A" -> c(10))) == ((b, None)))
   }
 
-  test("pending cells add nothing to the score") {
-    assert(LiveBoard.scoreOf(Seq(Pending(2), Failed(3), Empty)) == ACM.Score(0, 0, 0))
-    assert(LiveBoard.scoreOf(Seq(Pending(0), solved(125, 3), solved(60))) == ACM.Score(2, 2 + 40 + 1, 42))
+  test("a tie that forms shares the place: the row and the places around it") {
+    val b = board(team(1) -> Map("A" -> c(10)), team(2) -> Map("A" -> c(5)))
+    val (nb, out) = b.update(team(2), Map("A" -> c(10)))
+    assert(nb.rows.map(_.place) == Seq(Some(1), Some(1)))
+    out match {
+      case Some(RowOut(ch)) => assert(ch.position == 1 && ch.ranks == Seq(Some(1)) && ch.rankFrom == 1)
+      case other => fail(other.toString)
+    }
   }
 
-  private def five = board(
-    1 -> Map("A" -> solved(100), "B" -> solved(100)),
-    2 -> Map("A" -> solved(200), "B" -> solved(200)),
-    3 -> Map("A" -> solved(300)),
-    4 -> Map("A" -> solved(400)),
-    5 -> Map())
-
-  test("update moving a team up reports the affected range and new ranks") {
-    val b = five
-    assert(b.rows.map(_.team.id) == Seq(1, 2, 3, 4, 5))
-    val (nb, ch) = b.update(team(4), Map("A" -> solved(10), "B" -> solved(10), "C" -> solved(10)))
-    val c = ch.get
-    assert(c.team == 4 && c.position == 0 && c.rankFrom == 0)
-    assert(nb.rows.map(_.team.id) == Seq(4, 1, 2, 3, 5))
-    assert(c.ranks == nb.rows.slice(0, 4).map(_.rank))
-    assert(c.ranks == Seq(1, 2, 3, 4))
-    assert(c.row == nb.rows.head)
-    assert(nb.rows(4) == b.rows(4))
-    assert(nb.rowOf(4).contains(c.row))
+  test("a team that becomes not rated drops to the tail without a place; the next rated team takes place 1") {
+    val b = board(team(1) -> Map("A" -> c(10)), team(2) -> Map("A" -> c(5)))
+    val (nb, out) = b.update(team(1, notRated = true), Map("A" -> c(10)))
+    assert(nb.rows.map(r => (r.team.id, r.place)) == Seq((2, Some(1)), (1, None)))
+    out match {
+      case Some(RowOut(ch)) => assert(ch.position == 1 && ch.rankFrom == 0 && ch.ranks == Seq(Some(1), None))
+      case other => fail(other.toString)
+    }
   }
 
-  test("update that changes a cell but not score or order yields a one-element range") {
-    val b = five
-    val (nb, ch) = b.update(team(5), Map("A" -> Failed(2)))
-    val c = ch.get
-    assert(c.position == 4 && c.rankFrom == 4 && c.ranks == Seq(5))
-    assert(nb.rowOf(5).get.cells == Map("A" -> Failed(2)))
-    assert(nb.rows.map(_.team.id) == b.rows.map(_.team.id))
-  }
-
-  test("update with unchanged cells yields None") {
-    val b = five
-    val (nb, ch) = b.update(team(1), Map("A" -> solved(100), "B" -> solved(100)))
-    assert(ch.isEmpty && nb == b)
-  }
-
-  test("solved in the change contains only counts that moved") {
-    val b = five
-    assert(b.solvedCounts == Map("A" -> 4, "B" -> 2, "C" -> 0))
-    val (nb, ch) = b.update(team(5), Map("C" -> solved(5)))
-    assert(ch.get.solved == Map("C" -> 1))
-    assert(nb.solvedCounts == Map("A" -> 4, "B" -> 2, "C" -> 1))
-    val (_, ch2) = nb.update(team(1), Map("A" -> solved(100), "B" -> Failed(1)))
-    assert(ch2.get.solved == Map("B" -> 1))
-  }
-
-  test("not rated leaders do not take rank 1 from the first rated team") {
-    val teams = Seq(team(1, notRated = true), team(2, notRated = true), team(3), team(4), team(5))
-    val cells = Map(
-      1 -> Map("A" -> solved(100), "B" -> solved(100)), 2 -> Map("A" -> solved(100), "B" -> solved(100)),
-      3 -> Map("A" -> solved(600)), 4 -> Map("A" -> solved(600)), 5 -> Map("A" -> solved(900)))
-    val b = LiveBoard.build(problems, teams, cells)
-    assert(b.rows.map(r => (r.team.id, r.rank)) == Seq((1, 0), (2, 0), (3, 1), (4, 1), (5, 3)))
-    // The same through incremental updates.
-    val (e, _) = LiveBoard.build(problems, teams, Map.empty).update(team(3), cells(3))
-    val (e2, _) = e.update(team(1, notRated = true), cells(1))
-    assert(e2.rows.map(r => (r.team.id, r.rank)).filter(_._1 != 2).take(2) == Seq((1, 0), (3, 1)))
-  }
-
-  test("a rated team tied in score with the not rated team before it is not given rank 0") {
-    val s = Seq((team(1, notRated = true), 1), (team(2), 1), (team(3), 1), (team(4), 2))
-    assert(Foo.ranks(s) == Seq(0, 1, 1, 3))
-  }
-
-  test("Foo.ranks matches rank rule directly") {
-    val s = Seq((team(1), 1), (team(2), 1), (team(3, notRated = true), 1), (team(4), 2))
-    assert(Foo.ranks(s) == Seq(1, 1, 0, 3))
+  test("a disqualified or removed team leaves as a whole board; a new team arrives as a whole board") {
+    val b = board(team(1) -> Map("A" -> c(10)), team(2) -> Map("A" -> c(5)))
+    val (dq, outDq) = b.update(team(1).copy(unrated = Some(Disqualified)), Map("A" -> c(10)))
+    assert(dq.rows.map(_.team.id) == Seq(2) && outDq == Some(WholeOut(dq)))
+    val (rm, outRm) = b.remove(2)
+    assert(rm.rows.map(_.team.id) == Seq(1) && outRm == Some(WholeOut(rm)))
+    assert(b.remove(9) == ((b, None)))
+    val (add, outAdd) = b.update(team(3), Map.empty)
+    assert(add.rows.map(_.team.id) == Seq(1, 2, 3) && outAdd == Some(WholeOut(add)))
   }
 }

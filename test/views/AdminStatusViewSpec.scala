@@ -36,7 +36,7 @@ class AdminStatusViewSpec extends AnyFunSuite {
   private val row: AdminSubmitRow = {
     val s = Submit(SubmitId(4242, Arrived(new DateTime(2026, 11, 1, 10, 0), 600, afterFreeze = false), 7777, 3,
       RatedProblem("A", 30), "cpp"), finished = true, compiled = true, passed = 1, taken = 3, None)
-    AdminSubmitRow(s, None, Placeholder, SubmitStats(TimeMs(31), Memory(2048)), runs = 2)
+    AdminSubmitRow(s, Placeholder, SubmitStats(TimeMs(31), Memory(2048)), runs = 2)
   }
 
   private def rendered(rejudge: Boolean) = html.admin.submitrow(row, Map.empty, rejudge, linkTeam = true).body.trim

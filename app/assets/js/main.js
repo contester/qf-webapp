@@ -68,48 +68,11 @@ function formatSeconds(s) {
         e.norm = Date.now();
         e.startTime = new Date(e.norm + e.startTimeDelta);
         e.endTime = new Date(e.norm + e.endTimeDelta);
-        if (e.freezeTimeDelta !== undefined && e.exposeTimeDelta !== undefined) {
-            e.freezeTime = new Date(e.norm + e.freezeTimeDelta);
-            e.exposeTime = new Date(e.norm + e.exposeTimeDelta);
-        }
 
         e.prevState = countdownState.contest ? countdownState.contest.state : null;
         countdownState.contest = e;
 
         intervalUpdateContestTimes(iconbase, admin);
-        startFrozenUpdate();
-    }
-
-    // The "scoreboard is frozen" line follows the clock between the freeze and the expose time; this keeps running
-    // after the contest is over (the countdown above stops then), up to the expose time.
-    function updateFrozen() {
-        var c = countdownState.contest;
-        if (!c || !c.freezeTime || !c.exposeTime) return;
-        var now = Date.now();
-        var frozen = c.freezeTime < c.endTime && now >= c.freezeTime && now < c.exposeTime;
-        if (frozen) $("#contest-frozen").show(); else $("#contest-frozen").hide();
-        // The public page also dresses the board for the freeze (boardstyle.scala.html).
-        if (countdownState.publicTheme) {
-            document.documentElement.classList.toggle('frozen-board', frozen);
-            // Public monitor only: tick the time left until the board is exposed.
-            if (frozen) {
-                $("#contest-unfreeze-counter").text(formatSeconds(Math.max(0, ((c.exposeTime - now) / 1000) >> 0)));
-                $("#contest-unfreeze").show();
-            } else {
-                $("#contest-unfreeze").hide();
-            }
-        }
-        if (now >= c.exposeTime && countdownState.frozenInterval) {
-            clearInterval(countdownState.frozenInterval);
-            countdownState.frozenInterval = null;
-        }
-    }
-
-    function startFrozenUpdate() {
-        updateFrozen();
-        if (!countdownState.frozenInterval && countdownState.contest.freezeTime) {
-            countdownState.frozenInterval = setInterval(updateFrozen, 1000);
-        }
     }
 
     function intervalUpdateContestTimes(iconbase, admin) {
@@ -143,8 +106,6 @@ function formatSeconds(s) {
                         countdownState.interval = null;
                     }
             }
-            if (countdownState.publicTheme)
-                document.documentElement.classList.toggle('not-started', countdownState.contest.state == "before");
             if (countdownState.contest.prevState && notify && !countdownState.quiet) {
                 notifyMe(countdownState.contest.name, iconbase, "Соревнование " + notify);
             }
@@ -158,16 +119,6 @@ function formatSeconds(s) {
         }
         countdownState.contest.prevState = countdownState.contest.state;
     }
-
-// The public live monitor has no feed to deliver the `contest` event: the page gives the start and end as
-// milliseconds from now (computed when the page was rendered) and the same countdown runs, without notifications
-// or the reload that team pages do when the contest starts (the monitor stream brings the board by itself).
-function publicContestTimer(startTimeDelta, endTimeDelta, freezeTimeDelta, exposeTimeDelta) {
-    countdownState.quiet = true;
-    countdownState.publicTheme = true;
-    updateContestTimes({name: '', startTimeDelta: startTimeDelta, endTimeDelta: endTimeDelta,
-        freezeTimeDelta: freezeTimeDelta, exposeTimeDelta: exposeTimeDelta}, '', true);
-}
 
 function btn(target, btnid) {
     var b = $('#' + btnid);
@@ -254,7 +205,7 @@ function listenV2(path, setup, state) {
 
 function listenOnEvents(path, iconbase, ackMessagePath) {
     var setup = function(add) {
-        // Server-rendered rows (not stored): the finished attempt and the later ones, whose score may have changed.
+        // Server-rendered rows (not stored): the finished attempt's row.
         add('submitRows', function(obj) {
             obj.rows.forEach(function(row) {
                 var old = $('#result-' + row.id).closest('tr');
@@ -432,9 +383,7 @@ function listenOnStatus(path, canRejudge, newest, teamFilter) {
 
 function listenOnContester(path, table) {
     var labels = {
-        publicMonitor: 'Public monitor', teamMonitor: 'Team monitor', teamFeed: 'Team feed',
-        adminMonitorRestricted: 'Admin monitor (restricted)', adminMonitorUnrestricted: 'Admin monitor (unrestricted)',
-        adminFeed: 'Admin feed', publicPreview: 'Public preview', statusRows: 'Status rows'
+        teamFeed: 'Team feed', adminMonitor: 'Admin monitor', adminFeed: 'Admin feed', statusRows: 'Status rows'
     };
     var names = {};
     $('#contester-names span').each(function() { names[$(this).data('id')] = $(this).text(); });
@@ -489,43 +438,37 @@ function listenOnAdmin(path, iconbase) {
 
     return listenV2(path, setup, setConnectedBadge);
 }
-// Live monitor. The markup must match app/views/livetable.scala.html exactly (contract documented there,
-// pinned by test/resources/live/livetable.html; check with `node test/js/livetable-check.js`).
+// Admin live monitor (points). The markup must match app/views/livetable.scala.html exactly (contract documented
+// there, pinned by test/resources/live/livetable.html; check with `node test/js/livetable-check.js`).
 function liveEsc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
 }
 
-// Rank 0 (not rated) shows as *; board/row JSON already carries "*" or the number as a string.
-function liveRankText(rank) {
-    return (rank === 0 || rank === '*') ? '*' : String(rank); // "DSQ" passes through as is
+// A place is a number, or null (shown empty) for a team that is not rated.
+function liveRankText(place) {
+    return (place === null || place === undefined) ? '' : String(place);
 }
 
-function liveCellHtml(c) {
-    if (!c) return '';
-    switch (c.t) {
-    case 'ok':
-        return '<span class="text-success"><strong>' + liveEsc(c.s) + '</strong></span><br/>' +
-            '<span class="text-info"><small>' + liveEsc(c.at) + '</small></span>';
-    case 'fail':
-        return '<span class="text-muted">' + liveEsc(c.s) + '</span>';
-    case 'pend':
-        return '<span class="text-warning">' + liveEsc(c.s) + '</span>';
-    default:
-        return '';
-    }
+// One problem cell, <td> included. c: {b: best as text (absent: none), n: attempts, f: full, p: in flight}; max as text.
+function liveCellHtml(c, max) {
+    c = c || {n: 0, f: false, p: 0};
+    var has = c.b !== undefined && c.b !== null;
+    var cls = 'text-center points-cell' + (c.f ? ' full-score' : '') + (has ? '' : ' text-muted');
+    var h = has ? liveEsc(c.b) + '<br/><small class="text-muted">из ' + liveEsc(max) + '</small>' : '—';
+    if (c.p > 0) h += '<br/><span class="text-warning">?' + c.p + '</span>';
+    return '<td class="' + cls + '">' + h + '</td>';
 }
 
-// What colour a cell flashes when it changes, from its new markup: pending, solved or failed; null for empty.
+// What colour a cell flashes when it changes, from its new markup: in flight, with points, or without.
 function liveCellKind(html) {
-    if (html.indexOf('text-success') >= 0) return 'ok';
     if (html.indexOf('text-warning') >= 0) return 'pend';
-    if (html.indexOf('text-muted') >= 0) return 'fail';
-    return null;
+    if (html.indexOf('<small') >= 0) return 'ok';
+    return 'fail';
 }
 
 // Which parts of a replaced row flash (see flashstyle.scala.html): the cells whose markup changed, and the whole
-// row when it moved or its rank changed. oldCells/newCells are the innerHTML of the problem cells, in order.
+// row when it moved or its place changed. oldCells/newCells are the outerHTML of the problem cells, in order.
 function liveFlashPlan(oldCells, newCells, moved) {
     return {
         row: !!moved,
@@ -533,10 +476,14 @@ function liveFlashPlan(oldCells, newCells, moved) {
     };
 }
 
+function liveCellsOf(tr) {
+    return tr.children('td.points-cell').map(function() { return this.outerHTML; }).get();
+}
+
 // Adds the flash classes to a row that replaced an old one, and takes them off when the animation is over.
 function liveFlash(tr, oldCells, moved) {
-    var tds = tr.children('td.text-center');
-    var plan = liveFlashPlan(oldCells, tds.map(function() { return $(this).html(); }).get(), moved);
+    var tds = tr.children('td.points-cell');
+    var plan = liveFlashPlan(oldCells, liveCellsOf(tr), moved);
     var classes = [];
     if (plan.row) { tr.addClass('flash-move'); classes.push('flash-move'); }
     tds.each(function(i) {
@@ -550,62 +497,46 @@ function liveFlash(tr, oldCells, moved) {
     }
 }
 
-// All problem cells of a row; a problem absent from `cells` is empty.
-function liveCellsHtml(problems, cells) {
-    var h = '';
+function liveRowHtml(problems, row) {
+    var h = '<tr data-team="' + row.team + '"><th scope="row">' + liveEsc(liveRankText(row.place)) + '</th>' +
+        '<td>' + row.number + '</td><td>' + liveEsc(row.name) + '<br/><small>' + liveEsc(row.school) + '</small></td>';
     for (var i = 0; i < problems.length; i++) {
-        h += '<td class="text-center">' + liveCellHtml(cells ? cells[problems[i]] : null) + '</td>';
+        h += liveCellHtml(row.cells ? row.cells[problems[i].id] : null, problems[i].max);
     }
-    return h;
+    return h + '<td class="text-center"><strong>' + liveEsc(row.total) + '</strong></td></tr>';
 }
 
-function liveCountHtml(problem, n) {
-    return '<th style="text-align: center;">' + liveEsc(problem) + '<div style="font-size: 65%;' +
-        (n ? '' : 'color:#ccc;') + '">(' + n + ')</div></th>';
-}
-
-function liveRowHtml(problems, row, currentTeamId) {
-    return '<tr data-team="' + row.team + '"' + (row.rank === 'DSQ' ? ' class="danger"' : row.team === currentTeamId ? ' class="info"' : '') + '>' +
-        '<th scope="row">' + liveEsc(liveRankText(row.rank)) + '</th><td>' + row.team + '</td>' +
-        '<td>' + liveEsc(row.school) + '<br/><small>' + liveEsc(row.name) + '</small></td>' +
-        '<td>' + row.solved + '</td><td>' + row.penalty + '</td>' + liveCellsHtml(problems, row.cells) + '</tr>';
-}
-
-function liveTableHtml(board, labels, currentTeamId) {
-    var h = '<table class="table table-hover table-bordered table-responsive"><thead><tr>' +
-        '<th>' + liveEsc(labels.rank) + '</th><th>ID</th><th>' + liveEsc(labels.team) + '</th><th>=</th>' +
-        '<th>' + liveEsc(labels.penalty) + '</th>';
+function liveTableHtml(board, labels) {
+    var h = '<table class="table table-hover table-bordered table-responsive points-board"><thead><tr>' +
+        '<th>' + liveEsc(labels.rank) + '</th><th>№</th><th>' + liveEsc(labels.team) + '</th>';
     for (var i = 0; i < board.problems.length; i++) {
-        h += liveCountHtml(board.problems[i], board.solved[board.problems[i]] || 0);
+        var p = board.problems[i];
+        h += '<th style="text-align: center;" title="' + liveEsc(p.name) + '">' + liveEsc(p.id) +
+            '<div style="font-size: 65%;">' + liveEsc(p.name) + ' (' + liveEsc(p.max) + ')</div></th>';
     }
-    h += '</tr></thead><tbody>\n';
+    h += '<th style="text-align: center;">' + liveEsc(labels.total) + '</th></tr></thead><tbody>\n';
     for (var j = 0; j < board.rows.length; j++) {
-        h += liveRowHtml(board.problems, board.rows[j], currentTeamId) + '\n';
+        h += liveRowHtml(board.problems, board.rows[j]) + '\n';
     }
     return h + '</tbody></table>';
 }
 
-// Fills containerSelector from the live stream at eventsPath; currentTeamId (0 for none) gets the `info` row.
-function liveMonitor(eventsPath, containerSelector, currentTeamId) {
+// Fills containerSelector from the admin live stream at eventsPath.
+function liveMonitor(eventsPath, containerSelector) {
     var box = $(containerSelector);
     var labels = {
         rank: box.attr('data-label-rank') || '',
         team: box.attr('data-label-team') || '',
-        penalty: box.attr('data-label-penalty') || ''
+        total: box.attr('data-label-total') || ''
     };
     var problems = [];
-    var FIXED_COLUMNS = 5; // rank, ID, team, solved, penalty
 
     var body = function() { return box.find('tbody').first(); };
 
     var setup = function(add) {
         add('board', function(b) {
             problems = b.problems;
-            if (!b.problems.length && !b.rows.length) {
-                box.empty(); // before the start: no table, like the old monitor
-            } else {
-                box.html(liveTableHtml(b, labels, currentTeamId));
-            }
+            box.html(liveTableHtml(b, labels));
         });
 
         add('row', function(e) {
@@ -615,9 +546,9 @@ function liveMonitor(eventsPath, containerSelector, currentTeamId) {
             var had = old.length > 0;
             var oldIndex = old.index();
             var oldRank = old.children('th').first().text();
-            var oldCells = old.children('td.text-center').map(function() { return $(this).html(); }).get();
+            var oldCells = liveCellsOf(old);
             old.remove();
-            var tr = $(liveRowHtml(problems, e.row, currentTeamId));
+            var tr = $(liveRowHtml(problems, e.row));
             var rows = tbody.children('tr');
             if (e.pos < rows.length) {
                 rows.eq(e.pos).before(tr);
@@ -627,30 +558,10 @@ function liveMonitor(eventsPath, containerSelector, currentTeamId) {
             rows = tbody.children('tr');
             if (had) liveFlash(tr, oldCells, oldIndex !== tr.index() || oldRank !== tr.children('th').first().text());
             for (var i = 0; i < e.ranks.length; i++) {
-                var rankCell = rows.eq(e.rankFrom + i);
-                if (!rankCell.hasClass('danger')) rankCell.children('th').first().text(liveRankText(e.ranks[i]));
+                rows.eq(e.rankFrom + i).children('th').first().text(liveRankText(e.ranks[i]));
             }
-            var head = box.find('thead tr').first().children('th');
-            $.each(e.solved, function(p, n) {
-                var k = problems.indexOf(p);
-                if (k >= 0) head.eq(FIXED_COLUMNS + k).replaceWith(liveCountHtml(p, n));
-            });
-        });
-
-        add('cells', function(e) {
-            var tr = body().children('tr[data-team="' + e.team + '"]');
-            if (!tr.length) return;
-            var oldCells = tr.children('td.text-center').map(function() { return $(this).html(); }).get();
-            tr.children('td.text-center').remove();
-            tr.append(liveCellsHtml(problems, e.cells));
-            liveFlash(tr, oldCells, false);
         });
     };
 
-    // The navbar badge does not exist on the public page.
-    var badge = function(state) {
-        if ($('#connected1').length) setConnectedBadge(state);
-    };
-
-    return listenV2(eventsPath, setup, badge);
+    return listenV2(eventsPath, setup, setConnectedBadge);
 }

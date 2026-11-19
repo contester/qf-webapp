@@ -32,7 +32,8 @@ class NotifyListenerDbSpec extends TestKit(ActorSystem("NotifyListenerDbSpec")) 
     fx.await(fx.db.run(sql"select pid from pg_stat_activity where application_name = $appName".as[Int]))
 
   case class Rig(listener: ActorRef, status: TestProbe, teams: TestProbe, contests: ConcurrentLinkedQueue[Contest],
-                 listening: TestProbe, removed: ConcurrentLinkedQueue[Int])
+                 listening: TestProbe, removed: ConcurrentLinkedQueue[Int],
+                 teamsHook: ConcurrentLinkedQueue[Int] = new ConcurrentLinkedQueue[Int]())
 
   /** Starts a listener with probes as targets, waits until it listens, runs the body, then stops it. */
   private def withListener(body: Rig => Unit): Unit = {
@@ -44,12 +45,14 @@ class NotifyListenerDbSpec extends TestKit(ActorSystem("NotifyListenerDbSpec")) 
       system.eventStream.subscribe(listening.ref, classOf[NotifyListener.Listening])
       val contests = new ConcurrentLinkedQueue[Contest]()
       val removed = new ConcurrentLinkedQueue[Int]()
+      val teamsHook = new ConcurrentLinkedQueue[Int]()
       val settings = NotifyListener.ConnectionSettings(fx.url.get, fx.user, fx.password, appName)
       val listener = system.actorOf(NotifyListener.props(settings, fx.db,
-        NotifyListener.Targets(status.ref, teams.ref, c => { contests.add(c); () }, id => { removed.add(id); () })))
+        NotifyListener.Targets(status.ref, teams.ref, c => { contests.add(c); () }, id => { removed.add(id); () },
+          id => { teamsHook.add(id); () })))
       try {
         listening.expectMsgType[NotifyListener.Listening](10.seconds)
-        body(Rig(listener, status, teams, contests, listening, removed))
+        body(Rig(listener, status, teams, contests, listening, removed, teamsHook))
       } finally {
         system.eventStream.unsubscribe(listening.ref)
         listener ! PoisonPill
@@ -66,7 +69,7 @@ class NotifyListenerDbSpec extends TestKit(ActorSystem("NotifyListenerDbSpec")) 
       exec(sqlu"update submits set testing_id = $testing, tested = true, compiled = true, passed = 3, taken = 3, points = 10 where id = $submit")
       exec(sqlu"update testings set finished_at = now() where id = $testing")
       val got = rig.status.expectMsgType[FinishedTesting](2.seconds)
-      assert(got == FinishedTesting(SubmitObject(submit.toInt, fx.kid, fx.round, "Z"), testing.toInt, compiled = true, passed = 3, taken = 3))
+      assert(got == FinishedTesting(SubmitObject(submit.toInt, fx.kid, fx.round, "Z"), testing.toInt, compiled = true, passed = 3, taken = 3, points = Some(10.0)))
       rig.status.expectNoMessage(500.millis)
     }
   }
@@ -162,6 +165,8 @@ class NotifyListenerDbSpec extends TestKit(ActorSystem("NotifyListenerDbSpec")) 
       rig.teams.expectMsg(2.seconds, StatusActor.TeamsChanged(r))
       rig.teams.expectNoMessage(300.millis)
       rig.status.expectNoMessage(100.millis)
+      // the same TeamsChanged reaches the hook (the admin live monitor and the public board cache)
+      assert(rig.teamsHook.toArray.toSeq == Seq(r, r))
     }
   }
 

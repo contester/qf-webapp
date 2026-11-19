@@ -1,7 +1,5 @@
 package live
 
-import java.io.File
-import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicInteger
 
 import actors.LiveMonitorActor
@@ -14,10 +12,10 @@ import com.typesafe.config.ConfigFactory
 import org.joda.time.DateTime
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuiteLike
-import org.stingray.contester.dbmodel.{Contest, Team}
-import palevo.{ContestRescheduled, ContestStarting, FirstSolveContest, PalevoEvent, PalevoSink, TimeChange}
+import org.stingray.contester.dbmodel.Contest
+import palevo.{ContestRescheduled, ContestStarting, FirstSolveContest, JuryAudience, PalevoEvent, PalevoSink}
 import play.api.libs.EventSource.Event
-import play.api.libs.json.{JsObject, JsValue, Json}
+import play.api.libs.json.JsValue
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
@@ -47,11 +45,11 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
       if (calls.incrementAndGet() == 1) throw new IllegalStateException("injected palevo failure")
   }
 
-  test("startup loads both boards before handling messages sent during the load") {
+  test("startup loads the board before handling messages sent during the load") {
     val gate = Promise[Unit]()
     val f = new Fixture(running, gate = gate.future)
     val probe = TestProbe()
-    probe.send(f.actor, JoinPublic(1))
+    probe.send(f.actor, JoinAdmin(1))
     val r = rec(10, 2, "A", running)
     f.actor ! Arrived(1, r)
     probe.expectNoMessage(200.millis)
@@ -59,92 +57,56 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     val src = probe.expectMsgType[Source[Event, NotUsed]](5.seconds)
     val p = TestProbe()
     src.runForeach(e => p.ref ! e)
-    val expected = new LiveContest(contest(), problems, teams, Nil, running)
-    expected.onArrived(r, running)
-    assert(next(p, "board") == LiveJson.board(expected.board(Freezing)))
+    val expected = new LiveContest(contest(), problems, teams, Nil)
+    expected.onArrived(r)
+    assert(next(p, "board") == LiveJson.board(expected.board))
     f.stop()
   }
 
-  test("JoinPublic starts with the freezing board") {
-    val subs = Seq(rec(1, 1, "A", t0.plusMinutes(30), ok), rec(2, 2, "B", t0.plusHours(4).plusMinutes(5), ok))
-    val f = new Fixture(frozen, subs = Map(1 -> subs))
-    val p = f.subscribe(JoinPublic(1))
-    assert(next(p, "board") == LiveJson.board(boardOf(contest(), subs, frozen, Freezing)))
-    f.stop()
-  }
-
-  test("JoinPublic of a contest that is not public fails") {
-    val f = new Fixture(running, rows = Seq(contest(), contest(42)))
-    val probe = TestProbe()
-    probe.send(f.actor, JoinPublic(42))
-    probe.expectMsgType[akka.actor.Status.Failure](5.seconds)
-    f.stop()
-  }
-
-  test("JoinPublicPreview gives the public board of a contest that is not public") {
-    val f = new Fixture(running, rows = Seq(contest(), contest(42)))
-    val probe = TestProbe()
-    probe.send(f.actor, JoinPublic(42))
-    probe.expectMsgType[akka.actor.Status.Failure](5.seconds)
-    val p = f.subscribe(JoinPublicPreview(42))
-    assert((next(p, "board") \ "rows").as[Seq[JsValue]].size == 3)
-    f.stop()
-  }
-
-  test("before start the public, team and freezing admin boards list the teams without problems; the start tick sends the whole board") {
-    val f = new Fixture(t0.minusMinutes(5), subs = Map(1 -> Seq(rec(1, 1, "A", t0.minusMinutes(10), ok))))
-    val pub = f.subscribe(JoinPublic(1))
-    val tm = f.subscribe(JoinTeam(1, 2))
-    val adm = f.subscribe(JoinAdmin(1, real = false))
-    val real = f.subscribe(JoinAdmin(1, real = true))
-    def bare(js: JsValue) = {
-      assert((js \ "problems").as[Seq[String]].isEmpty)
-      val rows = (js \ "rows").as[Seq[JsValue]]
-      assert(rows.map(r => (r \ "team").as[Int]).toSet == Set(1, 2, 3))
-      assert(rows.forall(r => (r \ "cells").as[JsObject].fields.isEmpty))
+  test("the admin stream starts with the real points board, before the start, while running and after the end") {
+    val subs = Seq(rec(1, 1, "A", t0.plusMinutes(30), ok), rec(2, 2, "B", t0.plusHours(4).plusMinutes(5), pts(4)))
+    for (now <- Seq(t0.minusMinutes(5), running, late, t0.plusHours(6))) {
+      val f = new Fixture(now, subs = Map(1 -> subs))
+      val b = next(f.subscribe(JoinAdmin(1)), "board")
+      assert(b == LiveJson.board(boardOf(contest(), subs)), s"at $now")
+      assert((b \ "problems").as[Seq[JsValue]].map(p => (p \ "id").as[String]) == problemIds)
+      assert(best(cellJs(b, 1, "A")).contains("10") && best(cellJs(b, 2, "B")).contains("4"))
+      f.stop()
     }
-    Seq(pub, tm, adm).foreach(p => bare(next(p, "board")))
-    assert((next(real, "board") \ "problems").as[Seq[String]] == problems)
-    f.clock.at = t0.plusSeconds(1)
-    f.actor ! Tick
-    for (p <- Seq(pub, tm, adm)) {
-      val b = next(p, "board")
-      assert((b \ "rows").as[Seq[JsValue]].size == 3 && (b \ "problems").as[Seq[String]] == problems)
-    }
+  }
+
+  test("an unknown contest is refused for the board and for the snapshot") {
+    val f = new Fixture(running)
+    val probe = TestProbe()
+    probe.send(f.actor, JoinAdmin(42))
+    probe.expectMsgType[akka.actor.Status.Failure](5.seconds)
+    probe.send(f.actor, Snapshot(JoinAdmin(42)))
+    probe.expectMsgType[akka.actor.Status.Failure](5.seconds)
+    probe.send(f.actor, Snapshot(JoinAdmin(1)))
+    assert(probe.expectMsgType[LiveBoard](5.seconds) == boardOf(contest(), Nil))
     f.stop()
   }
 
-  test("a team gets cells events for its own row only; the freezing admin stream never sees the real board") {
-    val f = new Fixture(frozen)
-    val t2 = f.subscribe(JoinTeam(1, 2))
-    val t3 = f.subscribe(JoinTeam(1, 3))
-    val adm = f.subscribe(JoinAdmin(1, real = false))
-    val real = f.subscribe(JoinAdmin(1, real = true))
-    Seq(t2, t3, adm, real).foreach(next(_, "board"))
+  // Restored (deleted in Task 10): an arrival and then its finish each give the admin stream a row event.
+  test("Arrived then Finished produce row events on the admin stream: in flight, then the points and the new place") {
+    val f = new Fixture(running, subs = Map(1 -> Seq(rec(1, 1, "A", t0.plusMinutes(10), pts(5)))))
+    val adm = f.subscribe(JoinAdmin(1))
+    next(adm, "board")
 
-    f.actor ! Arrived(1, rec(21, 2, "B", frozen))
-    assert((next(t2, "row") \ "team").as[Int] == 2)
-    assert((next(t2, "cells") \ "team").as[Int] == 2)
-    assert((next(t3, "row") \ "team").as[Int] == 2)
-    next(adm, "row")
-    next(real, "row")
+    f.actor ! Arrived(1, rec(21, 2, "B", running))
+    val arrived = next(adm, "row")
+    assert((arrived \ "team").as[Int] == 2)
+    assert(pending(rowCellJs(arrived, "B")) == 1 && best(rowCellJs(arrived, "B")).isEmpty)
+    assert((arrived \ "row" \ "total").as[String] == "0")
 
-    f.actor ! Finished(1, 21, compiled = true, 3, 3)
-    val own = next(t2, "cells")
-    assert((own \ "cells" \ "B" \ "t").as[String] == "ok")
-    assert((next(real, "row") \ "row" \ "cells" \ "B" \ "t").as[String] == "ok")
-    t3.expectNoMessage(300.millis)
-    adm.expectNoMessage(100.millis)
-
-    // A later row about team 2 carries its real cells on its own stream only.
-    f.actor ! Arrived(1, rec(22, 2, "C", frozen.plusMinutes(1)))
-    assert((next(t2, "row") \ "row" \ "cells" \ "B" \ "t").as[String] == "ok")
-    assert((next(t3, "row") \ "row" \ "cells" \ "B" \ "t").as[String] == "pend")
-    assert((next(adm, "row") \ "row" \ "cells" \ "B" \ "t").as[String] == "pend")
-
-    // A new team connection gets the overlay in its first board; the public board does not.
-    assert(cellT(next(f.subscribe(JoinTeam(1, 2)), "board"), 2, "B") == "ok")
-    assert(cellT(next(f.subscribe(JoinPublic(1)), "board"), 2, "B") == "pend")
+    f.actor ! Finished(1, 21, compiled = true, Some(7.0))
+    val done = next(adm, "row")
+    assert((done \ "team").as[Int] == 2 && (done \ "pos").as[Int] == 0)
+    assert(best(rowCellJs(done, "B")).contains("7") && pending(rowCellJs(done, "B")) == 0)
+    assert((done \ "row" \ "place").as[Int] == 1 && (done \ "row" \ "total").as[String] == "7")
+    // team 2 passed team 1: places 1 and 2 from position 0
+    assert((done \ "rankFrom").as[Int] == 0 && (done \ "ranks").as[Seq[Int]].take(2) == Seq(1, 2))
+    adm.expectNoMessage(200.millis)
     f.stop()
   }
 
@@ -164,40 +126,20 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
   test("a submit with a rejudge in flight is excluded from a reload's comparison") {
     val solved = rec(51, 1, "A", t0.plusMinutes(30), ok)
     val f = new Fixture(running, subs = Map(1 -> Seq(solved)))
-    val real = f.subscribe(JoinAdmin(1, real = true))
+    val real = f.subscribe(JoinAdmin(1))
     next(real, "board")
     f.actor ! RejudgeRequested(51)
-    assert((next(real, "row") \ "row" \ "cells" \ "A" \ "t").as[String] == "pend")
+    val rejudged = next(real, "row")
+    assert(pending(rowCellJs(rejudged, "A")) == 1 && best(rowCellJs(rejudged, "A")).isEmpty)
     // A finish for an id the contest does not know makes it reload from the database.
-    f.actor ! Finished(1, 999, compiled = true, 3, 3)
+    f.actor ! Finished(1, 999, compiled = true, Some(1.0))
     awaitCond(f.loads.get == 2, 5.seconds)
     real.expectNoMessage(500.millis)
-    assert(cellT(next(f.subscribe(JoinAdmin(1, real = true)), "board"), 1, "A") == "pend")
-    f.actor ! Finished(1, 51, compiled = true, 3, 3)
-    assert((next(real, "row") \ "row" \ "cells" \ "A" \ "t").as[String] == "ok")
+    assert(pending(cellJs(next(f.subscribe(JoinAdmin(1)), "board"), 1, "A")) == 1)
+    f.actor ! Finished(1, 51, compiled = true, Some(6.0))
+    val after = next(real, "row")
+    assert(best(rowCellJs(after, "A")).contains("6") && pending(rowCellJs(after, "A")) == 0)
     f.stop()
-  }
-
-  test("the static file is written at load and on each change of the freezing board, without any interval") {
-    val dir = Files.createTempDirectory("live-static").toFile
-    val f = new Fixture(running, rows = Seq(contest(), contest(11)), staticDir = Some(dir))
-    f.barrier()
-    assert(f.rendered.get == 1)
-    assert(new File(dir, "1.html").exists() && !new File(dir, "11.html").exists())
-
-    f.actor ! Arrived(1, rec(61, 1, "A", running))
-    f.barrier()
-    assert(f.rendered.get == 2)
-    // a finish hidden by the freeze leaves the freezing board, and so the file, alone
-    f.actor ! Finished(1, 61, compiled = true, 3, 3)
-    f.barrier()
-    assert(f.rendered.get == 2)
-    f.actor ! Arrived(1, rec(62, 2, "B", running))
-    f.barrier()
-    assert(f.rendered.get == 3)
-    f.stop()
-    dir.listFiles().foreach(_.delete())
-    dir.delete()
   }
 
   test("palevo hears the first solve") {
@@ -206,8 +148,21 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     f.barrier()
     assert(sink.events.isEmpty)
     f.actor ! Arrived(1, rec(71, 2, "B", running))
-    f.actor ! Finished(1, 71, compiled = true, 3, 3)
+    f.actor ! Finished(1, 71, compiled = true, Some(10.0))
     awaitCond(sink.events.asScala.exists(_.isInstanceOf[FirstSolveContest]), 5.seconds)
+    // While the round runs only the jury hears standings (the public learns nothing of the board before the end).
+    assert(sink.events.asScala.collect { case e: FirstSolveContest => e.audience }.forall(_ == JuryAudience))
+    f.stop()
+  }
+
+  test("a partial score is not a solve for palevo") {
+    val sink = new CollectingSink
+    val f = new Fixture(running, palevoSink = sink)
+    f.barrier()
+    f.actor ! Arrived(1, rec(72, 2, "B", running))
+    f.actor ! Finished(1, 72, compiled = true, Some(9.0))
+    f.barrier()
+    assert(!sink.events.asScala.exists(_.isInstanceOf[FirstSolveContest]))
     f.stop()
   }
 
@@ -229,7 +184,7 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
   test("contests above 10 get no countdown and no reschedule announcement") {
     val sink = new CollectingSink
     val f = new Fixture(t0.minusMinutes(61), rows = Seq(contest(11)), palevoSink = sink)
-    def barrier11(): Unit = f.join(JoinAdmin(11, real = true))
+    def barrier11(): Unit = f.join(JoinAdmin(11))
     barrier11()
     f.clock.at = t0.minusMinutes(59)
     f.actor ! Tick
@@ -325,19 +280,19 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
 
   test("an unknown submit id reloads the contest once and is then applied; still unknown is ignored") {
     val f = new Fixture(running)
-    val p = f.subscribe(JoinAdmin(1, real = true))
+    val p = f.subscribe(JoinAdmin(1))
     next(p, "board")
     f.data = Map(1 -> ContestData(problems, teams, Seq(rec(91, 2, "C", running))))
-    f.actor ! Finished(1, 91, compiled = true, 3, 3)
-    assert(cellT(next(p, "board"), 2, "C") == "pend")
-    assert((next(p, "row") \ "row" \ "cells" \ "C" \ "t").as[String] == "ok")
+    f.actor ! Finished(1, 91, compiled = true, Some(3.0))
+    assert(pending(cellJs(next(p, "board"), 2, "C")) == 1)
+    assert(best(rowCellJs(next(p, "row"), "C")).contains("3"))
     assert(f.loads.get == 2)
 
     EventFilter.warning(pattern = "unknown submit 99", occurrences = 1).intercept {
-      f.actor ! Finished(1, 99, compiled = true, 3, 3)
+      f.actor ! Finished(1, 99, compiled = true, Some(3.0))
       awaitCond(f.loads.get == 3, 5.seconds)
     }
-    f.actor ! Finished(1, 99, compiled = true, 3, 3)
+    f.actor ! Finished(1, 99, compiled = true, Some(3.0))
     f.barrier()
     Thread.sleep(200)
     assert(f.loads.get == 3)
@@ -353,16 +308,16 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
       f = new Fixture(running, rows = Seq(contest(), contest(2)), overrideData = Map(2 -> badData))
       f.barrier()
     }
-    next(f.subscribe(JoinPublic(1)), "board")
+    next(f.subscribe(JoinAdmin(1)), "board")
     val probe = TestProbe()
-    probe.send(f.actor, JoinAdmin(2, real = true))
+    probe.send(f.actor, JoinAdmin(2))
     probe.expectMsgType[akka.actor.Status.Failure](5.seconds)
 
     f.data = f.data + (2 -> ContestData(problems, teams, Nil))
     // No contest poll any more: the next change of that round retries it.
     f.actor ! ContestChanged(contest(2))
     awaitCond({
-      probe.send(f.actor, JoinAdmin(2, real = true))
+      probe.send(f.actor, JoinAdmin(2))
       probe.expectMsgType[AnyRef](5.seconds).isInstanceOf[Source[_, _]]
     }, 5.seconds)
     f.stop()
@@ -370,39 +325,39 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
 
   test("a failed reload is retried and its unknown id is then applied") {
     val f = new Fixture(running)
-    val p = f.subscribe(JoinAdmin(1, real = true))
+    val p = f.subscribe(JoinAdmin(1))
     next(p, "board")
     f.data = Map(1 -> ContestData(problems, teams, Seq(rec(95, 2, "C", running))))
     f.failLoads.set(1)
     EventFilter.warning(pattern = "load failed", occurrences = 1).intercept {
-      f.actor ! Finished(1, 95, compiled = true, 3, 3)
+      f.actor ! Finished(1, 95, compiled = true, Some(3.0))
     }
     next(p, "board")
-    assert((next(p, "row") \ "row" \ "cells" \ "C" \ "t").as[String] == "ok")
+    assert(best(rowCellJs(next(p, "row"), "C")).contains("3"))
     assert(f.loads.get == 3)
     // Not ignored: a rejudge of it is applied.
     f.actor ! RejudgeRequested(95)
-    assert((next(p, "row") \ "row" \ "cells" \ "C" \ "t").as[String] == "pend")
+    assert(pending(rowCellJs(next(p, "row"), "C")) == 1)
     f.stop()
   }
 
   test("a failed rebuild is retried and does not ignore the waiting id") {
     val f = new Fixture(running, timings = defaultTimings.copy(reloadGap = 1.second))
-    val p = f.subscribe(JoinAdmin(1, real = true))
+    val p = f.subscribe(JoinAdmin(1))
     next(p, "board")
     f.data = Map(1 -> badData)
     EventFilter[NullPointerException](occurrences = 1).intercept {
-      f.actor ! Finished(1, 96, compiled = true, 3, 3)
+      f.actor ! Finished(1, 96, compiled = true, Some(3.0))
     }
     f.data = Map(1 -> ContestData(problems, teams, Seq(rec(96, 3, "B", running))))
     next(p, "board")
-    assert((next(p, "row") \ "row" \ "cells" \ "B" \ "t").as[String] == "ok")
+    assert(best(rowCellJs(next(p, "row"), "B")).contains("3"))
     f.stop()
   }
 
   test("a rejudge of a submit no contest knows reloads only the contest the database names") {
     val f = new Fixture(running, rows = Seq(contest(), contest(2)))
-    val p = f.subscribe(JoinAdmin(1, real = true))
+    val p = f.subscribe(JoinAdmin(1))
     next(p, "board")
     val solved = rec(61, 1, "A", t0.plusMinutes(30), ok)
     f.data = f.data + (1 -> ContestData(problems, teams, Seq(solved)))
@@ -410,7 +365,7 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     val loadsBefore = f.loads.get
     f.actor ! RejudgeRequested(61)
     next(p, "board")
-    assert((next(p, "row") \ "row" \ "cells" \ "A" \ "t").as[String] == "pend")
+    assert(pending(rowCellJs(next(p, "row"), "A")) == 1)
     assert(f.loads.get == loadsBefore + 1)
     assert(f.lookups.get == 1)
     f.stop()
@@ -446,31 +401,32 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
   test("a rejudge whose finish is lost heals at the first reload after the age limit") {
     val solved = rec(97, 1, "A", t0.plusMinutes(30), ok)
     val f = new Fixture(running, subs = Map(1 -> Seq(solved)), timings = defaultTimings.copy(rejudgeMaxAge = 10.seconds))
-    val real = f.subscribe(JoinAdmin(1, real = true))
+    val real = f.subscribe(JoinAdmin(1))
     next(real, "board")
     f.actor ! RejudgeRequested(97)
-    assert((next(real, "row") \ "row" \ "cells" \ "A" \ "t").as[String] == "pend")
+    assert(pending(rowCellJs(next(real, "row"), "A")) == 1)
 
     // Reloads are caused by finishes of ids the contest does not know.
     f.clock.ms = 5000
-    f.actor ! Finished(1, 998, compiled = true, 3, 3)
+    f.actor ! Finished(1, 998, compiled = true, Some(1.0))
     awaitCond(f.loads.get == 2, 5.seconds)
     real.expectNoMessage(500.millis)
-    assert(cellT(next(f.subscribe(JoinAdmin(1, real = true)), "board"), 1, "A") == "pend")
+    assert(pending(cellJs(next(f.subscribe(JoinAdmin(1)), "board"), 1, "A")) == 1)
 
     f.clock.ms = 10000
-    f.actor ! Finished(1, 999, compiled = true, 3, 3)
-    assert(cellT(next(real, "board"), 1, "A") == "ok")
+    f.actor ! Finished(1, 999, compiled = true, Some(1.0))
+    assert(best(cellJs(next(real, "board"), 1, "A")).contains("10"))
     f.stop()
   }
 
   test("a round_changed with an unchanged row (its problems changed) reloads the contest; the new problem appears") {
     val f = new Fixture(running)
-    val p = f.subscribe(JoinAdmin(1, real = true))
-    assert((next(p, "board") \ "problems").as[Seq[String]] == problems)
-    f.data = Map(1 -> ContestData(problems :+ "D", teams, Nil))
+    val p = f.subscribe(JoinAdmin(1))
+    def ids(b: JsValue) = (b \ "problems").as[Seq[JsValue]].map(p => (p \ "id").as[String])
+    assert(ids(next(p, "board")) == problemIds)
+    f.data = Map(1 -> ContestData(problems :+ models.ProblemColumn("D", "Problem D", 25), teams, Nil))
     f.actor ! ContestChanged(contest())
-    assert((next(p, "board") \ "problems").as[Seq[String]] == problems :+ "D")
+    assert(ids(next(p, "board")) == problemIds :+ "D")
     assert(f.loads.get == 2)
     f.stop()
   }
@@ -494,15 +450,15 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
   test("a removed round is dropped: its streams end, joins fail, and later events for it are ignored") {
     val f = new Fixture(running, rows = Seq(contest(), contest(2)))
     val p = TestProbe()
-    val done = f.join(JoinAdmin(2, real = true)).runForeach(e => p.ref ! e)
+    val done = f.join(JoinAdmin(2)).runForeach(e => p.ref ! e)
     next(p, "board")
     f.actor ! ContestRemoved(2)
     scala.concurrent.Await.result(done, 5.seconds)
     val probe = TestProbe()
-    probe.send(f.actor, JoinAdmin(2, real = true))
+    probe.send(f.actor, JoinAdmin(2))
     probe.expectMsgType[akka.actor.Status.Failure](5.seconds)
     f.actor ! Arrived(2, rec(81, 1, "A", running))
-    next(f.subscribe(JoinAdmin(1, real = true)), "board") // contest 1 keeps working
+    next(f.subscribe(JoinAdmin(1)), "board") // contest 1 keeps working
     f.stop()
   }
 
@@ -511,12 +467,14 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     val hooks = new ActorLiveHooks(probe.ref)
     val r = rec(1, 1, "A", running)
     hooks.submitArrived(1, r)
-    hooks.finished(1, 1, compiled = true, 3, 3)
+    hooks.finished(1, 1, compiled = true, Some(2.5))
     hooks.rejudged(1)
+    hooks.teamsChanged(5)
     hooks.contestRemoved(4)
     probe.expectMsg(Arrived(1, r))
-    probe.expectMsg(Finished(1, 1, compiled = true, 3, 3))
+    probe.expectMsg(Finished(1, 1, compiled = true, Some(2.5)))
     probe.expectMsg(RejudgeRequested(1))
+    probe.expectMsg(TeamsChanged(5))
     probe.expectMsg(ContestRemoved(4))
     NoopLiveHooks.rejudged(1)
   }

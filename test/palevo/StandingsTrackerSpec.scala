@@ -1,6 +1,5 @@
 package palevo
 
-import models.{ACM, ACMCell, AnyStatus, Foo}
 import org.joda.time.DateTime
 import org.scalatest.funsuite.AnyFunSuite
 import org.stingray.contester.dbmodel.{Contest, NotRated, Team}
@@ -13,12 +12,9 @@ class StandingsTrackerSpec extends AnyFunSuite {
     Team(id, 0, "", s"School$id", "City", (if (notRated) Some(NotRated) else None))
 
   // solves: problem -> seconds. Rows must be given in rank order.
-  private def row(rank: Int, t: Team, solves: Map[String, Int]) =
-    Foo.RankedRow(rank, t, ACM.Score(solves.size, solves.values.sum / 60, 0),
-      solves.map { case (p, sec) => p -> ACMCell(1, sec, fullSolution = true) })
+  private def row(rank: Int, t: Team, solves: Map[String, Int]) = StandingsRow(t, rank, solves.size, solves)
 
-  private def status(rows: Foo.RankedRow[ACM.Score, ACMCell]*): StandingsView =
-    StandingsView.of(ACM.Status(Seq("A", "B", "C"), rows))
+  private def status(rows: StandingsRow*): StandingsView = StandingsView(rows)
 
   private def types(es: Seq[PalevoEvent]) = es.map(_.eventType)
 
@@ -105,16 +101,6 @@ class StandingsTrackerSpec extends AnyFunSuite {
     tr.observe(contest, status(row(1, team(1), Map()), row(0, guest, Map())), now)
     val es = tr.observe(contest, status(row(1, team(1), Map()), row(0, guest, Map("A" -> 100))), now)
     assert(es.isEmpty)
-  }
-
-  test("non-ACM status is ignored") {
-    val tr = new StandingsTracker
-    val other = new AnyStatus {
-      def problems = Seq("A")
-      def anyRows = Nil
-    }
-    assert(tr.observe(contest, StandingsView.of(other), now).isEmpty)
-    assert(tr.observe(contest, StandingsView.of(other), now).isEmpty)
   }
 
   test("contests are tracked independently") {

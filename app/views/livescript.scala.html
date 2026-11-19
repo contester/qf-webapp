@@ -1,4 +1,4 @@
-@(eventsPath: String, currentTeam: Int)
+@(eventsPath: String)
 <script type="text/javascript">
-    $(function() { liveMonitor('@eventsPath', '#live-monitor', @currentTeam); });
+    $(function() { liveMonitor('@eventsPath', '#live-monitor'); });
 </script>

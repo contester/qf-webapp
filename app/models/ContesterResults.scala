@@ -9,7 +9,9 @@ object ContesterResults {
     implicit val submitObjectFormat = Json.format[SubmitObject]
   }
 
-  case class FinishedTesting(submit: SubmitObject, testingId: Int, compiled: Boolean, passed: Int, taken: Int)
+  /** A finished testing of a submit; `points` are the submit's points now (None: not set). */
+  case class FinishedTesting(submit: SubmitObject, testingId: Int, compiled: Boolean, passed: Int, taken: Int,
+                             points: Option[Double] = None)
 
   object FinishedTesting {
     implicit val finishedTestingFormat = Json.format[FinishedTesting]

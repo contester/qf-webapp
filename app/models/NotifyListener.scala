@@ -100,10 +100,10 @@ object NotifyListener {
     * Where the events go: `status` gets FinishedTesting, CustomTestResult, ContestChanged and ContestRemoved (it feeds
     * the round clock), `teams` gets TeamsChanged (also for every round_changed: a round that became usable needs its
     * teams, one that did not is dropped), and the hooks are told of a changed or removed round (the live monitor, the
-    * problems).
+    * problems, the public board cache) and of every TeamsChanged (the live monitor, the public board cache).
     */
   case class Targets(status: ActorRef, teams: ActorRef, contestChanged: Contest => Unit = _ => (),
-                     contestRemoved: Int => Unit = _ => ())
+                     contestRemoved: Int => Unit = _ => (), teamsChanged: Int => Unit = _ => ())
 
   /** Published on the event stream each time the listener has (re)connected and issued its LISTENs. */
   case class Listening(applicationName: String)
@@ -141,11 +141,11 @@ object NotifyListener {
 
   /** The finished testing as the status actor takes it; None when unknown or not the submit's current testing (stale). */
   def finishedTesting(db: JdbcBackend#DatabaseDef, testingId: Long)(implicit ec: ExecutionContext): Future[Option[FinishedTesting]] =
-    db.run(sql"""select s.id, s.participant_id, s.round_id, s.problem_id, s.compiled, s.passed, s.taken
+    db.run(sql"""select s.id, s.participant_id, s.round_id, s.problem_id, s.compiled, s.passed, s.taken, s.points
                    from testings t join submits s on s.id = t.submit_id
-                  where t.id = $testingId and s.testing_id = t.id""".as[(Long, Int, Int, String, Boolean, Int, Int)].headOption)
-      .map(_.map { case (submit, team, round, problem, compiled, passed, taken) =>
-        FinishedTesting(SubmitObject(submit.toInt, team, round, problem), testingId.toInt, compiled, passed, taken)
+                  where t.id = $testingId and s.testing_id = t.id""".as[(Long, Int, Int, String, Boolean, Int, Int, Option[Double])].headOption)
+      .map(_.map { case (submit, team, round, problem, compiled, passed, taken, points) =>
+        FinishedTesting(SubmitObject(submit.toInt, team, round, problem), testingId.toInt, compiled, passed, taken, points)
       })
 
   def customTestResult(db: JdbcBackend#DatabaseDef, id: Long)(implicit ec: ExecutionContext): Future[Option[CustomTestResult]] =
@@ -243,6 +243,11 @@ class NotifyListener(settings: NotifyListener.ConnectionSettings, db: JdbcBacken
     case () => // the status actor's acknowledgement of a result; nothing waits for it
   }
 
+  private def teamsChanged(round: Int): Unit = {
+    targets.teams.tell(StatusActor.TeamsChanged(round), self)
+    Try(targets.teamsChanged(round)).failed.foreach(e => logger.warn(s"teams change hook for round $round: $e"))
+  }
+
   private def handle(channel: String, payload: String): Future[Unit] =
     parse(channel, payload) match {
       case None =>
@@ -266,19 +271,19 @@ class NotifyListener(settings: NotifyListener.ConnectionSettings, db: JdbcBacken
         Rounds.currentRound(db, id).map {
           case Some(c) =>
             targets.status.tell(StatusActor.ContestChanged(c), self)
-            targets.teams.tell(StatusActor.TeamsChanged(id), self)
+            teamsChanged(id)
             Try(targets.contestChanged(c)).failed.foreach(e => logger.warn(s"contest change hook for round $id: $e"))
           case None =>
             // Gone, of another season, or without times: such a round is unusable and is dropped everywhere.
             logger.info(s"round $id is not a current round with times; removing it")
             targets.status.tell(StatusActor.ContestRemoved(id), self)
-            targets.teams.tell(StatusActor.TeamsChanged(id), self)
+            teamsChanged(id)
             Try(targets.contestRemoved(id)).failed.foreach(e => logger.warn(s"contest removal hook for round $id: $e"))
         }
       case Some(CredentialChanged(round, _)) =>
-        targets.teams.tell(StatusActor.TeamsChanged(round), self)
+        teamsChanged(round)
         Future.unit
       case Some(ParticipantChanged(participant)) =>
-        roundsOfParticipant(db, participant).map(_.foreach(r => targets.teams.tell(StatusActor.TeamsChanged(r), self)))
+        roundsOfParticipant(db, participant).map(_.foreach(teamsChanged))
     }
 }

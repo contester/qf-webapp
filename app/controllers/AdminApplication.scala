@@ -41,7 +41,6 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
                                   configuration: Configuration,
                                   ws: WSClient,
                         liveHooks: live.LiveHooks,
-                        liveConfig: live.LiveMonitorConfig,
                         liveMonitor: live.LiveMonitorRef,
                         stats: live.ConnectionStats) extends AbstractController(cc)  with I18nSupport with Logging {
 
@@ -83,41 +82,28 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     LiveStreams.response(stats.events())
   }
 
-  // The points board of the round, rendered from the database; admins see it always.
-  // TODO(task17): restore the live admin board (SSE deltas) over the points cells; until then the page is static.
+  // The live points board of the round: admins see it always, the real one, while the round runs too. The page
+  // carries the board the stream starts with; when the live monitor cannot give one (it does not hold the round),
+  // the board is rendered from the database instead.
   def monitor(id: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(id)).async { implicit request =>
     monitorModel.source.round(id).flatMap { round =>
       BoardAccess.decide(round, AdminViewer, org.joda.time.DateTime.now) match {
         case Left(result) => Future.successful(result)
         case Right(contest) =>
-          getSelectedContests(id, request.identity).zip(monitorModel.source.board(contest.id)).map {
-            case (selected, board) => Ok(html.admin.monitor(selected.copy(contest = contest), board))
+          getSelectedContests(id, request.identity).zip(LiveStreams.snapshot(liveMonitor.ref, LiveStreams.adminJoin(contest.id))).flatMap {
+            case (selected, Some(initial)) =>
+              Future.successful(Ok(html.admin.livemonitor(selected.copy(contest = contest), initial))
+                .withHeaders(LiveStreams.pageHeaders: _*))
+            case (selected, None) =>
+              monitorModel.source.board(contest.id).map(board => Ok(html.admin.monitor(selected.copy(contest = contest), board)))
           }
       }
     }
   }
 
-  // The public page and stream of any contest, for the people who can open its admin monitor: what the public
-  // would see, whether or not the contest is on the public list. Nothing here is reachable without a session.
-  def publicPreview(id: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(id)).async { implicit request =>
-    if (!liveConfig.enabled) Future.successful(NotFound)
-    else getSelectedContests(id, request.identity).flatMap { sel =>
-      if (sel.contest.id != id) Future.successful(NotFound)
-      else LiveStreams.snapshot(liveMonitor.ref, LiveStreams.publicPreviewJoin(id)).map { initial =>
-        Ok(html.publiclive(sel.contest, routes.AdminApplication.publicPreviewEvents(id).url, initial))
-          .withHeaders(LiveStreams.pageHeaders: _*)
-      }
-    }
-  }
-
-  def publicPreviewEvents(id: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(id)).async { implicit request =>
-    LiveStreams.stream(liveMonitor.ref.filter(_ => liveConfig.enabled), LiveStreams.publicPreviewJoin(id), stats)
-  }
-
-  // The real board for accounts that can see everything, otherwise the freezing board.
+  // The admin live board's stream (deltas of the points board); admins only.
   def monitorEvents(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
-    LiveStreams.stream(liveMonitor.ref.filter(_ => liveConfig.enabled),
-      LiveStreams.adminJoin(contestId, request.identity.canSeeAll(contestId)), stats)
+    LiveStreams.stream(liveMonitor.ref, LiveStreams.adminJoin(contestId), stats)
   }
 
 
@@ -149,9 +135,9 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }
 
-  // The status page's rows as they arrive and finish; 404 when the live monitor is off (the page is then static).
+  // The status page's rows as they arrive and finish.
   def statusEvents(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
-    LiveStreams.stream(liveMonitor.ref.filter(_ => liveConfig.enabled),
+    LiveStreams.stream(liveMonitor.ref,
       LiveStreams.adminStatusJoin(contestId, request.identity.canSeeAll(contestId)), stats)
   }
 
@@ -162,7 +148,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
         case (contest, teamMap) =>
           AdminSubmits.page(db, contestId, team, before, after, account.canSeeAll(contestId)).map { page =>
             Ok(html.admin.submits(page, teamMap, contest, account, team,
-              live = liveMonitor.ref.isDefined && liveConfig.enabled, newest = before.isEmpty && page.newer.isEmpty))
+              live = liveMonitor.ref.isDefined, newest = before.isEmpty && page.newer.isEmpty))
           }
       }
     }

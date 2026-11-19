@@ -2,29 +2,49 @@ package live
 
 import actors.LiveMonitorActor
 import akka.actor.ActorRef
+import org.stingray.contester.dbmodel.Contest
 
 import scala.util.Try
 
-/** Fire-and-forget notifications for the live monitor. Implementations never throw and never block. */
+/**
+  * Fire-and-forget notifications of what changed a round's board: for the admin live monitor and for the public
+  * board cache. Implementations never throw and never block.
+  */
 trait LiveHooks {
   def submitArrived(contest: Int, rec: SubmitRec): Unit
-  def finished(contest: Int, id: Int, compiled: Boolean, passed: Int, taken: Int): Unit
+  /** A testing finished: the submit's current points (None when it has none). */
+  def finished(contest: Int, id: Int, compiled: Boolean, points: Option[Double]): Unit
   def rejudged(id: Int): Unit
-  /** A team's details in one contest changed; `team` is the whole new value. */
-  def teamChanged(contest: Int, team: org.stingray.contester.dbmodel.Team): Unit
-  /** A contest row was changed by the application; `contest` is the whole new row. */
-  def contestChanged(contest: org.stingray.contester.dbmodel.Contest): Unit
-  /** A round vanished or became unusable; the monitor drops it. */
+  /** The round's participants changed (credential_changed, participant_changed, round_changed). */
+  def teamsChanged(roundId: Int): Unit
+  /** A contest row changed (or something else of the round: its problems); `contest` is the whole new row. */
+  def contestChanged(contest: Contest): Unit
+  /** A round vanished or became unusable. */
   def contestRemoved(roundId: Int): Unit
 }
 
 object NoopLiveHooks extends LiveHooks {
   override def submitArrived(contest: Int, rec: SubmitRec): Unit = ()
-  override def finished(contest: Int, id: Int, compiled: Boolean, passed: Int, taken: Int): Unit = ()
+  override def finished(contest: Int, id: Int, compiled: Boolean, points: Option[Double]): Unit = ()
   override def rejudged(id: Int): Unit = ()
-  override def teamChanged(contest: Int, team: org.stingray.contester.dbmodel.Team): Unit = ()
-  override def contestChanged(contest: org.stingray.contester.dbmodel.Contest): Unit = ()
+  override def teamsChanged(roundId: Int): Unit = ()
+  override def contestChanged(contest: Contest): Unit = ()
   override def contestRemoved(roundId: Int): Unit = ()
+}
+
+object LiveHooks {
+  /** Every call goes to each of the hooks in turn; one that throws does not keep the call from the others. */
+  def all(hooks: LiveHooks*): LiveHooks = new LiveHooks {
+    private def each(f: LiveHooks => Unit): Unit = hooks.foreach(h => Try(f(h)))
+
+    override def submitArrived(contest: Int, rec: SubmitRec): Unit = each(_.submitArrived(contest, rec))
+    override def finished(contest: Int, id: Int, compiled: Boolean, points: Option[Double]): Unit =
+      each(_.finished(contest, id, compiled, points))
+    override def rejudged(id: Int): Unit = each(_.rejudged(id))
+    override def teamsChanged(roundId: Int): Unit = each(_.teamsChanged(roundId))
+    override def contestChanged(contest: Contest): Unit = each(_.contestChanged(contest))
+    override def contestRemoved(roundId: Int): Unit = each(_.contestRemoved(roundId))
+  }
 }
 
 class ActorLiveHooks(ref: ActorRef) extends LiveHooks {
@@ -35,16 +55,14 @@ class ActorLiveHooks(ref: ActorRef) extends LiveHooks {
 
   override def submitArrived(contest: Int, rec: SubmitRec): Unit = tell(LiveMonitorActor.Arrived(contest, rec))
 
-  override def finished(contest: Int, id: Int, compiled: Boolean, passed: Int, taken: Int): Unit =
-    tell(LiveMonitorActor.Finished(contest, id, compiled, passed, taken))
+  override def finished(contest: Int, id: Int, compiled: Boolean, points: Option[Double]): Unit =
+    tell(LiveMonitorActor.Finished(contest, id, compiled, points))
 
   override def rejudged(id: Int): Unit = tell(LiveMonitorActor.RejudgeRequested(id))
 
-  override def teamChanged(contest: Int, team: org.stingray.contester.dbmodel.Team): Unit =
-    tell(LiveMonitorActor.TeamChanged(contest, team))
+  override def teamsChanged(roundId: Int): Unit = tell(LiveMonitorActor.TeamsChanged(roundId))
 
-  override def contestChanged(contest: org.stingray.contester.dbmodel.Contest): Unit =
-    tell(LiveMonitorActor.ContestChanged(contest))
+  override def contestChanged(contest: Contest): Unit = tell(LiveMonitorActor.ContestChanged(contest))
 
   override def contestRemoved(roundId: Int): Unit = tell(LiveMonitorActor.ContestRemoved(roundId))
 }

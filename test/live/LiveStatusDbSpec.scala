@@ -85,7 +85,7 @@ class LiveStatusDbSpec extends TestKit(ActorSystem("LiveStatusDbSpec", ConfigFac
     assert((arrived \ "id").as[Int] == id && (arrived \ "team").as[Int] == sample.submit.submitId.teamId)
     assert((arrived \ "rw").as[String].contains("Running..."), "an arrival shows as running")
 
-    f.actor ! Finished(cid, id, compiled = true, sample.submit.passed, sample.submit.taken)
+    f.actor ! Finished(cid, id, compiled = true, sample.submit.points)
     val finished = rowOf(p)
     assert((finished \ "rw").as[String].contains(sample.result.message), s"expected '${sample.result.message}'")
     assert((finished \ "rw").as[String].contains(s"rejudge-$id") && !(finished \ "ro").as[String].contains(s"rejudge-$id"))
@@ -118,7 +118,7 @@ class LiveStatusDbSpec extends TestKit(ActorSystem("LiveStatusDbSpec", ConfigFac
     f.actor ! Arrived(cid, hookRec(sample))
     viewers.foreach(rowOf)
     // One at a time: a finish heard while the arrival's row is still being read replaces it (tested elsewhere).
-    f.actor ! Finished(cid, sample.submit.submitId.id, compiled = true, 1, 1)
+    f.actor ! Finished(cid, sample.submit.submitId.id, compiled = true, Some(1.0))
     viewers.foreach(rowOf)
     assert(rows.reads.get == 2)
     f.stop()

@@ -5,7 +5,6 @@ import akka.stream.Materializer
 import akka.stream.scaladsl.Sink
 import akka.testkit.TestKit
 import com.typesafe.config.ConfigFactory
-import live.{LiveMonitorConfig, LiveMonitorRef}
 import models._
 import org.joda.time.DateTime
 import org.scalatest.BeforeAndAfterAll
@@ -102,8 +101,7 @@ class BoardAccessSpec extends TestKit(ActorSystem("BoardAccessSpec", ConfigFacto
   private def controller(rounds: Map[Int, Contest]) = {
     val asked = new java.util.concurrent.atomic.AtomicInteger(0)
     val source = BoardSource(id => Future.successful(rounds.get(id)), _ => { asked.incrementAndGet(); Future.successful(board) })
-    (new PublicMonitor(cc, LiveMonitorConfig(enabled = false, Set.empty, 10),
-      LiveMonitorRef(None), source, new live.ConnectionStats), asked)
+    (new PublicMonitor(cc, source, new PublicBoardCache), asked)
   }
 
   private def get(path: String): Request[AnyContent] =

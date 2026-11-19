@@ -44,7 +44,6 @@ class AdminSubmitRowDbSpec extends AnyFunSuite {
         val one = await(AdminSubmits.row(db, id)).getOrElse(fail(s"no row for submit $id of contest $c"))
         assert(one.submit.submitId.contestId == c && one.submit.submitId.teamId == shown.submit.submitId.teamId, s"submit $id")
         assert(one.result.message == shown.result.message, s"verdict of $id")
-        assert(one.score.map(_.toString) == shown.score.map(_.toString), s"score of $id")
         assert(one.stats == shown.stats, s"stats of $id")
         assert(one.runs == shown.runs, s"runs of $id")
         assert(one.submit.submitId.arrived.afterFreeze == shown.submit.submitId.arrived.afterFreeze, s"freeze flag of $id")

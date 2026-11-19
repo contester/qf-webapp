@@ -1,24 +1,26 @@
 package views
 
-import live.{LiveBoard, LiveCell, LiveJson, StaticRender}
-import org.joda.time.DateTime
+import live.{LiveBoard, LiveCell, LiveJson}
+import models.ProblemColumn
 import org.scalatest.funsuite.AnyFunSuite
-import org.stingray.contester.dbmodel.{Contest, Disqualified, NotRated, Team}
+import org.stingray.contester.dbmodel.{NotRated, Team}
 import play.api.i18n.{DefaultMessagesApi, Lang, MessagesImpl}
 import play.api.libs.json.Json
 
 import scala.io.Source
 
-// The live table markup contract: livetable.scala.html (static files) and liveTableHtml in main.js (live pages)
+// The admin live table markup contract: livetable.scala.html (the page) and liveTableHtml in main.js (the stream)
 // must both produce test/resources/live/livetable.html for the board in test/resources/live/livetable.json.
 object LiveTableFixture {
+  val problems = Seq(ProblemColumn("A", "Alpha's", 10), ProblemColumn("B", "B&B", 2.5))
+
   val teams = Seq(
     Team(1, 2, "<Alpha>", "Lyceum & Co", "City", None),
-    Team(2, 0, "Beta's", "School 2", "City", Some(NotRated)))
+    Team(2, 5, "Beta's", "School 2", "City", Some(NotRated)))
 
-  val board: LiveBoard = LiveBoard.build(Seq("A", "B", "C", "D"), teams, Map(
-    1 -> Map("A" -> LiveCell.Solved(2, 1260), "B" -> LiveCell.Failed(2), "C" -> LiveCell.Pending(0)),
-    2 -> Map("A" -> LiveCell.Pending(1))))
+  val board: LiveBoard = LiveBoard.build(problems, teams, Map(
+    1 -> Map("A" -> LiveCell(Some(10), 1, full = true, 0, Some(1260)), "B" -> LiveCell(None, 2, full = false, 1, None)),
+    2 -> Map("A" -> LiveCell(Some(4), 2, full = false, 1, None))))
 
   private def resource(name: String): String = {
     val s = Source.fromResource(s"live/$name", getClass.getClassLoader)
@@ -32,37 +34,19 @@ object LiveTableFixture {
 class LiveTableSpec extends AnyFunSuite {
   private implicit val messages: MessagesImpl = MessagesImpl(Lang("en"), new DefaultMessagesApi())
 
-  private def contest(start: DateTime) =
-    Contest(1, "Open & Cup", start, start.plusHours(5), None, 1)
-
-  test("livetable renders the exact contract markup: solved with time, failed, pending, empty, not-rated rank, highlight") {
-    assert(html.livetable(LiveTableFixture.board, currentTeam = 1).body.trim == LiveTableFixture.html)
-  }
-
-  test("livetable shows DSQ and a red row for a disqualified team") {
-    val dsq = Team(3, 0, "", "School 3", "City", Some(Disqualified))
-    val b = LiveBoard.build(Seq("A"), Seq(dsq), Map(3 -> Map("A" -> LiveCell.Solved(1, 60))))
-    val out = html.livetable(b, currentTeam = 3).body
-    assert(out.contains("""<tr data-team="3" class="danger"><th scope="row">DSQ</th>"""), out)
+  test("livetable renders the exact contract markup: full, partial, no points, in flight, unranked, escaping") {
+    assert(html.livetable(LiveTableFixture.board).body.trim == LiveTableFixture.html)
   }
 
   test("the JSON fixture used by the browser-side check is LiveJson.board of the same board") {
     assert(Json.parse(LiveTableFixture.json) == LiveJson.board(LiveTableFixture.board))
   }
 
-  test("static page after start: the table without highlight, escaped title, 60 s reload") {
-    val page = StaticRender.render(contest(DateTime.now.minusHours(1)), LiveTableFixture.board)
-    assert(page.contains(html.livetable(LiveTableFixture.board, currentTeam = 0).body.trim))
-    assert(!page.contains("class=\"info\""))
-    assert(page.contains("<title>Open &amp; Cup</title>"))
-    assert(page.contains("location.reload()"))
-    assert(page.contains("60000"))
-  }
-
-  test("static page before start: no table body") {
-    val page = StaticRender.render(contest(DateTime.now.plusHours(1)), LiveTableFixture.board)
-    assert(page.contains("<title>Open &amp; Cup</title>"))
-    assert(!page.contains("<tbody"))
-    assert(!page.contains("<table"))
+  test("the admin page shell carries the table and the labels the script needs, and no freeze banner") {
+    val shell = html.liveshell(org.stingray.contester.dbmodel.Contest(1, "R", org.joda.time.DateTime.now.minusHours(1),
+      org.joda.time.DateTime.now.plusHours(1), None, 1), LiveTableFixture.board).body
+    assert(shell.contains(html.livetable(LiveTableFixture.board).body.trim))
+    assert(shell.contains("data-label-total=\"label.total\""))
+    assert(!shell.contains("contest-frozen") && !shell.contains("frozen"))
   }
 }

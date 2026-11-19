@@ -15,7 +15,6 @@ POST /ackMessage controllers.Application.ackMessage
 
 GET /monitor controllers.Application.monitorDefault
 GET /monitor/ controllers.Application.monitorDefault
-GET /monitor/events controllers.Application.monitorEvents
 
 GET /submit controllers.Application.submit
 POST /submit controllers.Application.submitPost
@@ -39,7 +38,6 @@ GET /admin/contester/:contestId controllers.AdminApplication.contester(contestId
 GET /admin/monitor/:contestId controllers.AdminApplication.monitor(contestId: Int)
 GET /admin/monitor/:contestId/events controllers.AdminApplication.monitorEvents(contestId: Int)
 GET /public/monitor/:contestId controllers.PublicMonitor.page(contestId: Int)
-GET /public/monitor/:contestId/events controllers.PublicMonitor.events(contestId: Int)
 
 
 GET /admin/rejudge/:contestId controllers.AdminApplication.rejudgePage(contestId: Int)
@@ -68,8 +66,6 @@ GET /admin/login controllers.AdminAuthForms.login
 POST /admin/login controllers.AdminAuthForms.authenticate
 GET /admin/logout controllers.AdminAuthForms.logout
 GET /admin/feed/:contestId controllers.AdminApplication.feed(contestId: Int)
-GET /admin/publicPreview/:contestId controllers.AdminApplication.publicPreview(contestId: Int)
-GET /admin/publicPreview/:contestId/events controllers.AdminApplication.publicPreviewEvents(contestId: Int)
 
 
 

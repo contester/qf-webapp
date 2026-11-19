@@ -30,7 +30,7 @@ class TeamProblemSubmitsDbSpec extends AnyFunSuite {
   private lazy val db = dbConfig.db
 
   private def summary(fs: FullyDescribedSubmit) =
-    (fs.submit.submitId.id, fs.index, fs.score.map(_.toString), fs.result.success, fs.result.message, fs.stats)
+    (fs.submit.submitId.id, fs.index, fs.result.success, fs.result.message, fs.stats)
 
   test("every team and problem agrees with the full pipeline") {
     import org.stingray.contester.dbmodel.MyPostgresProfile.api._

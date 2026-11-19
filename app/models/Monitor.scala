@@ -1,11 +1,8 @@
 package models
 
-import actors.MonitorActor
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorSystem
 import org.joda.time.DateTime
 import org.stingray.contester.dbmodel.{Contest, Disqualified, NotRated, SlickModel, Team}
-import play.api.Configuration
-import play.api.i18n.MessagesApi
 import slick.basic.DatabaseConfig
 import slick.jdbc.{JdbcBackend, JdbcProfile}
 
@@ -121,16 +118,7 @@ object BoardSource {
     BoardSource(id => Rounds.currentRound(db, id), id => MonitorPoints.load(db, id))
 }
 
-class Monitor(dbConfig: DatabaseConfig[JdbcProfile], system: ActorSystem, configuration: Configuration,
-              messagesApi: MessagesApi, liveConfig: live.LiveMonitorConfig) {
-  private val db = dbConfig.db
-
-  val source: BoardSource = BoardSource.fromDb(db)(system.dispatcher)
-
-  // Not started when the live monitor is on: that one writes the static files instead.
-  private[this] val monitorActor: Option[ActorRef] =
-    if (live.LiveWiring.startOldMonitor(liveConfig))
-      Some(system.actorOf(MonitorActor.props(db, configuration.getOptional[String]("monitor.static_location"), messagesApi),
-        "monitor-actor"))
-    else None
+/** The boards of the monitor pages, rendered on demand from the database. */
+class Monitor(dbConfig: DatabaseConfig[JdbcProfile], system: ActorSystem) {
+  val source: BoardSource = BoardSource.fromDb(dbConfig.db)(system.dispatcher)
 }

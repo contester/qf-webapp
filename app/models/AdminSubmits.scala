@@ -7,7 +7,7 @@ import slick.jdbc.JdbcBackend
 import scala.concurrent.{ExecutionContext, Future}
 
 /** One row of the admin status page. No per-test details: those are only needed on the submit page. */
-case class AdminSubmitRow(submit: Submit, score: Option[Score], result: SubmitResult, stats: SubmitStats, runs: Int)
+case class AdminSubmitRow(submit: Submit, result: SubmitResult, stats: SubmitStats, runs: Int)
 
 /**
  * A page of the admin status page, newest first. `older`/`newer` are the id cursors to pass as
@@ -80,30 +80,15 @@ object AdminSubmits {
         .as[(Long, Int)].map(_.toMap)
     }
 
-  /**
-   * The rows for the submits `shown` (newest first). `base` is the query they came from: the scores need everything
-   * the same teams submitted for the same problems in it, up to the newest shown submit.
-   */
-  private def describe(db: JdbcBackend#DatabaseDef, base: Query[SlickModel.LiftedSubmit, UpliftedSubmit, Seq], shown: Seq[Submit])(
+  /** The rows for the submits `shown` (newest first): their verdicts, the stats of their testings and the run counts. */
+  private def describe(db: JdbcBackend#DatabaseDef, shown: Seq[Submit])(
     implicit ec: ExecutionContext): Future[Seq[AdminSubmitRow]] = {
-    val maxId = shown.head.submitId.id.toLong
-    val pairs = shown.map(s => (s.submitId.teamId, s.submitId.problem.id)).distinct
-    val context = base.filter(x => pairs.map { case (t, p) => x.teamID === t && x.problemID === p }.reduceLeft(_ || _))
-      .filter(_.id <= maxId)
     val testingIds = shown.flatMap(_.testingId.map(_.toLong))
 
-    db.run(context.result.zip(aggregates(testingIds)).zip(runCounts(shown.map(_.submitId.id.toLong))).map {
-      case ((ctx, aggs), counts) => (ctx, aggs, counts)
-    }).map { case (ctx, aggs, counts) =>
-      // groupByTP orders by whole seconds and is stable, so what the query returns decides submits in the same second:
-      // by id, the same for every page and for a single row.
-      val scores: Map[Int, Option[Score]] = Submits.groupByTP(ctx.map(Submits.upliftSub).sortBy(_.submitId.id)).values.flatMap { subs =>
-        Submits.scoreGrouped(subs, ACMCell.empty, ACMScorer)._2.map { case (s, sc) => s.submitId.id -> sc }
-      }.toMap
-
+    db.run(aggregates(testingIds).zip(runCounts(shown.map(_.submitId.id.toLong)))).map { case (aggs, counts) =>
       shown.map { s =>
         val agg = s.testingId.flatMap(t => aggs.get(t.toLong))
-        AdminSubmitRow(s, scores.getOrElse(s.submitId.id, None),
+        AdminSubmitRow(s,
           SubmitResult.fromSubmit(s),
           agg.map(_.stats).getOrElse(SubmitStats(TimeMs(0), Memory(0))),
           counts.getOrElse(s.submitId.id.toLong, 0))
@@ -117,7 +102,7 @@ object AdminSubmits {
       case None => Future.successful(None)
       case Some(found) =>
         val s = Submits.upliftSub(found)
-        describe(db, submitsQuery.filter(_.contestID === s.submitId.contestId), Seq(s)).map(_.headOption)
+        describe(db, Seq(s)).map(_.headOption)
     }
 
   /**
@@ -125,7 +110,7 @@ object AdminSubmits {
    * @param team only this team's submits
    * @param before only submits with a smaller id (the next, older page)
    * @param after only submits with a bigger id (the previous, newer page)
-   * @param canSeeAll false hides submits after the freeze, from the list and from the scores
+   * @param canSeeAll false hides submits after the freeze
    */
   def page(db: JdbcBackend#DatabaseDef, contest: Int, team: Option[Int], before: Option[Long], after: Option[Long],
            canSeeAll: Boolean, size: Int = PageSize)(implicit ec: ExecutionContext): Future[AdminSubmitPage] = {
@@ -145,7 +130,7 @@ object AdminSubmits {
       else {
         val maxId = shown.head.submitId.id.toLong
         val minId = shown.last.submitId.id.toLong
-        describe(db, base, shown).map { rows =>
+        describe(db, shown).map { rows =>
           val (older, newer) = after match {
             case Some(_) => (Some(minId), if (hasMore) Some(maxId) else None)
             case None => (if (hasMore) Some(minId) else None, before.map(_ => maxId))

@@ -1,81 +1,53 @@
 package live
 
-import akka.actor.ActorRef
 import org.joda.time.DateTime
-import org.stingray.contester.dbmodel.{Contest, NotRated, Team}
+import org.stingray.contester.dbmodel.Contest
 import org.scalatest.funsuite.AnyFunSuite
 
-import scala.concurrent.duration._
-
 class LiveWiringSpec extends AnyFunSuite {
-  private def cfg(enabled: Boolean) = LiveMonitorConfig(enabled, (1 to 10).toSet, 1000)
-
-  test("disabled: no-op hooks, the actor factory is never called, the old monitor starts") {
-    var started = 0
-    val built = LiveWiring.build(cfg(enabled = false), () => { started += 1; ActorRef.noSender })
-    assert(built.hooks eq NoopLiveHooks)
-    assert(built.monitor.isEmpty)
-    assert(started == 0)
-    assert(LiveWiring.startOldMonitor(cfg(enabled = false)))
+  private class Recording(name: String, calls: scala.collection.mutable.Buffer[String]) extends LiveHooks {
+    override def submitArrived(contest: Int, rec: SubmitRec): Unit = calls += s"$name arrived $contest ${rec.id}"
+    override def finished(contest: Int, id: Int, compiled: Boolean, points: Option[Double]): Unit =
+      calls += s"$name finished $contest $id $compiled $points"
+    override def rejudged(id: Int): Unit = calls += s"$name rejudged $id"
+    override def teamsChanged(roundId: Int): Unit = calls += s"$name teams $roundId"
+    override def contestChanged(contest: Contest): Unit = calls += s"$name contest ${contest.id}"
+    override def contestRemoved(roundId: Int): Unit = calls += s"$name removed $roundId"
   }
 
-  test("contest time events have exactly one host: the live monitor when enabled, StatusActor when not") {
-    assert(LiveWiring.timeEventHost(cfg(enabled = true)) == LiveMonitorHost)
-    assert(LiveWiring.timeEventHost(cfg(enabled = false)) == StatusActorHost)
-    for (enabled <- Seq(true, false)) {
-      // the old monitor and the StatusActor's tracker are on and off together: never two producers, never none
-      assert((LiveWiring.timeEventHost(cfg(enabled)) == StatusActorHost) == LiveWiring.startOldMonitor(cfg(enabled)))
-    }
+  private def every(hooks: LiveHooks): Unit = {
+    hooks.submitArrived(1, SubmitRec(5, 2, "A", new DateTime(0), 0, Pending))
+    hooks.finished(1, 5, compiled = true, Some(2.5))
+    hooks.rejudged(5)
+    hooks.teamsChanged(1)
+    hooks.contestChanged(Contest(3, "c", new DateTime(0), new DateTime(0), None, 1))
+    hooks.contestRemoved(3)
   }
 
-  test("enabled: actor hooks on the started actor, the old monitor does not start") {
-    var started = 0
-    val built = LiveWiring.build(cfg(enabled = true), () => { started += 1; ActorRef.noSender })
-    assert(built.hooks.isInstanceOf[ActorLiveHooks])
-    assert(built.monitor.contains(ActorRef.noSender))
-    assert(started == 1)
-    assert(!LiveWiring.startOldMonitor(cfg(enabled = true)))
-  }
+  private val expected = Seq("arrived 1 5", "finished 1 5 true Some(2.5)", "rejudged 5", "teams 1", "contest 3", "removed 3")
 
   test("ActorLiveHooks swallows an exception thrown by the send") {
     // A null ref makes `ref ! msg` throw a NullPointerException.
-    val hooks = new ActorLiveHooks(null)
-    hooks.submitArrived(1, SubmitRec(1, 2, "A", new DateTime(0), 0, Pending))
-    hooks.finished(1, 1, compiled = true, 3, 100)
-    hooks.rejudged(1)
-    hooks.teamChanged(1, Team(2, 0, "", "School", "City", Some(NotRated)))
+    every(new ActorLiveHooks(null))
   }
 
   test("deferred hooks resolve their target only on first use and forward every call") {
     var resolved = 0
     val calls = scala.collection.mutable.Buffer.empty[String]
-    val target = new LiveHooks {
-      override def submitArrived(contest: Int, rec: SubmitRec): Unit = calls += s"arrived $contest ${rec.id}"
-      override def finished(contest: Int, id: Int, compiled: Boolean, passed: Int, taken: Int): Unit =
-        calls += s"finished $contest $id $compiled $passed $taken"
-      override def rejudged(id: Int): Unit = calls += s"rejudged $id"
-      override def teamChanged(contest: Int, team: Team): Unit = calls += s"team $contest ${team.id}"
-      override def contestChanged(contest: Contest): Unit = calls += s"contest ${contest.id}"
-      override def contestRemoved(roundId: Int): Unit = calls += s"removed $roundId"
-    }
-    val hooks = LiveWiring.deferred { resolved += 1; target }
+    val hooks = LiveWiring.deferred { resolved += 1; new Recording("t", calls) }
     assert(resolved == 0)
-    hooks.submitArrived(1, SubmitRec(5, 2, "A", new DateTime(0), 0, Pending))
-    hooks.finished(1, 5, compiled = true, 3, 100)
-    hooks.rejudged(5)
-    hooks.teamChanged(1, Team(7, 0, "", "School", "City", None))
-    hooks.contestChanged(Contest(3, "c", new DateTime(0), new DateTime(0), None, 1))
-    hooks.contestRemoved(3)
+    every(hooks)
     assert(resolved == 1)
-    assert(calls == Seq("arrived 1 5", "finished 1 5 true 3 100", "rejudged 5", "team 1 7", "contest 3", "removed 3"))
+    assert(calls == expected.map("t " + _))
   }
 
   test("deferred hooks swallow an exception from resolving or calling the target") {
-    val hooks = LiveWiring.deferred(throw new IllegalStateException("boom"))
-    hooks.submitArrived(1, SubmitRec(5, 2, "A", new DateTime(0), 0, Pending))
-    hooks.finished(1, 5, compiled = true, 3, 100)
-    hooks.rejudged(5)
-    hooks.teamChanged(1, Team(7, 0, "", "School", "City", None))
-    hooks.contestChanged(Contest(3, "c", new DateTime(0), new DateTime(0), None, 1))
+    every(LiveWiring.deferred(throw new IllegalStateException("boom")))
+  }
+
+  test("LiveHooks.all forwards every call to each hook in turn, even when one of them throws") {
+    val calls = scala.collection.mutable.Buffer.empty[String]
+    every(LiveHooks.all(new Recording("a", calls), new ActorLiveHooks(null), new Recording("b", calls)))
+    assert(calls == expected.flatMap(e => Seq("a " + e, "b " + e)))
   }
 }

@@ -1,123 +1,97 @@
 package live
 
-import org.joda.time.DateTime
+import models.ProblemColumn
 import org.stingray.contester.dbmodel.{Contest, Team}
 
 import scala.collection.mutable
 
-sealed trait BoardOut
-case class RowOut(change: RowChange) extends BoardOut
-case class WholeOut(board: LiveBoard) extends BoardOut
-
-// `public` is the change of the public board: the freezing board without the contest jury teams.
-case class Delta(freezing: Seq[BoardOut], real: Seq[BoardOut], ownCells: Seq[(Int, Map[String, LiveCell])],
-                 public: Seq[BoardOut] = Nil)
-
-object Delta {
-  val empty: Delta = Delta(Nil, Nil, Nil)
+/** What one event did to the board, in order. */
+case class Delta(board: Seq[BoardOut]) {
+  def nonEmpty: Boolean = board.nonEmpty
 }
 
-// Mutable, single-threaded: one actor owns each instance.
-class LiveContest(initial: Contest, problems: Seq[String], teams: Seq[Team], subs: Seq[SubmitRec], now: DateTime) {
-  private[this] var current: Contest = initial
-  private[this] var currentRules: FreezeRules = FreezeRules.of(initial)
-  private[this] var lastNow: DateTime = now
+object Delta {
+  val empty: Delta = Delta(Nil)
+}
 
-  private[this] var teamList: Vector[Team] = teams.toVector
+/**
+  * The live points board of one round, kept from its submit events. There is one board, the real one: admins see it
+  * always, and nobody else gets a live board. Mutable, single-threaded: one actor owns each instance.
+  */
+class LiveContest(initial: Contest, val problems: Seq[ProblemColumn], teams: Seq[Team], subs: Seq[SubmitRec]) {
+  private[this] var current: Contest = initial
+
   private[this] var teamById: Map[Int, Team] = teams.map(t => t.id -> t).toMap
-  private[this] val problemSet: Set[String] = problems.toSet
+  private[this] val maxPoints: Map[String, Double] = problems.map(p => p.id -> p.maxPoints).toMap
 
   private[this] val byId = mutable.Map.empty[Int, SubmitRec]
   private[this] val byCell = mutable.Map.empty[(Int, String), Vector[SubmitRec]]
 
-  subs.foreach(r => if (accepts(r)) insert(r))
+  // Every submit of a known problem is kept, also those of a team that is not listed (an inactive credential), so that
+  // the team's work is back when it is listed again.
+  subs.foreach(r => if (maxPoints.contains(r.problem)) insert(r))
 
-  private[this] var freezingBoard: LiveBoard = buildBoard(Freezing, now)
-  private[this] var realBoard: LiveBoard = buildBoard(Real, now)
-  private[this] var pubBoard: LiveBoard = buildPublic(now)
+  private[this] var liveBoard: LiveBoard = buildBoard()
 
-  /** What the public sees: the freezing board without the not-rated contest jury teams (coach teams stay). */
-  def publicBoard: LiveBoard = pubBoard
-
-  def board(kind: BoardKind): LiveBoard = kind match {
-    case Freezing => freezingBoard
-    case Real => realBoard
-  }
-
+  def board: LiveBoard = liveBoard
   def contest: Contest = current
-  def rules: FreezeRules = currentRules
+  def teamList: Seq[Team] = teamById.values.toSeq.sortBy(_.id)
   def records: Seq[SubmitRec] = byId.values.toSeq.sortBy(_.id)
+
+  /** Whether an arrival can be on this board: a listed team and a known problem. */
+  def accepts(rec: SubmitRec): Boolean = teamById.contains(rec.team) && maxPoints.contains(rec.problem)
 
   // A repeated arrival (e.g. a late message after the row was loaded for an early finish) is ignored:
   // the stored record and its state win.
-  def onArrived(rec: SubmitRec, now: DateTime): Delta =
+  def onArrived(rec: SubmitRec): Delta =
     if (!accepts(rec) || byId.contains(rec.id)) Delta.empty
     else {
       insert(rec)
-      applyCells(Seq(rec.team -> rec.problem), now)
+      applyCell(rec.team, rec.problem)
     }
 
-  def onFinished(id: Int, compiled: Boolean, passed: Int, taken: Int, now: DateTime): Option[Delta] =
-    setState(id, Done(compiled, passed, taken), now)
+  /** A testing finished: the submit's points are now `points` (they replace the old ones, never add). */
+  def onFinished(id: Int, compiled: Boolean, points: Option[Double]): Option[Delta] =
+    setState(id, Done(compiled, points))
 
-  def onRejudge(id: Int, now: DateTime): Option[Delta] =
-    setState(id, Pending, now)
+  /** A rejudge was asked for: the submit is in flight again and does not count for the best until it finishes. */
+  def onRejudge(id: Int): Option[Delta] =
+    setState(id, Pending)
 
-  def onTick(now: DateTime): Option[Delta] =
-    if (crossed(now)) Some(rebuildAll(now)) else {
-      lastNow = now
-      None
-    }
-
-  /**
-    * A team's details changed (not rated, disqualified, name, school, number): replace it, or add a team new to the
-    * contest. While the contest runs, a team that stays on the same boards is moved and re-ranked as one row change
-    * per board, like a score change. Anything else (a team added, disabled or enabled, one that appears on or leaves
-    * the public board, a contest not started yet whose boards carry no ranks) rebuilds the boards.
-    */
-  def onTeamChanged(team: Team, now: DateTime): Delta = {
-    val old = teamById.get(team.id)
-    val i = teamList.indexWhere(_.id == team.id)
-    teamList = if (i >= 0) teamList.updated(i, team) else teamList :+ team
+  /** A team's details changed (name, school, not rated, disqualified), or a team new to the round. */
+  def onTeamChanged(team: Team): Delta = {
     teamById += team.id -> team
-    val inPlace = old.exists(o => !o.disabled && !team.disabled &&
-      LiveContest.hiddenFromPublic(o) == LiveContest.hiddenFromPublic(team)) &&
-      !now.isBefore(current.startTime) && !crossed(now)
-    if (!inPlace) rebuildAll(now)
-    else {
-      lastNow = now
-      def step(b: LiveBoard): (LiveBoard, Seq[BoardOut]) =
-        b.rowOf(team.id).fold((b, Seq.empty[BoardOut])) { r =>
-          val (nb, ch) = b.update(team, r.cells)
-          (nb, ch.map(RowOut).toSeq)
-        }
-      val (nf, fo) = step(freezingBoard)
-      val (nr, ro) = step(realBoard)
-      val (np, po) = step(pubBoard)
-      freezingBoard = nf
-      realBoard = nr
-      pubBoard = np
-      Delta(fo, ro, Nil, po)
-    }
+    val (nb, out) = liveBoard.update(team, teamCells(team.id))
+    liveBoard = nb
+    Delta(out.toSeq)
   }
 
-  def onContest(c: Contest, now: DateTime): Delta = {
+  /** A team left the round (its credential was deactivated or deleted). Its submits are kept. */
+  def onTeamRemoved(teamId: Int): Delta = {
+    teamById -= teamId
+    val (nb, out) = liveBoard.remove(teamId)
+    liveBoard = nb
+    Delta(out.toSeq)
+  }
+
+  /** The round's whole team list as now stored: each changed, new or vanished team is applied in turn. */
+  def onTeams(teams: Seq[Team]): Delta = {
+    val now = teams.map(t => t.id -> t).toMap
+    val removed = teamById.keys.filterNot(now.contains).toSeq.sorted.map(onTeamRemoved)
+    val changed = teams.sortBy(_.id).filterNot(t => teamById.get(t.id).contains(t)).map(onTeamChanged)
+    Delta((removed ++ changed).flatMap(_.board))
+  }
+
+  /** The round's row changed (name, times): the board does not depend on it. */
+  def onContest(c: Contest): Delta = {
     current = c
-    currentRules = FreezeRules.of(c)
-    rebuildAll(now)
+    Delta.empty
   }
 
-  def rebuilt(problems: Seq[String], teams: Seq[Team], subs: Seq[SubmitRec], now: DateTime): LiveContest =
-    new LiveContest(current, problems, teams, subs, now)
+  def rebuilt(problems: Seq[ProblemColumn], teams: Seq[Team], subs: Seq[SubmitRec]): LiveContest =
+    new LiveContest(current, problems, teams, subs)
 
-  def differences(other: LiveContest): Seq[String] =
-    Seq(Freezing, Real).flatMap(kind => LiveContest.boardDifferences(kind, board(kind), other.board(kind))) ++
-      LiveContest.boardDifferences(Freezing, publicBoard, other.publicBoard).map("public " + _)
-
-  // Disabled teams are on no board and score nothing. Their submits are still kept, for when they are enabled again.
-  private[this] def onBoards: Vector[Team] = teamList.filterNot(_.disabled)
-
-  private[this] def accepts(r: SubmitRec): Boolean = teamById.contains(r.team) && problemSet(r.problem)
+  def differences(other: LiveContest): Seq[String] = LiveContest.boardDifferences(board, other.board)
 
   private[this] def insert(r: SubmitRec): Unit = {
     byId(r.id) = r
@@ -126,103 +100,53 @@ class LiveContest(initial: Contest, problems: Seq[String], teams: Seq[Team], sub
       .sortBy(x => (x.arrivedAt.getMillis, x.id))
   }
 
-  private[this] def setState(id: Int, state: SubmitState, now: DateTime): Option[Delta] =
+  private[this] def setState(id: Int, state: SubmitState): Option[Delta] =
     byId.get(id).map { old =>
-      if (old.state == state && !crossed(now)) {
-        lastNow = now
-        Delta.empty
-      } else {
+      if (old.state == state) Delta.empty
+      else {
         insert(old.copy(state = state))
-        applyCells(Seq(old.team -> old.problem), now)
+        applyCell(old.team, old.problem)
       }
     }
 
-  private[this] def cellOf(teamId: Int, problem: String, kind: BoardKind, now: DateTime): LiveCell =
-    LiveCells.cellOf(byCell.getOrElse((teamId, problem), Vector.empty), kind, currentRules, now)
+  private[this] def cellOf(teamId: Int, problem: String): LiveCell =
+    LiveCells.cellOf(byCell.getOrElse((teamId, problem), Vector.empty), maxPoints.getOrElse(problem, 0))
 
-  private[this] def teamCells(teamId: Int, kind: BoardKind, now: DateTime): Map[String, LiveCell] =
+  private[this] def teamCells(teamId: Int): Map[String, LiveCell] =
     problems.flatMap { p =>
-      val c = cellOf(teamId, p, kind, now)
-      if (c == LiveCell.Empty) None else Some(p -> c)
+      val c = cellOf(teamId, p.id)
+      if (c.isEmpty) None else Some(p.id -> c)
     }.toMap
 
-  private[this] def buildBoard(kind: BoardKind, now: DateTime): LiveBoard =
-    LiveBoard.build(problems, onBoards, onBoards.map(t => t.id -> teamCells(t.id, kind, now)).toMap)
+  private[this] def buildBoard(): LiveBoard =
+    LiveBoard.build(problems, teamById.values.toSeq, teamById.keys.map(id => id -> teamCells(id)).toMap)
 
-  private[this] def buildPublic(now: DateTime): LiveBoard = {
-    val shown = onBoards.filterNot(LiveContest.hiddenFromPublic)
-    LiveBoard.build(problems, shown, shown.map(t => t.id -> teamCells(t.id, Freezing, now)).toMap)
-  }
-
-  // True when now and the last seen instant lie on different sides of start, freeze or expose.
-  // The live monitor wakes at these instants (ContestTimeTracker.nextDeadline lists them): keep the two in step.
-  private[this] def crossed(now: DateTime): Boolean =
-    Seq(current.startTime, current.freezeTime, current.exposeTime).exists(t => lastNow.isBefore(t) != now.isBefore(t))
-
-  private[this] def rebuildAll(now: DateTime): Delta = {
-    lastNow = now
-    freezingBoard = buildBoard(Freezing, now)
-    realBoard = buildBoard(Real, now)
-    pubBoard = buildPublic(now)
-    Delta(Seq(WholeOut(freezingBoard)), Seq(WholeOut(realBoard)), Nil, Seq(WholeOut(pubBoard)))
-  }
-
-  private[this] def freezeActive(now: DateTime): Boolean =
-    currentRules.freezeTime.isBefore(currentRules.endTime) && !now.isBefore(currentRules.freezeTime) &&
-      now.isBefore(currentRules.exposeTime)
-
-  // Recomputes only the touched (team, problem) cells; a crossed time boundary rebuilds both boards instead.
-  private[this] def applyCells(touched: Seq[(Int, String)], now: DateTime): Delta =
-    if (crossed(now)) rebuildAll(now)
-    else {
-      lastNow = now
-      val teamIds = touched.map(_._1).distinct.filterNot(tid => teamById(tid).disabled)
-      def step(kind: BoardKind, start: LiveBoard, ids: Seq[Int] = teamIds): (LiveBoard, Seq[BoardOut]) =
-        ids.foldLeft((start, Seq.empty[BoardOut])) { case ((b, outs), tid) =>
-          val old = b.rowOf(tid).map(_.cells).getOrElse(Map.empty[String, LiveCell])
-          val cells = touched.filter(_._1 == tid).map(_._2).distinct.foldLeft(old) { (m, p) =>
-            val c = cellOf(tid, p, kind, now)
-            if (c == LiveCell.Empty) m - p else m + (p -> c)
-          }
-          val (nb, ch) = b.update(teamById(tid), cells)
-          (nb, outs ++ ch.map(RowOut))
-        }
-      val (nf, fo) = step(Freezing, freezingBoard)
-      val (nr, ro) = step(Real, realBoard)
-      val (np, po) = step(Freezing, pubBoard, teamIds.filterNot(tid => LiveContest.hiddenFromPublic(teamById(tid))))
-      freezingBoard = nf
-      realBoard = nr
-      pubBoard = np
-      val own =
-        if (!freezeActive(now)) Nil
-        else teamIds.flatMap { tid =>
-          val real = nr.rowOf(tid).map(_.cells).getOrElse(Map.empty[String, LiveCell])
-          val frozen = nf.rowOf(tid).map(_.cells).getOrElse(Map.empty[String, LiveCell])
-          val realChanged = ro.exists { case RowOut(c) => c.team == tid; case _ => false }
-          if (realChanged || real != frozen) Some(tid -> real) else None
-        }
-      Delta(fo, ro, own, po)
+  // Recomputes the one touched cell and re-ranks.
+  private[this] def applyCell(teamId: Int, problem: String): Delta =
+    teamById.get(teamId) match {
+      case None => Delta.empty // a team that is not listed: its submit is kept, it is on no board
+      case Some(team) =>
+        val old = liveBoard.rowOf(teamId).map(_.cells).getOrElse(Map.empty[String, LiveCell])
+        val c = cellOf(teamId, problem)
+        val (nb, out) = liveBoard.update(team, if (c.isEmpty) old - problem else old + (problem -> c))
+        liveBoard = nb
+        Delta(out.toSeq)
     }
 }
 
 object LiveContest {
-  /** Teams the public board leaves out. There are no jury teams any more: none (the scoreboard rewrite drops this). */
-  def hiddenFromPublic(t: Team): Boolean = false
-
-  private[live] def boardDifferences(kind: BoardKind, a: LiveBoard, b: LiveBoard): Seq[String] = {
-    val header =
-      (if (a.problems != b.problems) Seq(s"$kind: problems ${a.problems} vs ${b.problems}") else Nil) ++
-        (if (a.solvedCounts != b.solvedCounts) Seq(s"$kind: solved counts ${a.solvedCounts} vs ${b.solvedCounts}") else Nil)
+  private[live] def boardDifferences(a: LiveBoard, b: LiveBoard): Seq[String] = {
+    val header = if (a.problems != b.problems) Seq(s"problems ${a.problems} vs ${b.problems}") else Nil
     val rows = (0 until a.rows.size.max(b.rows.size)).flatMap { i =>
       (a.rows.lift(i), b.rows.lift(i)) match {
         case (Some(x), Some(y)) if x == y => None
         case (Some(x), Some(y)) if x.team.id != y.team.id =>
-          Some(s"$kind: position $i has team ${x.team.id} vs team ${y.team.id}")
+          Some(s"position $i has team ${x.team.id} vs team ${y.team.id}")
         case (Some(x), Some(y)) =>
-          Some(s"$kind: team ${x.team.id} at position $i: rank ${x.rank}/${y.rank}, score ${x.score}/${y.score}, " +
+          Some(s"team ${x.team.id} at position $i: place ${x.place}/${y.place}, total ${x.total}/${y.total}, " +
             s"cells ${x.cells}/${y.cells}, team ${x.team}/${y.team}")
-        case (Some(x), None) => Some(s"$kind: team ${x.team.id} only on the first board")
-        case (None, Some(y)) => Some(s"$kind: team ${y.team.id} only on the second board")
+        case (Some(x), None) => Some(s"team ${x.team.id} only on the first board")
+        case (None, Some(y)) => Some(s"team ${y.team.id} only on the second board")
         case _ => None
       }
     }

@@ -1,6 +1,6 @@
-{"problems":["A","B","C","D"],"solved":{"A":1,"B":0,"C":0,"D":0},"rows":[
-{"team":1,"school":"2. Lyceum & Co, City","name":"<Alpha>","rank":"1","solved":1,"penalty":41,
- "cells":{"A":{"t":"ok","s":"+1","at":"00:21"},"B":{"t":"fail","s":"-2"},"C":{"t":"pend","s":"?1"},"D":{"t":"empty","s":""}}},
-{"team":2,"school":"0. School 2, City","name":"Beta's","rank":"*","solved":0,"penalty":0,
- "cells":{"A":{"t":"pend","s":"?2"},"B":{"t":"empty","s":""},"C":{"t":"empty","s":""},"D":{"t":"empty","s":""}}}
+{"problems":[{"id":"A","name":"Alpha's","max":"10"},{"id":"B","name":"B&B","max":"2.5"}],"rows":[
+{"team":1,"number":2,"name":"<Alpha>","school":"Lyceum & Co, City","place":1,"total":"10",
+ "cells":{"A":{"n":1,"f":true,"p":0,"b":"10"},"B":{"n":2,"f":false,"p":1}}},
+{"team":2,"number":5,"name":"Beta's","school":"School 2, City","place":null,"total":"4",
+ "cells":{"A":{"n":2,"f":false,"p":1,"b":"4"}}}
 ]}

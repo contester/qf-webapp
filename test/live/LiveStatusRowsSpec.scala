@@ -50,7 +50,7 @@ class LiveStatusRowsSpec extends TestKit(ActorSystem("LiveStatusRowsSpec", Confi
     assert((arrived \ "rw").as[String] == "rw-11-Running...")
     assert((arrived \ "ro").as[String] == "ro-11-Running...")
 
-    f.actor ! Finished(1, 11, compiled = true, 3, 3)
+    f.actor ! Finished(1, 11, compiled = true, Some(3.0))
     assert((row(p) \ "rw").as[String] == "rw-11-done")
     f.stop()
   }
@@ -78,7 +78,7 @@ class LiveStatusRowsSpec extends TestKit(ActorSystem("LiveStatusRowsSpec", Confi
     f.barrier()
     // The finish is read after the arrival, and quickly.
     rows.gates.remove(11)
-    f.actor ! Finished(1, 11, compiled = true, 3, 3)
+    f.actor ! Finished(1, 11, compiled = true, Some(3.0))
     assert((row(p) \ "rw").as[String] == "rw-11-done")
     slow.success(())
     f.barrier()
@@ -107,7 +107,7 @@ class LiveStatusRowsSpec extends TestKit(ActorSystem("LiveStatusRowsSpec", Confi
     val rows = new FakeRows
     val f = new Fixture(running, statusRows = rows)
     f.actor ! Arrived(1, rec(11, 1, "A", running))
-    f.actor ! Finished(1, 11, compiled = true, 3, 3)
+    f.actor ! Finished(1, 11, compiled = true, Some(3.0))
     f.actor ! RejudgeRequested(11)
     f.barrier()
     assert(rows.asked.isEmpty)
@@ -131,7 +131,7 @@ class LiveStatusRowsSpec extends TestKit(ActorSystem("LiveStatusRowsSpec", Confi
     Await.result(f.join(JoinAdminStatus(1, real = true)).take(1).runWith(Sink.ignore)(Materializer(system)), 5.seconds)
     f.barrier()
     f.actor ! Arrived(1, rec(11, 1, "A", running))
-    f.actor ! Finished(1, 11, compiled = true, 3, 3)
+    f.actor ! Finished(1, 11, compiled = true, Some(3.0))
     f.barrier()
     assert(rows.asked.isEmpty)
     f.stop()

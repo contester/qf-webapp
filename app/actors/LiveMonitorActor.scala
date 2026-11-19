@@ -1,13 +1,11 @@
 package actors
 
-import java.io.File
-
 import akka.NotUsed
 import akka.actor.{Actor, ActorLogging, Props, Stash, Status, Timers}
 import akka.stream.scaladsl.Source
 import akka.stream.{BoundedSourceQueue, Materializer, QueueOfferResult}
 import live._
-import models.{ACM, ProblemClient, Submits}
+import models.{ProblemColumn, Rounds, Submits}
 import org.stingray.qf.actors.ProblemStateActor
 import org.joda.time.DateTime
 import org.stingray.contester.dbmodel.{Contest, Team}
@@ -25,23 +23,24 @@ import scala.util.{Failure, Success, Try}
 object LiveMonitorActor {
   // Events (fire-and-forget, see live.LiveHooks).
   case class Arrived(contest: Int, rec: SubmitRec)
-  case class Finished(contest: Int, id: Int, compiled: Boolean, passed: Int, taken: Int)
+  /** A testing finished; `points` are the submit's points now (they replace the old ones). */
+  case class Finished(contest: Int, id: Int, compiled: Boolean, points: Option[Double])
   case class RejudgeRequested(id: Int)
-  /** A team's details in a contest changed (not rated, name, school, number); `team` is the whole new value. */
-  case class TeamChanged(contest: Int, team: Team)
+  /**
+    * The round's participants changed (credential_changed: unrated, is_active; participant_changed: name, school;
+    * round_changed). The team list is read again and each changed, new or vanished row is applied to the board.
+    */
+  case class TeamsChanged(contest: Int)
   /** A contest row changed (round_changed: times, name, ...); `contest` is the whole new row. A new id is loaded. */
   case class ContestChanged(contest: Contest)
   /** A round vanished or became unusable: dropped, and its streams end. */
   case class ContestRemoved(contest: Int)
 
-  // Each join is answered with a Source[Event, NotUsed] whose first element is the `board` event,
-  // or with Status.Failure when the contest is unknown (or, for JoinPublic, not public).
+  // Each join is answered with a Source[Event, NotUsed] whose first element is the `board` event (`ready` for the
+  // status rows), or with Status.Failure when the contest is unknown. There are only admin joins: nobody else gets a
+  // live board (contestants and the public see the board once the round is over, rendered from the database).
   sealed trait Join
-  case class JoinPublic(contest: Int) extends Join
-  // The public board for a contest that need not be public: only for the admin-protected preview routes.
-  case class JoinPublicPreview(contest: Int) extends Join
-  case class JoinTeam(contest: Int, team: Int) extends Join
-  case class JoinAdmin(contest: Int, real: Boolean) extends Join
+  case class JoinAdmin(contest: Int) extends Join
   /**
     * The rows of the admin status page: a `ready` event first, then a `statusRow` event for every submit that arrives,
     * finishes or is rejudged. `real` false hides the submits after the freeze, as the page does.
@@ -50,17 +49,21 @@ object LiveMonitorActor {
 
   /**
     * The board a join would start with, as a LiveBoard (for server-side rendering of the page), answered with
-    * Status.Failure like the join. A team's own row shows its real cells, with the frozen rank and score.
+    * Status.Failure like the join.
     */
   case class Snapshot(join: Join)
 
   // The deadline wake (the one exact timer, see rearm); public so tests can drive it with timers switched off.
   case object Tick
 
-  case class ContestData(problems: Seq[String], teams: Seq[Team], submits: Seq[SubmitRec])
+  case class ContestData(problems: Seq[ProblemColumn], teams: Seq[Team], submits: Seq[SubmitRec])
 
   trait ContestLoader {
     def load(contest: Contest)(implicit ec: ExecutionContext): Future[ContestData]
+
+    /** The round's participants as now stored. A failure makes the actor reload the whole contest instead. */
+    def teams(contest: Int)(implicit ec: ExecutionContext): Future[Seq[Team]] =
+      Future.failed(new UnsupportedOperationException("teams"))
 
     /** The contest a submit belongs to, None if there is no such submit. A failure makes callers fall back to reloading every contest. */
     def contestOf(submitId: Int)(implicit ec: ExecutionContext): Future[Option[Int]] =
@@ -141,39 +144,35 @@ object LiveMonitorActor {
                          scheduled: Boolean = true)
 
   /**
-    * Teams from the team state actor; problems and all submits of the contest (finished or not) from the database.
-    * Problems are read directly: a round_changed for a problem change reaches the problem state actor and this
-    * monitor at the same time, and the actor's own reload may not have finished yet.
+    * Problems, participants and all submits of the contest (finished or not), straight from the database: a
+    * round_changed or credential_changed reaches the problem and team state actors at the same time as this monitor,
+    * and their own reloads may not have finished yet.
     */
-  class DbContestLoader(db: JdbcBackend#DatabaseDef, teamClient: TeamClient, problemClient: ProblemClient)
-    extends ContestLoader {
-    private implicit val timeout: akka.util.Timeout = akka.util.Timeout(30.seconds)
-
+  class DbContestLoader(db: JdbcBackend#DatabaseDef) extends ContestLoader {
     override def load(contest: Contest)(implicit ec: ExecutionContext): Future[ContestData] =
       ProblemStateActor.loadRound(db, contest.id)
-        .zip(teamClient.getTeams(contest.id))
+        .zip(teams(contest.id))
         .zip(db.run(Submits.getContestSubmits(contest.id)))
         .map { case ((problems, teams), submits) =>
-          ContestData(problems.map(_.id), teams.values.toSeq,
+          ContestData(problems.map(p => ProblemColumn(p.id, p.name, p.maxPoints)), teams,
             submits.map(s => SubmitRec.fromSubmit(Submits.upliftSub(s))))
         }
+
+    override def teams(contest: Int)(implicit ec: ExecutionContext): Future[Seq[Team]] =
+      Rounds.teamsOfRound(db, contest)
 
     override def contestOf(submitId: Int)(implicit ec: ExecutionContext): Future[Option[Int]] =
       db.run(Submits.contestOfSubmit(submitId))
   }
 
-  def props(db: JdbcBackend#DatabaseDef, cfg: LiveMonitorConfig, staticLocation: Option[File],
-            teamClient: TeamClient, problemClient: ProblemClient, contests: () => Future[Seq[Contest]],
-            renderStatic: (Contest, LiveBoard) => String, palevo: PalevoSink,
+  def props(db: JdbcBackend#DatabaseDef, contests: () => Future[Seq[Contest]], palevo: PalevoSink,
             countdown: CountdownConfig = CountdownConfig.Default, statusRows: StatusRows = NoStatusRows): Props =
-    propsWith(cfg, staticLocation, contests, new DbContestLoader(db, teamClient, problemClient), renderStatic, palevo,
-      SystemLiveClock, LiveTimings(), countdown, statusRows)
+    propsWith(contests, new DbContestLoader(db), palevo, SystemLiveClock, LiveTimings(), countdown, statusRows)
 
-  def propsWith(cfg: LiveMonitorConfig, staticLocation: Option[File], contests: () => Future[Seq[Contest]],
-                loader: ContestLoader, renderStatic: (Contest, LiveBoard) => String, palevo: PalevoSink,
+  def propsWith(contests: () => Future[Seq[Contest]], loader: ContestLoader, palevo: PalevoSink,
                 clock: LiveClock, timings: LiveTimings, countdown: CountdownConfig = CountdownConfig.Default,
                 statusRows: StatusRows = NoStatusRows): Props =
-    Props(new LiveMonitorActor(cfg, staticLocation, contests, loader, renderStatic, palevo, clock, timings, countdown, statusRows))
+    Props(new LiveMonitorActor(contests, loader, palevo, clock, timings, countdown, statusRows))
 
   /**
     * How long to sleep until `deadline` (the earliest moment something can happen): a margin past it so the clock has
@@ -189,50 +188,42 @@ object LiveMonitorActor {
   private case class Loaded(contest: Int, result: Try[ContestData])
   private case class Added(contest: Contest, result: Try[ContestData])
   private case class RejudgeContest(id: Int, result: Try[Option[Int]])
+  private case class TeamsLoaded(contest: Int, result: Try[Seq[Team]])
   private case class StartReload(contest: Int)
   private case class Register(contest: Int, viewer: Viewer, queue: BoundedSourceQueue[Event])
   private case class Unregister(contest: Int, queue: BoundedSourceQueue[Event])
   private case class StatusRowReady(seq: Long, id: Int, result: Try[Option[StatusRow]])
 
   private sealed trait Viewer
-  private case object PublicViewer extends Viewer
-  private case object AdminFreezingViewer extends Viewer
-  private case object AdminRealViewer extends Viewer
-  private case class TeamViewer(team: Int) extends Viewer
+  private case object BoardViewer extends Viewer
   // Not a board: the rows of the status page. `real` sees the submits after the freeze.
   private case class StatusViewer(real: Boolean) extends Viewer
 
   private sealed trait Ev { def id: Int }
   private case class EvArrived(rec: SubmitRec) extends Ev { def id: Int = rec.id }
-  private case class EvFinished(id: Int, compiled: Boolean, passed: Int, taken: Int) extends Ev
+  private case class EvFinished(id: Int, compiled: Boolean, points: Option[Double]) extends Ev
   // quiet: one of many reloads looking for an id no contest knew; a miss is not worth a warning per contest.
   private case class EvRejudge(id: Int, quiet: Boolean = false) extends Ev
 
   private val pingEvent = Event("", None, Some("ping"))
   private val roundChangedReason = "round changed"
-  private val emptyBoard = LiveBoard(Nil, Vector.empty, Map.empty)
-
-  /** What a viewer without the real board sees before the start: the teams, in board order, and no problems; a not-rated team keeps rank 0. */
-  private[actors] def teamsOnly(b: LiveBoard): LiveBoard =
-    LiveBoard(Nil, b.rows.map(r => r.copy(score = ACM.Score(0, 0, 0), cells = Map.empty, rank = if (r.rank == 0) 0 else 1)), Map.empty)
 }
 
 /**
-  * Owns one LiveContest per contest, applies submit events to it and streams the boards over SSE.
+  * Owns one LiveContest per contest, applies submit events to it and streams the points board to admins over SSE.
+  * Nothing else gets a live board, and nothing is written to files.
   *
   * Startup loads every contest before any event is handled (Stash). Each event is applied inside Try: a failure is
   * logged and the contest is rebuilt from the database (rate-limited). The database is read only at startup, for a
-  * new round (ContestChanged), for an event about a submit id the contest does not know, and after a failure. Nothing
+  * new round (ContestChanged), for the team list on TeamsChanged, for an event about a submit id the contest does not
+  * know, and after a failure. Nothing
   * runs on an interval: the only timers are the exact deadline wake, the reload backoff and the start-up retry.
   *
   * Streams are per-connection queues registered with this actor, so the first `board` event and the later updates
   * come from the same ordered sequence and nothing is lost between the snapshot and the subscription.
   */
-class LiveMonitorActor(cfg: LiveMonitorConfig,
-                       staticLocation: Option[File],
-                       contestRows: () => Future[Seq[Contest]],
+class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
                        loader: LiveMonitorActor.ContestLoader,
-                       renderStatic: (Contest, LiveBoard) => String,
                        palevoSink: PalevoSink,
                        clock: LiveMonitorActor.LiveClock,
                        timings: LiveMonitorActor.LiveTimings,
@@ -246,8 +237,8 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
   private class Load(val reason: String, val waiting: Vector[Ev]) {
     // Events applied to the live state while this load runs; replayed onto the rebuilt state.
     var applied: Vector[Ev] = Vector.empty
-    // Team changes that came in while this load ran; its team list may predate them.
-    var teamChanges: Vector[Team] = Vector.empty
+    // A team list read while this load ran; the load's own list may predate it.
+    var teams: Option[Seq[Team]] = None
   }
 
   private class ContestState(var live: LiveContest) {
@@ -259,7 +250,9 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
     // Events about ids the contest did not know, waiting for the next load.
     var waiting: Vector[Ev] = Vector.empty
     var dirty = false
-    var staticFailing = false
+    // A team list read is running; another TeamsChanged came in meanwhile (read once more after it).
+    var teamsLoading = false
+    var teamsAgain = false
     // Ids still unknown after a reload, or arrivals the contest does not accept: never reload for them again.
     val ignored: mutable.Set[Int] = mutable.Set.empty
   }
@@ -321,15 +314,12 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
     * built is skipped (the others keep working) and retried on the next ContestChanged of its round.
     */
   private def add(c: Contest, d: ContestData, now: DateTime): Unit =
-    Try(new LiveContest(c, d.problems, d.teams, d.submits, now)) match {
+    Try(new LiveContest(c, d.problems, d.teams, d.submits)) match {
       case Success(lc) =>
         val st = new ContestState(lc)
         contests(c.id) = st
         observeTime(c, now)
-        guarded(c.id, st) {
-          observePalevo(st)
-          writeStatic(c.id, st)
-        }
+        guarded(c.id, st)(observePalevo(st))
       case Failure(e) =>
         log.error(e, s"live monitor: cannot build contest ${c.id}; will retry on the next change of its round")
     }
@@ -347,9 +337,9 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       withContest(cid, "arrival")(st => applyEvent(cid, st, EvArrived(rec), mayReload = false))
       requestStatusRow(cid, rec.id, Some(models.SubmitWaiting))
 
-    case Finished(cid, id, compiled, passed, taken) =>
+    case Finished(cid, id, compiled, points) =>
       rejudging -= id
-      withContest(cid, "finish")(st => applyEvent(cid, st, EvFinished(id, compiled, passed, taken), mayReload = true))
+      withContest(cid, "finish")(st => applyEvent(cid, st, EvFinished(id, compiled, points), mayReload = true))
       requestStatusRow(cid, id, None)
 
     case RejudgeRequested(id) =>
@@ -358,7 +348,10 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
 
     case StatusRowReady(seq, id, result) => statusRowReady(seq, id, result)
 
-    case TeamChanged(cid, team) => withContest(cid, "team change")(st => teamChanged(cid, st, team))
+    // A round the monitor does not hold gets its teams when it is loaded.
+    case TeamsChanged(cid) => contests.get(cid).foreach(st => readTeams(cid, st))
+
+    case TeamsLoaded(cid, result) => contests.get(cid).foreach(st => teamsLoaded(cid, st, result))
 
     case j: Join => viewerOf(j) match {
       case Some((cid, viewer)) => join(cid, viewer)
@@ -366,9 +359,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
     }
 
     case Snapshot(j) =>
-      val board = viewerOf(j).flatMap { case (cid, viewer) =>
-        contests.get(cid).map(st => Try(snapshotBoard(st, viewer)))
-      }
+      val board = contests.get(contestOf(j)).map(st => Try(st.live.board))
       sender() ! (board match {
         case Some(Success(b)) => b
         case Some(Failure(e)) => Status.Failure(e)
@@ -384,11 +375,8 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       val now = clock.now()
       contests.foreach { case (cid, st) =>
         observeTime(st.live.contest, now)
-        Try(st.live.onTick(now)) match {
-          case Success(Some(d)) => changed(cid, st, d)
-          case Success(None) => ()
-          case Failure(e) => failed(cid, st, e)
-        }
+        // At the end the public standings tracker starts from the final board (see StandingsAnnouncer).
+        guarded(cid, st)(observePalevo(st))
       }
       armedFor = None // the wake that brought us here (or a 7-day cap): the next one is chosen afresh
       rearm(now)
@@ -429,21 +417,15 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
   private def notFound(cid: Int) = new NoSuchElementException(s"live monitor: no contest $cid")
 
   private def contestOf(j: Join): Int = j match {
-    case JoinPublic(c) => c
-    case JoinPublicPreview(c) => c
-    case JoinTeam(c, _) => c
-    case JoinAdmin(c, _) => c
+    case JoinAdmin(c) => c
     case JoinAdminStatus(c, _) => c
   }
 
   private def notFound(j: Join): NoSuchElementException = notFound(contestOf(j))
 
-  /** The contest and viewer of a join; None when it is not allowed (a contest that is not public). */
+  /** The contest and viewer of a join. */
   private def viewerOf(j: Join): Option[(Int, Viewer)] = j match {
-    case JoinPublic(cid) => if (cfg.publicContests(cid)) Some(cid -> PublicViewer) else None
-    case JoinPublicPreview(cid) => Some(cid -> PublicViewer)
-    case JoinTeam(cid, team) => Some(cid -> TeamViewer(team))
-    case JoinAdmin(cid, real) => Some(cid -> (if (real) AdminRealViewer else AdminFreezingViewer))
+    case JoinAdmin(cid) => Some(cid -> BoardViewer)
     case JoinAdminStatus(cid, real) => Some(cid -> StatusViewer(real))
   }
 
@@ -463,22 +445,18 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
     requestReload(cid, st)
   }
 
-  private def applyTo(lc: LiveContest, ev: Ev, now: DateTime): Option[Delta] = ev match {
-    case EvArrived(rec) => Some(lc.onArrived(rec, now))
-    case EvFinished(id, compiled, passed, taken) => lc.onFinished(id, compiled, passed, taken, now)
-    case EvRejudge(id, _) => lc.onRejudge(id, now)
+  private def applyTo(lc: LiveContest, ev: Ev): Option[Delta] = ev match {
+    case EvArrived(rec) => Some(lc.onArrived(rec))
+    case EvFinished(id, compiled, points) => lc.onFinished(id, compiled, points)
+    case EvRejudge(id, _) => lc.onRejudge(id)
   }
 
-  private def accepts(lc: LiveContest, rec: SubmitRec): Boolean =
-    lc.board(Real).problems.contains(rec.problem) && lc.board(Real).rowOf(rec.team).isDefined
-
   private def applyEvent(cid: Int, st: ContestState, ev: Ev, mayReload: Boolean): Unit = {
-    val now = clock.now()
     ev match {
-      case EvArrived(rec) if !accepts(st.live, rec) => st.ignored += rec.id
+      case EvArrived(rec) if !st.live.accepts(rec) => st.ignored += rec.id
       case _ =>
     }
-    Try(applyTo(st.live, ev, now)) match {
+    Try(applyTo(st.live, ev)) match {
       case Success(Some(d)) =>
         st.loading.foreach(l => l.applied :+= ev)
         ev match {
@@ -502,17 +480,37 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
     }
   }
 
-  private def teamChanged(cid: Int, st: ContestState, team: Team): Unit = {
-    st.loading.foreach(l => l.teamChanges :+= team)
-    Try(st.live.onTeamChanged(team, clock.now())) match {
-      case Success(d) => changed(cid, st, d)
-      case Failure(e) => failed(cid, st, e)
+  /** Reads the round's team list; a burst of TeamsChanged while a read runs gives one more read after it. */
+  private def readTeams(cid: Int, st: ContestState): Unit =
+    if (st.teamsLoading) st.teamsAgain = true
+    else {
+      st.teamsLoading = true
+      Future.fromTry(Try(loader.teams(cid))).flatten.onComplete(r => self ! TeamsLoaded(cid, r))
+    }
+
+  private def teamsLoaded(cid: Int, st: ContestState, result: Try[Seq[Team]]): Unit = {
+    st.teamsLoading = false
+    result match {
+      case Success(ts) =>
+        st.loading.foreach(l => l.teams = Some(ts))
+        Try(st.live.onTeams(ts)) match {
+          case Success(d) => changed(cid, st, d)
+          case Failure(e) => failed(cid, st, e)
+        }
+      case Failure(e) =>
+        // The change must not be lost: the whole contest is read again (with the reload backoff).
+        log.warning(s"live monitor: contest $cid: cannot read its teams ($e); reloading the contest")
+        st.dirty = true
+        requestReload(cid, st)
+    }
+    if (st.teamsAgain) {
+      st.teamsAgain = false
+      readTeams(cid, st)
     }
   }
 
   private def rejudge(id: Int): Unit = {
-    val now = clock.now()
-    val found = contests.iterator.map { case (cid, st) => (cid, st, Try(st.live.onRejudge(id, now))) }
+    val found = contests.iterator.map { case (cid, st) => (cid, st, Try(st.live.onRejudge(id))) }
       .find { case (_, _, r) => r != Success(None) }
     found match {
       case Some((cid, st, Success(Some(d)))) =>
@@ -602,7 +600,6 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
 
   /** Builds the state from the database data and replaces the live one; false when it could not be built. */
   private def rebuild(cid: Int, st: ContestState, l: Load, data: ContestData): Boolean = {
-    val now = clock.now()
     // While a rejudge runs the database still holds the old result (`tested` stays true), so a recent in-flight
     // rejudge keeps its pending state: it is neither reported as a mismatch nor reverted. An entry older than
     // rejudgeMaxAge is taken to have lost its finish: it is dropped and the database state wins.
@@ -610,12 +607,12 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
     val ms = clock.millis()
     val subs = data.submits.map(s => if (youngRejudge(s.id, ms)) s.copy(state = live.Pending) else s)
     val result = Try {
-      val fresh = st.live.rebuilt(data.problems, data.teams, subs, now)
+      val fresh = st.live.rebuilt(data.problems, data.teams, subs)
       l.applied.foreach { ev =>
-        Try(applyTo(fresh, ev, now)).failed.foreach(e => log.warning(s"live monitor: contest $cid: replay of $ev failed: $e"))
+        Try(applyTo(fresh, ev)).failed.foreach(e => log.warning(s"live monitor: contest $cid: replay of $ev failed: $e"))
       }
-      l.teamChanges.foreach(t => Try(fresh.onTeamChanged(t, now)).failed.foreach(e =>
-        log.warning(s"live monitor: contest $cid: replay of the change of team ${t.id} failed: $e")))
+      l.teams.foreach(ts => Try(fresh.onTeams(ts)).failed.foreach(e =>
+        log.warning(s"live monitor: contest $cid: replay of its team list failed: $e")))
       fresh
     }
     result match {
@@ -631,9 +628,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
         val wasDirty = st.dirty
         st.live = fresh
         st.dirty = false
-        if (diffs.nonEmpty || wasDirty)
-          changed(cid, st, Delta(Seq(WholeOut(fresh.board(Freezing))), Seq(WholeOut(fresh.board(Real))), Nil, Seq(WholeOut(fresh.publicBoard))),
-            freezingChanged = old.board(Freezing) != fresh.board(Freezing))
+        if (diffs.nonEmpty || wasDirty) changed(cid, st, Delta(Seq(WholeOut(fresh.board))))
         true
     }
   }
@@ -647,15 +642,11 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
     case Some(st) if st.live.contest == c =>
       if (st.loading.isEmpty) startLoad(c.id, st, roundChangedReason) else st.reloadAgain = true
     case Some(st) =>
-      {
-        val before = st.live.board(Freezing)
-        val wasStarted = started(st.live, clock.now())
-        Try(st.live.onContest(c, clock.now())) match {
-          case Success(d) =>
-            observeTime(c, clock.now())
-            changed(c.id, st, d, freezingChanged = before != st.live.board(Freezing) || wasStarted != started(st.live, clock.now()))
-          case Failure(e) => failed(c.id, st, e)
-        }
+      Try(st.live.onContest(c)) match {
+        case Success(d) =>
+          observeTime(c, clock.now())
+          changed(c.id, st, d)
+        case Failure(e) => failed(c.id, st, e)
       }
     case None =>
       if (!adding(c.id)) {
@@ -664,12 +655,11 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       }
   }
 
-  /** After a change: stream it, rewrite the static file and feed palevo. */
-  private def changed(cid: Int, st: ContestState, d: Delta, freezingChanged: Boolean = true): Unit =
+  /** After a change: stream it to the admins and feed palevo. */
+  private def changed(cid: Int, st: ContestState, d: Delta): Unit =
     guarded(cid, st) {
       publish(cid, st, d)
-      if (d.freezing.nonEmpty && freezingChanged) writeStatic(cid, st)
-      if (d.freezing.nonEmpty || d.real.nonEmpty) observePalevo(st)
+      if (d.nonEmpty) observePalevo(st)
     }
 
   /**
@@ -707,35 +697,12 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
 
   private def observePalevo(st: ContestState): Unit = {
     val lc = st.live
-    standings.observe(lc.contest, PalevoView.of(lc.board(Freezing)), PalevoView.of(lc.board(Real)), clock.now())
-      .foreach(palevoSink.send)
-  }
-
-  /** Rewrites the contest's static file now (on a board change; no interval). TODO(task17): render on demand instead. */
-  private def writeStatic(cid: Int, st: ContestState): Unit = for (dir <- staticLocation if cid < 11) {
-    Try(StaticFiles.write(dir, cid, renderStatic(st.live.contest, publicVisible(st.live, clock.now())))) match {
-      case Success(_) => st.staticFailing = false
-      case Failure(e) =>
-        // Written again on the next change; log once per failure streak.
-        if (!st.staticFailing) log.error(e, s"live monitor: cannot write static file for contest $cid")
-        st.staticFailing = true
-    }
+    standings.observe(lc.contest, PalevoView.of(lc.board), clock.now()).foreach(palevoSink.send)
   }
 
   // ---- streams ----
 
-  private def started(lc: LiveContest, now: DateTime): Boolean = !now.isBefore(lc.contest.startTime)
-
-  private def freezeActive(lc: LiveContest, now: DateTime): Boolean = {
-    val r = lc.rules
-    r.freezeTime.isBefore(r.endTime) && !now.isBefore(r.freezeTime) && now.isBefore(r.exposeTime)
-  }
-
-  private def realCells(lc: LiveContest, team: Int): Map[String, LiveCell] =
-    lc.board(Real).rowOf(team).map(_.cells).getOrElse(Map.empty)
-
-  private def boardEvent(b: LiveBoard, own: Option[(Int, Map[String, LiveCell])] = None): Event =
-    LiveJson.event("board", LiveJson.board(b, own))
+  private def boardEvent(b: LiveBoard): Event = LiveJson.event("board", LiveJson.board(b))
 
   private def plainEvent(out: BoardOut): Event = out match {
     case WholeOut(b) => boardEvent(b)
@@ -757,40 +724,6 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
       sender() ! src
     }
 
-  /** The board a viewer starts with, and the real cells of its own row to show instead of the frozen ones. */
-  /** The freezing board once the contest has started; the bare team list before. */
-  private def visibleBoard(lc: LiveContest, now: DateTime): LiveBoard =
-    if (started(lc, now)) lc.board(Freezing) else teamsOnly(lc.board(Freezing))
-
-  /** The same for the public: without the contest jury teams. */
-  private def publicVisible(lc: LiveContest, now: DateTime): LiveBoard =
-    if (started(lc, now)) lc.publicBoard else teamsOnly(lc.publicBoard)
-
-  private def snapshotParts(st: ContestState, viewer: Viewer): (LiveBoard, Option[(Int, Map[String, LiveCell])]) = {
-    val lc = st.live
-    val now = clock.now()
-    viewer match {
-      case AdminRealViewer | StatusViewer(true) => (lc.board(Real), None)
-      case AdminFreezingViewer | StatusViewer(false) => (visibleBoard(lc, now), None)
-      case PublicViewer => (publicVisible(lc, now), None)
-      case TeamViewer(t) =>
-        if (!started(lc, now)) (teamsOnly(lc.board(Freezing)), None)
-        else (lc.board(Freezing), if (freezeActive(lc, now)) Some(t -> realCells(lc, t)) else None)
-    }
-  }
-
-  private def snapshot(st: ContestState, viewer: Viewer): Event = {
-    val (b, own) = snapshotParts(st, viewer)
-    boardEvent(b, own)
-  }
-
-  private def snapshotBoard(st: ContestState, viewer: Viewer): LiveBoard = {
-    val (b, own) = snapshotParts(st, viewer)
-    own.fold(b) { case (team, cells) =>
-      b.copy(rows = b.rows.map(r => if (r.team.id == team) r.copy(cells = cells) else r))
-    }
-  }
-
   private def register(cid: Int, viewer: Viewer, q: BoundedSourceQueue[Event]): Unit =
     contests.get(cid) match {
       case Some(st) =>
@@ -798,7 +731,7 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
         subs(q) = viewer
         viewer match {
           case _: StatusViewer => offer(cid, q, LiveJson.event("ready", Json.obj()))
-          case _ => offer(cid, q, Try(snapshot(st, viewer)).getOrElse(boardEvent(emptyBoard)))
+          case BoardViewer => offer(cid, q, Try(boardEvent(st.live.board)).getOrElse(boardEvent(LiveBoard.empty)))
         }
       case None => q.complete()
     }
@@ -853,37 +786,10 @@ class LiveMonitorActor(cfg: LiveMonitorConfig,
 
   private def publish(cid: Int, st: ContestState, d: Delta): Unit =
     subscribers.get(cid).filter(_.nonEmpty).foreach { subs =>
-      val lc = st.live
-      val now = clock.now()
-      val isStarted = started(lc, now)
-      val overlay = freezeActive(lc, now)
-      lazy val plain = d.freezing.map(plainEvent)
-      lazy val gated = if (isStarted) plain else d.freezing.collect { case WholeOut(b) => boardEvent(teamsOnly(b)) }
-      lazy val publicPlain = d.public.map(plainEvent)
-      lazy val publicGated = if (isStarted) publicPlain else d.public.collect { case WholeOut(b) => boardEvent(teamsOnly(b)) }
-      lazy val real = d.real.map(plainEvent)
-
-      def teamEvents(t: Int): Seq[Event] =
-        if (!isStarted || !overlay) gated
-        else {
-          val own = realCells(lc, t)
-          d.freezing.zip(plain).map {
-            case (WholeOut(b), _) => boardEvent(b, Some(t -> own))
-            case (RowOut(c), _) if c.team == t => LiveJson.event("row", LiveJson.row(c, Some(own)))
-            case (_, e) => e
-          } ++ d.ownCells.collect { case (`t`, cells) => LiveJson.event("cells", LiveJson.cells(t, cells)) }
-        }
-
-      subs.toList.foreach { case (q, viewer) =>
-        val events = viewer match {
-          case AdminRealViewer => real
-          case AdminFreezingViewer => gated
-          case PublicViewer => publicGated
-          case TeamViewer(t) => teamEvents(t)
-          case _: StatusViewer => Nil
-        }
-        events.foreach(offer(cid, q, _))
+      lazy val events = d.board.map(plainEvent)
+      subs.toList.foreach {
+        case (q, BoardViewer) => events.foreach(offer(cid, q, _))
+        case (_, _: StatusViewer) => ()
       }
     }
-
 }

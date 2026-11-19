@@ -1,6 +1,5 @@
 package live
 
-import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 
 import actors.LiveMonitorActor
@@ -9,6 +8,7 @@ import akka.NotUsed
 import akka.actor.ActorRef
 import akka.stream.scaladsl.Source
 import akka.testkit.{TestKit, TestProbe}
+import models.ProblemColumn
 import org.joda.time.DateTime
 import org.stingray.contester.dbmodel.{Contest, Team}
 import palevo.PalevoSink
@@ -22,22 +22,24 @@ import scala.concurrent.{ExecutionContext, Future}
 trait LiveActorFixtures { this: TestKit =>
   val t0 = new DateTime(2026, 11, 1, 10, 0)
   val running = t0.plusHours(1)
-  val frozen = t0.plusHours(4).plusMinutes(10)
+  val late = t0.plusHours(4).plusMinutes(10)
 
-  def contest(id: Int = 1, freeze: DateTime = t0.plusHours(4)): Contest =
+  def contest(id: Int = 1): Contest =
     Contest(id, s"C$id", t0, t0.plusHours(5), None, 1)
 
   def team(id: Int): Team =
-    Team(id, 0, "", f"School$id%02d", "City", None)
+    Team(id, id, s"Team$id", f"School$id%02d", "City", None)
 
-  val problems = Seq("A", "B", "C")
+  // Three problems of 10 points each.
+  val problems: Seq[ProblemColumn] = Seq("A", "B", "C").map(p => ProblemColumn(p, s"Problem $p", 10))
+  val problemIds: Seq[String] = problems.map(_.id)
   val teams = Seq(team(1), team(2), team(3))
-  val ok = Done(compiled = true, 3, 3)
+  /** A finished testing with all 10 points. */
+  val ok = Done(compiled = true, Some(10.0))
+  def pts(p: Double): SubmitState = Done(compiled = true, Some(p))
 
   def rec(id: Int, t: Int, p: String, at: DateTime, state: SubmitState = live.Pending): SubmitRec =
     SubmitRec(id, t, p, at, ((at.getMillis - t0.getMillis) / 1000).toInt, state)
-
-  val defaultCfg = LiveMonitorConfig(enabled = true, publicContests = (1 to 10).toSet, publicMaxConnections = 1000)
 
   val defaultTimings = LiveTimings(scheduled = false, reloadGap = Duration.Zero, ping = 1.hour)
 
@@ -48,18 +50,15 @@ trait LiveActorFixtures { this: TestKit =>
   }
 
   class Fixture(now: DateTime,
-                        rows: Seq[Contest] = Seq(contest()),
-                        subs: Map[Int, Seq[SubmitRec]] = Map.empty,
-                        cfg: LiveMonitorConfig = defaultCfg,
-                        staticDir: Option[File] = None,
-                        palevoSink: PalevoSink = palevo.NoopPalevoSink,
-                        gate: Future[Unit] = Future.successful(()),
-                        timings: LiveTimings = defaultTimings,
-                        overrideData: Map[Int, ContestData] = Map.empty,
-                        render: (Contest, LiveBoard) => String = (c, b) => s"${c.id}:${b.rows.size}",
-                        // True: the actor reads the system clock (timer tests); `clock` is then unused.
-                        realClock: Boolean = false,
-                        statusRows: StatusRows = NoStatusRows) {
+                rows: Seq[Contest] = Seq(contest()),
+                subs: Map[Int, Seq[SubmitRec]] = Map.empty,
+                palevoSink: PalevoSink = palevo.NoopPalevoSink,
+                gate: Future[Unit] = Future.successful(()),
+                timings: LiveTimings = defaultTimings,
+                overrideData: Map[Int, ContestData] = Map.empty,
+                // True: the actor reads the system clock (timer tests); `clock` is then unused.
+                realClock: Boolean = false,
+                statusRows: StatusRows = NoStatusRows) {
     val clock = new FakeClock(now)
     @volatile var contestRows: Seq[Contest] = rows
     // The start-up listing reads the rows when it starts but only answers when this is completed.
@@ -71,11 +70,15 @@ trait LiveActorFixtures { this: TestKit =>
     val loads = new AtomicInteger
     // Number of upcoming loads that fail.
     val failLoads = new AtomicInteger
-    val rendered = new AtomicInteger
     // Submit id -> owning contest for the contestOf lookup; a missing id is "no such submit". lookupFails: the lookup throws.
     @volatile var owners: Map[Int, Int] = Map.empty
     @volatile var lookupFails = false
     val lookups = new AtomicInteger
+    // The team lists read on TeamsChanged: by default the loaded data's; teamsGate holds the reads back.
+    @volatile var teamLists: Map[Int, Seq[Team]] = Map.empty
+    @volatile var teamsGate: Future[Unit] = Future.successful(())
+    @volatile var teamsFail = false
+    val teamReads = new AtomicInteger
 
     private val loader = new ContestLoader {
       override def load(c: Contest)(implicit ec: ExecutionContext): Future[ContestData] = {
@@ -89,11 +92,17 @@ trait LiveActorFixtures { this: TestKit =>
         if (lookupFails) Future.failed(new RuntimeException("injected lookup failure"))
         else Future.successful(owners.get(id))
       }
+
+      override def teams(c: Int)(implicit ec: ExecutionContext): Future[Seq[Team]] = {
+        teamReads.incrementAndGet()
+        if (teamsFail) Future.failed(new RuntimeException("injected team read failure"))
+        else teamsGate.map(_ => teamLists.getOrElse(c, data(c).teams))
+      }
     }
 
-    val actor: ActorRef = system.actorOf(LiveMonitorActor.propsWith(cfg, staticDir, () => { val read = contestRows; pollGate.map(_ => read)(ExecutionContext.global) },
-      loader, (c: Contest, b: LiveBoard) => { rendered.incrementAndGet(); render(c, b) },
-      palevoSink, if (realClock) SystemLiveClock else clock, timings, statusRows = statusRows))
+    val actor: ActorRef = system.actorOf(LiveMonitorActor.propsWith(
+      () => { val read = contestRows; pollGate.map(_ => read)(ExecutionContext.global) },
+      loader, palevoSink, if (realClock) SystemLiveClock else clock, timings, statusRows = statusRows))
 
     def join(m: Any): Source[Event, NotUsed] = {
       val p = TestProbe()
@@ -108,7 +117,7 @@ trait LiveActorFixtures { this: TestKit =>
     }
 
     // A reply to a join proves every earlier message has been handled.
-    def barrier(): Unit = join(JoinAdmin(1, real = true))
+    def barrier(): Unit = join(JoinAdmin(rows.head.id))
 
     def stop(): Unit = system.stop(actor)
   }
@@ -119,10 +128,20 @@ trait LiveActorFixtures { this: TestKit =>
     Json.parse(e.data)
   }
 
-  def boardOf(c: Contest, subs: Seq[SubmitRec], now: DateTime, kind: BoardKind): LiveBoard =
-    new LiveContest(c, problems, teams, subs, now).board(kind)
+  def boardOf(c: Contest, subs: Seq[SubmitRec]): LiveBoard =
+    new LiveContest(c, problems, teams, subs).board
 
-  def cellT(js: JsValue, team: Int, p: String): String =
-    ((js \ "rows").as[Seq[JsValue]].find(r => (r \ "team").as[Int] == team).get \ "cells" \ p \ "t").as[String]
+  /** A cell of a `board` event's row of the team (an absent cell is {}). */
+  def cellJs(board: JsValue, team: Int, p: String): JsValue =
+    ((board \ "rows").as[Seq[JsValue]].find(r => (r \ "team").as[Int] == team).get \ "cells" \ p).asOpt[JsValue]
+      .getOrElse(Json.obj())
 
+  /** A cell of a `row` event. */
+  def rowCellJs(row: JsValue, p: String): JsValue = (row \ "row" \ "cells" \ p).asOpt[JsValue].getOrElse(Json.obj())
+
+  /** The best points of a cell as shown, None without. */
+  def best(cell: JsValue): Option[String] = (cell \ "b").asOpt[String]
+
+  /** How many submits of the cell are in flight. */
+  def pending(cell: JsValue): Int = (cell \ "p").asOpt[Int].getOrElse(0)
 }

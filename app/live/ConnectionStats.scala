@@ -15,19 +15,14 @@ import scala.concurrent.duration._
 sealed abstract class FeedKind(val id: String)
 
 object FeedKind {
-  case object PublicMonitor extends FeedKind("publicMonitor")
-  case object TeamMonitor extends FeedKind("teamMonitor")
   case object TeamFeed extends FeedKind("teamFeed")
-  /** Admin monitor of an account that cannot see everything: it gets the freezing board. */
-  case object AdminMonitorRestricted extends FeedKind("adminMonitorRestricted")
-  case object AdminMonitorUnrestricted extends FeedKind("adminMonitorUnrestricted")
+  /** The admin live board (there is no team or public live board). */
+  case object AdminMonitor extends FeedKind("adminMonitor")
   case object AdminFeed extends FeedKind("adminFeed")
-  case object PublicPreview extends FeedKind("publicPreview")
   case object StatusRows extends FeedKind("statusRows")
 
   /** In the order of the columns. */
-  val all: Seq[FeedKind] = Seq(PublicMonitor, TeamMonitor, TeamFeed, AdminMonitorRestricted, AdminMonitorUnrestricted,
-    AdminFeed, PublicPreview, StatusRows)
+  val all: Seq[FeedKind] = Seq(TeamFeed, AdminMonitor, AdminFeed, StatusRows)
 }
 
 /**
