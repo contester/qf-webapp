@@ -1,6 +1,5 @@
 package palevo
 
-import models.StoredWaiterTask
 import org.joda.time.DateTime
 import org.stingray.contester.dbmodel.{ClarificationRequest, Contest, Team}
 
@@ -24,14 +23,4 @@ object EventBuilders {
   def clarificationPosted(id: Long, contest: PContest, updated: Boolean, problem: String, text: String,
                           now: DateTime): PalevoEvent =
     ClarificationPosted(id, contest, now, updated, Some(problem).filter(_.nonEmpty), text)
-
-  def taskCreated(task: StoredWaiterTask, now: DateTime): PalevoEvent =
-    TaskCreated(task.id, now, task.message, task.rooms.toSeq.sorted, task.allRooms)
-
-  def printerProblem(printer: String, areas: Seq[String], open: Boolean, condition: String, waitingJobs: Int,
-                     now: DateTime): PalevoEvent =
-    PrinterProblem(printer, areas.sorted, open, condition, waitingJobs, now)
-
-  def printError(jobId: Long, contest: PContest, team: Option[PTeam], error: String, now: DateTime): PalevoEvent =
-    PrintError(jobId, contest, now, team, error)
 }

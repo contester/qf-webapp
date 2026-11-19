@@ -13,7 +13,8 @@ import org.joda.time.DateTime
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuiteLike
 import org.stingray.contester.dbmodel.Contest
-import palevo.{ContestRescheduled, ContestStarting, FirstSolveContest, JuryAudience, PalevoEvent, PalevoSink}
+import actors.{RoundClock, RoundClockActor}
+import palevo.{ContestEnding, ContestRescheduled, ContestStarting, FinalStandings, FirstSolveContest, JuryAudience, PalevoEvent, PalevoSink, PublicAudience}
 import play.api.libs.EventSource.Event
 import play.api.libs.json.JsValue
 
@@ -166,115 +167,55 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     f.stop()
   }
 
-  private def aheadOf(sink: CollectingSink): Seq[Int] =
-    sink.events.asScala.toSeq.collect { case e: ContestStarting if e.inMinutes > 0 => e.inMinutes }
+  private def finalsOf(sink: CollectingSink): Seq[FinalStandings] =
+    sink.events.asScala.toSeq.collect { case e: FinalStandings => e }
 
-  test("palevo hears a start countdown when a tick passes a threshold") {
+  test("the end edge of the round clock, on the event stream, makes palevo hear the public final standings once") {
+    val sink = new CollectingSink
+    val f = new Fixture(running, subs = Map(1 -> Seq(rec(81, 2, "A", running, ok))), palevoSink = sink)
+    f.barrier()
+    assert(sink.events.isEmpty)
+    f.clock.at = t0.plusHours(5)
+    system.eventStream.publish(RoundClockActor.Fired(RoundClock.Ended(1), contest()))
+    awaitCond(finalsOf(sink).nonEmpty, 5.seconds)
+    val fin = finalsOf(sink).head
+    assert(fin.audience == PublicAudience && !fin.updated)
+    assert(fin.rows.map(r => (r.place, r.team.id, r.points)) == Seq((1, 2, 10.0)))
+    system.eventStream.publish(RoundClockActor.Fired(RoundClock.Ended(1), contest()))
+    f.barrier()
+    assert(finalsOf(sink).size == 1)
+    // a submit judged after the end changes the top places: the standings are sent again, as an update
+    f.actor ! Arrived(1, rec(82, 1, "B", t0.plusHours(5).minusMillis(1)))
+    f.actor ! Finished(1, 82, compiled = true, Some(10.0))
+    awaitCond(finalsOf(sink).size == 2, 5.seconds)
+    assert(finalsOf(sink).last.updated)
+    assert(!sink.events.asScala.exists(e => e.audience == PublicAudience && !e.isInstanceOf[FinalStandings]))
+    f.stop()
+  }
+
+  test("before the end the board reaches palevo for the jury only; an early is_finished edge ends it") {
+    val sink = new CollectingSink
+    val f = new Fixture(running, palevoSink = sink)
+    f.barrier()
+    f.actor ! Arrived(1, rec(83, 3, "C", running))
+    f.actor ! Finished(1, 83, compiled = true, Some(10.0))
+    awaitCond(sink.events.asScala.exists(_.isInstanceOf[FirstSolveContest]), 5.seconds)
+    assert(sink.events.asScala.forall(_.audience == JuryAudience))
+    // The clock's row says finished; the monitor has not heard the ContestChanged yet.
+    f.actor ! RoundClockActor.Fired(RoundClock.Ended(1), contest().copy(isFinished = true))
+    awaitCond(finalsOf(sink).size == 1, 5.seconds)
+    f.stop()
+  }
+
+  test("the monitor has no time events and no deadline timer of its own") {
     val sink = new CollectingSink
     val f = new Fixture(t0.minusMinutes(61), palevoSink = sink)
     f.barrier()
-    assert(sink.events.isEmpty) // the first observation only records
-    f.clock.at = t0.minusMinutes(59)
-    f.actor ! Tick
+    f.clock.at = t0.plusHours(6)
+    f.actor ! ContestChanged(contest().copy(startTime = t0.plusHours(1)))
     f.barrier()
-    assert(aheadOf(sink) == Seq(60))
-    f.stop()
-  }
-
-  test("contests above 10 get no countdown and no reschedule announcement") {
-    val sink = new CollectingSink
-    val f = new Fixture(t0.minusMinutes(61), rows = Seq(contest(11)), palevoSink = sink)
-    def barrier11(): Unit = f.join(JoinAdmin(11))
-    barrier11()
-    f.clock.at = t0.minusMinutes(59)
-    f.actor ! Tick
-    f.actor ! ContestChanged(contest(11).copy(startTime = t0.plusHours(1)))
-    barrier11()
-    assert(sink.events.isEmpty)
-    f.stop()
-  }
-
-  test("a palevo failure while announcing time events does not stop the actor") {
-    val sink = new ThrowOnceSink
-    val f = new Fixture(t0.minusMinutes(61), palevoSink = sink)
-    f.barrier()
-    f.clock.at = t0.minusMinutes(59)
-    f.actor ! Tick
-    f.barrier() // the tick must be handled before the clock moves on
-    f.clock.at = t0.minusMinutes(29)
-    f.actor ! Tick
-    f.barrier()
-    assert(sink.calls.get == 2)
-    f.stop()
-  }
-
-  test("a monitor started in the middle of a countdown stays silent about the thresholds already passed") {
-    val sink = new CollectingSink
-    val f = new Fixture(t0.minusMinutes(21), palevoSink = sink)
-    f.barrier()
-    f.actor ! Tick
-    f.barrier()
-    assert(sink.events.isEmpty)
-    f.clock.at = t0.minusMinutes(19) // 60 and 30 were used up at startup; only 20 is still to come
-    f.actor ! Tick
-    f.barrier()
-    assert(aheadOf(sink) == Seq(20))
-    f.stop()
-  }
-
-  // ---- deadline timers (the scheduled actor, on the system clock) ----
-
-  private val scheduled = LiveTimings(scheduled = true, reloadGap = Duration.Zero, ping = 1.hour)
-
-  private def startingIn(d: FiniteDuration, id: Int = 1): Contest = {
-    val start = DateTime.now.plusMillis(d.toMillis.toInt)
-    Contest(id, s"C$id", start, start.plusHours(5), None, 1)
-  }
-
-  private def startedNow(sink: CollectingSink) =
-    sink.events.asScala.exists { case e: ContestStarting => e.inMinutes == 0; case _ => false }
-
-  test("the monitor wakes at the start by itself, on its one deadline timer") {
-    val sink = new CollectingSink
-    val f = new Fixture(DateTime.now, rows = Seq(startingIn(2500.millis)), palevoSink = sink, timings = scheduled, realClock = true)
-    awaitCond(startedNow(sink), 8.seconds)
-    f.stop()
-  }
-
-  test("re-arming from other messages does not drop a wake that is already due") {
-    val sink = new CollectingSink
-    val f = new Fixture(DateTime.now, rows = Seq(startingIn(2500.millis)), palevoSink = sink, timings = scheduled, realClock = true)
-    f.barrier()
-    // A message every 20 ms for the whole window in which the wake is due: each one re-arms the timer.
-    val deadline = System.currentTimeMillis() + 4500
-    while (System.currentTimeMillis() < deadline && !startedNow(sink)) {
-      f.actor ! ContestChanged(f.contestRows.head)
-      Thread.sleep(20)
-    }
-    assert(startedNow(sink), "the start was not announced although the timer was due")
-    f.stop()
-  }
-
-  test("a contest change re-arms the timer for the new deadline") {
-    val sink = new CollectingSink
-    val f = new Fixture(DateTime.now, rows = Seq(startingIn(1.hour)), palevoSink = sink, timings = scheduled, realClock = true)
-    f.barrier()
-    assert(!startedNow(sink))
-    f.actor ! ContestChanged(startingIn(2500.millis))
-    awaitCond(startedNow(sink), 8.seconds)
-    assert(sink.events.asScala.exists(_.isInstanceOf[ContestRescheduled]))
-    f.stop()
-  }
-
-  test("a contest added later is watched by the timer too") {
-    val sink = new CollectingSink
-    val f = new Fixture(DateTime.now, rows = Seq(startingIn(1.hour)), palevoSink = sink, timings = scheduled, realClock = true)
-    f.barrier()
-    val added = startingIn(2500.millis, id = 2)
-    f.contestRows = Seq(startingIn(1.hour), added)
-    f.data = f.data + (2 -> ContestData(problems, teams, Nil))
-    f.actor ! ContestChanged(added)
-    awaitCond(startedNow(sink), 8.seconds)
+    assert(!sink.events.asScala.exists(e => e.isInstanceOf[ContestStarting] || e.isInstanceOf[ContestEnding] ||
+      e.isInstanceOf[ContestRescheduled]))
     f.stop()
   }
 

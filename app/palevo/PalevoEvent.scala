@@ -4,7 +4,7 @@ import org.joda.time.{DateTime, DateTimeZone}
 import org.joda.time.format.ISODateTimeFormat
 import play.api.libs.json._
 
-/** Who may see an event. Jury events carry real-state information (e.g. standings during a freeze). */
+/** Who may see an event. Jury events carry the live standings while a round runs; the public hears standings only after it. */
 sealed trait Audience
 case object PublicAudience extends Audience
 case object JuryAudience extends Audience
@@ -50,11 +50,6 @@ object PalevoEvent {
   }
 }
 
-/** Events that have no contest (waiter tasks) use this placeholder. */
-object NoContest {
-  val value = PContest(0, "")
-}
-
 final case class ClarificationRequested(requestId: Long, contest: PContest, ts: DateTime, team: PTeam,
                                         problem: String, text: String) extends PalevoEvent {
   def id = s"qf-clr-req-$requestId-${ts.getMillis}"
@@ -77,15 +72,7 @@ final case class ClarificationPosted(clarificationId: Long, contest: PContest, t
     problem.fold(Json.obj())(p => Json.obj("problem" -> p))
 }
 
-final case class TaskCreated(taskId: Long, ts: DateTime, text: String, rooms: Seq[String], allRooms: Boolean = false) extends PalevoEvent {
-  def id = s"qf-task-$taskId-${ts.getMillis}"
-  def eventType = "task_created"
-  def contest = NoContest.value
-  def data = Json.obj("text" -> text, "rooms" -> rooms) ++
-    (if (allRooms) Json.obj("all_rooms" -> true) else Json.obj())
-}
-
-/** Shared by the three phase events: `inMinutes == 0` means "now"; otherwise the event is about the moment `at`. */
+/** Shared by the two phase events (there is no freeze): `inMinutes == 0` means "now"; otherwise the event is about the moment `at`. */
 private[palevo] object PhaseEvent {
   def id(eventType: String, contest: PContest, inMinutes: Int, at: Option[DateTime]): String =
     if (inMinutes == 0) s"qf-$eventType-${contest.id}"
@@ -107,14 +94,6 @@ final case class ContestStarting(contest: PContest, ts: DateTime, inMinutes: Int
   def data = PhaseEvent.data(inMinutes, at)
 }
 
-final case class ContestFreezing(contest: PContest, ts: DateTime, inMinutes: Int = 0,
-                                 at: Option[DateTime] = None) extends PalevoEvent {
-  PhaseEvent.check(inMinutes, at)
-  def id = PhaseEvent.id(eventType, contest, inMinutes, at)
-  def eventType = "contest_freezing"
-  def data = PhaseEvent.data(inMinutes, at)
-}
-
 final case class ContestEnding(contest: PContest, ts: DateTime, inMinutes: Int = 0,
                                at: Option[DateTime] = None) extends PalevoEvent {
   PhaseEvent.check(inMinutes, at)
@@ -123,7 +102,7 @@ final case class ContestEnding(contest: PContest, ts: DateTime, inMinutes: Int =
   def data = PhaseEvent.data(inMinutes, at)
 }
 
-/** One time of a contest that changed: `what` is "start", "freeze" or "end". */
+/** One time of a contest that changed: `what` is "start" or "end". */
 final case class TimeChange(what: String, from: DateTime, to: DateTime)
 
 /** The schedule of a contest was edited; one event per edit, listing every changed time. */
@@ -155,20 +134,19 @@ final case class NewLeader(contest: PContest, ts: DateTime, team: PTeam, solved:
   def data = Json.obj("team" -> PalevoEvent.team(team), "solved" -> solved)
 }
 
-/** A printer cannot print (open) or works again. About a printer, not a contest, so like a waiter task it goes to every
-  * route, public ones included. */
-final case class PrinterProblem(printer: String, areas: Seq[String], open: Boolean, condition: String,
-                                waitingJobs: Int, ts: DateTime) extends PalevoEvent {
-  def id = s"qf-printer-$printer-${ts.getMillis}-${if (open) "open" else "cleared"}"
-  def eventType = "printer_problem"
-  def contest = NoContest.value
-  def data = Json.obj("printer" -> printer, "areas" -> areas, "state" -> (if (open) "open" else "cleared")) ++
-    (if (open) Json.obj("condition" -> condition, "waiting_jobs" -> waitingJobs) else Json.obj())
-}
+/** One line of the final standings: a ranked team, its points and the number of problems at full points. */
+final case class FinalRow(place: Int, team: PTeam, points: Double, solved: Int)
 
-final case class PrintError(jobId: Long, contest: PContest, ts: DateTime, team: Option[PTeam],
-                            error: String) extends PalevoEvent {
-  def id = s"qf-print-$jobId-${ts.getMillis}"
-  def eventType = "print_error"
-  def data = Json.obj("error" -> error) ++ team.fold(Json.obj())(t => Json.obj("team" -> PalevoEvent.team(t)))
+/**
+  * The final standings of a round (its top places), public: sent once when the round is over, and again (`updated`)
+  * whenever a later change (a rejudge, a credential change) alters them. The id carries the time, so an update is a new
+  * event for palevo.
+  */
+final case class FinalStandings(contest: PContest, ts: DateTime, rows: Seq[FinalRow], updated: Boolean) extends PalevoEvent {
+  def id = s"qf-final-${contest.id}-${ts.getMillis}"
+  def eventType = "final_standings"
+  def data = Json.obj(
+    "standings" -> rows.map(r => Json.obj("place" -> r.place, "team" -> PalevoEvent.team(r.team), "points" -> r.points,
+      "solved" -> r.solved)),
+    "updated" -> updated)
 }

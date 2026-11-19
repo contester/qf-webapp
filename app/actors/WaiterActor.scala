@@ -4,7 +4,6 @@ import akka.actor.{Actor, Props, Stash}
 import akka.stream.scaladsl.{Merge, Source}
 import com.github.nscala_time.time.Imports.DateTime
 import models._
-import palevo.{EventBuilders, PalevoSink}
 import play.api.{Logger, Logging}
 import play.api.libs.EventSource
 import play.api.libs.EventSource.{Event, EventDataExtractor, EventNameExtractor}
@@ -24,7 +23,7 @@ import scala.util.Success
 // - if that room matches our list
 
 object WaiterActor {
-  def props(db: JdbcBackend#DatabaseDef, sink: PalevoSink) = Props(classOf[WaiterActor], db, sink)
+  def props(db: JdbcBackend#DatabaseDef) = Props(classOf[WaiterActor], db)
 
   case object Load
   case class Loaded(tasks: Iterable[StoredWaiterTask])
@@ -93,7 +92,7 @@ object WaiterTaskHeader {
   }
 }
 
-class WaiterActor(db: JdbcBackend#DatabaseDef, sink: PalevoSink) extends Actor with Stash with Logging {
+class WaiterActor(db: JdbcBackend#DatabaseDef) extends Actor with Stash with Logging {
   val tasks = mutable.Map[Long, StoredWaiterTask]()
 
   import WaiterActor._
@@ -159,7 +158,6 @@ class WaiterActor(db: JdbcBackend#DatabaseDef, sink: PalevoSink) extends Actor w
 
     case task: StoredWaiterTask => {
       tasks.put(task.id, task)
-      sink.send(EventBuilders.taskCreated(task, DateTime.now))
       waiterChannel.offer(WaiterTaskUpdated(task))
       headerChannel.offer(HeaderSource(getHeaderRows, Some(task)))
     }

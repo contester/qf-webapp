@@ -24,14 +24,6 @@ class PalevoEventSpec extends AnyFunSuite {
     assert((PalevoEvent.toJson(ContestStarting(c, local)) \ "ts").as[String] == "2026-11-01T12:34:56Z")
   }
 
-  test("task_created has no contest and carries rooms") {
-    val e = TaskCreated(5, ts, "bring water", Seq("101", "102"))
-    val j = PalevoEvent.toJson(e)
-    assert((j \ "id").as[String] == s"qf-task-5-${ts.getMillis}")
-    assert((j \ "contest").get == Json.obj("id" -> 0, "name" -> ""))
-    assert((j \ "data").get == Json.obj("text" -> "bring water", "rooms" -> Seq("101", "102")))
-  }
-
   test("clarification_posted omits problem when None and keeps it when present") {
     val none = PalevoEvent.toJson(ClarificationPosted(3, c, ts, updated = false, None, "t"))
     assert((none \ "data").get == Json.obj("text" -> "t", "updated" -> false))
@@ -55,30 +47,9 @@ class PalevoEventSpec extends AnyFunSuite {
     assert((j \ "data").get == Json.obj("team" -> Json.obj("id" -> 7, "name" -> "Name"), "problem" -> "A", "text" -> "why?"))
   }
 
-  test("print_error omits team when unknown") {
-    val j = PalevoEvent.toJson(PrintError(4, c, ts, None, "no paper"))
-    assert((j \ "id").as[String] == s"qf-print-4-${ts.getMillis}")
-    assert((j \ "data").get == Json.obj("error" -> "no paper"))
-    val k = PalevoEvent.toJson(PrintError(4, c, ts, Some(team), "no paper"))
-    assert((k \ "data" \ "team").get == Json.obj("id" -> 7, "name" -> "Name"))
-  }
-
-  test("printer_problem: public, no contest, condition only while open") {
-    val open = PalevoEvent.toJson(PrinterProblem("""\\\\srv\\p1""", Seq("Hall A"), open = true, "out of paper", 2, ts))
-    assert((open \ "type").as[String] == "printer_problem")
-    assert((open \ "audience").toOption.isEmpty)
-    assert((open \ "contest" \ "id").as[Int] == 0)
-    assert((open \ "data").get == Json.obj("printer" -> """\\\\srv\\p1""", "areas" -> Seq("Hall A"), "state" -> "open",
-      "condition" -> "out of paper", "waiting_jobs" -> 2))
-    val cleared = PalevoEvent.toJson(PrinterProblem("""\\\\srv\\p1""", Nil, open = false, "", 0, ts))
-    assert((cleared \ "data").get == Json.obj("printer" -> """\\\\srv\\p1""", "areas" -> Seq.empty[String], "state" -> "cleared"))
-    assert((open \ "id").as[String] != (cleared \ "id").as[String])
-  }
-
   test("type names and ids of the remaining events") {
     def tp(e: PalevoEvent) = ((PalevoEvent.toJson(e) \ "type").as[String], (PalevoEvent.toJson(e) \ "id").as[String])
     assert(tp(ContestStarting(c, ts)) == ("contest_starting", "qf-contest_starting-12"))
-    assert(tp(ContestFreezing(c, ts)) == ("contest_freezing", "qf-contest_freezing-12"))
     assert(tp(ContestEnding(c, ts)) == ("contest_ending", "qf-contest_ending-12"))
     assert(tp(FirstSolveContest(c, ts, team, "B", 60)) == ("first_solve_contest", "qf-first-contest-12"))
     assert(tp(NewLeader(c, ts, team, 3)) == ("new_leader", "qf-leader-12-7-3"))
@@ -95,7 +66,6 @@ class PalevoEventSpec extends AnyFunSuite {
     assert((j \ "id").as[String] == s"qf-contest_starting-12-in10-${at.getMillis}")
     assert((j \ "data").get == Json.obj("in_minutes" -> 10, "at" -> "2026-11-01T15:30:00Z"))
     assert((PalevoEvent.toJson(ContestEnding(c, ts, 5, Some(at))) \ "id").as[String] == s"qf-contest_ending-12-in5-${at.getMillis}")
-    assert((PalevoEvent.toJson(ContestFreezing(c, ts, 1, Some(at))) \ "data" \ "in_minutes").as[Int] == 1)
   }
 
   test("a phase event ahead without a target time is a programming error") {
@@ -125,8 +95,8 @@ class PalevoEventSpec extends AnyFunSuite {
   test("ids of one-shot events differ when a database sequence restarts and reuses a row id") {
     val later = ts.plusDays(30)
     assert(ClarificationRequested(1, c, ts, team, "A", "t").id != ClarificationRequested(1, c, later, team, "A", "t").id)
-    assert(TaskCreated(1, ts, "t", Nil).id != TaskCreated(1, later, "t", Nil).id)
-    assert(PrintError(1, c, ts, None, "e").id != PrintError(1, c, later, None, "e").id)
+    assert(ClarificationPosted(1, c, ts, updated = false, None, "t").id != ClarificationPosted(1, c, later, updated = false, None, "t").id)
+    assert(FinalStandings(c, ts, Nil, updated = false).id != FinalStandings(c, later, Nil, updated = true).id)
   }
 
   test("a retry of the same event keeps the same id") {
@@ -162,5 +132,28 @@ class PalevoEventSpec extends AnyFunSuite {
     assert(FirstSolveProblem(c, ts, team, "B", 60).id != FirstSolveProblem(c, ts, team, "B", 60, JuryAudience).id)
     assert(FirstSolveContest(c, ts, team, "B", 60).id != FirstSolveContest(c, ts, team, "B", 60, JuryAudience).id)
     assert(NewLeader(c, ts, team, 3).id != NewLeader(c, ts, team, 3, JuryAudience).id)
+  }
+
+  test("final_standings: public, the top places with team, points and solved, and whether it is an update") {
+    val e = FinalStandings(c, ts, Seq(FinalRow(1, team, 545.0, 12), FinalRow(2, PTeam(8, "Other"), 100.5, 2)), updated = false)
+    val j = PalevoEvent.toJson(e)
+    assert((j \ "audience").toOption.isEmpty && e.audience == PublicAudience)
+    assert(j == Json.parse(
+      s"""{"id":"qf-final-12-${ts.getMillis}","type":"final_standings","ts":"2026-11-01T12:34:56Z",
+         |"contest":{"id":12,"name":"C"},
+         |"data":{"standings":[{"place":1,"team":{"id":7,"name":"Name"},"points":545,"solved":12},
+         |{"place":2,"team":{"id":8,"name":"Other"},"points":100.5,"solved":2}],"updated":false}}""".stripMargin))
+  }
+
+  test("the remaining event types: no freeze, printing or waiter events") {
+    val at = Some(ts.plusHours(1))
+    val all: Seq[PalevoEvent] = Seq(
+      ClarificationRequested(1, c, ts, team, "A", "t"), ClarificationAnswered(1, c, ts, team, "A", "q", "a"),
+      ClarificationPosted(1, c, ts, updated = false, None, "t"), ContestStarting(c, ts), ContestStarting(c, ts, 5, at),
+      ContestEnding(c, ts), ContestEnding(c, ts, 5, at), ContestRescheduled(c, ts, Nil), FirstSolveContest(c, ts, team, "A", 1),
+      FirstSolveProblem(c, ts, team, "A", 1), NewLeader(c, ts, team, 1), FinalStandings(c, ts, Nil, updated = false))
+    assert(all.map(_.eventType).toSet == Set("clarification_requested", "clarification_answered", "clarification_posted",
+      "contest_starting", "contest_ending", "contest_rescheduled", "first_solve_contest", "first_solve_problem",
+      "new_leader", "final_standings"))
   }
 }

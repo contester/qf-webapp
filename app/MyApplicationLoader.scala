@@ -114,13 +114,13 @@ class MyComponents(context: ApplicationLoader.Context)
 
   lazy val palevoSink: palevo.PalevoSink = palevo.PalevoSink.fromConfig(configuration, wsClient, actorSystem)(executionContext)
 
-  // Minutes before the start and the end at which palevo is told "in N minutes"; produced by the live monitor.
+  // Minutes before the start and the end at which palevo is told "in N minutes"; edges of the status actor's round clock.
   lazy val countdownConfig: palevo.CountdownConfig = palevo.CountdownConfig(configuration)
 
   // The admin live monitor (the only live board) and the public board cache; both hear every change of a board
   // through the live hooks. Nothing writes static files.
   lazy val liveMonitor: ActorRef = actorSystem.actorOf(actors.LiveMonitorActor.props(dbConfig.db,
-    () => models.Rounds.currentRounds(dbConfig.db)(executionContext), palevoSink, countdownConfig,
+    () => models.Rounds.currentRounds(dbConfig.db)(executionContext), palevoSink,
     actors.LiveMonitorActor.DbStatusRows.fromDb(dbConfig.db, statusActorModel.teamClient, actorSystem.scheduler)(executionContext)),
     "live-monitor-actor")
   lazy val publicBoardCache: PublicBoardCache = new PublicBoardCache
@@ -131,9 +131,10 @@ class MyComponents(context: ApplicationLoader.Context)
   lazy val monitorModel = wire[Monitor]
   lazy val boardSource: models.BoardSource = monitorModel.source
   // Deferred: the live monitor itself needs statusActorModel's team client (status rows).
-  // The live monitor produces palevo's time events, so the status actor does not (timeEvents = false).
+  // The status actor's round clock produces palevo's phase, countdown and reschedule events; the live monitor hears
+  // its edges on the event stream for the standings.
   lazy val statusActorModel = new StatusActorModel(dbConfig, actorSystem, palevoSink, live.LiveWiring.deferred(liveHooks),
-    false, countdownConfig)
+    countdownConfig)
 
   // Database notifications (testing/eval results, round and team changes) for the actors; see NotifyListener.
   lazy val notifyListener: ActorRef = actorSystem.actorOf(NotifyListener.props(

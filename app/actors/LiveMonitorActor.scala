@@ -10,7 +10,7 @@ import org.stingray.qf.actors.ProblemStateActor
 import org.joda.time.DateTime
 import org.stingray.contester.dbmodel.{Contest, Team}
 import org.stingray.qf.models.TeamClient
-import palevo.{ContestTimeTracker, CountdownConfig, PalevoSink, StandingsAnnouncer}
+import palevo.{PalevoSink, StandingsAnnouncer}
 import play.api.libs.EventSource.Event
 import play.api.libs.json.Json
 import slick.jdbc.JdbcBackend
@@ -52,9 +52,6 @@ object LiveMonitorActor {
     * Status.Failure like the join.
     */
   case class Snapshot(join: Join)
-
-  // The deadline wake (the one exact timer, see rearm); public so tests can drive it with timers switched off.
-  case object Tick
 
   case class ContestData(problems: Seq[ProblemColumn], teams: Seq[Team], submits: Seq[SubmitRec])
 
@@ -140,8 +137,7 @@ object LiveMonitorActor {
                          startupRetry: FiniteDuration = 10.seconds,
                          // How long a rejudge may stay in flight (its finish not yet heard) before the database wins.
                          rejudgeMaxAge: FiniteDuration = 30.minutes,
-                         connectionBuffer: Int = 1024,
-                         scheduled: Boolean = true)
+                         connectionBuffer: Int = 1024)
 
   /**
     * Problems, participants and all submits of the contest (finished or not), straight from the database: a
@@ -166,24 +162,14 @@ object LiveMonitorActor {
   }
 
   def props(db: JdbcBackend#DatabaseDef, contests: () => Future[Seq[Contest]], palevo: PalevoSink,
-            countdown: CountdownConfig = CountdownConfig.Default, statusRows: StatusRows = NoStatusRows): Props =
-    propsWith(contests, new DbContestLoader(db), palevo, SystemLiveClock, LiveTimings(), countdown, statusRows)
+            statusRows: StatusRows = NoStatusRows): Props =
+    propsWith(contests, new DbContestLoader(db), palevo, SystemLiveClock, LiveTimings(), statusRows)
 
   def propsWith(contests: () => Future[Seq[Contest]], loader: ContestLoader, palevo: PalevoSink,
-                clock: LiveClock, timings: LiveTimings, countdown: CountdownConfig = CountdownConfig.Default,
-                statusRows: StatusRows = NoStatusRows): Props =
-    Props(new LiveMonitorActor(contests, loader, palevo, clock, timings, countdown, statusRows))
-
-  /**
-    * How long to sleep until `deadline` (the earliest moment something can happen): a margin past it so the clock has
-    * reached it, at least 50 ms, and at most RoundClockActor.MaxDelay (7 days; Akka's scheduler refuses delays of
-    * about 248 days and more, so a farther deadline is re-armed from there). There is no heartbeat.
-    */
-  def wakeDelay(deadline: DateTime, now: DateTime): FiniteDuration =
-    (deadline.getMillis - now.getMillis + 50).max(50L).millis.min(RoundClockActor.MaxDelay)
+                clock: LiveClock, timings: LiveTimings, statusRows: StatusRows = NoStatusRows): Props =
+    Props(new LiveMonitorActor(contests, loader, palevo, clock, timings, statusRows))
 
   private case object Start
-  private case object WakeKey
   private case class Started(result: Try[Seq[(Contest, Try[ContestData])]])
   private case class Loaded(contest: Int, result: Try[ContestData])
   private case class Added(contest: Contest, result: Try[ContestData])
@@ -216,8 +202,9 @@ object LiveMonitorActor {
   * Startup loads every contest before any event is handled (Stash). Each event is applied inside Try: a failure is
   * logged and the contest is rebuilt from the database (rate-limited). The database is read only at startup, for a
   * new round (ContestChanged), for the team list on TeamsChanged, for an event about a submit id the contest does not
-  * know, and after a failure. Nothing
-  * runs on an interval: the only timers are the exact deadline wake, the reload backoff and the start-up retry.
+  * know, and after a failure. Nothing runs on an interval and the actor has no deadline timer of its own: the end of
+  * a round reaches it as the round clock's `RoundClockActor.Fired` on the event stream. Its only timers are the reload
+  * backoff and the start-up retry.
   *
   * Streams are per-connection queues registered with this actor, so the first `board` event and the later updates
   * come from the same ordered sequence and nothing is lost between the snapshot and the subscription.
@@ -227,7 +214,6 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
                        palevoSink: PalevoSink,
                        clock: LiveMonitorActor.LiveClock,
                        timings: LiveMonitorActor.LiveTimings,
-                       countdown: CountdownConfig,
                        statusRows: LiveMonitorActor.StatusRows) extends Actor with Stash with Timers with ActorLogging {
   import LiveMonitorActor._
 
@@ -267,17 +253,16 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
   private val statusRequests = mutable.Map.empty[Int, Long]
   private var statusSeq = 0L
   private val standings = new StandingsAnnouncer
-  // The deadline the pending wake timer was armed for, if any.
-  private var armedFor: Option[DateTime] = None
-  // Phase, countdown and reschedule events for palevo; when the live monitor is on, only this actor produces them.
-  private val timeTracker = new ContestTimeTracker(countdown)
 
   override def preStart(): Unit = {
     super.preStart()
+    // The round clock's edges (StatusActor's RoundClockActor): the end of a round makes its standings public.
+    context.system.eventStream.subscribe(self, classOf[RoundClockActor.Fired])
     self ! Start
   }
 
   override def postStop(): Unit = {
+    context.system.eventStream.unsubscribe(self)
     subscribers.values.foreach(_.keys.foreach(q => Try(q.complete())))
     super.postStop()
   }
@@ -297,7 +282,6 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
         case (c, Success(d)) => add(c, d, now)
         case (c, Failure(e)) => log.error(e, s"live monitor: cannot load contest ${c.id}; will retry on the next change of its round")
       }
-      rearm(now)
       unstashAll()
       context.become(running)
 
@@ -318,7 +302,6 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
       case Success(lc) =>
         val st = new ContestState(lc)
         contests(c.id) = st
-        observeTime(c, now)
         guarded(c.id, st)(observePalevo(st))
       case Failure(e) =>
         log.error(e, s"live monitor: cannot build contest ${c.id}; will retry on the next change of its round")
@@ -369,17 +352,12 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
     case Register(cid, viewer, q) => register(cid, viewer, q)
     case Unregister(cid, q) => unregister(cid, q)
 
-    // The check against the clock: on the deadline timer, and from tests. Idempotent.
-    case Tick =>
+    // A round clock edge (no timer of this actor's own): at the end the final standings become public (see
+    // StandingsAnnouncer). The clock's row is used, as this actor may not have heard of an early is_finished yet.
+    // Idempotent: observing the same board twice says nothing new.
+    case RoundClockActor.Fired(_, c) =>
       expireRejudges()
-      val now = clock.now()
-      contests.foreach { case (cid, st) =>
-        observeTime(st.live.contest, now)
-        // At the end the public standings tracker starts from the final board (see StandingsAnnouncer).
-        guarded(cid, st)(observePalevo(st))
-      }
-      armedFor = None // the wake that brought us here (or a 7-day cap): the next one is chosen afresh
-      rearm(now)
+      contests.get(c.id).foreach(st => guarded(c.id, st)(observePalevo(st, c)))
 
     case StartReload(cid) =>
       contests.get(cid).foreach { st =>
@@ -393,14 +371,11 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
 
     case ContestChanged(c) =>
       contestRow(c)
-      rearm(clock.now())
 
     case ContestRemoved(cid) =>
       adding -= cid
       if (contests.remove(cid).isDefined) log.info(s"live monitor: round $cid is gone or no longer usable; dropped")
       subscribers.remove(cid).foreach(_.keys.foreach(q => Try(q.complete())))
-      armedFor = None
-      rearm(clock.now())
 
     case Added(c, result) =>
       // Not wanted any more when the round was removed while it loaded.
@@ -409,7 +384,6 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
       result match {
         case Success(d) =>
           if (wanted && !contests.contains(c.id)) add(c, d, clock.now())
-          rearm(clock.now())
         case Failure(e) => log.warning(s"live monitor: cannot load new contest ${c.id}: $e")
       }
   }
@@ -644,8 +618,9 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
     case Some(st) =>
       Try(st.live.onContest(c)) match {
         case Success(d) =>
-          observeTime(c, clock.now())
           changed(c.id, st, d)
+          // A new end or is_finished may make the round over without changing the board.
+          guarded(c.id, st)(observePalevo(st))
         case Failure(e) => failed(c.id, st, e)
       }
     case None =>
@@ -662,43 +637,11 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
       if (d.nonEmpty) observePalevo(st)
     }
 
-  /**
-    * Sleeps until the earliest moment something about the contests' times can happen: a phase, a board boundary, a
-    * countdown threshold after `after`. A reschedule or a new contest moves the deadlines, hence the calls after those.
-    *
-    * A pending wake that is for an earlier or the same deadline is left alone: replacing a timer drops its message
-    * even when it is already due, and a stream of re-arms would postpone it for ever. At worst the pending wake is
-    * for a deadline that no longer exists; it fires, finds nothing, and the next check arms the right one.
-    */
-  private def rearm(after: DateTime): Unit =
-    if (timings.scheduled) {
-      val next = contests.values.flatMap(st => ContestTimeTracker.nextDeadline(st.live.contest, after, countdown))
-        .reduceOption((a, b) => if (a.isBefore(b)) a else b)
-      val pendingIsEnough = armedFor.exists(a => next.forall(n => !a.isAfter(n)))
-      if (!pendingIsEnough) next match {
-        case Some(n) =>
-          timers.startSingleTimer(WakeKey, Tick, wakeDelay(n, clock.now()))
-          armedFor = next
-        case None =>
-          // Nothing can happen until a round changes, and every change re-arms: no timer at all.
-          timers.cancel(WakeKey)
-          armedFor = None
-      }
-    }
+  /** Feeds the standings announcer the contest's board (jury events while it runs, the final standings once over). */
+  private def observePalevo(st: ContestState, contest: Contest): Unit =
+    standings.observe(contest, PalevoView.of(st.live.board), clock.now()).foreach(palevoSink.send)
 
-  /** Tells palevo what the contest's times did: a phase reached, a countdown threshold, a reschedule. Never throws. */
-  private def observeTime(c: Contest, now: DateTime): Unit =
-    Try(timeTracker.observe(c, now)) match {
-      case Success(events) =>
-        events.foreach(e => Try(palevoSink.send(e)).failed.foreach(t =>
-          log.warning(s"live monitor: contest ${c.id}: cannot send ${e.eventType}: $t")))
-      case Failure(t) => log.warning(s"live monitor: contest ${c.id}: cannot track its times: $t")
-    }
-
-  private def observePalevo(st: ContestState): Unit = {
-    val lc = st.live
-    standings.observe(lc.contest, PalevoView.of(lc.board), clock.now()).foreach(palevoSink.send)
-  }
+  private def observePalevo(st: ContestState): Unit = observePalevo(st, st.live.contest)
 
   // ---- streams ----
 

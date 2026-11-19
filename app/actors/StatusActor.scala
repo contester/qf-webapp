@@ -6,7 +6,7 @@ import akka.stream.scaladsl.{BroadcastHub, Keep, Merge, Sink, Source}
 import akka.stream.{ActorMaterializer, OverflowStrategy}
 import models.ContesterResults.{CustomTestResult, FinishedTesting}
 import models._
-import palevo.{ContestTimeTracker, CountdownConfig, EventBuilders, PContest, PalevoSink}
+import palevo.{ContestTimeTracker, CountdownConfig, EventBuilders, PContest, PalevoEvent, PalevoSink}
 import org.stingray.contester.dbmodel.{Clarification, Contest, MaxSeen, Message2}
 import play.api.{Logger, Logging}
 import play.api.libs.EventSource
@@ -18,21 +18,18 @@ import utils.{Ask, Concur}
 import scala.collection.mutable
 import scala.concurrent.Future
 import scala.util.{Success, Try}
+import org.joda.time.DateTime
 
 object StatusActor {
-  /** The contest time events for a contest row when this actor is their producer (`enabled`), else none; a failure is returned. */
-  def timeEventsOf(enabled: Boolean, observe: (Contest, org.joda.time.DateTime) => Seq[palevo.PalevoEvent], c: Contest,
-                   now: org.joda.time.DateTime): Try[Seq[palevo.PalevoEvent]] =
-    if (enabled) Try(observe(c, now)) else scala.util.Success(Nil)
-
   def props(db: JdbcBackend#DatabaseDef, palevo: PalevoSink, teamLookup: (Int, Int) => Future[Option[org.stingray.contester.dbmodel.Team]],
-            liveHooks: live.LiveHooks, timeEvents: Boolean, countdown: CountdownConfig) =
-    Props(new StatusActor(db, palevo, teamLookup, liveHooks, timeEvents, countdown))
+            liveHooks: live.LiveHooks, countdown: CountdownConfig) =
+    Props(new StatusActor(db, palevo, teamLookup, liveHooks, countdown))
 
-  /** With the start-up load replaced (tests). */
-  def propsWith(db: JdbcBackend#DatabaseDef, initialLoad: () => Future[StatusActorInitialState]): Props =
-    Props(new StatusActor(db, palevo.NoopPalevoSink, (_, _) => Future.successful(None), live.NoopLiveHooks, false,
-      CountdownConfig.Default, Some(initialLoad)))
+  /** With the start-up load replaced (tests); optionally a palevo sink and a clock for the round clock and the events. */
+  def propsWith(db: JdbcBackend#DatabaseDef, initialLoad: () => Future[StatusActorInitialState],
+                sink: PalevoSink = palevo.NoopPalevoSink, now: () => DateTime = () => DateTime.now,
+                countdown: CountdownConfig = CountdownConfig.Default): Props =
+    Props(new StatusActor(db, sink, (_, _) => Future.successful(None), live.NoopLiveHooks, countdown, Some(initialLoad), now))
 
   case object Init
   private case object InitFailed
@@ -92,13 +89,17 @@ object StatusActor {
   private def roundJson(c: Contest): JsObject =
     Json.obj("round" -> c.id, "startTime" -> c.startTime.getMillis, "endTime" -> c.endTime.getMillis, "isFinished" -> c.isFinished)
 
-  /** The SSE event for a round edge: `round_started` / `round_ended` with the round id and its times (epoch millis). */
-  def roundEvent(edge: RoundClock.RoundEdge, c: Contest): Event = {
+  /**
+    * The SSE event for a round edge: `round_started` / `round_ended` with the round id and its times (epoch millis).
+    * Countdown edges are for palevo only and give no browser event.
+    */
+  def roundEvent(edge: RoundClock.RoundEdge, c: Contest): Option[Event] = {
     val name = edge match {
-      case _: RoundClock.Started => "round_started"
-      case _: RoundClock.Ended => "round_ended"
+      case _: RoundClock.Started => Some("round_started")
+      case _: RoundClock.Ended => Some("round_ended")
+      case _: RoundClock.CountdownToStart | _: RoundClock.CountdownToEnd => None
     }
-    Event(Json.stringify(roundJson(c)), None, Some(name))
+    name.map(n => Event(Json.stringify(roundJson(c)), None, Some(n)))
   }
 
   /** The SSE event for a round whose start or end moved: `round_rescheduled` with the new times. */
@@ -119,9 +120,10 @@ object StatusActor {
 class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
                   teamLookup: (Int, Int) => Future[Option[org.stingray.contester.dbmodel.Team]],
                   liveHooks: live.LiveHooks,
-                  // True when the live monitor is off: then this actor, not the live monitor, produces the contest time events.
-                  timeEvents: Boolean, countdown: CountdownConfig,
-                  initialLoad: Option[() => Future[StatusActor.StatusActorInitialState]] = None)
+                  // Palevo's countdown thresholds, run by the round clock.
+                  countdown: CountdownConfig,
+                  initialLoad: Option[() => Future[StatusActor.StatusActorInitialState]] = None,
+                  now: () => DateTime = () => DateTime.now)
   extends Actor with Stash with akka.actor.Timers with Logging {
   import StatusActor._
   import context.dispatcher
@@ -149,8 +151,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
 
   private[this] val (contestOut2, contestChannel2) = Concur.broadcast[Contest]()
   private[this] val contestStates = mutable.Map[Int, Contest]()
-  private[this] val timeTracker = new ContestTimeTracker(countdown)
-  // The exact deadline timer for round starts and ends; created once the contests are loaded.
+  // The exact deadline timer for round starts, ends and palevo's countdowns; created once the contests are loaded.
   private[this] var roundClock: Option[akka.actor.ActorRef] = None
   private[this] val (roundOut, roundChannel) = Concur.broadcast[RoundPush]()
   private[this] val (msg2Out, msg2Channel) = Concur.broadcast[Message2]()
@@ -242,18 +243,18 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
       m.remove(id)
     }.headOption
 
-  /** Palevo's contest time events when this actor is their producer (the live monitor is off). Never throws. */
-  private def observeTimes(c: Contest): Unit =
-    StatusActor.timeEventsOf(timeEvents, timeTracker.observe, c, com.github.nscala_time.time.Imports.DateTime.now) match {
-      case scala.util.Success(events) => events.foreach(e => Try(palevo.send(e)).failed.foreach(t =>
-        logger.warn(s"cannot send ${e.eventType} for contest ${c.id}: $t")))
-      case scala.util.Failure(t) => logger.warn(s"cannot track the times of contest ${c.id}: $t")
-    }
+  /** Tells palevo; a failure is logged, never thrown. */
+  private def toPalevo(c: Contest, event: => Option[PalevoEvent]): Unit =
+    Try(event).flatMap(e => Try(e.foreach(palevo.send))).failed.foreach(t =>
+      logger.warn(s"palevo: cannot announce the times of round ${c.id}: $t"))
 
-  /** A round's new row: stored, streamed as the `contest` event, and pushed as `round_rescheduled` when its times moved. */
+  /**
+    * A round's new row: stored, streamed as the `contest` event, and pushed as `round_rescheduled` when its times moved
+    * (palevo hears contest_rescheduled).
+    */
   private def applyContest(c: Contest): Unit = {
-    observeTimes(c)
     val old = contestStates.get(c.id)
+    for (o <- old) toPalevo(c, ContestTimeTracker.rescheduled(o, c, now()))
     if (old.isEmpty || old.get != c) {
       contestStates.put(c.id, c)
       contestChannel2.offer(c)
@@ -332,7 +333,8 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
       for (c <- contests) {
         contestStates.put(c.id, c)
       }
-      roundClock = Some(context.actorOf(RoundClockActor.props(contests.toSeq, Seq(self)), "round-clock"))
+      roundClock = Some(context.actorOf(RoundClockActor.props(contests.toSeq, Seq(self), now,
+        ContestTimeTracker.countdownOf(countdown)), "round-clock"))
 
       for (msg <- msgs)
         catchMsg(msg)
@@ -463,10 +465,10 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
       roundClock.foreach(_ ! m)
       if (contestStates.remove(id).isDefined) logger.info(s"round $id is gone or no longer usable; dropped")
 
+    // Every edge goes to palevo (phase and countdown events); only the start and the end reach the browsers.
     case RoundClockActor.Fired(edge, c) =>
-      // TODO(task18): palevo's phase and countdown events from the clock's edges.
-      observeTimes(c)
-      roundChannel.offer(RoundPush(c.id, roundEvent(edge, c)))
+      toPalevo(c, ContestTimeTracker.onEdge(edge, c, now()))
+      roundEvent(edge, c).foreach(e => roundChannel.offer(RoundPush(c.id, e)))
 
     case JoinAdmin(c: Int) => {
       import ContestWrites._

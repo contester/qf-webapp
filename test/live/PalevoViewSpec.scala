@@ -39,20 +39,26 @@ class PalevoViewSpec extends AnyFunSuite {
     assert(PalevoView.of(b).rows.forall(_.solves.isEmpty))
   }
 
-  test("while the round runs standings events go to the jury only; once it is over, to the public") {
+  test("rows carry the team's total points") {
+    assert(PalevoView.of(board).rows.map(r => (r.team.id, r.points)) == Seq((2, 30.0), (1, 29.0), (3, 10.0)))
+  }
+
+  test("while the round runs standings events go to the jury only; at the end the public hears the final standings") {
     val a = new StandingsAnnouncer
     val empty = LiveBoard.build(problems, teams, Map.empty)
     assert(a.observe(contest, PalevoView.of(empty), during).isEmpty) // the first observation only records
     val running = a.observe(contest, PalevoView.of(board), during)
     assert(running.nonEmpty && running.forall(_.audience == JuryAudience))
-    // The public tracker starts at the end: its first observation only records, so the end itself says nothing.
+    // At the end: one public event, the final standings of the one live board (the unrated team 3 is not ranked).
+    val atEnd = a.observe(contest, PalevoView.of(board), after)
+    assert(atEnd.map(e => (e.eventType, e.audience)) == Seq(("final_standings", PublicAudience)))
+    assert(atEnd.head.asInstanceOf[FinalStandings].rows.map(r => (r.place, r.team.id, r.points, r.solved)) ==
+      Seq((1, 2, 30.0, 2), (2, 1, 29.0, 1)))
     assert(a.observe(contest, PalevoView.of(board), after).isEmpty)
+    // A team that scores after the end (a submit judged late) and enters the top places: the standings are re-sent.
     val more = LiveBoard.build(problems, teams :+ team(4), Map(4 -> Map("B" -> full(20, 9000))) ++
       Map(1 -> board.rowOf(1).get.cells, 2 -> board.rowOf(2).get.cells, 3 -> board.rowOf(3).get.cells))
-    assert(a.observe(contest, PalevoView.of(more), after).isEmpty, "B was already solved")
-    val finished = contest.copy(isFinished = true)
-    val b2 = new StandingsAnnouncer
-    b2.observe(finished, PalevoView.of(empty), during)
-    assert(b2.observe(finished, PalevoView.of(board), during).forall(_.audience == PublicAudience))
+    val again = a.observe(contest, PalevoView.of(more), after)
+    assert(again.collect { case f: FinalStandings => f.updated } == Seq(true))
   }
 }

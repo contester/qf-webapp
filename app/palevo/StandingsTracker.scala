@@ -6,11 +6,12 @@ import org.stingray.contester.dbmodel.Contest
 import scala.collection.mutable
 
 /**
-  * Derives first_solve_contest / first_solve_problem / new_leader events from successive scoreboards.
+  * Derives first_solve_contest / first_solve_problem / new_leader events from successive observations of the one
+  * (live) points board.
   *
-  * Who hears it is the audience's business (StandingsAnnouncer feeds the public tracker only once the round is over).
-  * The first observation of a contest only records its state, so a restart mid-contest announces nothing. Teams that are not rated are ignored.
-  * Not thread-safe: call it from one actor.
+  * The audience is the caller's choice: StandingsAnnouncer runs it for the jury while a round runs (the public hears
+  * only the final standings, after the end). The first observation of a contest only records its state, so a restart
+  * mid-contest announces nothing. Teams that are not rated are ignored. Not thread-safe: call it from one actor.
   */
 final class StandingsTracker(audience: Audience = PublicAudience) {
   import StandingsTracker._

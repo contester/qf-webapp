@@ -1,6 +1,6 @@
 package actors
 
-import actors.RoundClock.{Ended, Started}
+import actors.RoundClock.{CountdownToEnd, CountdownToStart, Ended, Started}
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.Materializer
@@ -34,7 +34,7 @@ class StatusActorRoundEventsSpec extends TestKit(ActorSystem("StatusActorRoundEv
 
   test("round events: name and data carry the round id and its times") {
     for ((edge, name) <- Seq(Started(42) -> "round_started", Ended(42) -> "round_ended")) {
-      val e = StatusActor.roundEvent(edge, c)
+      val e = StatusActor.roundEvent(edge, c).get
       assert(e.name.contains(name))
       val js = Json.parse(e.data)
       assert((js \ "round").as[Int] == 42)
@@ -42,6 +42,9 @@ class StatusActorRoundEventsSpec extends TestKit(ActorSystem("StatusActorRoundEv
       assert((js \ "endTime").as[Long] == start.plusHours(2).getMillis)
       assert(!(js \ "isFinished").as[Boolean])
     }
+    // countdown edges are for palevo only: no browser event
+    assert(StatusActor.roundEvent(CountdownToStart(42, 5), c).isEmpty)
+    assert(StatusActor.roundEvent(CountdownToEnd(42, 1), c).isEmpty)
     val r = StatusActor.rescheduledEvent(c)
     assert(r.name.contains("round_rescheduled") && (Json.parse(r.data) \ "round").as[Int] == 42)
   }
@@ -91,7 +94,7 @@ class StatusActorRoundEventsSpec extends TestKit(ActorSystem("StatusActorRoundEv
     assume(fx.url.isDefined)
     fx.withFixture {
       val status = system.actorOf(StatusActor.props(fx.db, palevo.NoopPalevoSink, (_, _) => scala.concurrent.Future.successful(None),
-        live.NoopLiveHooks, timeEvents = false, palevo.CountdownConfig.Default))
+        live.NoopLiveHooks, palevo.CountdownConfig.Default))
       try {
         val probe = TestProbe()
         probe.send(status, StatusActor.JoinUser(fx.round, fx.kid))
@@ -113,6 +116,8 @@ class StatusActorRoundEventsSpec extends TestKit(ActorSystem("StatusActorRoundEv
           assert((js \ "round").as[Int] == fx.round && (js \ "endTime").as[Long] == moved.endTime.getMillis)
         }
         status ! StatusActor.ContestChanged(moved.copy(name = "renamed")) // not a reschedule
+        // a countdown edge reaches no browser: the next round event the streams see is round_ended
+        status ! RoundClockActor.Fired(CountdownToEnd(fx.round, 5), moved)
         status ! RoundClockActor.Fired(Ended(fx.round), moved)
         for (p <- Seq(user, admin)) data(p, "round_ended")
         other.expectNoMessage(300.millis)

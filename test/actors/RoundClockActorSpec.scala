@@ -1,6 +1,6 @@
 package actors
 
-import actors.RoundClock.{Ended, Started}
+import actors.RoundClock.{CountdownToEnd, CountdownToStart, Ended, Started}
 import actors.RoundClockActor.{Fired, Wake}
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.{TestKit, TestProbe}
@@ -8,6 +8,7 @@ import org.joda.time.DateTime
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuiteLike
 import org.stingray.contester.dbmodel.Contest
+import palevo.CountdownConfig
 
 import scala.concurrent.duration._
 
@@ -23,10 +24,10 @@ class RoundClockActorSpec extends TestKit(ActorSystem("RoundClockActorSpec")) wi
 
   private val t0 = new DateTime(2026, 11, 18, 10, 0)
 
-  class Rig(rounds: Seq[Contest]) {
+  class Rig(rounds: Seq[Contest], countdown: RoundClock.Countdown = RoundClock.NoCountdown) {
     @volatile var now: DateTime = t0
     val probe = TestProbe()
-    val clock: ActorRef = system.actorOf(RoundClockActor.props(rounds, Seq(probe.ref), () => now))
+    val clock: ActorRef = system.actorOf(RoundClockActor.props(rounds, Seq(probe.ref), () => now, countdown))
     // The actor reads the clock when it is constructed: wait until it runs before the test moves the clock.
     locally {
       val p = TestProbe()
@@ -134,5 +135,48 @@ class RoundClockActorSpec extends TestKit(ActorSystem("RoundClockActorSpec")) wi
     assert(RoundClockActor.delay(now.plusMillis(1234), now) == 1234.millis)
     assert(RoundClockActor.delay(now.minusMinutes(5), now) == Duration.Zero)
     assert(RoundClockActor.delay(now.plusYears(70), now) == 7.days)
+  }
+
+  private val cd: RoundClock.Countdown = _ => CountdownConfig(Seq(30, 10, 1), Seq(5))
+
+  test("countdown edges: each threshold once, a late wake gives only the latest, then the start") {
+    val r = round(7, t0.plusHours(1), t0.plusHours(3))
+    val g = new Rig(Seq(r), cd)
+    g.at(t0.plusMinutes(29))
+    g.none()
+    g.at(t0.plusMinutes(30))
+    val e = g.edge()
+    assert(e.edge == CountdownToStart(7, 30) && e.round == r)
+    g.at(t0.plusMinutes(30).plusSeconds(1))
+    g.none()
+    g.at(t0.plusMinutes(59).plusSeconds(30)) // a late wake: 10 and 1 crossed, only 1 is announced
+    assert(g.edge().edge == CountdownToStart(7, 1))
+    g.none()
+    g.at(t0.plusHours(1))
+    assert(g.edge().edge == Started(7))
+    g.at(t0.plusHours(3).minusMinutes(5))
+    assert(g.edge().edge == CountdownToEnd(7, 5))
+    g.clock ! StatusActor.ContestChanged(r) // unchanged row: nothing again
+    g.none()
+    g.at(t0.plusHours(3))
+    assert(g.edge().edge == Ended(7))
+    g.none()
+    g.stop()
+  }
+
+  test("countdown edges: a clock started mid-countdown is silent about passed thresholds; a reschedule re-arms them") {
+    val r = round(8, t0.plusMinutes(20), t0.plusHours(3)) // 30 has passed at start-up
+    val g = new Rig(Seq(r), cd)
+    g.none()
+    g.at(t0.plusMinutes(10))
+    assert(g.edge().edge == CountdownToStart(8, 10))
+    // moved an hour later: 30 and 10 are ahead again
+    val moved = r.copy(startTime = t0.plusMinutes(80))
+    g.clock ! StatusActor.ContestChanged(moved)
+    g.none()
+    g.at(t0.plusMinutes(50))
+    val e = g.edge()
+    assert(e.edge == CountdownToStart(8, 30) && e.round == moved)
+    g.stop()
   }
 }

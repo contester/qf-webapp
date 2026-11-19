@@ -41,7 +41,7 @@ trait LiveActorFixtures { this: TestKit =>
   def rec(id: Int, t: Int, p: String, at: DateTime, state: SubmitState = live.Pending): SubmitRec =
     SubmitRec(id, t, p, at, ((at.getMillis - t0.getMillis) / 1000).toInt, state)
 
-  val defaultTimings = LiveTimings(scheduled = false, reloadGap = Duration.Zero, ping = 1.hour)
+  val defaultTimings = LiveTimings(reloadGap = Duration.Zero, ping = 1.hour)
 
   class FakeClock(@volatile var at: DateTime) extends LiveClock {
     @volatile var ms: Long = 0L
