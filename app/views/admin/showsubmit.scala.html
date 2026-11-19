@@ -34,8 +34,7 @@
         <p>Тестинг: @viewed.map(_.toString).getOrElse("нет")@for(t <- viewed; r <- runs.find(_.testingId == t)) { (@r.problemURL)}
             @if(viewed != sub.fsub.submit.testingId.map(_.toLong)) { <b>— это не текущий прогон</b>, <a href="@routes.AdminApplication.showSubmit(subId.contestId, subId.id, None)">к текущему</a> }</p>
         @defining(subId.arrived) { arrived =>
-            <p>По часам: @fmt(arrived.timestamp), по контесту: @arrived.asString,
-                @if(arrived.afterFreeze){после}else{до} заморозки</p>
+            <p>По часам: @fmt(arrived.timestamp), по контесту: @arrived.asString</p>
         }
     <a href="@routes.AdminApplication.downloadArchiveSubmit(subId.contestId, subId.id)">Download</a>
     }

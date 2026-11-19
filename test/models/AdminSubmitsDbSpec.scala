@@ -36,12 +36,12 @@ class AdminSubmitsDbSpec extends AnyFunSuite {
 
   private def allPages(contest: Int, team: Option[Int], size: Int) = {
     var rows = Seq[AdminSubmitRow]()
-    var page = await(AdminSubmits.page(db, contest, team, None, None, canSeeAll = true, size))
+    var page = await(AdminSubmits.page(db, contest, team, None, None, size))
     rows ++= page.rows
     var guard = 0
     while (page.older.isDefined && guard < 100) {
       guard += 1
-      page = await(AdminSubmits.page(db, contest, team, page.older, None, canSeeAll = true, size))
+      page = await(AdminSubmits.page(db, contest, team, page.older, None, size))
       rows ++= page.rows
     }
     rows
@@ -50,7 +50,7 @@ class AdminSubmitsDbSpec extends AnyFunSuite {
   for (contest <- Seq(14, 12, 13)) test(s"contest $contest: pages agree with the old pipeline") {
     assume(url.isDefined)
     val old = oldPipeline(contest)
-    val one = await(AdminSubmits.page(db, contest, None, None, None, canSeeAll = true))
+    val one = await(AdminSubmits.page(db, contest, None, None, None))
     assert(one.older.isEmpty && one.newer.isEmpty)
     assert(one.rows.map(_.submit.submitId.id) == old.map(_.submit.submitId.id))
     one.rows.zip(old).foreach { case (n, o) =>
@@ -65,27 +65,27 @@ class AdminSubmitsDbSpec extends AnyFunSuite {
 
   test("newer pages mirror the older ones") {
     assume(url.isDefined)
-    val first = await(AdminSubmits.page(db, 14, None, None, None, canSeeAll = true, 4))
+    val first = await(AdminSubmits.page(db, 14, None, None, None, 4))
     assert(first.newer.isEmpty && first.older.isDefined)
-    val second = await(AdminSubmits.page(db, 14, None, first.older, None, canSeeAll = true, 4))
+    val second = await(AdminSubmits.page(db, 14, None, first.older, None, 4))
     assert(second.newer.isDefined)
-    val back = await(AdminSubmits.page(db, 14, None, None, second.newer, canSeeAll = true, 4))
+    val back = await(AdminSubmits.page(db, 14, None, None, second.newer, 4))
     assert(back.rows.map(_.submit.submitId.id) == first.rows.map(_.submit.submitId.id))
     assert(back.newer.isEmpty && back.older.isDefined)
   }
 
   test("team filter keeps the verdicts of the full history") {
     assume(url.isDefined)
-    val team = await(AdminSubmits.page(db, 14, Some(8), None, None, canSeeAll = true)).rows
+    val team = await(AdminSubmits.page(db, 14, Some(8), None, None)).rows
     assert(team.nonEmpty && team.forall(_.submit.submitId.teamId == 8))
-    assert(await(AdminSubmits.page(db, 14, Some(99999), None, None, canSeeAll = true)).rows.isEmpty)
+    assert(await(AdminSubmits.page(db, 14, Some(99999), None, None)).rows.isEmpty)
     val old = oldPipeline(14, Some(8))
     assert(team.map(_.result.message) == old.map(_.result.message))
   }
 
   test("rejudged submits show their run count and history") {
     assume(url.isDefined)
-    val rows = await(AdminSubmits.page(db, 14, None, None, None, canSeeAll = true)).rows
+    val rows = await(AdminSubmits.page(db, 14, None, None, None)).rows
     assert(rows.find(_.submit.submitId.id == 4).get.runs == 2)
     assert(rows.find(_.submit.submitId.id == 1).get.runs == 1)
     val runs = await(AdminSubmits.runHistory(db, 4, Some(10)))

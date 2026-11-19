@@ -116,7 +116,7 @@ class ContestDataDbSpec extends AnyFunSuite with BeforeAndAfterAll {
     assert(subs.map(_.submitId.id.toLong) == Seq(id))
     val s = subs.head
     assert(s.submitId.ext == "g++" && s.finished && s.compiled && s.passed == 1 && s.taken == 2 && s.testingId.contains(testing.toInt))
-    assert(s.submitId.arrived.seconds > 0 && s.submitId.arrived.afterFreeze)
+    assert(s.submitId.arrived.seconds > 0)
 
     val details = await(Submits.loadSubmitDetails(db, testing.toInt))
     assert(details.map(_.test) == Seq(0, 1, 2))
@@ -129,7 +129,7 @@ class ContestDataDbSpec extends AnyFunSuite with BeforeAndAfterAll {
     assert(await(db.run(SlickModel.testingGroups.filter(_.testingId === testing).result)).map(_.policy) == Seq("each-test"))
     assert(await(db.run(SlickModel.problems.filter(_.contestID === round).result)).map(p => (p.id, p.maxPoints)) == Seq(("A", 20.0)))
 
-    val page = await(AdminSubmits.page(db, round, None, None, None, canSeeAll = true))
+    val page = await(AdminSubmits.page(db, round, None, None, None))
     assert(page.rows.map(r => (r.submit.submitId.id.toLong, r.runs, r.result.message)) == Seq((id, 1, "10 из 20")))
     assert(page.rows.head.stats.timeMs.underlying == 20)
     val runs = await(AdminSubmits.runHistory(db, id, Some(testing)))

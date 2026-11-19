@@ -10,8 +10,8 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 
 /**
   * The row the live status page pushes for one submit (AdminSubmits.row) must be the row the page itself shows for
-  * it, in every contest of the database; and its afterFreeze flag must be what hides it from an admin who cannot
-  * see everything (skipped unless ADMINS_TEST_URL is set, like AdminSubmitsDbSpec; any data will do):
+  * it, in every contest of the database (skipped unless ADMINS_TEST_URL is set, like AdminSubmitsDbSpec; any data
+  * will do):
   *   ADMINS_TEST_URL=jdbc:postgresql://127.0.0.1:54329/contest ADMINS_TEST_USER=postgres ADMINS_TEST_PASSWORD=x
   */
 class AdminSubmitRowDbSpec extends AnyFunSuite {
@@ -32,36 +32,26 @@ class AdminSubmitRowDbSpec extends AnyFunSuite {
     await(models.Rounds.currentRounds(db)).map(_.id)
   }
 
-  private def whole(contest: Int, canSeeAll: Boolean) =
-    await(AdminSubmits.page(db, contest, None, None, None, canSeeAll, size = 100000)).rows
+  private def whole(contest: Int) =
+    await(AdminSubmits.page(db, contest, None, None, None, size = 100000)).rows
 
   test("every submit's row is the row the page shows for it") {
     assume(url.isDefined)
     var checked = 0
     contests.foreach { c =>
-      whole(c, canSeeAll = true).foreach { shown =>
+      whole(c).foreach { shown =>
         val id = shown.submit.submitId.id
         val one = await(AdminSubmits.row(db, id)).getOrElse(fail(s"no row for submit $id of contest $c"))
         assert(one.submit.submitId.contestId == c && one.submit.submitId.teamId == shown.submit.submitId.teamId, s"submit $id")
         assert(one.result.message == shown.result.message, s"verdict of $id")
         assert(one.stats == shown.stats, s"stats of $id")
         assert(one.runs == shown.runs, s"runs of $id")
-        assert(one.submit.submitId.arrived.afterFreeze == shown.submit.submitId.arrived.afterFreeze, s"freeze flag of $id")
+        assert(one.submit.submitId.arrived == shown.submit.submitId.arrived, s"arrival of $id")
         checked += 1
       }
     }
     assert(checked > 0, "the database has no submits")
     info(s"$checked submits in ${contests.size} contests")
-  }
-
-  test("the freeze flag is what the page hides from an admin who cannot see everything") {
-    assume(url.isDefined)
-    contests.foreach { c =>
-      val all = whole(c, canSeeAll = true)
-      val visible = whole(c, canSeeAll = false)
-      assert(visible.map(_.submit.submitId.id) == all.filterNot(_.submit.submitId.arrived.afterFreeze).map(_.submit.submitId.id),
-        s"contest $c")
-    }
   }
 
   test("a submit that is not there has no row") {

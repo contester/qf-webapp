@@ -15,7 +15,7 @@ case class SubmitRec(id: Int, team: Int, problem: String, arrivedAt: DateTime, a
       case Done(c, p) => (true, c, p)
       case Pending => (false, false, None)
     }
-    Submit(SubmitId(id, Arrived(arrivedAt, arrivedSeconds, afterFreeze = false), team, 0, RatedProblem(problem, 0), ""),
+    Submit(SubmitId(id, Arrived(arrivedAt, arrivedSeconds), team, 0, RatedProblem(problem, 0), ""),
       finished, compiled, 0, 0, None, points)
   }
 

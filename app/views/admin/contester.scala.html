@@ -9,7 +9,7 @@ $(function() { listenOnContester('@routes.AdminApplication.contesterEvents.url',
 <div class="panel panel-info">
     <div class="panel-heading"><h3 class="panel-title">Open connections <span id="contester-state" class="badge badge-error">*</span></h3></div>
     <div class="panel-body">
-        <p>Everyone watching right now, by contest. Restricted admins see the frozen board; unrestricted admins the real one.
+        <p>Everyone watching right now, by contest. Admins see the live board.
             This page's own stream is not counted, but its admin feed is.</p>
         <span class="hidden" id="contester-names">
             @for(c <- contest.contests) {<span data-id="@c._1">@c._2</span>}

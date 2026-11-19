@@ -12,7 +12,7 @@ import spire.math.extras.{FixedPoint, FixedScale}
 
 import scala.concurrent.{ExecutionContext, Future}
 
-case class Arrived(timestamp: DateTime, seconds: Int, afterFreeze: Boolean) {
+case class Arrived(timestamp: DateTime, seconds: Int) {
   def asString = SecondsToTimeStr(seconds)
 }
 
@@ -23,7 +23,6 @@ case class SubmitId(id: Int, arrived: Arrived, teamId: Int, contestId: Int, prob
 case class Submit(submitId: SubmitId, finished: Boolean, compiled: Boolean, passed: Int, taken: Int, testingId: Option[Int],
                   points: Option[Double] = None, maxPoints: Double = 0) {
   val success = finished && compiled && taken > 0 && passed == taken
-  def afterFreeze = submitId.arrived.afterFreeze
   val failedOnFirst = taken == 1 && passed == 0
 }
 
@@ -100,7 +99,7 @@ object Submits {
 
   def upliftSub(s: UpliftedSubmit): Submit =
     Submit(
-      SubmitId(s.id.toInt, Arrived(s.arrived, s.arrivedSeconds.toStandardSeconds.getSeconds, s.afterFreeze),
+      SubmitId(s.id.toInt, Arrived(s.arrived, s.arrivedSeconds.toStandardSeconds.getSeconds),
         s.teamID, s.contestID, RatedProblem(s.problemID, 30), s.ext), s.finished,
       s.compiled, s.passed, s.taken,
       s.testingID.map(_.toInt), s.points, s.maxPoints)

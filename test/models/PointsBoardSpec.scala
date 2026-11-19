@@ -10,7 +10,7 @@ class PointsBoardSpec extends AnyFunSuite {
 
   private def submit(id: Int, points: Option[Double], finished: Boolean = true, compiled: Boolean = true,
                      team: Int = 1, problem: String = "A", seconds: Int = 0): Submit =
-    Submit(SubmitId(id, Arrived(t0.plusSeconds(seconds), seconds, afterFreeze = true), team, 7, RatedProblem(problem, 30), "cpp"),
+    Submit(SubmitId(id, Arrived(t0.plusSeconds(seconds), seconds), team, 7, RatedProblem(problem, 30), "cpp"),
       finished, compiled, 0, 0, None, points, 20)
 
   test("an empty cell: no submits, no best, not full") {

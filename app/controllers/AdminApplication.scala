@@ -107,16 +107,10 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   }
 
 
-  /** The submit's round and whether it arrived after that round's start, its freeze time (the same rule as the status list). */
-  private[this] def getSubmitContestFreeze(submitId: Long)(implicit ec: ExecutionContext): Future[Option[(Int, Boolean)]] =
-    db.run(SlickModel.submitsUnsorted.filter(_.id === submitId).map(x => (x.contestID, x.afterFreeze)).take(1).result.headOption)
-
-  /** Spectators may open a submit of their contest; those with a restricted view only if it arrived before the freeze. */
+  /** Spectators of a submit's round may open it (there is no freeze: every submit is visible to them). */
   case class canSeeSubmit(submitId: Int) extends Authorization[Admin, SessionAuthenticator] {
     override def isAuthorized[B](identity: Admin, authenticator: SessionAuthenticator)(implicit request: Request[B]): Future[Boolean] =
-      getSubmitContestFreeze(submitId).map { found =>
-        found.exists { case (cid, afterFreeze) => identity.canSeeSubmit(cid, afterFreeze) }
-      }
+      getSubmitCid(submitId).map(_.exists(identity.canSpectate))
   }
 
   case class canRejudgeSubmit(submitId: Int) extends Authorization[Admin, SessionAuthenticator] {
@@ -138,7 +132,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   // The status page's rows as they arrive and finish.
   def statusEvents(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
     LiveStreams.stream(liveMonitor.ref,
-      LiveStreams.adminStatusJoin(contestId, request.identity.canSeeAll(contestId)), stats)
+      LiveStreams.adminStatusJoin(contestId), stats)
   }
 
   def submits(contestId: Int, team: Option[Int], before: Option[Long], after: Option[Long]) =
@@ -146,7 +140,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
       val account = request.identity
       getSelectedContests(contestId, account).zip(statusActorModel.teamClient.getTeams(contestId)).flatMap {
         case (contest, teamMap) =>
-          AdminSubmits.page(db, contestId, team, before, after, account.canSeeAll(contestId)).map { page =>
+          AdminSubmits.page(db, contestId, team, before, after).map { page =>
             Ok(html.admin.submits(page, teamMap, contest, account, team,
               live = liveMonitor.ref.isDefined, newest = before.isEmpty && page.newer.isEmpty))
           }

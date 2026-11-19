@@ -45,9 +45,9 @@ class DbStatusRowsSpec extends TestKit(ActorSystem("DbStatusRowsSpec", ConfigFac
 
   private val noTeams = teamClient()
 
-  private def submitRow(id: Int, finished: Boolean, success: Boolean = true, afterFreeze: Boolean = false,
+  private def submitRow(id: Int, finished: Boolean, success: Boolean = true,
                         teamId: Int = 5): AdminSubmitRow = {
-    val s = Submit(SubmitId(id, Arrived(new DateTime(2026, 11, 1, 10, 0), 600, afterFreeze), teamId, 3, RatedProblem("A", 30), "cpp"),
+    val s = Submit(SubmitId(id, Arrived(new DateTime(2026, 11, 1, 10, 0), 600), teamId, 3, RatedProblem("A", 30), "cpp"),
       finished, compiled = finished, passed = if (success) 3 else 1, taken = if (finished) 3 else 0, None)
     AdminSubmitRow(s, if (!finished) SubmitWaiting else if (success) SubmitPointsResult(3, 3) else SubmitPointsResult(1, 3),
       SubmitStats(TimeMs(31), Memory(2048)), runs = 1)
@@ -58,7 +58,7 @@ class DbStatusRowsSpec extends TestKit(ActorSystem("DbStatusRowsSpec", ConfigFac
 
   test("a row is rendered for those who can rejudge and for those who cannot") {
     val r = await(rows(id => Future.successful(Some(submitRow(id, finished = true)))).render(42, None)).get
-    assert(r.contest == 3 && r.id == 42 && r.team == 5 && !r.afterFreeze)
+    assert(r.contest == 3 && r.id == 42 && r.team == 5)
     assert(r.rw.startsWith("<tr id=\"result-row-42\"") && r.ro.startsWith("<tr id=\"result-row-42\""))
     assert(r.rw.contains("rejudge-42") && !r.ro.contains("rejudge-42"))
     assert(r.rw.contains("3 из 3") && r.ro.contains("3 из 3"))
@@ -68,11 +68,6 @@ class DbStatusRowsSpec extends TestKit(ActorSystem("DbStatusRowsSpec", ConfigFac
   test("the team is named, escaped, from the team list") {
     val r = await(rows(id => Future.successful(Some(submitRow(id, finished = true))), teamClient(team(5))).render(42, None)).get
     assert(r.rw.contains("Lyceum &amp; Co") && !r.rw.contains("Lyceum & Co"), r.rw)
-  }
-
-  test("a freeze flag of the submit is carried") {
-    val r = await(rows(id => Future.successful(Some(submitRow(id, finished = true, afterFreeze = true)))).render(42, None)).get
-    assert(r.afterFreeze)
   }
 
   test("a submit that is not there has no row") {
@@ -129,17 +124,15 @@ class DbStatusRowsSpec extends TestKit(ActorSystem("DbStatusRowsSpec", ConfigFac
 
   private lazy val real = DbStatusRows.fromDb(db, noTeams, system.scheduler)
 
-  test("db: every submit renders, in its own contest, with the freeze flag the page uses") {
+  test("db: every submit renders, in its own contest") {
     assume(url.isDefined)
     var n = 0
     contests.foreach { c =>
-      val shown = await(AdminSubmits.page(db, c, None, None, None, canSeeAll = true, size = 100000)).rows
-      val visible = await(AdminSubmits.page(db, c, None, None, None, canSeeAll = false, size = 100000)).rows.map(_.submit.submitId.id).toSet
+      val shown = await(AdminSubmits.page(db, c, None, None, None, size = 100000)).rows
       shown.foreach { s =>
         val id = s.submit.submitId.id
         val r = await(real.render(id, None)).getOrElse(fail(s"no row for submit $id"))
         assert(r.contest == c && r.id == id && r.team == s.submit.submitId.teamId, s"submit $id")
-        assert(r.afterFreeze == !visible(id), s"freeze flag of $id")
         assert(r.rw.startsWith("<tr id=\"result-row-" + id + "\"") && r.rw.endsWith("</tr>"), s"markup of $id")
         assert(r.rw.contains(s.result.message) && r.ro.contains(s.result.message), s"verdict of $id")
         assert(r.rw.contains(s"rejudge-$id") && !r.ro.contains(s"rejudge-$id"), s"rejudge button of $id")
@@ -152,7 +145,7 @@ class DbStatusRowsSpec extends TestKit(ActorSystem("DbStatusRowsSpec", ConfigFac
 
   test("db: a submit that is not tested yet is shown as running, after the retries") {
     assume(url.isDefined)
-    val untested = contests.flatMap(c => await(AdminSubmits.page(db, c, None, None, None, canSeeAll = true, size = 100000)).rows)
+    val untested = contests.flatMap(c => await(AdminSubmits.page(db, c, None, None, None, size = 100000)).rows)
       .filterNot(_.submit.finished)
     assume(untested.nonEmpty, "no untested submit in the database")
     val fast = new DbStatusRows(id => AdminSubmits.row(db, id), noTeams, system.scheduler, retryAfter = 10.millis, retries = 2)
@@ -164,7 +157,7 @@ class DbStatusRowsSpec extends TestKit(ActorSystem("DbStatusRowsSpec", ConfigFac
 
   test("db: how long a row takes to read (the biggest contest, a team with many attempts on one problem)") {
     assume(url.isDefined)
-    val all = contests.flatMap(c => await(AdminSubmits.page(db, c, None, None, None, canSeeAll = true, size = 100000)).rows)
+    val all = contests.flatMap(c => await(AdminSubmits.page(db, c, None, None, None, size = 100000)).rows)
     val worst = all.groupBy(s => (s.submit.submitId.contestId, s.submit.submitId.teamId, s.submit.submitId.problem.id)).maxBy(_._2.size)._2
     await(real.render(worst.last.submit.submitId.id, None)) // warm up
     val t0 = System.nanoTime()

@@ -27,15 +27,10 @@ object ContestWrites {
       Json.obj(
         "id" -> c.id,
         "name" -> c.name,
-        "frozen" -> c.frozen,
         "startTime" -> c.startTime,
         "startTimeDelta" -> ntm(c.startTime),
         "endTime" -> c.endTime,
-        "endTimeDelta" -> ntm(c.endTime),
-        "freezeTime" -> c.freezeTime,
-        "freezeTimeDelta" -> ntm(c.freezeTime),
-        "exposeTime" -> c.exposeTime,
-        "exposeTimeDelta" -> ntm(c.exposeTime)
+        "endTimeDelta" -> ntm(c.endTime)
       )
     }
   }

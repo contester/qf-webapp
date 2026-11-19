@@ -12,8 +12,7 @@ class LiveStreamsSpec extends AnyFunSuite {
 
   test("every live join is counted under the kind of feed and the contest it joins") {
     assert(LiveStreams.feedOf(JoinAdmin(4)) == (FeedKind.AdminMonitor, 4))
-    assert(LiveStreams.feedOf(JoinAdminStatus(4, real = true)) == (FeedKind.StatusRows, 4))
-    assert(LiveStreams.feedOf(JoinAdminStatus(4, real = false)) == (FeedKind.StatusRows, 4))
+    assert(LiveStreams.feedOf(JoinAdminStatus(4)) == (FeedKind.StatusRows, 4))
     assert(FeedKind.all.map(_.id) == Seq("teamFeed", "adminMonitor", "adminFeed", "statusRows"))
   }
 
@@ -59,9 +58,8 @@ class LiveStreamsSpec extends AnyFunSuite {
     }
   }
 
-  test("the status page stream is real only for an account that can see everything") {
-    assert(LiveStreams.adminStatusJoin(7, canSeeAll = true) == JoinAdminStatus(7, real = true))
-    assert(LiveStreams.adminStatusJoin(7, canSeeAll = false) == JoinAdminStatus(7, real = false))
-    assert(src("app/controllers/AdminApplication.scala").contains("LiveStreams.adminStatusJoin(contestId, request.identity.canSeeAll(contestId))"))
+  test("the status page stream carries every submit of the round: there is no freeze") {
+    assert(LiveStreams.adminStatusJoin(7) == JoinAdminStatus(7))
+    assert(src("app/controllers/AdminApplication.scala").contains("LiveStreams.adminStatusJoin(contestId)"))
   }
 }

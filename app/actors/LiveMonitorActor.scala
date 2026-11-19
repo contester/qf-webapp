@@ -43,9 +43,9 @@ object LiveMonitorActor {
   case class JoinAdmin(contest: Int) extends Join
   /**
     * The rows of the admin status page: a `ready` event first, then a `statusRow` event for every submit that arrives,
-    * finishes or is rejudged. `real` false hides the submits after the freeze, as the page does.
+    * finishes or is rejudged. Every admin sees every submit.
     */
-  case class JoinAdminStatus(contest: Int, real: Boolean) extends Join
+  case class JoinAdminStatus(contest: Int) extends Join
 
   /**
     * The board a join would start with, as a LiveBoard (for server-side rendering of the page), answered with
@@ -68,7 +68,7 @@ object LiveMonitorActor {
   }
 
   /** A submit rendered for the status page: the row for an admin who can rejudge (`rw`) and for one who cannot (`ro`). */
-  case class StatusRow(contest: Int, id: Int, team: Int, afterFreeze: Boolean, rw: String, ro: String)
+  case class StatusRow(contest: Int, id: Int, team: Int, rw: String, ro: String)
 
   /** Renders a status page row from the database; None when there is no such submit. */
   trait StatusRows {
@@ -106,7 +106,7 @@ object LiveMonitorActor {
           val cid = r.submit.submitId.contestId
           teamClient.getTeams(cid).map { teams =>
             val body = (rejudge: Boolean) => views.html.admin.submitrow(r, teams, rejudge, linkTeam = true).body.trim
-            Some(StatusRow(cid, r.submit.submitId.id, r.submit.submitId.teamId, r.submit.submitId.arrived.afterFreeze,
+            Some(StatusRow(cid, r.submit.submitId.id, r.submit.submitId.teamId,
               body(true), body(false)))
           }
       }
@@ -182,8 +182,8 @@ object LiveMonitorActor {
 
   private sealed trait Viewer
   private case object BoardViewer extends Viewer
-  // Not a board: the rows of the status page. `real` sees the submits after the freeze.
-  private case class StatusViewer(real: Boolean) extends Viewer
+  // Not a board: the rows of the status page.
+  private case object StatusViewer extends Viewer
 
   private sealed trait Ev { def id: Int }
   private case class EvArrived(rec: SubmitRec) extends Ev { def id: Int = rec.id }
@@ -392,7 +392,7 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
 
   private def contestOf(j: Join): Int = j match {
     case JoinAdmin(c) => c
-    case JoinAdminStatus(c, _) => c
+    case JoinAdminStatus(c) => c
   }
 
   private def notFound(j: Join): NoSuchElementException = notFound(contestOf(j))
@@ -400,7 +400,7 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
   /** The contest and viewer of a join. */
   private def viewerOf(j: Join): Option[(Int, Viewer)] = j match {
     case JoinAdmin(cid) => Some(cid -> BoardViewer)
-    case JoinAdminStatus(cid, real) => Some(cid -> StatusViewer(real))
+    case JoinAdminStatus(cid) => Some(cid -> StatusViewer)
   }
 
   private def withContest(cid: Int, what: String)(f: ContestState => Unit): Unit =
@@ -673,7 +673,7 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
         val subs = subscribers.getOrElseUpdate(cid, mutable.Map.empty)
         subs(q) = viewer
         viewer match {
-          case _: StatusViewer => offer(cid, q, LiveJson.event("ready", Json.obj()))
+          case StatusViewer => offer(cid, q, LiveJson.event("ready", Json.obj()))
           case BoardViewer => offer(cid, q, Try(boardEvent(st.live.board)).getOrElse(boardEvent(LiveBoard.empty)))
         }
       case None => q.complete()
@@ -710,7 +710,7 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
     }
 
   private def hasStatusViewers(cid: Int): Boolean =
-    subscribers.iterator.exists { case (c, subs) => (cid < 0 || c == cid) && subs.valuesIterator.exists(_.isInstanceOf[StatusViewer]) }
+    subscribers.iterator.exists { case (c, subs) => (cid < 0 || c == cid) && subs.valuesIterator.contains(StatusViewer) }
 
   private def statusRowReady(seq: Long, id: Int, result: Try[Option[StatusRow]]): Unit =
     if (statusRequests.get(id).contains(seq)) {
@@ -719,7 +719,7 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
         case Success(Some(row)) =>
           lazy val event = LiveJson.event("statusRow", Json.obj("id" -> row.id, "team" -> row.team, "rw" -> row.rw, "ro" -> row.ro))
           subscribers.get(row.contest).foreach(_.toList.foreach {
-            case (q, StatusViewer(real)) if real || !row.afterFreeze => offer(row.contest, q, event)
+            case (q, StatusViewer) => offer(row.contest, q, event)
             case _ =>
           })
         case Success(None) => log.debug(s"live monitor: no status row for submit $id")
@@ -732,7 +732,7 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
       lazy val events = d.board.map(plainEvent)
       subs.toList.foreach {
         case (q, BoardViewer) => events.foreach(offer(cid, q, _))
-        case (_, _: StatusViewer) => ()
+        case (_, StatusViewer) => ()
       }
     }
 }

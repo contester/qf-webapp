@@ -14,7 +14,7 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 
-/** The status page stream of the live monitor: a row for every arrival, finish and rejudge, gated by the freeze. */
+/** The status page stream of the live monitor: a row for every arrival, finish and rejudge, for every admin. */
 class LiveStatusRowsSpec extends TestKit(ActorSystem("LiveStatusRowsSpec", ConfigFactory.parseString(
   """
     |akka.loglevel = WARNING
@@ -24,7 +24,7 @@ class LiveStatusRowsSpec extends TestKit(ActorSystem("LiveStatusRowsSpec", Confi
   override def afterAll(): Unit = TestKit.shutdownActorSystem(system)
 
   /** Rows by submit id; a row can be held back with a promise to make a read slow. */
-  private class FakeRows(after: Set[Int] = Set.empty) extends StatusRows {
+  private class FakeRows extends StatusRows {
     val gates = new ConcurrentHashMap[Int, Promise[Unit]]
     val asked = new ConcurrentHashMap[Int, Option[models.SubmitResult]]
 
@@ -32,7 +32,7 @@ class LiveStatusRowsSpec extends TestKit(ActorSystem("LiveStatusRowsSpec", Confi
       asked.put(id, inTesting)
       val gate = Option(gates.get(id)).map(_.future).getOrElse(Future.successful(()))
       val what = inTesting.map(_.message).getOrElse("done")
-      gate.map(_ => Some(StatusRow(1, id, 1, after(id), s"rw-$id-$what", s"ro-$id-$what")))
+      gate.map(_ => Some(StatusRow(1, id, 1, s"rw-$id-$what", s"ro-$id-$what")))
     }
   }
 
@@ -41,7 +41,7 @@ class LiveStatusRowsSpec extends TestKit(ActorSystem("LiveStatusRowsSpec", Confi
   test("an open status page gets a ready event, then a row for an arrival and for a finish") {
     val rows = new FakeRows
     val f = new Fixture(running, statusRows = rows)
-    val p = f.subscribe(JoinAdminStatus(1, real = true))
+    val p = f.subscribe(JoinAdminStatus(1))
     next(p, "ready")
 
     f.actor ! Arrived(1, rec(11, 1, "A", running))
@@ -58,7 +58,7 @@ class LiveStatusRowsSpec extends TestKit(ActorSystem("LiveStatusRowsSpec", Confi
   test("a rejudge of a submit reads its row as being tested, in whatever contest it is") {
     val rows = new FakeRows
     val f = new Fixture(running, subs = Map(1 -> Seq(rec(11, 1, "A", running, ok))), statusRows = rows)
-    val p = f.subscribe(JoinAdminStatus(1, real = true))
+    val p = f.subscribe(JoinAdminStatus(1))
     next(p, "ready")
 
     f.actor ! RejudgeRequested(11)
@@ -71,7 +71,7 @@ class LiveStatusRowsSpec extends TestKit(ActorSystem("LiveStatusRowsSpec", Confi
     val slow = Promise[Unit]()
     rows.gates.put(11, slow)
     val f = new Fixture(running, statusRows = rows)
-    val p = f.subscribe(JoinAdminStatus(1, real = true))
+    val p = f.subscribe(JoinAdminStatus(1))
     next(p, "ready")
 
     f.actor ! Arrived(1, rec(11, 1, "A", running))
@@ -83,23 +83,6 @@ class LiveStatusRowsSpec extends TestKit(ActorSystem("LiveStatusRowsSpec", Confi
     slow.success(())
     f.barrier()
     p.expectNoMessage(300.millis)
-    f.stop()
-  }
-
-  test("a viewer that cannot see the real board gets no rows of submits after the freeze") {
-    val rows = new FakeRows(after = Set(12))
-    val f = new Fixture(running, statusRows = rows)
-    val real = f.subscribe(JoinAdminStatus(1, real = true))
-    val frozen = f.subscribe(JoinAdminStatus(1, real = false))
-    next(real, "ready")
-    next(frozen, "ready")
-
-    f.actor ! Arrived(1, rec(12, 1, "A", running))
-    f.actor ! Arrived(1, rec(13, 2, "A", running))
-    assert((row(real) \ "id").as[Int] == 12)
-    assert((row(real) \ "id").as[Int] == 13)
-    assert((row(frozen) \ "id").as[Int] == 13)
-    frozen.expectNoMessage(300.millis)
     f.stop()
   }
 
@@ -116,7 +99,7 @@ class LiveStatusRowsSpec extends TestKit(ActorSystem("LiveStatusRowsSpec", Confi
 
   test("a status page does not get board events") {
     val f = new Fixture(running, statusRows = new FakeRows)
-    val p = f.subscribe(JoinAdminStatus(1, real = true))
+    val p = f.subscribe(JoinAdminStatus(1))
     next(p, "ready")
     f.actor ! Arrived(1, rec(11, 1, "A", running))
     row(p)
@@ -128,7 +111,7 @@ class LiveStatusRowsSpec extends TestKit(ActorSystem("LiveStatusRowsSpec", Confi
     val rows = new FakeRows
     val f = new Fixture(running, statusRows = rows)
     // A page that reads the ready event and goes away.
-    Await.result(f.join(JoinAdminStatus(1, real = true)).take(1).runWith(Sink.ignore)(Materializer(system)), 5.seconds)
+    Await.result(f.join(JoinAdminStatus(1)).take(1).runWith(Sink.ignore)(Materializer(system)), 5.seconds)
     f.barrier()
     f.actor ! Arrived(1, rec(11, 1, "A", running))
     f.actor ! Finished(1, 11, compiled = true, Some(3.0))
@@ -141,7 +124,7 @@ class LiveStatusRowsSpec extends TestKit(ActorSystem("LiveStatusRowsSpec", Confi
     val f = new Fixture(running, statusRows = new FakeRows)
     val mat = Materializer(system)
     // The body of the route: the join, and the response a browser's EventSource reads.
-    val result = Await.result(controllers.LiveStreams.stream(Some(f.actor), JoinAdminStatus(1, real = true), new ConnectionStats)(ExecutionContext.global), 5.seconds)
+    val result = Await.result(controllers.LiveStreams.stream(Some(f.actor), JoinAdminStatus(1), new ConnectionStats)(ExecutionContext.global), 5.seconds)
     assert(result.header.status == 200)
     assert(result.body.contentType.exists(_.startsWith("text/event-stream")), result.body.contentType.toString)
     assert(result.header.headers.get("X-Accel-Buffering").contains("no") && result.header.headers.get("Cache-Control").contains("no-cache"))

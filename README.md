@@ -2,20 +2,25 @@
 
 ## Configuration: palevo (IRC announcements)
 
-qf-webapp can post contest events (new clarifications, questions from teams and the answers to them, tasks, contest start/freeze/end with countdowns and reschedules, first solves,
-new leader, print errors) to [palevo](https://github.com/contester/palevo), which announces them in the
-duty IRC channel. Add to the application configuration:
+qf-webapp can post contest events (new clarifications, questions from teams and the answers to them, round start and
+end with countdowns and reschedules, first solves and new leaders for the jury, the final standings) to
+[palevo](https://github.com/contester/palevo), which announces them in the duty IRC channel. Add to the application configuration:
 
     palevo.url = "http://127.0.0.1:8081/events"
     palevo.token = "..."   # the same value as PALEVO_TOKEN in palevo's /etc/sysconfig/palevo
 
 If either key is missing the feature is off. Delivery is best effort (3 attempts, in order, one event at a
-time) and never affects contest operation. Scoreboard events are computed from the pre-freeze monitor only,
-so nothing is announced about the scoreboard after the freeze.
+time) and never affects contest operation. There is no freeze: standings events come from the one live points board.
+While a round runs they go to the jury audience only (`first_solve_contest`, `first_solve_problem`, `new_leader`
+with `"audience": "jury"`); the public hears nothing about the board until the round is over (`is_finished`, or its
+end has come). Then one public `final_standings` event names the top three places (team, points, problems at full
+points), and it is sent again (`"updated": true`) only when a later change, such as a rejudge, alters them. A
+restart after the end announces nothing. palevo must know the `final_standings` type; until it does, it rejects
+the event and qf drops it.
 
 ### Contest time events
 
-palevo is told when a contest starts, freezes and ends (`contest_starting`, `contest_freezing`, `contest_ending`),
+palevo is told when a contest starts and ends (`contest_starting`, `contest_ending`; there is no freeze event),
 that these are coming (the same events with `in_minutes`: "starts in 10 minutes"), and when an operator moves a
 contest (`contest_rescheduled`: "start time changed to 19:30"). Before 2026-11-07 the phase events were called
 `contest_started`, `contest_frozen` and `contest_finished`; deploy palevo first, it still accepts the old names.
@@ -27,9 +32,11 @@ Optional keys:
 An empty list turns that countdown off; a value that is not positive is ignored with a warning (the default is used).
 A late or restarted application announces only the latest threshold it has crossed, and nothing for the ones already
 passed when it started. Countdowns and reschedules are announced only for contests 1 to 10 (the others are test
-copies); the phase events themselves are announced for every contest. Expose-time changes alone are not announced.
+copies); the phase events themselves are announced for every contest. A reschedule lists only `start` and `end`.
 
-The events come from the live monitor.
+The events are the edges of the round clock (`actors.RoundClock`, below): each countdown threshold is an edge of
+its own, so no timer other than the clock's one deadline timer is involved. Countdown edges go to palevo only, never
+to browsers.
 
 ## Database notifications
 
@@ -73,14 +80,14 @@ round is over (`is_finished`, or `ends_at` has come).
 
 There are no static monitor files and no `monitor.*` settings any more (`monitor.disable_new_monitor`,
 `monitor.public_contests`, `monitor.public_max_connections`, `monitor.static_location` and the old interval keys are
-ignored). The live actor feeds palevo's time and standings events; standings events reach the public audience only
-once the round is over.
+ignored). The live actor feeds palevo's standings events (see the palevo section); it has no timer of its own and
+hears the end of a round from the round clock.
 
 ## No polling
 
 qf never re-reads the database on an interval. Contests, teams and problems are loaded once at start-up and then
-follow the notifications (`round_changed`, `credential_changed`, `participant_changed`). Round starts and ends come
-from one exact single-shot timer (`actors.RoundClock`), armed for the next deadline and re-armed on every round change
+follow the notifications (`round_changed`, `credential_changed`, `participant_changed`). Round starts and ends, and
+palevo's countdown thresholds, come from one exact single-shot timer (`actors.RoundClock`), armed for the next deadline and re-armed on every round change
 and after it fires; each edge is pushed to the round's participants and admins as a `round_started` / `round_ended`
 server-sent event, and a moved round as `round_rescheduled`. On start-up the clock announces nothing that already
 happened (a running round gets no `round_started`). The only other timers are SSE keep-alive comments and

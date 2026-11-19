@@ -30,22 +30,15 @@ case class Extrainfo(contest: Int, num: Int, heading: String, data: String)
 
 /**
   * A round of the current season, with both times set. `id` is contest_rounds.id, the "contest id" of qf's URLs.
-  * Start and end are also the freeze and expose times: there is no freeze configuration.
+  * There is no freeze: the board is live for admins and public once the round is over.
   */
 case class Contest(id: Int, name: String, startTime: DateTime, endTime: DateTime, polygonId: Option[String], seasonId: Int,
                    isFinished: Boolean = false) {
   /** A round takes submits from starts_at (inclusive) to ends_at (exclusive), unless it was finished early. */
   def acceptsSubmits(now: DateTime): Boolean = !isFinished && !now.isBefore(startTime) && now.isBefore(endTime)
 
-  // Kept so that the legacy board code compiles; the scoreboard rewrite drops them.
-  def freezeTime: DateTime = startTime
-  def exposeTime: DateTime = endTime
   def language: String = "russian"
 
-  def frozen = {
-    val now = DateTime.now
-    freezeTime.isBefore(endTime) && now >= freezeTime && now < exposeTime
-  }
   /** The round is over: finished early, or its end has come. */
   def finished = isFinished || DateTime.now >= endTime
   def started = DateTime.now >= startTime
@@ -485,24 +478,24 @@ object SlickModel {
 
   val problems = TableQuery[Problems]
 
-  case class LiftedSubmit(id: Rep[Long], arrived: Rep[DateTime], arrivedSeconds: Rep[Period], afterFreeze: Rep[Boolean],
+  case class LiftedSubmit(id: Rep[Long], arrived: Rep[DateTime], arrivedSeconds: Rep[Period],
                           teamID: Rep[Int], contestID: Rep[Int], problemID: Rep[String], ext: Rep[String],
                           finished: Rep[Boolean], compiled: Rep[Boolean], passed: Rep[Int], taken: Rep[Int],
                           testingID: Rep[Option[Long]], points: Rep[Option[Double]], maxPoints: Rep[Double])
 
-  case class UpliftedSubmit(id: Long, arrived: DateTime, arrivedSeconds: Period, afterFreeze: Boolean, teamID: Int,
+  case class UpliftedSubmit(id: Long, arrived: DateTime, arrivedSeconds: Period, teamID: Int,
                             contestID: Int, problemID: String, ext: String, finished: Boolean, compiled: Boolean,
                             passed: Int, taken: Int, testingID: Option[Long], points: Option[Double], maxPoints: Double)
 
   implicit object SubmitShape extends CaseClassShape(LiftedSubmit.tupled, UpliftedSubmit.tupled)
 
-  /** Submits with their round's start (arrival and "after freeze" are relative to it) and language, unsorted. */
+  /** Submits with their time from their round's start and their language, unsorted. */
   val submitsUnsorted = for {
     s <- submits
     round <- contestRounds if s.contest === round.id
     problem <- problems if s.problem === problem.id && s.contest === problem.contestID
     lang <- compilers if s.language === lang.id
-  } yield LiftedSubmit(s.id, s.arrived, s.arrived - round.startsAt.ifNull(s.arrived), s.arrived > round.startsAt.ifNull(s.arrived),
+  } yield LiftedSubmit(s.id, s.arrived, s.arrived - round.startsAt.ifNull(s.arrived),
     s.team, s.contest, s.problem, lang.moduleID, s.tested, s.compiled, s.passed, s.taken, s.testingID, s.points, problem.maxPoints)
 
   val submits0 = submitsUnsorted.sortBy(_.arrived)

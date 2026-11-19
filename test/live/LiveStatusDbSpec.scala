@@ -21,7 +21,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 /**
   * The status page stream with the real rows: the live monitor actor fed with hook events for the submits of a
   * database, the rows read and rendered from it (skipped unless ADMINS_TEST_URL is set, like AdminSubmitsDbSpec;
-  * needs a contest with submits, and for the freeze test one with submits on both sides of its freeze time):
+  * needs a contest with submits):
   *   ADMINS_TEST_URL=jdbc:postgresql://127.0.0.1:54329/contest ADMINS_TEST_USER=postgres ADMINS_TEST_PASSWORD=x
   */
 class LiveStatusDbSpec extends TestKit(ActorSystem("LiveStatusDbSpec", ConfigFactory.parseString(
@@ -58,12 +58,12 @@ class LiveStatusDbSpec extends TestKit(ActorSystem("LiveStatusDbSpec", ConfigFac
 
   private def realRows = new CountingRows(DbStatusRows.fromDb(db, teamClient, system.scheduler))
 
-  private def pageRows(contest: Int, canSeeAll: Boolean): Seq[AdminSubmitRow] =
-    await(AdminSubmits.page(db, contest, None, None, None, canSeeAll, size = 100000)).rows
+  private def pageRows(contest: Int): Seq[AdminSubmitRow] =
+    await(AdminSubmits.page(db, contest, None, None, None, size = 100000)).rows
 
   // A finished submit of the biggest contest.
   private lazy val sample: AdminSubmitRow = {
-    val all = await(models.Rounds.currentRounds(db)).flatMap(c => pageRows(c.id, canSeeAll = true))
+    val all = await(models.Rounds.currentRounds(db)).flatMap(c => pageRows(c.id))
     all.filter(_.submit.finished).maxBy(_.submit.submitId.id)
   }
 
@@ -77,7 +77,7 @@ class LiveStatusDbSpec extends TestKit(ActorSystem("LiveStatusDbSpec", ConfigFac
     val cid = sample.submit.submitId.contestId
     val id = sample.submit.submitId.id
     val f = new Fixture(running, rows = Seq(contest(cid)), statusRows = realRows)
-    val p = f.subscribe(JoinAdminStatus(cid, real = true))
+    val p = f.subscribe(JoinAdminStatus(cid))
     next(p, "ready")
 
     f.actor ! Arrived(cid, hookRec(sample))
@@ -101,7 +101,7 @@ class LiveStatusDbSpec extends TestKit(ActorSystem("LiveStatusDbSpec", ConfigFac
     val cid = sample.submit.submitId.contestId
     // The fixture's board has teams 1-3 and problems A-C; this one is neither.
     val f = new Fixture(running, rows = Seq(contest(cid)), statusRows = realRows)
-    val p = f.subscribe(JoinAdminStatus(cid, real = true))
+    val p = f.subscribe(JoinAdminStatus(cid))
     next(p, "ready")
     f.actor ! Arrived(cid, rec(sample.submit.submitId.id, 99999, "ZZ", running))
     assert((rowOf(p) \ "id").as[Int] == sample.submit.submitId.id)
@@ -113,7 +113,7 @@ class LiveStatusDbSpec extends TestKit(ActorSystem("LiveStatusDbSpec", ConfigFac
     val cid = sample.submit.submitId.contestId
     val rows = realRows
     val f = new Fixture(running, rows = Seq(contest(cid)), statusRows = rows)
-    val viewers = Seq(true, false, true, false, true).map(real => f.subscribe(JoinAdminStatus(cid, real)))
+    val viewers = (1 to 5).map(_ => f.subscribe(JoinAdminStatus(cid)))
     viewers.foreach(next(_, "ready"))
     f.actor ! Arrived(cid, hookRec(sample))
     viewers.foreach(rowOf)
@@ -121,30 +121,6 @@ class LiveStatusDbSpec extends TestKit(ActorSystem("LiveStatusDbSpec", ConfigFac
     f.actor ! Finished(cid, sample.submit.submitId.id, compiled = true, Some(1.0))
     viewers.foreach(rowOf)
     assert(rows.reads.get == 2)
-    f.stop()
-  }
-
-  test("db: after the freeze only the real board's viewer gets the row") {
-    assume(url.isDefined)
-    val contests = await(models.Rounds.currentRounds(db)).map(_.id)
-    val split = contests.map(c => (c, pageRows(c, canSeeAll = true))).find { case (_, all) =>
-      all.exists(_.submit.submitId.arrived.afterFreeze) && all.exists(!_.submit.submitId.arrived.afterFreeze)
-    }
-    assume(split.isDefined, "no contest has submits on both sides of its freeze time")
-    val (cid, all) = split.get
-    val before = all.find(!_.submit.submitId.arrived.afterFreeze).get
-    val after = all.find(_.submit.submitId.arrived.afterFreeze).get
-
-    val f = new Fixture(running, rows = Seq(contest(cid)), statusRows = realRows)
-    val real = f.subscribe(JoinAdminStatus(cid, real = true))
-    val frozen = f.subscribe(JoinAdminStatus(cid, real = false))
-    next(real, "ready"); next(frozen, "ready")
-    f.actor ! Arrived(cid, hookRec(after))
-    f.actor ! Arrived(cid, hookRec(before))
-    assert((rowOf(real) \ "id").as[Int] == after.submit.submitId.id)
-    assert((rowOf(real) \ "id").as[Int] == before.submit.submitId.id)
-    assert((rowOf(frozen) \ "id").as[Int] == before.submit.submitId.id)
-    frozen.expectNoMessage(500.millis)
     f.stop()
   }
 }

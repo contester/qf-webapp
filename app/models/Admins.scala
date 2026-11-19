@@ -27,10 +27,6 @@ case class Admin(email: String, passwordHash: String) extends Identity {
 
   def canSpectate(contestId: Int) = true
 
-  def canSeeAll(contestId: Int) = true
-
-  def canSeeSubmit(contestId: Int, afterFreeze: Boolean) = true
-
   def canModify(contestId: Int) = true
 
   def isSuperAdmin = true

@@ -8,11 +8,8 @@ class AdminPermissionsSpec extends AnyFunSuite {
   test("every admin has every permission in every round") {
     for (c <- Seq(-1, 0, 1, 3, 42)) {
       assert(a.canSpectate(c))
-      assert(a.canSeeAll(c))
       assert(a.canModify(c))
       assert(a.canSeeTeamPasswords(c))
-      assert(a.canSeeSubmit(c, afterFreeze = false))
-      assert(a.canSeeSubmit(c, afterFreeze = true))
     }
     assert(a.isSuperAdmin)
   }

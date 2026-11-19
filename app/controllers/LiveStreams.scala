@@ -44,9 +44,9 @@ object LiveStreams extends Results {
   /** The admin live board of a round (admins only: nobody else gets a live board). */
   def adminJoin(contestId: Int): actors.LiveMonitorActor.JoinAdmin = actors.LiveMonitorActor.JoinAdmin(contestId)
 
-  /** The rows of the admin status page: an account that cannot see everything gets none of the submits after the freeze. */
-  def adminStatusJoin(contestId: Int, canSeeAll: Boolean): actors.LiveMonitorActor.JoinAdminStatus =
-    actors.LiveMonitorActor.JoinAdminStatus(contestId, real = canSeeAll)
+  /** The rows of the admin status page (every submit of the round). */
+  def adminStatusJoin(contestId: Int): actors.LiveMonitorActor.JoinAdminStatus =
+    actors.LiveMonitorActor.JoinAdminStatus(contestId)
 
   def response(source: Source[Event, _]): Result =
     Ok.chunked(source).as(ContentTypes.EVENT_STREAM).withHeaders(streamHeaders: _*)
@@ -54,7 +54,7 @@ object LiveStreams extends Results {
   /** The kind of feed and the contest a join is counted under on the contester page. */
   def feedOf(j: actors.LiveMonitorActor.Join): (FeedKind, Int) = j match {
     case actors.LiveMonitorActor.JoinAdmin(c) => (FeedKind.AdminMonitor, c)
-    case actors.LiveMonitorActor.JoinAdminStatus(c, _) => (FeedKind.StatusRows, c)
+    case actors.LiveMonitorActor.JoinAdminStatus(c) => (FeedKind.StatusRows, c)
   }
 
   /** The whole route body for the admin streams, counted in `stats`; 404 without a live monitor. */

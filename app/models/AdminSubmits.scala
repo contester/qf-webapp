@@ -96,7 +96,7 @@ object AdminSubmits {
     }
   }
 
-  /** One submit as the status page shows it, in whatever contest it is, with no freeze applied. None: no such submit. */
+  /** One submit as the status page shows it, in whatever contest it is. None: no such submit. */
   def row(db: JdbcBackend#DatabaseDef, id: Int)(implicit ec: ExecutionContext): Future[Option[AdminSubmitRow]] =
     db.run(submitsQuery.filter(_.id === id.toLong).result.headOption).flatMap {
       case None => Future.successful(None)
@@ -110,12 +110,10 @@ object AdminSubmits {
    * @param team only this team's submits
    * @param before only submits with a smaller id (the next, older page)
    * @param after only submits with a bigger id (the previous, newer page)
-   * @param canSeeAll false hides submits after the freeze
    */
   def page(db: JdbcBackend#DatabaseDef, contest: Int, team: Option[Int], before: Option[Long], after: Option[Long],
-           canSeeAll: Boolean, size: Int = PageSize)(implicit ec: ExecutionContext): Future[AdminSubmitPage] = {
-    val base = submitsQuery.filter(_.contestID === contest).filter(x => if (canSeeAll) true.bind else !x.afterFreeze)
-      .filterOpt(team)(_.teamID === _)
+           size: Int = PageSize)(implicit ec: ExecutionContext): Future[AdminSubmitPage] = {
+    val base = submitsQuery.filter(_.contestID === contest).filterOpt(team)(_.teamID === _)
 
     val fetch = after match {
       case Some(a) => base.filter(_.id > a).sortBy(_.id.asc).take(size + 1)

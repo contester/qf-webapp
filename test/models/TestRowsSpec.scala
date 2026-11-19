@@ -92,7 +92,7 @@ class TestRowsSpec extends AnyFunSuite {
   }
 
   test("a finished, compiled submit whose points are NULL is in progress, not 0 of max") {
-    val s = Submit(SubmitId(1, Arrived(new org.joda.time.DateTime(2030, 1, 1, 0, 0), 0, afterFreeze = false), 1, 1,
+    val s = Submit(SubmitId(1, Arrived(new org.joda.time.DateTime(2030, 1, 1, 0, 0), 0), 1, 1,
       RatedProblem("A", 30), "cpp"), finished = true, compiled = true, 0, 0, None, None, 20)
     assert(SubmitResult.fromSubmit(s) == BeingRetestedResult)
     assert(SubmitResult.fromSubmit(s.copy(points = Some(0))) == SubmitPointsResult(0, 20))

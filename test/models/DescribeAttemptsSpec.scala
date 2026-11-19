@@ -11,7 +11,7 @@ class DescribeAttemptsSpec extends AnyFunSuite {
   private def attempt(id: Int, seconds: Int, passed: Int, taken: Int = 5, testing: Int) = {
     val points = if (passed == taken) 10.0 else 3.0
 
-    Submit(SubmitId(id, Arrived(t0.plusSeconds(seconds), seconds, afterFreeze = false), 1, 1, RatedProblem("A", 30), "cpp"),
+    Submit(SubmitId(id, Arrived(t0.plusSeconds(seconds), seconds), 1, 1, RatedProblem("A", 30), "cpp"),
       finished = true, compiled = true, passed, taken, Some(testing), Some(points), 10)
   }
 
