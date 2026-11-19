@@ -1,4 +1,57 @@
-# QF Internal Site
+# qf
+
+qf is the contest web front end: contestants log in with their round credentials, submit solutions, run custom
+tests, read clarifications and ask questions, and see their per-test results; admins watch the live points board,
+the submit status, rejudge, answer questions and manage a few round settings. Testing is done by director through
+its teacher-web bridge (`cmd/bridge-teacherweb` in the director repository); qf never talks to director itself.
+
+## Database
+
+qf uses teacher-web's PostgreSQL database (schema `public`) and never migrates it: the tables, the
+`credential_unrated` enum and the notification triggers are teacher-web's goose migrations (00005 and later).
+Seasons, contests, rounds, participants, credentials and admins are teacher-web's; qf reads them and writes only
+contest data (submits, custom tests, clarifications and requests, messages, extra info), `round_credentials.unrated`
+and, from the admin languages page, `season_languages`. A qf contest id in URLs is a `contest_rounds.id`. Only rounds
+of the current season (`seasons.is_current`) with both `starts_at` and `ends_at` set exist for qf.
+
+Scoring is always points (there are no ACM or school modes). Admins are teacher-web's `admins` (email + bcrypt);
+every admin may do everything in every round.
+
+## Configuration
+
+Besides the usual Play keys (`play.http.secret.key`, `play.application.loader = "MyApplicationLoader"`):
+
+    slick.dbs.default.profile = "org.stingray.contester.dbmodel.MyPostgresProfile$"
+    slick.dbs.default.db.driver = "org.postgresql.Driver"
+    slick.dbs.default.db.url = "jdbc:postgresql://host:5432/contester"
+    slick.dbs.default.db.user = "..."
+    slick.dbs.default.db.password = "..."
+    fileserver.url = "http://bridge-host:port/fs/"   # the bridge's /fs2/ and /protopackage/ proxy (test outputs)
+    fileserver.shortn = "..."                        # informational `contest` parameter of those requests
+
+Optional: `notify.keepalive.*` (database notifications, below) and `palevo.*` (IRC announcements, below).
+
+## Admin pages
+
+`/admin` (log in with a teacher-web admin): the submit status (live), custom tests (with rerun), the live points
+board, clarifications and questions, rejudge (per submit, or a problem's outdated/all submits), the rounds of the
+current season (read only; rounds are edited in teacher-web), extra info pages per round, the round's participants
+with the unrated toggle (rated / `not_rated` / `disqualified`, written to `round_credentials.unrated`; the live board
+follows through `credential_changed`), and the season languages page (the current season's `season_languages`, and
+copying another season's list into it). With no current round the round pages say «Нет текущих туров».
+
+## Tests
+
+    sbt test
+
+runs the unit specs; the database specs are skipped unless a teacher-web database is given:
+
+    QF_TEST_URL=jdbc:postgresql://127.0.0.1:55433/contester QF_TEST_USER=postgres QF_TEST_PASSWORD=x sbt test
+
+The database must be migrated by `teacherweb migrate` and seeded with teacher-web's `doc/testdata/seed.sql` (one
+current season and round with Polygon contest 62042, participants `team1_1..3`, admin `admin@example.org`). The specs
+create their own rounds, participants and seasons and delete them afterwards; they run one suite at a time. The seed
+round's times are relative to the time of seeding, so re-seed before a run if it is hours old.
 
 ## Configuration: palevo (IRC announcements)
 
@@ -22,9 +75,7 @@ the event and qf drops it.
 
 palevo is told when a contest starts and ends (`contest_starting`, `contest_ending`; there is no freeze event),
 that these are coming (the same events with `in_minutes`: "starts in 10 minutes"), and when an operator moves a
-contest (`contest_rescheduled`: "start time changed to 19:30"). Before 2026-11-07 the phase events were called
-`contest_started`, `contest_frozen` and `contest_finished`; deploy palevo first, it still accepts the old names.
-Optional keys:
+contest (`contest_rescheduled`: "start time changed to 19:30"). Optional keys:
 
     palevo.countdown.start = [60, 30, 20, 10, 5, 2, 1]   # minutes before the start (default as shown)
     palevo.countdown.end = [20, 10, 5, 1]                # minutes before the end (default as shown)
@@ -94,15 +145,3 @@ happened (a running round gets no `round_started`). The only other timers are SS
 retries after a failure. `round_changed` also fires for a deleted round, for any change of a round's
 `problems` rows and, for every round of the season, when a season becomes (or stops being) current
 (teacher-web migration 00009), so problems and season switches need no restart either.
-
-## TODO
-
-- Reactive
-    - teams
-    - contests (half-done in status)
-    - submits
-- Team editing
-- diff solutions
-- В запуске на сервере подсвечивать тип результата (Хороший, Плохой, в очереди)
-- Панель статуса в админке для наблюдателей:
-    - Таймер \[+ кнопки для сдвига админам\]
