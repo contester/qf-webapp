@@ -114,21 +114,21 @@ final case class ContestRescheduled(contest: PContest, ts: DateTime, changes: Se
 }
 
 final case class FirstSolveContest(contest: PContest, ts: DateTime, team: PTeam, problem: String,
-                                   elapsedSeconds: Int, override val audience: Audience = PublicAudience) extends PalevoEvent {
+                                   elapsedSeconds: Int, override val audience: Audience) extends PalevoEvent {
   def id = s"${PalevoEvent.idPrefix(audience)}first-contest-${contest.id}"
   def eventType = "first_solve_contest"
   def data = Json.obj("team" -> PalevoEvent.team(team), "problem" -> problem, "elapsed_seconds" -> elapsedSeconds)
 }
 
 final case class FirstSolveProblem(contest: PContest, ts: DateTime, team: PTeam, problem: String,
-                                   elapsedSeconds: Int, override val audience: Audience = PublicAudience) extends PalevoEvent {
+                                   elapsedSeconds: Int, override val audience: Audience) extends PalevoEvent {
   def id = s"${PalevoEvent.idPrefix(audience)}first-problem-${contest.id}-$problem"
   def eventType = "first_solve_problem"
   def data = Json.obj("team" -> PalevoEvent.team(team), "problem" -> problem, "elapsed_seconds" -> elapsedSeconds)
 }
 
 final case class NewLeader(contest: PContest, ts: DateTime, team: PTeam, solved: Int,
-                           override val audience: Audience = PublicAudience) extends PalevoEvent {
+                           override val audience: Audience) extends PalevoEvent {
   def id = s"${PalevoEvent.idPrefix(audience)}leader-${contest.id}-${team.id}-$solved"
   def eventType = "new_leader"
   def data = Json.obj("team" -> PalevoEvent.team(team), "solved" -> solved)

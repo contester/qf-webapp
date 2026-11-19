@@ -1,7 +1,7 @@
 package controllers
 
 import actors.StatusActor.ClarificationAnswered
-import actors.{StatusActor, WaiterActor}
+import actors.StatusActor
 import akka.NotUsed
 import akka.stream.scaladsl.{Merge, Source}
 import com.github.nscala_time.time.Imports._
@@ -247,8 +247,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
         val outputsF = viewed.map { tid =>
           getTestingByID(tid.toInt).flatMap {
             case Some(_) =>
-              // The testing records a Polygon problem revision, not the problem URL the assets used to be keyed by.
-              Outputs.getAllAssets2(ws, fileserverBase, shortn, submit.fsub.submit.submitId.id, tid.toInt, "")
+              Outputs.getAllAssets2(ws, fileserverBase, shortn, submit.fsub.submit.submitId.id, tid.toInt)
             case None => Future.successful(Map[Int, ResultAssets]())
           }
         }.getOrElse(Future.successful(Map[Int, ResultAssets]()))
@@ -271,8 +270,8 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
     db.run(q.take(1).result.headOption).map {
         case Some(testingID) =>
-          // TODO: the testing has a Polygon problem revision, not the problem URL whose path the archive was keyed by.
-          val downloadLoc = s"/fs2/?contest=$shortn&submit=${submitId}&testing=${testingID}&problem="
+          // The bridge's /fs2/ proxy finds the archive by the testing id alone; no problem prefix is needed.
+          val downloadLoc = s"/fs2/?contest=$shortn&submit=${submitId}&testing=${testingID}"
           logger.trace(s"download: $downloadLoc")
           Ok("download").as("application/zip").withHeaders("X-Accel-Redirect" -> downloadLoc)
         case None => NotFound
@@ -492,60 +491,6 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
       Redirect(routes.AdminApplication.extraInfoPage(contestID))
         .flashing(if (found) "success" -> s"Deleted page $num" else "error" -> s"No page $num")
     }
-  }
-
-  // TODO(task19): the areas, computers and agent printer pages go with the rest of printing (their tables are not in the schema).
-  private val areaPrinterForm = Form(single("printer" -> text))
-
-  def areasPage(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
-    getSelectedContests(contestID, request.identity)
-      .zip(db.run(SlickModel.areas.sortBy(_.id).result))
-      .zip(AgentPrinterList.all(db)).map {
-      case ((contest, areas), printers) => Ok(html.admin.areas(areas, printers, contest))
-    }
-  }
-
-  def postEditArea(contestID: Int, areaID: Int) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
-    areaPrinterForm.bindFromRequest.fold(
-      _ => Future.successful(BadRequest),
-      printer => db.run(SlickModel.areas.filter(_.id === areaID).map(_.printer).update(printer.trim)).map { n =>
-        Redirect(routes.AdminApplication.areasPage(contestID)).flashing(
-          if (n == 0) "error" -> s"No area $areaID" else "success" -> s"Saved printer for area $areaID")
-      }
-    )
-  }
-
-  def deleteArea(contestID: Int, areaID: Int) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
-    val back = Redirect(routes.AdminApplication.areasPage(contestID))
-    db.run(SlickModel.compLocations.filter(_.location === areaID).length.result).flatMap {
-      case 0 =>
-        db.run(SlickModel.areas.filter(_.id === areaID).delete).map { n =>
-          back.flashing(if (n == 0) "error" -> s"No area $areaID" else "success" -> s"Deleted area $areaID")
-        }
-      case n =>
-        Future.successful(back.flashing("error" -> s"Area $areaID still has $n computers; delete them first"))
-    }
-  }
-
-  def computersPage(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
-    val q = (for {
-      c <- SlickModel.compLocations
-      a <- SlickModel.areas if a.id === c.location
-    } yield (c.id, c.name, a.name)).sortBy(x => (x._3, x._2))
-    getSelectedContests(contestID, request.identity).zip(db.run(q.result)).map {
-      case (contest, comps) => Ok(html.admin.computers(comps.map(x => (x._1.address, x._2, x._3)), contest))
-    }
-  }
-
-  def deleteComputers(contestID: Int) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
-    val addrs = request.body.asFormUrlEncoded.flatMap(_.get("addr")).getOrElse(Seq.empty)
-    val back = Redirect(routes.AdminApplication.computersPage(contestID))
-    if (addrs.isEmpty)
-      Future.successful(back.flashing("error" -> "Nothing selected"))
-    else
-      db.run(SlickModel.compLocations.filter(_.id inSet addrs.map(com.github.tminglei.slickpg.InetString(_))).delete).map { n =>
-        back.flashing("success" -> s"Deleted $n computers")
-      }
   }
 
   /** Runs a custom test again as a copy with a new id (the bridge picks it up like a fresh one); shows the copy. */

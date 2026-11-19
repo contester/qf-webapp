@@ -11,7 +11,7 @@ import scala.concurrent.duration._
   * Needs the teacher-web schema (`teacherweb migrate`, plus its doc/testdata/seed.sql for the joined queries).
   * Skipped unless QF_TEST_URL is set:
   *   QF_TEST_URL=jdbc:postgresql://127.0.0.1:55433/contester QF_TEST_USER=postgres QF_TEST_PASSWORD=x sbt test
-  * The printing, waiter and qf admin tables are not in that schema and are left out (TODO(task11), TODO(task19)).
+  * Every table the model maps is checked.
   */
 class SchemaDriftSpec extends AnyFunSuite {
   import MyPostgresProfile.api._
@@ -42,6 +42,7 @@ class SchemaDriftSpec extends AnyFunSuite {
     "testing_groups" -> testingGroups.take(0).result,
     "custom_tests" -> customTests.take(0).result,
     "results" -> results.take(0).result,
+    "admins" -> admins.take(0).result,
     "current rounds" -> currentRounds.result,
     "teams of current rounds" -> teamsOfCurrentRounds.result,
     "login query" -> loginQuery.take(0).result,

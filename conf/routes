@@ -9,7 +9,6 @@ GET /sendwithinput controllers.ServerSideEval.index
 POST /sendwithinput controllers.ServerSideEval.post
 GET /evaldetails/:id controllers.ServerSideEval.details(id: Long)
 
-
 + nocsrf
 POST /ackMessage controllers.Application.ackMessage
 
@@ -39,7 +38,6 @@ GET /admin/monitor/:contestId controllers.AdminApplication.monitor(contestId: In
 GET /admin/monitor/:contestId/events controllers.AdminApplication.monitorEvents(contestId: Int)
 GET /public/monitor/:contestId controllers.PublicMonitor.page(contestId: Int)
 
-
 GET /admin/rejudge/:contestId controllers.AdminApplication.rejudgePage(contestId: Int)
 POST /admin/rejudgeProblem/:contestId controllers.AdminApplication.rejudgeProblem(contestId: Int)
 
@@ -67,9 +65,6 @@ POST /admin/login controllers.AdminAuthForms.authenticate
 GET /admin/logout controllers.AdminAuthForms.logout
 GET /admin/feed/:contestId controllers.AdminApplication.feed(contestId: Int)
 
-
-
-
 GET /admin/:contestID/contests/ controllers.AdminApplication.showContestList(contestID: Int)
 
 GET /admin/:contestID/extrainfo controllers.AdminApplication.extraInfoPage(contestID: Int)
@@ -77,12 +72,6 @@ GET /admin/:contestID/extrainfo/new controllers.AdminApplication.newExtraInfo(co
 POST /admin/:contestID/extrainfo controllers.AdminApplication.postExtraInfo(contestID: Int, original: Option[Int] ?= None)
 GET /admin/:contestID/extrainfo/:num controllers.AdminApplication.editExtraInfo(contestID: Int, num: Int)
 POST /admin/:contestID/extrainfo/:num/delete controllers.AdminApplication.deleteExtraInfo(contestID: Int, num: Int)
-GET /admin/:contestID/areas controllers.AdminApplication.areasPage(contestID: Int)
-POST /admin/:contestID/areas/:areaID controllers.AdminApplication.postEditArea(contestID: Int, areaID: Int)
-
-POST /admin/:contestID/areas/:areaID/delete controllers.AdminApplication.deleteArea(contestID: Int, areaID: Int)
-GET /admin/:contestID/computers controllers.AdminApplication.computersPage(contestID: Int)
-POST /admin/:contestID/computers/delete controllers.AdminApplication.deleteComputers(contestID: Int)
 
 GET     /assets/*file               controllers.Assets.versioned(path="/public", file: Asset)
 

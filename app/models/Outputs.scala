@@ -45,12 +45,12 @@ object Outputs extends Logging {
       CompileOutput(t.testerOutput, t.testerError)
     }
 
-  def getAllAssets2(ws: WSClient, prefix: String, shortName: String, submitId: Int, testingId: Int, problemPrefix: String)
+  /** The bridge's /protopackage/ proxy finds the testing by its id alone (`contest` and `submit` are informational). */
+  def getAllAssets2(ws: WSClient, prefix: String, shortName: String, submitId: Int, testingId: Int)
                    (implicit ec: ExecutionContext): Future[Map[Int, ResultAssets]] = {
     import scala.concurrent.duration._
     ws.url(s"${prefix}protopackage/")
       .withQueryStringParameters(
-        "problem" -> problemPrefix,
         "submit" -> submitId.toString,
         "testing" -> testingId.toString,
         "contest" -> shortName
@@ -58,7 +58,7 @@ object Outputs extends Logging {
       resp.status match {
         case 200 => parseAllAssets(resp.bodyAsBytes.toArray)
         case _ =>
-          logger.info(s"getAllAssets2($prefix, $shortName, $submitId, $testingId, $problemPrefix): ${resp.status} ${resp.statusText}")
+          logger.info(s"getAllAssets2($prefix, $shortName, $submitId, $testingId): ${resp.status} ${resp.statusText}")
           Map.empty[Int, ResultAssets]
       }
     }.recover { case e =>

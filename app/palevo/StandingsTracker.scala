@@ -13,7 +13,7 @@ import scala.collection.mutable
   * only the final standings, after the end). The first observation of a contest only records its state, so a restart
   * mid-contest announces nothing. Teams that are not rated are ignored. Not thread-safe: call it from one actor.
   */
-final class StandingsTracker(audience: Audience = PublicAudience) {
+final class StandingsTracker(audience: Audience) {
   import StandingsTracker._
 
   private val states = mutable.Map[Int, State]()

@@ -12,7 +12,7 @@ class PalevoEventSpec extends AnyFunSuite {
   private val team = PTeam(7, "Name")
 
   test("envelope has id/type/ts/contest/data") {
-    val e = FirstSolveProblem(c, ts, team, "B", 2467)
+    val e = FirstSolveProblem(c, ts, team, "B", 2467, PublicAudience)
     assert(PalevoEvent.toJson(e) == Json.parse(
       """{"id":"qf-first-problem-12-B","type":"first_solve_problem","ts":"2026-11-01T12:34:56Z",
         |"contest":{"id":12,"name":"C"},
@@ -51,10 +51,10 @@ class PalevoEventSpec extends AnyFunSuite {
     def tp(e: PalevoEvent) = ((PalevoEvent.toJson(e) \ "type").as[String], (PalevoEvent.toJson(e) \ "id").as[String])
     assert(tp(ContestStarting(c, ts)) == ("contest_starting", "qf-contest_starting-12"))
     assert(tp(ContestEnding(c, ts)) == ("contest_ending", "qf-contest_ending-12"))
-    assert(tp(FirstSolveContest(c, ts, team, "B", 60)) == ("first_solve_contest", "qf-first-contest-12"))
-    assert(tp(NewLeader(c, ts, team, 3)) == ("new_leader", "qf-leader-12-7-3"))
+    assert(tp(FirstSolveContest(c, ts, team, "B", 60, PublicAudience)) == ("first_solve_contest", "qf-first-contest-12"))
+    assert(tp(NewLeader(c, ts, team, 3, PublicAudience)) == ("new_leader", "qf-leader-12-7-3"))
     assert((PalevoEvent.toJson(ContestStarting(c, ts)) \ "data").get == Json.obj())
-    assert((PalevoEvent.toJson(NewLeader(c, ts, team, 3)) \ "data").get ==
+    assert((PalevoEvent.toJson(NewLeader(c, ts, team, 3, PublicAudience)) \ "data").get ==
       Json.obj("team" -> Json.obj("id" -> 7, "name" -> "Name"), "solved" -> 3))
   }
 
@@ -105,8 +105,8 @@ class PalevoEventSpec extends AnyFunSuite {
   }
 
   test("public events carry no audience key") {
-    val events = Seq(ContestStarting(c, ts), FirstSolveProblem(c, ts, team, "B", 1), FirstSolveContest(c, ts, team, "B", 1),
-      NewLeader(c, ts, team, 1), ClarificationPosted(1, c, ts, updated = false, None, "t"))
+    val events = Seq(ContestStarting(c, ts), FirstSolveProblem(c, ts, team, "B", 1, PublicAudience), FirstSolveContest(c, ts, team, "B", 1, PublicAudience),
+      NewLeader(c, ts, team, 1, PublicAudience), ClarificationPosted(1, c, ts, updated = false, None, "t"))
     events.foreach { e =>
       assert((PalevoEvent.toJson(e) \ "audience").toOption.isEmpty, e.eventType)
       assert(e.audience == PublicAudience)
@@ -125,13 +125,13 @@ class PalevoEventSpec extends AnyFunSuite {
       assert((PalevoEvent.toJson(e) \ "id").as[String].startsWith("qf-jury-"))
     }
     // the payload itself is unchanged
-    assert((PalevoEvent.toJson(fp) \ "data").get == (PalevoEvent.toJson(FirstSolveProblem(c, ts, team, "B", 60)) \ "data").get)
+    assert((PalevoEvent.toJson(fp) \ "data").get == (PalevoEvent.toJson(FirstSolveProblem(c, ts, team, "B", 60, PublicAudience)) \ "data").get)
   }
 
   test("a public and a jury event for the same fact never share an id") {
-    assert(FirstSolveProblem(c, ts, team, "B", 60).id != FirstSolveProblem(c, ts, team, "B", 60, JuryAudience).id)
-    assert(FirstSolveContest(c, ts, team, "B", 60).id != FirstSolveContest(c, ts, team, "B", 60, JuryAudience).id)
-    assert(NewLeader(c, ts, team, 3).id != NewLeader(c, ts, team, 3, JuryAudience).id)
+    assert(FirstSolveProblem(c, ts, team, "B", 60, PublicAudience).id != FirstSolveProblem(c, ts, team, "B", 60, JuryAudience).id)
+    assert(FirstSolveContest(c, ts, team, "B", 60, PublicAudience).id != FirstSolveContest(c, ts, team, "B", 60, JuryAudience).id)
+    assert(NewLeader(c, ts, team, 3, PublicAudience).id != NewLeader(c, ts, team, 3, JuryAudience).id)
   }
 
   test("final_standings: public, the top places with team, points and solved, and whether it is an update") {
@@ -150,8 +150,8 @@ class PalevoEventSpec extends AnyFunSuite {
     val all: Seq[PalevoEvent] = Seq(
       ClarificationRequested(1, c, ts, team, "A", "t"), ClarificationAnswered(1, c, ts, team, "A", "q", "a"),
       ClarificationPosted(1, c, ts, updated = false, None, "t"), ContestStarting(c, ts), ContestStarting(c, ts, 5, at),
-      ContestEnding(c, ts), ContestEnding(c, ts, 5, at), ContestRescheduled(c, ts, Nil), FirstSolveContest(c, ts, team, "A", 1),
-      FirstSolveProblem(c, ts, team, "A", 1), NewLeader(c, ts, team, 1), FinalStandings(c, ts, Nil, updated = false))
+      ContestEnding(c, ts), ContestEnding(c, ts, 5, at), ContestRescheduled(c, ts, Nil), FirstSolveContest(c, ts, team, "A", 1, PublicAudience),
+      FirstSolveProblem(c, ts, team, "A", 1, PublicAudience), NewLeader(c, ts, team, 1, PublicAudience), FinalStandings(c, ts, Nil, updated = false))
     assert(all.map(_.eventType).toSet == Set("clarification_requested", "clarification_answered", "clarification_posted",
       "contest_starting", "contest_ending", "contest_rescheduled", "first_solve_contest", "first_solve_problem",
       "new_leader", "final_standings"))

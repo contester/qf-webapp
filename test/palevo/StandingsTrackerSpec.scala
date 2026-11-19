@@ -21,12 +21,12 @@ class StandingsTrackerSpec extends AnyFunSuite {
   private val empty = status(row(1, team(1), Map()), row(1, team(2), Map()))
 
   test("first observation is silent, even with solves already present") {
-    val tr = new StandingsTracker
+    val tr = new StandingsTracker(JuryAudience)
     assert(tr.observe(contest, status(row(1, team(1), Map("A" -> 600))), now).isEmpty)
   }
 
   test("first solve of the contest and of the problem are both announced once") {
-    val tr = new StandingsTracker
+    val tr = new StandingsTracker(JuryAudience)
     tr.observe(contest, empty, now)
     val es = tr.observe(contest, status(row(1, team(1), Map("A" -> 600)), row(2, team(2), Map())), now)
     assert(types(es) == Seq("first_solve_contest", "first_solve_problem"))
@@ -37,14 +37,14 @@ class StandingsTrackerSpec extends AnyFunSuite {
   }
 
   test("a leader is not announced together with the very first solve") {
-    val tr = new StandingsTracker
+    val tr = new StandingsTracker(JuryAudience)
     tr.observe(contest, empty, now)
     val es = tr.observe(contest, status(row(1, team(1), Map("A" -> 600)), row(2, team(2), Map())), now)
     assert(!types(es).contains("new_leader"))
   }
 
   test("second team solving the same problem announces nothing") {
-    val tr = new StandingsTracker
+    val tr = new StandingsTracker(JuryAudience)
     tr.observe(contest, empty, now)
     tr.observe(contest, status(row(1, team(1), Map("A" -> 600)), row(2, team(2), Map())), now)
     val es = tr.observe(contest, status(row(1, team(1), Map("A" -> 600)), row(1, team(2), Map("A" -> 900))), now)
@@ -52,7 +52,7 @@ class StandingsTrackerSpec extends AnyFunSuite {
   }
 
   test("another problem by another team announces first_solve_problem only") {
-    val tr = new StandingsTracker
+    val tr = new StandingsTracker(JuryAudience)
     tr.observe(contest, empty, now)
     tr.observe(contest, status(row(1, team(1), Map("A" -> 600)), row(2, team(2), Map())), now)
     val es = tr.observe(contest, status(row(1, team(1), Map("A" -> 600)), row(1, team(2), Map("B" -> 900))), now)
@@ -61,7 +61,7 @@ class StandingsTrackerSpec extends AnyFunSuite {
   }
 
   test("leader change announced with solved count") {
-    val tr = new StandingsTracker
+    val tr = new StandingsTracker(JuryAudience)
     tr.observe(contest, empty, now)
     tr.observe(contest, status(row(1, team(1), Map("A" -> 600)), row(2, team(2), Map())), now)
     val es = tr.observe(contest, status(
@@ -71,7 +71,7 @@ class StandingsTrackerSpec extends AnyFunSuite {
   }
 
   test("same leader solving more is not re-announced") {
-    val tr = new StandingsTracker
+    val tr = new StandingsTracker(JuryAudience)
     tr.observe(contest, empty, now)
     tr.observe(contest, status(row(1, team(1), Map("A" -> 600)), row(2, team(2), Map())), now)
     val es = tr.observe(contest, status(row(1, team(1), Map("A" -> 600, "C" -> 700)), row(2, team(2), Map())), now)
@@ -79,7 +79,7 @@ class StandingsTrackerSpec extends AnyFunSuite {
   }
 
   test("tie at rank 1 announces no leader") {
-    val tr = new StandingsTracker
+    val tr = new StandingsTracker(JuryAudience)
     tr.observe(contest, empty, now)
     tr.observe(contest, status(row(1, team(1), Map("A" -> 600)), row(2, team(2), Map())), now)
     val es = tr.observe(contest, status(row(1, team(1), Map("A" -> 600)), row(1, team(2), Map("A" -> 600))), now)
@@ -87,7 +87,7 @@ class StandingsTrackerSpec extends AnyFunSuite {
   }
 
   test("breaking a tie by a new sole leader is announced") {
-    val tr = new StandingsTracker
+    val tr = new StandingsTracker(JuryAudience)
     tr.observe(contest, empty, now)
     tr.observe(contest, status(row(1, team(1), Map("A" -> 600)), row(2, team(2), Map())), now)
     tr.observe(contest, status(row(1, team(1), Map("A" -> 600)), row(1, team(2), Map("A" -> 700))), now)
@@ -96,7 +96,7 @@ class StandingsTrackerSpec extends AnyFunSuite {
   }
 
   test("unrated team solving first is ignored") {
-    val tr = new StandingsTracker
+    val tr = new StandingsTracker(JuryAudience)
     val guest = team(9, notRated = true)
     tr.observe(contest, status(row(1, team(1), Map()), row(0, guest, Map())), now)
     val es = tr.observe(contest, status(row(1, team(1), Map()), row(0, guest, Map("A" -> 100))), now)
@@ -104,7 +104,7 @@ class StandingsTrackerSpec extends AnyFunSuite {
   }
 
   test("contests are tracked independently") {
-    val tr = new StandingsTracker
+    val tr = new StandingsTracker(JuryAudience)
     val other = contest.copy(id = 2)
     tr.observe(contest, empty, now)
     assert(tr.observe(other, status(row(1, team(1), Map("A" -> 600))), now).isEmpty) // first sight of contest 2

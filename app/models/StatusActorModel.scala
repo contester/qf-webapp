@@ -1,7 +1,7 @@
 package models
 
 import actors.StatusActor.GetSingleContestResult
-import actors.{StatusActor, WaiterActor}
+import actors.StatusActor
 import akka.actor.ActorSystem
 import org.stingray.qf.actors.{ProblemStateActor, TeamStateActor}
 import palevo.PalevoSink
@@ -20,7 +20,6 @@ class StatusActorModel (dbConfig: DatabaseConfig[JdbcProfile], system: ActorSyst
   private val teamLookupTimeout: akka.util.Timeout = akka.util.Timeout(5.seconds)
   // teamClient is defined below; the lookup is only called after construction.
   val statusActor = system.actorOf(StatusActor.props(db, palevo, (c, t) => teamClient.getTeam(c, t)(teamLookupTimeout), liveHooks, countdown), "status-actor")
-  val waiterActor = system.actorOf(WaiterActor.props(db), "waiter-actor")
   val teamStateActor = system.actorOf(TeamStateActor.props(db), "team-state-actor")
   val teamClient = new TeamClient(teamStateActor)
   val problemStateActor = system.actorOf(ProblemStateActor.props(db), "problem-state-actor")
