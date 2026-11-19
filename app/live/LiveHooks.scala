@@ -15,6 +15,8 @@ trait LiveHooks {
   /** A testing finished: the submit's current points (None when it has none). */
   def finished(contest: Int, id: Int, compiled: Boolean, points: Option[Double]): Unit
   def rejudged(id: Int): Unit
+  /** Several submits rejudged by one request (a problem rejudge). */
+  def rejudgedAll(ids: Seq[Int]): Unit = ids.foreach(rejudged)
   /** The round's participants changed (credential_changed, participant_changed, round_changed). */
   def teamsChanged(roundId: Int): Unit
   /** A contest row changed (or something else of the round: its problems); `contest` is the whole new row. */
@@ -41,6 +43,7 @@ object LiveHooks {
     override def finished(contest: Int, id: Int, compiled: Boolean, points: Option[Double]): Unit =
       each(_.finished(contest, id, compiled, points))
     override def rejudged(id: Int): Unit = each(_.rejudged(id))
+    override def rejudgedAll(ids: Seq[Int]): Unit = each(_.rejudgedAll(ids))
     override def teamsChanged(roundId: Int): Unit = each(_.teamsChanged(roundId))
     override def contestChanged(contest: Contest): Unit = each(_.contestChanged(contest))
     override def contestRemoved(roundId: Int): Unit = each(_.contestRemoved(roundId))

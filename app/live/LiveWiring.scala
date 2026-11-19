@@ -25,6 +25,8 @@ object LiveWiring {
 
     override def rejudged(id: Int): Unit = guard(_.rejudged(id))
 
+    override def rejudgedAll(ids: Seq[Int]): Unit = guard(_.rejudgedAll(ids))
+
     override def teamsChanged(roundId: Int): Unit = guard(_.teamsChanged(roundId))
 
     override def contestChanged(contest: Contest): Unit = guard(_.contestChanged(contest))

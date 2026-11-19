@@ -200,7 +200,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
             val ids = if (data.all) AdminSubmits.allSubmitIds(db, contestId, data.problem)
               else AdminSubmits.rejudgePlan(db, contestId, data.problem, url).map(_.outdated.map(_._1))
             ids.flatMap(ids => AdminSubmits.resetForRejudge(db, ids).map(_ => ids)).map { ids =>
-              ids.foreach(id => Try(liveHooks.rejudged(id.toInt)))
+              Try(liveHooks.rejudgedAll(ids.map(_.toInt)))
               back.flashing("success" -> s"${ids.size} ${if (data.all) "(all) " else ""}submits of problem ${data.problem}")
             }
         }

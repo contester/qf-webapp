@@ -61,13 +61,14 @@ class PublicBoardCacheSpec extends TestKit(ActorSystem("PublicBoardCacheSpec", C
     })
     val controller = new PublicMonitor(cc, source, cache)
 
-    def page(id: Int, now: DateTime): (Int, String) = {
+    def pageF(id: Int, now: DateTime): Future[(Int, String)] = {
       val path = s"/public/monitor/$id"
       val req = RequestFactory.plain.createRequest(RemoteConnection("127.0.0.1", secure = false, None), "GET",
         RequestTarget(path, path, Map.empty), "HTTP/1.1", Headers(), TypedMap.empty, AnyContentAsEmpty)
-      val r = Await.result(controller.pageAt(id, () => now)(req), 5.seconds)
-      (r.header.status, Await.result(r.body.consumeData, 5.seconds).utf8String)
+      controller.pageAt(id, () => now)(req).flatMap(r => r.body.consumeData.map(b => (r.header.status, b.utf8String)))
     }
+
+    def page(id: Int, now: DateTime): (Int, String) = Await.result(pageF(id, now), 5.seconds)
   }
 
   test("a cache hit does not render again") {
@@ -136,6 +137,92 @@ class PublicBoardCacheSpec extends TestKit(ActorSystem("PublicBoardCacheSpec", C
     rig.gate = Future.unit
     rig.page(5, afterEnd)
     assert(rig.renders.get == 2)
+  }
+
+  // ---- single flight ----
+
+  test("50 concurrent misses share exactly one render") {
+    val rig = new Rig
+    val gate = Promise[Unit]()
+    rig.gate = gate.future
+    val all = (1 to 50).map(_ => rig.pageF(5, afterEnd))
+    awaitCond(rig.renders.get == 1, 5.seconds)
+    Thread.sleep(200)
+    assert(rig.renders.get == 1)
+    gate.success(())
+    val got = Await.result(Future.sequence(all), 10.seconds)
+    assert(got.forall(_._1 == 200) && got.map(_._2).distinct.size == 1)
+    assert(rig.renders.get == 1 && rig.cache.cachedRounds == Set(5))
+  }
+
+  test("a request after an invalidation during an in-flight render starts a new render; the stale one is not stored") {
+    val rig = new Rig
+    val gate = Promise[Unit]()
+    rig.gate = gate.future
+    val stale = rig.pageF(5, afterEnd)
+    awaitCond(rig.renders.get == 1, 5.seconds)
+    rig.points = 7
+    rig.cache.hooks.finished(5, 1, compiled = true, Some(7.0))
+    rig.gate = Future.unit
+    val (s2, fresh) = rig.page(5, afterEnd)
+    assert(s2 == 200 && fresh.contains(">7<") && rig.renders.get == 2)
+    gate.success(())
+    val (s1, old) = Await.result(stale, 5.seconds)
+    assert(s1 == 200 && old.contains(">20<"), "a caller that was already waiting gets the older render")
+    // The newer page is the one kept: no third render, and it shows 7.
+    val (_, again) = rig.page(5, afterEnd)
+    assert(again.contains(">7<") && rig.renders.get == 2)
+  }
+
+  test("a failed render is not cached: the next request renders again") {
+    val cache = new PublicBoardCache
+    val calls = new AtomicInteger
+    val failed = cache.getOrRender(5, "en") { calls.incrementAndGet(); Future.failed(new RuntimeException("db down")) }
+    assert(Await.ready(failed, 5.seconds).value.exists(_.isFailure))
+    awaitCond(cache.entryRounds.isEmpty, 5.seconds)
+    assert(Await.result(cache.getOrRender(5, "en") { calls.incrementAndGet(); Future.successful("page") }, 5.seconds) == "page")
+    assert(calls.get == 2 && cache.cachedRounds == Set(5))
+    // A render that throws instead of returning a failed future is a failure too.
+    val thrown = cache.getOrRender(6, "en") { calls.incrementAndGet(); throw new IllegalStateException("boom") }
+    assert(Await.ready(thrown, 5.seconds).value.exists(_.isFailure))
+    awaitCond(!cache.entryRounds.contains(6), 5.seconds)
+  }
+
+  test("invalidate-all (a rejudge) drops the in-flight entries of every round") {
+    val cache = new PublicBoardCache
+    val calls = new AtomicInteger
+    val p5 = Promise[String]()
+    val p6 = Promise[String]()
+    cache.getOrRender(5, "en") { calls.incrementAndGet(); p5.future }
+    cache.getOrRender(6, "ru") { calls.incrementAndGet(); p6.future }
+    assert(cache.entryRounds == Set(5, 6))
+    cache.hooks.rejudgedAll(Seq(1, 2, 3))
+    assert(cache.entryRounds.isEmpty)
+    p5.success("old 5")
+    p6.success("old 6")
+    assert(Await.result(cache.getOrRender(5, "en") { calls.incrementAndGet(); Future.successful("new 5") }, 5.seconds) == "new 5")
+    assert(calls.get == 3)
+    awaitCond(cache.cachedRounds == Set(5), 5.seconds)
+    cache.hooks.rejudged(9)
+    assert(cache.entryRounds.isEmpty)
+  }
+
+  test("a problem rejudge drops the cache once per request, not once per submit") {
+    var drops = 0
+    val counting = new live.LiveHooks {
+      override def submitArrived(contest: Int, rec: SubmitRec): Unit = ()
+      override def finished(contest: Int, id: Int, compiled: Boolean, points: Option[Double]): Unit = ()
+      override def rejudged(id: Int): Unit = drops += 1
+      override def rejudgedAll(ids: Seq[Int]): Unit = drops += 1
+      override def teamsChanged(roundId: Int): Unit = ()
+      override def contestChanged(contest: Contest): Unit = ()
+      override def contestRemoved(roundId: Int): Unit = ()
+    }
+    live.LiveHooks.all(counting).rejudgedAll(Seq(1, 2, 3))
+    live.LiveWiring.deferred(counting).rejudgedAll(Seq(4, 5))
+    assert(drops == 2)
+    val admin = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("app/controllers/AdminApplication.scala")), "UTF-8")
+    assert(admin.contains("liveHooks.rejudgedAll(ids.map(_.toInt))") && !admin.contains("ids.foreach(id => Try(liveHooks.rejudged"))
   }
 
   test("the cache is fed only by the notification hooks and has no timer") {
