@@ -220,7 +220,7 @@ object Submits {
       TestRows.describe(details.map(TestRows.fromEntry), groups)
     }
 
-  /** Localized variant of [[loadTestRows]] for controllers. */
+  /** Localized variant of `loadTestRows` for controllers. */
   def loadTestRows(db: JdbcBackend#DatabaseDef, testingId: Long, messages: play.api.i18n.Messages)
                   (implicit ec: ExecutionContext): Future[Seq[TestRowView]] =
     loadSubmitDetails(db, testingId.toInt).zip(loadGroups(db, testingId)).map { case (details, groups) =>
