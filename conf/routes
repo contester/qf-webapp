@@ -63,8 +63,8 @@ GET /admin/feed/:contestId controllers.AdminApplication.feed(contestId: Int)
 
 GET /admin/:contestID/contests/ controllers.AdminApplication.showContestList(contestID: Int)
 
-GET /admin/languages controllers.AdminApplication.languages
-POST /admin/languages/copy controllers.AdminApplication.copyLanguages
+GET /admin/languages controllers.AdminApplication.languages(contest: Option[Int] ?= None)
+POST /admin/languages/copy controllers.AdminApplication.copyLanguages(contest: Option[Int] ?= None)
 
 GET /admin/:contestID/participants controllers.AdminApplication.participants(contestID: Int)
 POST /admin/:contestID/participants/:participantID/unrated controllers.AdminApplication.setUnrated(contestID: Int, participantID: Int)

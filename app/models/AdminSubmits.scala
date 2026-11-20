@@ -139,22 +139,30 @@ object AdminSubmits {
     }
   }
 
-  private def verdict(finished: Boolean, a: Option[RunAggregate]): (String, Boolean) = a match {
-    case None => if (finished) ("no results", false) else ("Running...", false)
-    case Some(x) if x.lastTest == 0 && x.lastCode != 1 => ("Compilation error", false)
-    case Some(x) if !finished => ("Running...", false)
-    case Some(x) if x.allOk && x.lastTest > 0 => ("ACCEPTED", true)
-    case Some(x) if x.lastTest == 0 => ("Compiled, no tests run", false)
-    case Some(x) => (s"${SubmitResult.message.getOrElse(x.lastCode, "unknown")} on test ${x.lastTest}", false)
+  private def verdict(finished: Boolean, a: Option[RunAggregate], messages: Option[play.api.i18n.Messages]): (String, Boolean) = {
+    def tr(key: String, fallback: => String, args: Any*): String =
+      messages.filter(_.isDefinedAt(key)).fold(fallback)(m => m(key, args: _*))
+
+    a match {
+      case None => if (finished) (tr("run.noResults", "no results"), false) else (tr("status.running", "Running..."), false)
+      case Some(x) if x.lastTest == 0 && x.lastCode != 1 => (tr("status.2", "Compilation error"), false)
+      case Some(x) if !finished => (tr("status.running", "Running..."), false)
+      case Some(x) if x.allOk && x.lastTest > 0 => (tr("run.accepted", "ACCEPTED"), true)
+      case Some(x) if x.lastTest == 0 => (tr("run.compiledNoTests", "Compiled, no tests run"), false)
+      case Some(x) =>
+        val codeText = messages.fold(SubmitResult.message.getOrElse(x.lastCode, "unknown"))(implicit m => SubmitResult.statusMessage(x.lastCode))
+        (tr("run.failedOnTest", s"$codeText on test ${x.lastTest}", codeText, x.lastTest.toString), false)
+    }
   }
 
   /** Every testing of the submit, newest first. */
-  def runHistory(db: JdbcBackend#DatabaseDef, submitId: Long, currentTesting: Option[Long])(implicit ec: ExecutionContext): Future[Seq[RunSummary]] =
+  def runHistory(db: JdbcBackend#DatabaseDef, submitId: Long, currentTesting: Option[Long],
+                 messages: Option[play.api.i18n.Messages] = None)(implicit ec: ExecutionContext): Future[Seq[RunSummary]] =
     db.run(SlickModel.testings.filter(_.submit === submitId).sortBy(_.id.desc).result.flatMap { ts =>
       aggregates(ts.map(_._1)).map { aggs =>
         ts.map { case (id, _, start, revision, finish) =>
           val agg = aggs.get(id)
-          val (text, ok) = verdict(finish.isDefined, agg)
+          val (text, ok) = verdict(finish.isDefined, agg, messages)
           RunSummary(id, start, finish, revisionKey(revision), text, ok, agg.map(_.stats).getOrElse(SubmitStats(TimeMs(0), Memory(0))),
             currentTesting.contains(id))
         }

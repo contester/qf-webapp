@@ -1,6 +1,6 @@
-@(title: String, styles: Html = Html(""), scripts: Html = Html(""))(body: Html)
+@(title: String, styles: Html = Html(""), scripts: Html = Html(""))(body: Html)(implicit messages: Messages)
 <!DOCTYPE html>
-<html>
+<html lang="@messages.lang.code">
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta charset="utf-8">
@@ -23,6 +23,30 @@
 <script src="@routes.Assets.versioned("lib/bootstrap-material-design/js/ripples.js")"></script>
 <script src="@routes.Assets.versioned("lib/bootstrap-material-design/js/material.js")"></script>
 <script src="@routes.Assets.versioned("lib/jquery-validation/jquery.validate.js")"></script>
+@if(messages.lang.language == "ru") {
+<script src="@routes.Assets.versioned("lib/jquery-validation/localization/messages_ru.js")"></script>
+}
+<script type="text/javascript">
+window.qfMessages = @Html(play.api.libs.json.Json.stringify(play.api.libs.json.Json.obj(
+    "contestStarted" -> messages("js.contestStarted"),
+    "contestFinished" -> messages("js.contestFinished"),
+    "rejudgeConfirm" -> messages("js.rejudgeConfirm"),
+    "noConnection" -> messages("js.noConnection"),
+    "notifyProblem" -> messages("js.notifyProblem"),
+    "notifyQuestionAnswered" -> messages("js.notifyQuestionAnswered"),
+    "notifyClarification" -> messages("js.notifyClarification"),
+    "notifyClarificationForProblem" -> messages("js.notifyClarificationForProblem"),
+    "notifyNewQuestion" -> messages("js.notifyNewQuestion"),
+    "statusReconnected" -> messages("js.statusReconnected"),
+    "statusNewSubmits" -> messages("js.statusNewSubmits"),
+    "contesterContest" -> messages("js.contesterContest"),
+    "contesterTotal" -> messages("js.contesterTotal"),
+    "contesterTeamFeed" -> messages("js.contesterTeamFeed"),
+    "contesterAdminMonitor" -> messages("js.contesterAdminMonitor"),
+    "contesterAdminFeed" -> messages("js.contesterAdminFeed"),
+    "contesterStatusRows" -> messages("js.contesterStatusRows")
+)).replace("</", "<\\/"));
+</script>
 <script src="@routes.Assets.versioned("js/main.js")"></script>
     @scripts
     <script type="text/javascript">
@@ -30,7 +54,7 @@
     $.material.init();
     $.validator.addMethod('filesize', function(value, element, param) {
         return this.optional(element) || (element.files[0].size <= param)
-    }, $.validator.format("File is too big, should be smaller than {0}."));
+    }, $.validator.format(@Html(play.api.libs.json.Json.stringify(play.api.libs.json.JsString(messages("validation.filesize"))).replace("</", "<\\/"))));
     });
     </script>
 </body></html>

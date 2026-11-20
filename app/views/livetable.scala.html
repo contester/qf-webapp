@@ -18,7 +18,7 @@
 @fmt(x: Double) = @{models.TestRows.formatPoints(x)}
 @cellClass(c: live.LiveCell) = @{"text-center points-cell" + (if (c.full) " full-score" else "") + (if (c.best.isEmpty) " text-muted" else "")}
 @cell(c: live.LiveCell, p: models.ProblemColumn) = {@c.best match {
-case Some(b) => {@fmt(b)<br/><small class="text-muted">из @fmt(p.maxPoints)</small>}
+case Some(b) => {@fmt(b)<br/><small class="text-muted">@if(messages.isDefinedAt("label.of")){@messages("label.of")}else{из} @fmt(p.maxPoints)</small>}
 case None => {—}
 }@if(c.pending > 0){<br/><span class="text-warning">?@c.pending</span>}}
 <table class="table table-hover table-bordered table-responsive points-board"><thead><tr><th>@messages("label.rank")</th><th>№</th><th>@messages("label.team")</th>@for(p <- board.problems) {<th style="text-align: center;" title="@p.name">@p.id<div style="font-size: 65%;">@p.name (@fmt(p.maxPoints))</div></th>}<th style="text-align: center;">@messages("label.total")</th></tr></thead><tbody>

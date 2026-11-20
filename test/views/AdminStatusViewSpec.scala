@@ -22,7 +22,16 @@ import scala.io.Source
   * changes on purpose, regenerate them: PIN_FIXTURES=1 sbt "testOnly views.AdminStatusViewSpec"
   */
 class AdminStatusViewSpec extends AnyFunSuite {
-  private implicit val messages: MessagesImpl = MessagesImpl(Lang("en"), new DefaultMessagesApi())
+  private def loadMessages(file: String): Map[String, String] = {
+    val s = Source.fromFile(file, "UTF-8")
+    try s.getLines().map(_.trim).filter(l => l.contains("=") && !l.startsWith("#"))
+      .map { l => val i = l.indexOf('='); l.substring(0, i).trim -> l.substring(i + 1).trim }.toMap
+    finally s.close()
+  }
+
+  private implicit val messages: MessagesImpl =
+    MessagesImpl(Lang("en"), new DefaultMessagesApi(Map("en" -> loadMessages("conf/messages")),
+      new play.api.i18n.DefaultLangs(Seq(Lang("en")))))
 
   private implicit val request: RequestHeader = new DefaultRequestFactory(HttpConfiguration()).createRequestHeader(
     RemoteConnection(java.net.InetAddress.getLoopbackAddress, secure = false, None), "GET",
@@ -118,5 +127,13 @@ class AdminStatusViewSpec extends AnyFunSuite {
   test("the page script exists in main.js with the arguments the page passes") {
     val js = { val s = Source.fromFile("app/assets/js/main.js", "UTF-8"); try s.mkString finally s.close() }
     assert(js.contains("function listenOnStatus(path, canRejudge, newest, teamFilter)"))
+  }
+
+  test("Russian messages localize the pushed row button, fallback team name and verdict") {
+    val ru = MessagesImpl(Lang("ru"), new DefaultMessagesApi(Map("ru" -> loadMessages("conf/messages.ru")),
+      new play.api.i18n.DefaultLangs(Seq(Lang("ru")))))
+    val r = html.admin.submitrow(row, Map.empty, showRejudge = true, linkTeam = true)(ru).body
+    assert(r.contains("Перепроверить") && !r.contains(">Rejudge<"))
+    assert(r.contains("Команда 7777") && !r.contains("Team 7777"))
   }
 }

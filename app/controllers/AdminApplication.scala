@@ -185,17 +185,18 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   def rejudgeProblem(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request =>
     val back = Redirect(routes.AdminApplication.rejudgePage(contestId))
     rejudgeProblemForm.bindFromRequest.fold(
-      _ => Future.successful(back.flashing("error" -> "No problem given")),
+      _ => Future.successful(back.flashing("error" -> request2Messages(request)("admin.rejudge.noProblem"))),
       data => AdminSubmits.revisionStatus(db, contestId).flatMap { status =>
         status.find(_.problem == data.problem).flatMap(_.latestURL) match {
           case None =>
-            Future.successful(back.flashing("error" -> s"Problem ${data.problem}: no revision loaded"))
+            Future.successful(back.flashing("error" -> request2Messages(request)("admin.rejudge.noRevision", data.problem)))
           case Some(url) =>
             val ids = if (data.all) AdminSubmits.allSubmitIds(db, contestId, data.problem)
               else AdminSubmits.rejudgePlan(db, contestId, data.problem, url).map(_.outdated.map(_._1))
             ids.flatMap(ids => AdminSubmits.resetForRejudge(db, ids).map(_ => ids)).map { ids =>
               Try(liveHooks.rejudgedAll(ids.map(_.toInt)))
-              back.flashing("success" -> s"${ids.size} ${if (data.all) "(all) " else ""}submits of problem ${data.problem}")
+              back.flashing("success" -> request2Messages(request)(
+                if (data.all) "admin.rejudge.countAll" else "admin.rejudge.countOutdated", ids.size.toString, data.problem))
             }
         }
       }
@@ -251,9 +252,9 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
             case None => Future.successful(Map[Int, ResultAssets]())
           }
         }.getOrElse(Future.successful(Map[Int, ResultAssets]()))
-        val rowsF = viewed.map(Submits.loadTestRows(db, _)).getOrElse(Future.successful(Nil))
+        val rowsF = viewed.map(Submits.loadTestRows(db, _, request2Messages(request))).getOrElse(Future.successful(Nil))
         outputsF.zip(getSelectedContests(contestId, request.identity))
-          .zip(AdminSubmits.runHistory(db, submitId, submit.fsub.submit.testingId.map(_.toLong))).zip(rowsF).map {
+          .zip(AdminSubmits.runHistory(db, submitId, submit.fsub.submit.testingId.map(_.toLong), Some(request2Messages(request)))).zip(rowsF).map {
           case (((outputs, contest), runs), rows) =>
             Ok(html.admin.showsubmit(submit, contest, outputs, runs, viewed, rows))
         }
@@ -336,7 +337,8 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     )(PostClarification.apply)(PostClarification.unapply)
   }
 
-  private[this] def selectableProblems(problems: Seq[Problem]) = Seq[(String, String)](("", "Выберите задачу")) ++ Problems.toSelect(problems)
+  private[this] def selectableProblems(problems: Seq[Problem])(implicit messages: play.api.i18n.Messages) =
+    Seq[(String, String)](("", messages("label.selectProblem"))) ++ Problems.toSelect(problems)
 
   def postNewClarification(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestId)).async { implicit request => withRounds {
     getSelectedContests(contestId, request.identity).flatMap { contest =>
@@ -408,7 +410,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
         if (!request.identity.canModify(clr.contest)) Future.successful(Forbidden) else
         getSelectedContests(clr.contest, request.identity).map { contest =>
           Ok(html.admin.postanswer(
-            clarificationResponseForm.fill(ClarificationResponse(clr.getAnswer)), clr, answerList.toSeq, contest))
+            clarificationResponseForm.fill(ClarificationResponse(if (clr.answered) clr.answer else "")), clr, answerList.toSeq, contest))
         }
       }.getOrElse(Future.successful(Redirect(routes.AdminApplication.index)))
     }
@@ -443,7 +445,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   private val extraInfoForm = Form(
     mapping(
       "num" -> number(min = 0),
-      "heading" -> text.transform[String](_.trim, identity).verifying("Required", _.nonEmpty),
+      "heading" -> text.transform[String](_.trim, identity).verifying("error.required", _.nonEmpty),
       "data" -> text
     )((num, heading, data) => org.stingray.contester.dbmodel.Extrainfo(0, num, heading, data))(x => Some((x.num, x.heading, x.data)))
   )
@@ -476,11 +478,11 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
         formWithErrors => Future.successful(BadRequest(html.admin.editextrainfo(formWithErrors, original, contest))),
         data => AdminExtraInfo.save(db, contestID, original, data).map {
           case AdminExtraInfo.Saved =>
-            Redirect(routes.AdminApplication.extraInfoPage(contestID)).flashing("success" -> s"Saved page ${data.num}")
+            Redirect(routes.AdminApplication.extraInfoPage(contestID)).flashing("success" -> request2Messages(request)("admin.extrainfo.saved", data.num.toString))
           case AdminExtraInfo.NumberTaken =>
-            BadRequest(html.admin.editextrainfo(extraInfoForm.fill(data).withError("num", s"Page ${data.num} already exists"), original, contest))
+            BadRequest(html.admin.editextrainfo(extraInfoForm.fill(data).withError("num", "admin.extrainfo.exists", data.num.toString), original, contest))
           case AdminExtraInfo.Missing =>
-            Redirect(routes.AdminApplication.extraInfoPage(contestID)).flashing("error" -> "That page was deleted meanwhile")
+            Redirect(routes.AdminApplication.extraInfoPage(contestID)).flashing("error" -> request2Messages(request)("admin.extrainfo.missing"))
         }
       )
     }
@@ -489,33 +491,37 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
   def deleteExtraInfo(contestID: Int, num: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
     AdminExtraInfo.delete(db, contestID, num).map { found =>
       Redirect(routes.AdminApplication.extraInfoPage(contestID))
-        .flashing(if (found) "success" -> s"Deleted page $num" else "error" -> s"No page $num")
+        .flashing(if (found) "success" -> request2Messages(request)("admin.extrainfo.deleted", num.toString) else "error" -> request2Messages(request)("admin.extrainfo.notFound", num.toString))
     }
   }
 
   /** The current season's languages, and copying them from another season. */
-  def languages = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
-    SeasonLanguages.currentSeason(db).flatMap {
-      case None => Future.successful(Ok(html.admin.languages(None, Nil, Nil)))
+  def languages(contestId: Option[Int] = None) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
+    val selectedF = getAllContests.map(all => SelectedContest.choose(all, contestId.getOrElse(0), request.identity))
+    val langsF = SeasonLanguages.currentSeason(db).flatMap {
+      case None => Future.successful((None, Nil, Nil))
       case Some(season) =>
         SeasonLanguages.list(db, season._1).zip(SeasonLanguages.seasonsWithLanguages(db)).map { case (langs, seasons) =>
-          Ok(html.admin.languages(Some(season), langs, seasons.filterNot(_.id == season._1)))
+          (Some(season), langs, seasons.filterNot(_.id == season._1))
         }
+    }
+    selectedF.zip(langsF).map { case (selected, (season, langs, sources)) =>
+      Ok(html.admin.languages(season, langs, sources, selected))
     }
   }
 
   private val copyLanguagesForm = Form(single("from" -> number))
 
   /** Copies the languages of the season `from` into the current season (never into any other). */
-  def copyLanguages = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
-    val back = Redirect(routes.AdminApplication.languages)
+  def copyLanguages(contestId: Option[Int] = None) = silhouette.SecuredAction(AdminPermissions.withSuperAdmin).async { implicit request =>
+    val back = Redirect(routes.AdminApplication.languages(contestId))
     copyLanguagesForm.bindFromRequest.fold(
       _ => Future.successful(back.flashing("error" -> request2Messages(request)("admin.languages.badSource"))),
       from => SeasonLanguages.currentSeason(db).flatMap {
         case None => Future.successful(back.flashing("error" -> request2Messages(request)("admin.languages.noCurrentSeason")))
         case Some((to, _)) => SeasonLanguages.copyLanguages(db, from, to).map {
           case CopyLanguagesResult.SameSeason => back.flashing("error" -> request2Messages(request)("admin.languages.sameSeason"))
-          case CopyLanguagesResult.Copied(n) => back.flashing("success" -> request2Messages(request)("admin.languages.copied", n))
+          case CopyLanguagesResult.Copied(n) => back.flashing("success" -> request2Messages(request)("admin.languages.copied", n.toString))
         }
       }
     )
@@ -534,7 +540,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     val value = request.body.asFormUrlEncoded.flatMap(_.get("value")).flatMap(_.headOption)
     UnratedToggle.respond(value, RoundParticipants.setUnrated(db, contestID, participantID, _),
       u => Redirect(routes.AdminApplication.participants(contestID)).flashing("success" ->
-        request2Messages(request)("admin.participants.saved", participantID, request2Messages(request)(UnratedToggle.labelKey(u)))))
+        request2Messages(request)("admin.participants.saved", participantID.toString, request2Messages(request)(UnratedToggle.labelKey(u)))))
   }
 
   /** Runs a custom test again as a copy with a new id (the bridge picks it up like a fresh one); shows the copy. */

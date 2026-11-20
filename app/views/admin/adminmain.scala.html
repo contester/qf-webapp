@@ -2,7 +2,7 @@
 
 @navlink(myid: String, mytext: Html) = {
 @if(myid == tab) {
-<li class="active"><a href="#">@mytext <span class="sr-only">(current)</span></a></li>
+<li class="active"><a href="#">@mytext <span class="sr-only">@messages("nav.current")</span></a></li>
 } else {
 <li><a href="@AdminNavlinkMatch(myid)(contest.contest.id)">@mytext</a></li>
 }
@@ -10,15 +10,15 @@
 
 @adminNavlinks = {
 @navlink("status", Html(messages("status")))
-@navlink("customtests", Html("Custom tests"))
+@navlink("customtests", Html(messages("admin.customtests")))
 @navlink("monitor", Html(messages("scoreboard")))
-@navlink("qanda", Html(messages("heading.clarifications")+" <span id='clrPending' class='badge'>-</span>"))
-@if(contest.canModify) {@navlink("rejudge", Html("Rejudge"))}
-@navlink("contests", Html("Contests"))
-@if(contest.canModify) {@navlink("extrainfo", Html("Extra pages"))}
+@navlink("qanda", Html(messages("admin.qanda")+" <span id='clrPending' class='badge'>-</span>"))
+@if(contest.canModify) {@navlink("rejudge", Html(messages("admin.rejudge")))}
+@navlink("contests", Html(messages("admin.contests")))
+@if(contest.canModify) {@navlink("extrainfo", Html(messages("admin.extrainfo")))}
 @if(contest.canModify) {@navlink("participants", Html(messages("admin.participants")))}
 @if(contest.isSuperAdmin) {@navlink("languages", Html(messages("admin.languages")))}
-@if(contest.isSuperAdmin) {@navlink("contester", Html("Contester"))}
+@if(contest.isSuperAdmin) {@navlink("contester", Html(messages("admin.contester")))}
 <li class="dropdown">
     <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">
         @contest.contest.id

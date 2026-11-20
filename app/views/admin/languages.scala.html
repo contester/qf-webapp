@@ -1,11 +1,12 @@
-@(season: Option[(Int, String)], langs: Seq[SeasonLanguage], sources: Seq[SeasonWithLanguages])(implicit flash: Flash, messages: Messages, request: RequestHeader)
+@(season: Option[(Int, String)], langs: Seq[SeasonLanguage], sources: Seq[SeasonWithLanguages], contest: Option[SelectedContest] = None)(implicit flash: Flash, messages: Messages, request: RequestHeader)
 @navlinks = {
 <li><a href="@controllers.routes.AdminApplication.index">@messages("status")</a></li>
 <li class="active"><a href="#">@messages("admin.languages")</a></li>
 }
-@base(messages("admin.languages")) {
-@navbar(Some(routes.AdminAuthForms.logout), "navbar-warning")(navlinks)
-<div class="container">
+@topbarStyles = {
+<link href="@routes.Assets.versioned("css/topbar.css")" rel="stylesheet">
+}
+@bodyContent = {
 @flash.get("success").map { message =>
 <div class="alert alert-success" role="alert">@message</div>
 }
@@ -33,7 +34,7 @@ case Some((seasonId, seasonName)) => {
         @if(sources.isEmpty) {
         <p class="text-muted">@messages("admin.languages.noSources")</p>
         } else {
-        @helper.form(controllers.routes.AdminApplication.copyLanguages, 'class -> "form-inline") {
+        @helper.form(controllers.routes.AdminApplication.copyLanguages(contest.map(_.contest.id)), 'class -> "form-inline") {
             @helper.CSRF.formField
             <label for="from">@messages("admin.languages.copyFrom")</label>
             <select id="from" name="from" class="form-control">
@@ -46,5 +47,19 @@ case Some((seasonId, seasonName)) => {
 </div>
 }
 }
+}
+@contest match {
+case Some(selected) => {
+@adminmain(tab = "languages", contest = selected) {
+@bodyContent
+}
+}
+case None => {
+@base(messages("admin.languages"), styles = topbarStyles) {
+@navbar(Some(routes.AdminAuthForms.logout), "navbar-warning")(navlinks)
+<div class="container">
+@bodyContent
 </div>
+}
+}
 }

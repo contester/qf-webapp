@@ -24,13 +24,14 @@ class TestTableViewSpec extends AnyFunSuite {
     ResultRow(3, 10, TimeMs(5), Memory(1024), Some("2"), 0),
     ResultRow(4, 18, TimeMs(0), Memory(0), Some("2"), 0)),
     Seq(GroupRow("1", "each-test", 2.5, 5, passed = false, skipped = false),
-      GroupRow("2", "complete-group", 0, 3, passed = false, skipped = false)))
+      GroupRow("2", "complete-group", 0, 3, passed = false, skipped = false)),
+    messages)
 
   test("the table has the headers, group, policy and points texts in Russian") {
     val h = html.testtable(rows).body
     for (t <- Seq("Группа", "Политика", "Баллы", "все тесты", "каждый тест", "2.5 (тест пройден)",
       "0 (тест не пройден)", "тест пройден", "не запускался"))
       assert(h.contains(t), t)
-    assert(h.indexOf("Wrong answer") > h.indexOf(">Ok<"))
+    assert(h.indexOf("Неправильный ответ") > h.indexOf(">OK<"))
   }
 }

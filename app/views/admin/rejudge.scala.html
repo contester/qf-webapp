@@ -9,25 +9,23 @@
 @adminmain(tab = "rejudge", contest = contest) {
 
 @flash.get("success").map { message =>
-<div class="alert alert-success" role="alert">Rejudge queued: @message</div>
+<div class="alert alert-success" role="alert">@messages("admin.rejudge.queued", message)</div>
 }
 @flash.get("error").map { message =>
 <div class="alert alert-danger" role="alert">@message</div>
 }
 
 <div class="panel panel-success">
-    <div class="panel-heading"><h3 class="panel-title">Submits against each problem's current definition</h3></div>
+    <div class="panel-heading"><h3 class="panel-title">@messages("admin.rejudge.heading")</h3></div>
     <div class="panel-body">
-        <p>A submit is outdated when its last testing is not against the problem the contest definition has now, at
-            the newest revision the director has loaded: an older revision, or a different problem altogether.
-            Submits still being tested are not counted as outdated.</p>
+        <p>@messages("admin.rejudge.hint")</p>
         <table class="table table-condensed">
-            <thead><tr><th>Problem</th><th>Current</th><th>At current</th><th>Outdated</th><th>Being tested</th><th>Tested against</th><th></th></tr></thead>
+            <thead><tr><th>@messages("label.problem")</th><th>@messages("admin.rejudge.current")</th><th>@messages("admin.rejudge.atCurrent")</th><th>@messages("admin.rejudge.outdated")</th><th>@messages("admin.rejudge.inProgress")</th><th>@messages("admin.rejudge.testedAgainst")</th><th></th></tr></thead>
             <tbody>
             @for(st <- status) {
             <tr @if(st.outdated > 0){class="warning"}>
                 <td>@st.problem</td>
-                <td>@st.latestURL.map(short(_)).getOrElse("not loaded")</td>
+                <td>@st.latestURL.map(short(_)).getOrElse(messages("admin.rejudge.notLoaded"))</td>
                 <td>@st.atLatest</td><td>@st.outdated</td><td>@st.inProgress</td>
                 <td>@for((u, n) <- st.others) { @short(u) ×@n }</td>
                 <td>
@@ -37,11 +35,13 @@
                         <input type="hidden" name="problem" value="@st.problem"/>
                         @if(st.outdated > 0) {
                         <button type="submit" class="btn btn-primary btn-xs"
-                                onclick="return confirm('Rejudge @st.outdated outdated submits of problem @st.problem?')">Rejudge @st.outdated</button>
+                                data-confirm="@messages("admin.rejudge.confirmOutdated", st.outdated.toString, st.problem)"
+                                onclick="return confirm(this.getAttribute('data-confirm'))">@messages("admin.rejudge.btnOutdated", st.outdated.toString)</button>
                         }
                         @if(st.total > 0) {
                         <button type="submit" name="all" value="true" class="btn btn-danger btn-xs"
-                                onclick="return confirm('Rejudge ALL @st.total submits of problem @st.problem, including those already at the current revision@if(st.inProgress > 0){ and the @st.inProgress being tested now}?')">Rejudge all @st.total</button>
+                                data-confirm="@if(st.inProgress > 0){@messages("admin.rejudge.confirmAllWithRunning", st.total.toString, st.problem, st.inProgress.toString)}else{@messages("admin.rejudge.confirmAll", st.total.toString, st.problem)}"
+                                onclick="return confirm(this.getAttribute('data-confirm'))">@messages("admin.rejudge.btnAll", st.total.toString)</button>
                         }
                     }
                 }
@@ -50,7 +50,7 @@
             }
             </tbody>
         </table>
-        @if(status.isEmpty) { <p class="text-muted">The contest has no problems loaded from Polygon.</p> }
+        @if(status.isEmpty) { <p class="text-muted">@messages("admin.rejudge.noProblems")</p> }
     </div>
 </div>
 }

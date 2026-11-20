@@ -15,15 +15,21 @@ case class ResultAssets(test: Int,
                         solutionStderr: Option[Asset])
 
 case class CompileOutput(stdout: Option[Asset], stderr: Option[Asset]) {
-  private def renderAsset(a: Asset): Option[String] = {
+  private def renderAsset(a: Asset, messages: Option[play.api.i18n.Messages]): Option[String] = {
     val body = a.data.toStringUtf8
     if (body.isEmpty && !a.truncated) None
-    else if (a.truncated) Some(s"$body\n... [truncated, ${a.originalSize} bytes total]")
-    else Some(body)
+    else if (a.truncated) {
+      val note = messages.filter(_.isDefinedAt("output.truncated"))
+        .fold(s"... [truncated, ${a.originalSize} bytes total]")(m => m("output.truncated", a.originalSize.toString))
+      Some(s"$body\n$note")
+    } else Some(body)
   }
 
   def combinedText: String =
-    Seq(stdout.flatMap(renderAsset), stderr.flatMap(renderAsset)).flatten.mkString("\n")
+    Seq(stdout.flatMap(renderAsset(_, None)), stderr.flatMap(renderAsset(_, None))).flatten.mkString("\n")
+
+  def combinedText(messages: play.api.i18n.Messages): String =
+    Seq(stdout.flatMap(renderAsset(_, Some(messages))), stderr.flatMap(renderAsset(_, Some(messages)))).flatten.mkString("\n")
 }
 
 object Outputs extends Logging {

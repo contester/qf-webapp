@@ -15,39 +15,39 @@
 @fscontent(name: String, co: Option[Asset]) = {
     @for(c <- co) {
         <div class="panel panel-default">
-            <div class="panel-heading"><h3 class="panel-title">@name (@{c.originalSize}b)@if(c.truncated) { [truncated] }</h3></div>
+            <div class="panel-heading"><h3 class="panel-title">@name (@messages("admin.submit.bytes", c.originalSize.toString))@if(c.truncated) { @messages("admin.submit.truncated") }</h3></div>
             <div class="panel-body nopadding"><pre class="nopadding">@c.data.toStringUtf8</pre></div>
         </div>
     }
 }
 
 @details(s: ResultEntry, wat: String) = {
-<p><b>Результат:</b> @s.resultString, <b>Время:</b> @s.time, <b>Память:</b> @s.memory,
-<b>Код возврата @wat</b>: @s.testerExitCode</p>
+<p><b>@messages("label.verdict"):</b> @s.resultString(messages), <b>@messages("label.elapsedTime"):</b> @s.time, <b>@messages("label.memory"):</b> @s.memory,
+<b>@messages("admin.submit.exitCode", wat):</b> @s.testerExitCode</p>
 }
 
 @adminmain(tab = "", contest = contest) {
 
-@panel("Попытка") {
+@panel(messages("admin.submit.heading")) {
     @defining(sub.fsub.submit.submitId) { subId =>
-        <p>Задача @subId.problem.id</p>
-        <p>Тестинг: @viewed.map(_.toString).getOrElse("нет")@for(t <- viewed; r <- runs.find(_.testingId == t)) { (@r.problemURL)}
-            @if(viewed != sub.fsub.submit.testingId.map(_.toLong)) { <b>— это не текущий прогон</b>, <a href="@routes.AdminApplication.showSubmit(subId.contestId, subId.id, None)">к текущему</a> }</p>
+        <p>@messages("admin.submit.problem", subId.problem.id)</p>
+        <p>@messages("admin.submit.testing"): @viewed.map(_.toString).getOrElse(messages("admin.submit.noTesting"))@for(t <- viewed; r <- runs.find(_.testingId == t)) { (@r.problemURL)}
+            @if(viewed != sub.fsub.submit.testingId.map(_.toLong)) { <b>— @messages("admin.submit.notCurrent")</b>, <a href="@routes.AdminApplication.showSubmit(subId.contestId, subId.id, None)">@messages("admin.submit.toCurrent")</a> }</p>
         @defining(subId.arrived) { arrived =>
-            <p>По часам: @fmt(arrived.timestamp), по контесту: @arrived.asString</p>
+            <p>@messages("admin.submit.arrivedAt", fmt(arrived.timestamp), arrived.asString)</p>
         }
-    <a href="@routes.AdminApplication.downloadArchiveSubmit(subId.contestId, subId.id)">Download</a>
+    <a href="@routes.AdminApplication.downloadArchiveSubmit(subId.contestId, subId.id)">@messages("admin.submit.download")</a>
     }
 }
 
 @if(runs.size > 1) {
-@panel("Прогоны", "default", "nopadding") {
+@panel(messages("admin.submits.runs"), "default", "nopadding") {
 <table id="runs" class="table table-condensed nopadding">
-    <thead><tr><th>Тестинг</th><th>Начат</th><th>Закончен</th><th>Задача</th><th>Результат</th><th>Время</th><th>Память</th></tr></thead>
+    <thead><tr><th>@messages("admin.submit.testing")</th><th>@messages("admin.submit.started")</th><th>@messages("admin.submit.finished")</th><th>@messages("label.problem")</th><th>@messages("label.verdict")</th><th>@messages("admin.submit.timeCol")</th><th>@messages("label.memory")</th></tr></thead>
     <tbody>
     @for(r <- runs) {
     <tr @if(r.testingId == viewed.getOrElse(-1L)){class="info"}>
-        <td><a href="@routes.AdminApplication.showSubmit(sub.fsub.submit.submitId.contestId, sub.fsub.submit.submitId.id, Some(r.testingId))">@r.testingId</a>@if(r.current){ (текущий)}</td>
+        <td><a href="@routes.AdminApplication.showSubmit(sub.fsub.submit.submitId.contestId, sub.fsub.submit.submitId.id, Some(r.testingId))">@r.testingId</a>@if(r.current){ (@messages("admin.submit.current"))}</td>
         <td>@fmt(r.started)</td><td>@r.finished.map(fmt(_))</td><td>@r.problemURL</td>
         <td @if(r.success){class="success"}>@r.verdict</td><td>@r.stats.timeMs</td><td>@r.stats.memory</td>
     </tr>
@@ -58,36 +58,36 @@
 }
 
 @if(rows.nonEmpty) {
-@panel("Тесты", "info", "nopadding") {
+@panel(messages("admin.submit.tests"), "info", "nopadding") {
 @testtable(rows)
 }
 }
 
-@panel("Исходный текст", "info") {
+@panel(messages("label.sourceCode"), "info") {
 <pre>@sub.sourceStr</pre>
 }
 
 @for(s <- sub.fsub.details) {
     @if(s.test == 0) {
         @if(s.result != 1) {
-            @panel("Компиляция", "info") {
-                @details(s, "компилятора")
+            @panel(messages("label.compile"), "info") {
+                @details(s, messages("admin.submit.ofCompiler"))
                 @for(out <- outputs.get(0)) {
-                    @fscontent("Вывод", out.testerOutput)
-                    @fscontent("Stderr", out.testerError)
+                    @fscontent(messages("label.output"), out.testerOutput)
+                    @fscontent(messages("admin.submit.stderr"), out.testerError)
                 }
             }
         }
     } else {
-        @panel(s"Тест ${s.test}", "primary") {
-            @details(s, "чекера")
+        @panel(messages("admin.submit.testTitle", s.test.toString), "primary") {
+            @details(s, messages("admin.submit.ofChecker"))
             @for(out <- outputs.get(s.test)) {
                 @fscontent(messages("label.input"), out.input)
                 @fscontent(messages("label.output"), out.output)
-                @fscontent("Stderr решения", out.solutionStderr)
-                @fscontent("Ответ жюри", out.answer)
-                @fscontent("Комментарий чекера", out.testerOutput)
-                @fscontent("Stderr чекера", out.testerError)
+                @fscontent(messages("admin.submit.solutionStderr"), out.solutionStderr)
+                @fscontent(messages("admin.submit.juryAnswer"), out.answer)
+                @fscontent(messages("admin.submit.checkerComment"), out.testerOutput)
+                @fscontent(messages("admin.submit.checkerStderr"), out.testerError)
             }
         }
     }

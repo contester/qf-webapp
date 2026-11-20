@@ -118,7 +118,7 @@ class Application (cc: ControllerComponents,
           submitData => {
             val solutionBytes = FormUtil.inlineOrFile(submitData.inline, request.body.file("file")).getOrElse(FormUtil.emptyBytes)
             if (solutionBytes.isEmpty) {
-              Future.successful(SubmitOutcome.Rejected("No solution"): SubmitOutcome)
+              Future.successful(SubmitOutcome.Rejected("submit.error.noSolution"): SubmitOutcome)
             } else {
               val now = org.joda.time.DateTime.now
               Submits.insert(db, request.identity, submitData.problem, submitData.compiler, solutionBytes,
@@ -157,7 +157,7 @@ class Application (cc: ControllerComponents,
           tid <- sub.fsub.submit.testingId
           if sub.fsub.details.exists(d => d.test == 0 && !d.success)
         } yield Outputs.getCompileAssets(ws, base, shortn, submitId, tid)).getOrElse(Future.successful(None))
-        val rowsF = sub.fsub.submit.testingId.map(t => Submits.loadTestRows(db, t.toLong)).getOrElse(Future.successful(Nil))
+        val rowsF = sub.fsub.submit.testingId.map(t => Submits.loadTestRows(db, t.toLong, request2Messages(request))).getOrElse(Future.successful(Nil))
         compileF.zip(rowsF).map { case (compileOut, rows) => Ok(html.showsubmit(request.identity, Some(sub), rows, compileOut)) }
       case None =>
         Future.successful(Ok(html.showsubmit(request.identity, None, Nil, None)))

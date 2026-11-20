@@ -1,8 +1,11 @@
 @()(implicit request: RequestHeader, messages: Messages)
 @navlinks = {
-<li><a href="@controllers.routes.AdminApplication.languages">@messages("admin.languages")</a></li>
+<li><a href="@controllers.routes.AdminApplication.languages(None)">@messages("admin.languages")</a></li>
 }
-@base(messages("admin.noRounds")) {
+@topbarStyles = {
+<link href="@routes.Assets.versioned("css/topbar.css")" rel="stylesheet">
+}
+@base(messages("admin.noRounds"), styles = topbarStyles) {
 @navbar(Some(routes.AdminAuthForms.logout), "navbar-warning")(navlinks)
 <div class="container">
     <p class="lead" id="no-rounds">@messages("admin.noRounds")</p>

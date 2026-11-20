@@ -22,14 +22,16 @@ import org.joda.time.DateTime
 
 object StatusActor {
   def props(db: JdbcBackend#DatabaseDef, palevo: PalevoSink, teamLookup: (Int, Int) => Future[Option[org.stingray.contester.dbmodel.Team]],
-            liveHooks: live.LiveHooks, countdown: CountdownConfig) =
-    Props(new StatusActor(db, palevo, teamLookup, liveHooks, countdown))
+            liveHooks: live.LiveHooks, countdown: CountdownConfig,
+            messages: play.api.i18n.Messages = SubmitResult.fallbackMessages) =
+    Props(new StatusActor(db, palevo, teamLookup, liveHooks, countdown, messages = messages))
 
   /** With the start-up load replaced (tests); optionally a palevo sink and a clock for the round clock and the events. */
   def propsWith(db: JdbcBackend#DatabaseDef, initialLoad: () => Future[StatusActorInitialState],
                 sink: PalevoSink = palevo.NoopPalevoSink, now: () => DateTime = () => DateTime.now,
-                countdown: CountdownConfig = CountdownConfig.Default): Props =
-    Props(new StatusActor(db, sink, (_, _) => Future.successful(None), live.NoopLiveHooks, countdown, Some(initialLoad), now))
+                countdown: CountdownConfig = CountdownConfig.Default,
+                messages: play.api.i18n.Messages = SubmitResult.fallbackMessages): Props =
+    Props(new StatusActor(db, sink, (_, _) => Future.successful(None), live.NoopLiveHooks, countdown, Some(initialLoad), now, messages))
 
   case object Init
   private case object InitFailed
@@ -123,12 +125,15 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
                   // Palevo's countdown thresholds, run by the round clock.
                   countdown: CountdownConfig,
                   initialLoad: Option[() => Future[StatusActor.StatusActorInitialState]] = None,
-                  now: () => DateTime = () => DateTime.now)
+                  now: () => DateTime = () => DateTime.now,
+                  messages: play.api.i18n.Messages = SubmitResult.fallbackMessages)
   extends Actor with Stash with akka.actor.Timers with Logging {
   import StatusActor._
   import context.dispatcher
 
   import scala.language.postfixOps
+
+  private implicit val defaultMessages: play.api.i18n.Messages = messages
 
   implicit val msg2eventNameExtractor = EventNameExtractor[Message2](x => Some(x.kind))
   implicit val msg2eventDataExtractor = EventDataExtractor[Message2] { msg2 =>
@@ -191,7 +196,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
       described.find(_.submit.submitId.id == sub.id).filter(_.submit.testingId.contains(finished.testingId)) match {
         case Some(mine) =>
           // Only this attempt's row changed: there is no per-attempt score that depends on the earlier ones.
-          val rows = Seq(SubmitRow(mine.submit.submitId.id, views.html.singlesubmit(mine).body))
+          val rows = Seq(SubmitRow(mine.submit.submitId.id, views.html.singlesubmit(mine)(defaultMessages).body))
           if (mine.details.isEmpty && finished.compiled && !mine.result.success)
             SubmitResult.annotateFinished2(db, finished).map(_ -> rows)
           else
@@ -447,7 +452,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
     case annotated: AnnoSubmit => {
       logger.debug(s"received annotated: $annotated")
 
-      pushPersistent(annotated.contest, annotated.team, "submit", Json.toJson(annotated))
+      pushPersistent(annotated.contest, annotated.team, "submit", AnnoSubmit.toJson(annotated)(defaultMessages))
     }
 
     case evalDone: CustomTestResult => {

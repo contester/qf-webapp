@@ -21,6 +21,8 @@ class DescribeAttemptsSpec extends AnyFunSuite {
   private def accepted(testing: Int) =
     testing.toLong -> Seq(ResultEntry(testing, 1, 10, TimeMs(40), Memory(4096), 0, 0))
 
+  private implicit val messages: play.api.i18n.Messages = SubmitResult.fallbackMessages
+
   private def row(fs: FullyDescribedSubmit) = views.html.singlesubmit(fs).body
 
   private val results = Map(wrongAnswer(1), wrongAnswer(2), accepted(3))

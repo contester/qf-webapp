@@ -1,5 +1,5 @@
 @(field: Field, args: (Symbol,Any)*)(implicit fc: b3.B3FieldConstructor, messages: Messages)
 @b3.inputFormGroup(field, withFeedback = true, withLabelFor = true, args) { fieldInfo =>
 <input type="file" id="@fieldInfo.id" name="@fieldInfo.name" value="@fieldInfo.value" @toHtmlArgs(fieldInfo.innerArgsMap)>
-<input type="text" readonly="" class="form-control" placeholder="Browse...">
+<input type="text" readonly="" class="form-control" placeholder="@messages("label.browse")">
 }(fc, messages)

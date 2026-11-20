@@ -104,6 +104,24 @@ class DbStatusRowsSpec extends TestKit(ActorSystem("DbStatusRowsSpec", ConfigFac
     assert(scala.util.Try(await(f)).isFailure)
   }
 
+  test("Russian messages localize pushed rows, running states and fallback team names") {
+    val src = scala.io.Source.fromFile("conf/messages.ru", "UTF-8")
+    val ruMap = try src.getLines().map(_.trim).filter(l => l.contains("=") && !l.startsWith("#"))
+      .map { l => val i = l.indexOf('='); l.substring(0, i).trim -> l.substring(i + 1).trim }.toMap
+    finally src.close()
+    val ru = play.api.i18n.MessagesImpl(play.api.i18n.Lang("ru"),
+      new play.api.i18n.DefaultMessagesApi(Map("ru" -> ruMap), new play.api.i18n.DefaultLangs(Seq(play.api.i18n.Lang("ru")))))
+    val r = new DbStatusRows(id => Future.successful(Some(submitRow(id, finished = true))), noTeams, system.scheduler,
+      retryAfter = 20.millis, retries = 3, messages = ru)
+    val done = await(r.render(42, None)).get
+    assert(done.rw.contains("Перепроверить") && done.rw.contains("Команда 5") && done.rw.contains("3 из 3"))
+    assert(!done.rw.contains(">Rejudge<") && !done.rw.contains("Team 5"))
+    val wait = await(r.render(42, Some(SubmitWaiting))).get
+    assert(wait.rw.contains("Выполняется..."))
+    val retest = await(r.render(42, Some(BeingRetestedResult))).get
+    assert(retest.rw.contains("Идёт тестирование..."))
+  }
+
   // --- against a database: a fixture round of its own (skipped unless QF_TEST_URL is set) -----------------------
 
   private val fx = new models.ContestFixture("Status rows spec")

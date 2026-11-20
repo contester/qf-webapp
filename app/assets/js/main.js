@@ -88,7 +88,7 @@ function formatSeconds(s) {
                     startIntervalUpdate(iconbase, admin);
                     break;
                 case "running":
-                    notify = "началось";
+                    notify = qfMsg('contestStarted', 'Соревнование началось');
                     $("#contest-timer").show();
                     $("#contest-ended").hide();
                     $("#contest-starting-in").hide();
@@ -96,7 +96,7 @@ function formatSeconds(s) {
                     startIntervalUpdate(iconbase, admin);
                     break;
                 case "finished":
-                    notify = "закончилось";
+                    notify = qfMsg('contestFinished', 'Соревнование закончилось');
                     $("#contest-timer").hide();
                     $("#contest-ended").show();
                     $("#contest-starting-in").hide();
@@ -107,7 +107,7 @@ function formatSeconds(s) {
                     }
             }
             if (countdownState.contest.prevState && notify && !countdownState.quiet) {
-                notifyMe(countdownState.contest.name, iconbase, "Соревнование " + notify);
+                notifyMe(countdownState.contest.name, iconbase, notify);
             }
             if (countdownState.contest.prevState == "before" && countdownState.contest.state == "running" && !admin) {
                 location.reload();
@@ -123,7 +123,17 @@ function formatSeconds(s) {
 // The state-changing POSTs below carry no CSRF token: the application's CSRF filter lets a request with
 // "X-Requested-With: XMLHttpRequest" through (MyApplicationLoader.csrfConfig), which a cross-site form cannot
 // send. jQuery adds it to same-origin requests; it is set explicitly so it never depends on that.
-$.ajaxSetup({headers: {'X-Requested-With': 'XMLHttpRequest'}});
+if (typeof $ !== 'undefined' && $.ajaxSetup) {
+    $.ajaxSetup({headers: {'X-Requested-With': 'XMLHttpRequest'}});
+}
+
+function qfMsg(key, fallback) {
+    return (typeof window !== 'undefined' && window.qfMessages && window.qfMessages[key]) || fallback;
+}
+
+function qfFmt(key, fallback, arg) {
+    return qfMsg(key, fallback).replace('{0}', String(arg));
+}
 
 function btn(target, btnid) {
     var b = $('#' + btnid);
@@ -136,7 +146,7 @@ function btnDelete(target, btnid, rowid) {
 }
 
 function rejudgePost(target, btnid) {
-    if (!window.confirm('Rejudge submit ' + btnid + '?')) {
+    if (!window.confirm(qfFmt('rejudgeConfirm', 'Перепроверить попытку {0}?', btnid))) {
         return;
     }
     $('#result-' + btnid).html('...');
@@ -151,7 +161,7 @@ function setConnectedBadge(state) {
         conn.text("+");
     } else {
         conn.addClass("badge-error");
-        conn.text("No connection");
+        conn.text(qfMsg('noConnection', 'Нет связи'));
     }
 }
 
@@ -248,7 +258,7 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
                         if (obj.result.success) {
                             icon = iconbase + 'baloons/baloon-' + obj.problem.toLowerCase() + '.png';
                         }
-                        notifyMe("Problem " + obj.problem, icon, obj.result.message);
+                        notifyMe(qfFmt('notifyProblem', 'Задача {0}', obj.problem), icon, obj.result.message);
                         sessionStorage.setItem(obj.msgid, "true");
                     }
                     $.post(ackMessagePath, {'msgid': obj.msgid});
@@ -263,7 +273,7 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
                     setTimeout(function() {
                         var exists = sessionStorage.getItem(obj.msgid);
                         if (!exists) {
-                          notifyMe("Your question about problem " + obj.problem + " was answered", iconbase + 'icpc_logo.png', obj.text);
+                          notifyMe(qfFmt('notifyQuestionAnswered', 'Получен ответ на ваш вопрос по задаче {0}', obj.problem), iconbase + 'icpc_logo.png', obj.text);
                           sessionStorage.setItem(obj.msgid, "true");
                         }
                         $.post(ackMessagePath, {'msgid': obj.msgid});
@@ -288,10 +298,9 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
                     var clrp = $("#clrPending");
                     clrp.text("!");
                     clrp.show();
-                    var msg = "Clarification posted";
-                    if (obj.problem) {
-                      msg += " for problem " + obj.problem;
-                    }
+                    var msg = obj.problem
+                        ? qfFmt('notifyClarificationForProblem', 'Новое уточнение по задаче {0}', obj.problem)
+                        : qfMsg('notifyClarification', 'Новое уточнение');
                     notifyMe(msg, iconbase + 'icpc_logo.png', obj.text);
                     sessionStorage.setItem(obj.text, "true");
                 }
@@ -339,9 +348,9 @@ function listenOnStatus(path, canRejudge, newest, teamFilter) {
     var showBar = function() {
         var n = Object.keys(held).length;
         if (down) {
-            bar.text('Связь прерывалась, возможны пропущенные попытки. Обновите страницу.');
+            bar.text(qfMsg('statusReconnected', 'Связь прерывалась, возможны пропущенные попытки. Обновите страницу.'));
         } else if (n) {
-            bar.text('Новых попыток: ' + n + '. Показать');
+            bar.text(qfFmt('statusNewSubmits', 'Новых попыток: {0}. Показать', n));
         } else {
             bar.hide();
             return;
@@ -388,7 +397,10 @@ function listenOnStatus(path, canRejudge, newest, teamFilter) {
 
 function listenOnContester(path, table) {
     var labels = {
-        teamFeed: 'Team feed', adminMonitor: 'Admin monitor', adminFeed: 'Admin feed', statusRows: 'Status rows'
+        teamFeed: qfMsg('contesterTeamFeed', 'Участники'),
+        adminMonitor: qfMsg('contesterAdminMonitor', 'Монитор жюри'),
+        adminFeed: qfMsg('contesterAdminFeed', 'События жюри'),
+        statusRows: qfMsg('contesterStatusRows', 'Статус попыток')
     };
     var names = {};
     $('#contester-names span').each(function() { names[$(this).data('id')] = $(this).text(); });
@@ -396,7 +408,7 @@ function listenOnContester(path, table) {
     var cell = function(tag, text) { return $('<' + tag + '/>').text(text); };
     var setup = function(add) {
         add('counts', function(obj) {
-            var head = $('<tr/>').append(cell('th', 'Contest'));
+            var head = $('<tr/>').append(cell('th', qfMsg('contesterContest', 'Тур')));
             obj.kinds.forEach(function(k) { head.append(cell('th', labels[k] || k)); });
             var total = obj.kinds.map(function() { return 0; });
             var body = [];
@@ -408,7 +420,7 @@ function listenOnContester(path, table) {
                 });
                 body.push(row);
             });
-            var foot = $('<tr/>').append(cell('th', 'Total'));
+            var foot = $('<tr/>').append(cell('th', qfMsg('contesterTotal', 'Итого')));
             total.forEach(function(n) { foot.append(cell('th', n)); });
             t.find('thead').empty().append(head);
             t.find('tbody').empty().append(body);
@@ -417,7 +429,7 @@ function listenOnContester(path, table) {
     };
     return listenV2(path, setup, function(ok) {
         var badge = $('#contester-state');
-        badge.toggleClass('badge-error', !ok).text(ok ? '+' : 'No connection');
+        badge.toggleClass('badge-error', !ok).text(ok ? '+' : qfMsg('noConnection', 'Нет связи'));
     });
 }
 
@@ -429,7 +441,8 @@ function listenOnAdmin(path, iconbase) {
             if (obj.pending) {
                 clrp.show();
                 if (obj.newRequest) {
-                    notifyMe("Новый вопрос жюри", iconbase + 'icpc_logo.png', 'Новый вопрос жюри');
+                    var title = qfMsg('notifyNewQuestion', 'Новый вопрос жюри');
+                    notifyMe(title, iconbase + 'icpc_logo.png', title);
                 }
             } else {
                 clrp.hide();
@@ -456,11 +469,12 @@ function liveRankText(place) {
 }
 
 // One problem cell, <td> included. c: {b: best as text (absent: none), n: attempts, f: full, p: in flight}; max as text.
-function liveCellHtml(c, max) {
+function liveCellHtml(c, max, ofWord) {
     c = c || {n: 0, f: false, p: 0};
+    ofWord = ofWord || 'из';
     var has = c.b !== undefined && c.b !== null;
     var cls = 'text-center points-cell' + (c.f ? ' full-score' : '') + (has ? '' : ' text-muted');
-    var h = has ? liveEsc(c.b) + '<br/><small class="text-muted">из ' + liveEsc(max) + '</small>' : '—';
+    var h = has ? liveEsc(c.b) + '<br/><small class="text-muted">' + liveEsc(ofWord) + ' ' + liveEsc(max) + '</small>' : '—';
     if (c.p > 0) h += '<br/><span class="text-warning">?' + c.p + '</span>';
     return '<td class="' + cls + '">' + h + '</td>';
 }
@@ -502,11 +516,11 @@ function liveFlash(tr, oldCells, moved) {
     }
 }
 
-function liveRowHtml(problems, row) {
+function liveRowHtml(problems, row, ofWord) {
     var h = '<tr data-team="' + row.team + '"><th scope="row">' + liveEsc(liveRankText(row.place)) + '</th>' +
         '<td>' + row.number + '</td><td>' + liveEsc(row.name) + '<br/><small>' + liveEsc(row.school) + '</small></td>';
     for (var i = 0; i < problems.length; i++) {
-        h += liveCellHtml(row.cells ? row.cells[problems[i].id] : null, problems[i].max);
+        h += liveCellHtml(row.cells ? row.cells[problems[i].id] : null, problems[i].max, ofWord);
     }
     return h + '<td class="text-center"><strong>' + liveEsc(row.total) + '</strong></td></tr>';
 }
@@ -521,7 +535,7 @@ function liveTableHtml(board, labels) {
     }
     h += '<th style="text-align: center;">' + liveEsc(labels.total) + '</th></tr></thead><tbody>\n';
     for (var j = 0; j < board.rows.length; j++) {
-        h += liveRowHtml(board.problems, board.rows[j]) + '\n';
+        h += liveRowHtml(board.problems, board.rows[j], labels.of) + '\n';
     }
     return h + '</tbody></table>';
 }
@@ -532,7 +546,8 @@ function liveMonitor(eventsPath, containerSelector) {
     var labels = {
         rank: box.attr('data-label-rank') || '',
         team: box.attr('data-label-team') || '',
-        total: box.attr('data-label-total') || ''
+        total: box.attr('data-label-total') || '',
+        of: box.attr('data-label-of') || 'из'
     };
     var problems = [];
 
@@ -553,7 +568,7 @@ function liveMonitor(eventsPath, containerSelector) {
             var oldRank = old.children('th').first().text();
             var oldCells = liveCellsOf(old);
             old.remove();
-            var tr = $(liveRowHtml(problems, e.row));
+            var tr = $(liveRowHtml(problems, e.row, labels.of));
             var rows = tbody.children('tr');
             if (e.pos < rows.length) {
                 rows.eq(e.pos).before(tr);

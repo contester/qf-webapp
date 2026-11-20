@@ -23,6 +23,14 @@ import scala.concurrent.ExecutionContext
 import scala.io.Source
 import scala.util.Try
 
+object I18nDefaults {
+  val DefaultLang: play.api.i18n.Lang = play.api.i18n.Lang("ru")
+
+  def resolveLangs(configured: play.api.i18n.Langs): play.api.i18n.Langs =
+    if (configured.availables.nonEmpty) configured
+    else new play.api.i18n.DefaultLangs(Seq(DefaultLang))
+}
+
 class MyApplicationLoader extends ApplicationLoader {
   private var components: MyComponents = _
 
@@ -80,6 +88,15 @@ class MyComponents(context: ApplicationLoader.Context)
       base.shouldProtect(rh) && !rh.headers.get("X-Requested-With").exists(_.equalsIgnoreCase("XMLHttpRequest")))
   }
 
+  /**
+    * Supported languages: defaults to Russian (`ru`) when `play.i18n.langs` is not set, so every page renders from
+    * `conf/messages.ru` regardless of the browser's Accept-Language header. A deployment can override this with
+    * `play.i18n.langs` (e.g. `["en"]` for an English contest).
+    */
+  override lazy val langs: play.api.i18n.Langs = I18nDefaults.resolveLangs(
+    new play.api.i18n.DefaultLangsProvider(configuration).get)
+  lazy val defaultMessages: play.api.i18n.Messages = messagesApi.preferred(langs.availables)
+
   lazy val clock = wire[Clock]
   lazy val authenticatorDecoder = wire[Base64AuthenticatorEncoder]
   lazy val idGenerator = new SecureRandomIDGenerator()
@@ -133,7 +150,7 @@ class MyComponents(context: ApplicationLoader.Context)
   // through the live hooks. Nothing writes static files.
   lazy val liveMonitor: ActorRef = actorSystem.actorOf(actors.LiveMonitorActor.props(dbConfig.db,
     () => models.Rounds.currentRounds(dbConfig.db)(executionContext), palevoSink,
-    actors.LiveMonitorActor.DbStatusRows.fromDb(dbConfig.db, statusActorModel.teamClient, actorSystem.scheduler)(executionContext)),
+    actors.LiveMonitorActor.DbStatusRows.fromDb(dbConfig.db, statusActorModel.teamClient, actorSystem.scheduler, defaultMessages)(executionContext)),
     "live-monitor-actor")
   lazy val publicBoardCache: PublicBoardCache = new PublicBoardCache
   lazy val liveHooks: live.LiveHooks = live.LiveHooks.all(new live.ActorLiveHooks(liveMonitor), publicBoardCache.hooks)
@@ -146,7 +163,7 @@ class MyComponents(context: ApplicationLoader.Context)
   // The status actor's round clock produces palevo's phase, countdown and reschedule events; the live monitor hears
   // its edges on the event stream for the standings.
   lazy val statusActorModel = new StatusActorModel(dbConfig, actorSystem, palevoSink, live.LiveWiring.deferred(liveHooks),
-    countdownConfig)
+    countdownConfig, defaultMessages)
 
   // Database notifications (testing/eval results, round and team changes) for the actors; see NotifyListener.
   lazy val notifyListener: ActorRef = actorSystem.actorOf(NotifyListener.props(

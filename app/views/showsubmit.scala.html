@@ -13,9 +13,9 @@
         @for(s <- sub.fsub.details.filter(_.test == 0)) {
         <table class="table table-bordered table-responsive" id="compile">
             <tbody>
-            <tr><td>@messages("label.compile")</td><td>@s.resultString</td></tr>
+            <tr><td>@messages("label.compile")</td><td>@s.resultString(messages)</td></tr>
             @if(!s.success) {
-                @for(co <- compileOut; text = co.combinedText if text.nonEmpty) {
+                @for(co <- compileOut; text = co.combinedText(messages) if text.nonEmpty) {
                 <tr><td colspan="2"><pre>@text</pre></td></tr>
                 }
             }

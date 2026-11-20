@@ -42,7 +42,7 @@
         <div class="alert alert-danger" role="alert">
             <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
             <span class="sr-only">@messages("error"):</span>
-            @error.message
+            @messages(error.message, error.args: _*)
         </div>
         }
 
@@ -66,7 +66,7 @@
     <div class="panel-heading"><h3 class="panel-title">@messages("attempts")</h3></div>
     <table class="table table-bordered table-responsive">
         <thead>
-        <tr><th>ID</th><th>@messages("label.time")</th><th>@messages("status")</th><th>@messages("label.elapsedTime"), ms</th><th>@messages("label.memory"), KB</th><th>@messages("label.returnCode")</th></tr>
+        <tr><th>ID</th><th>@messages("label.time")</th><th>@messages("status")</th><th>@messages("label.elapsedTime"), @messages("unit.ms")</th><th>@messages("label.memory"), @messages("unit.kb")</th><th>@messages("label.returnCode")</th></tr>
         </thead>
         <tbody>
         @for(s <- evals) {

@@ -29,7 +29,9 @@ Besides the usual Play keys (`play.http.secret.key`, `play.application.loader = 
     fileserver.url = "http://bridge-host:port/fs/"   # the bridge's /fs2/ and /protopackage/ proxy (test outputs)
     fileserver.shortn = "..."                        # informational `contest` parameter of those requests
 
-Optional: `notify.keepalive.*` (database notifications, below) and `palevo.*` (IRC announcements, below).
+Optional: `notify.keepalive.*` (database notifications, below), `palevo.*` (IRC announcements, below), and
+`play.i18n.langs` (the UI defaults to Russian, `["ru"]` from `conf/messages.ru`, regardless of the browser's
+`Accept-Language`; set `play.i18n.langs = ["en"]` for English from `conf/messages`).
 
 `play.http.secret.key` MUST be set to a long random secret in every deployment (e.g. `openssl rand -base64 48`),
 never a default or a value from a repository: it signs the Play session and the CSRF token, which carry the admin

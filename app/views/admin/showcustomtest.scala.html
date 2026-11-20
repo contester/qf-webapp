@@ -4,30 +4,30 @@
 
 @panel(name: String)(value: String) = {
 <div class="panel panel-default">
-    <div class="panel-heading"><h3 class="panel-title">@name (@{value.length} симв.)</h3></div>
+    <div class="panel-heading"><h3 class="panel-title">@name (@messages("admin.customtests.charsCount", value.length.toString))</h3></div>
     <div class="panel-body nopadding"><pre class="nopadding">@value</pre></div>
 </div>
 }
 
 @adminmain(tab = "customtests", contest = contest) {
 <div class="panel panel-default">
-    <div class="panel-heading"><h3 class="panel-title">Custom test @ev.id</h3></div>
+    <div class="panel-heading"><h3 class="panel-title">@messages("admin.customtests.title", ev.id.toString)</h3></div>
     <div class="panel-body">
-        <p><b>Команда:</b> <a href="@routes.AdminApplication.customTests(ev.contest, Some(ev.team), None, None)">@team.map(_.teamFullName).getOrElse("Team " + ev.team)</a>,
-            <b>язык:</b> @ev.languageName</p>
-        <p><b>Отправлено:</b> @fmt(ev.arrived), <b>завершено:</b> @ev.finishTime.map(fmt).getOrElse("ещё нет")</p>
-        <p><b>Результат:</b> @if(ev.finishTime.isEmpty){<i>выполняется</i>}else{@messages(s"status.${ev.resultCode}")},
-            <b>время:</b> @ev.timex, <b>память:</b> @ev.memory, <b>код возврата:</b> @ev.returnCode</p>
+        <p><b>@messages("label.team"):</b> <a href="@routes.AdminApplication.customTests(ev.contest, Some(ev.team), None, None)">@team.map(_.teamFullName).getOrElse(messages("label.teamWithId", ev.team.toString))</a>,
+            <b>@messages("admin.customtests.languageLower"):</b> @ev.languageName</p>
+        <p><b>@messages("label.submittedAt"):</b> @fmt(ev.arrived), <b>@messages("admin.customtests.finishedLower"):</b> @ev.finishTime.map(fmt).getOrElse(messages("admin.customtests.notFinished"))</p>
+        <p><b>@messages("label.verdict"):</b> @if(ev.finishTime.isEmpty){<i>@messages("status.running")</i>}else{@messages(s"status.${ev.resultCode}")},
+            <b>@messages("admin.customtests.timeLower"):</b> @ev.timex, <b>@messages("admin.customtests.memoryLower"):</b> @ev.memory, <b>@messages("admin.customtests.returnCodeLower"):</b> @ev.returnCode</p>
         @if(canRerun) {
         @helper.form(action = routes.AdminApplication.rerunCustomTest(ev.contest, ev.id), 'style -> "display:inline") {
             @helper.CSRF.formField
-            <button type="submit" class="btn btn-default btn-sm">Запустить заново</button>
+            <button type="submit" class="btn btn-default btn-sm">@messages("admin.customtests.rerun")</button>
         }
         }
-        <p><a href="@routes.AdminApplication.customTests(ev.contest, None, None, None)">&larr; все custom tests</a></p>
+        <p><a href="@routes.AdminApplication.customTests(ev.contest, None, None, None)">&larr; @messages("admin.customtests.allLink")</a></p>
     </div>
 </div>
-@panel("Исходник")(AdminCustomTests.sourceText(ev))
-@panel("Вход")(AdminCustomTests.inputText(ev))
-@panel("Выход / сообщение компилятора / stderr")(AdminCustomTests.outputText(ev))
+@panel(messages("label.sourceCode"))(AdminCustomTests.sourceText(ev))
+@panel(messages("label.input"))(AdminCustomTests.inputText(ev))
+@panel(messages("admin.customtests.outputTitle"))(AdminCustomTests.outputText(ev))
 }

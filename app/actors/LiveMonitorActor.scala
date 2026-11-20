@@ -94,7 +94,8 @@ object LiveMonitorActor {
     * read again a few times, so that a finished submit is never shown as running.
     */
   class DbStatusRows(read: Int => Future[Option[models.AdminSubmitRow]], teamClient: TeamClient, scheduler: akka.actor.Scheduler,
-                     retryAfter: FiniteDuration = 500.millis, retries: Int = 4) extends StatusRows {
+                     retryAfter: FiniteDuration = 500.millis, retries: Int = 4,
+                     messages: play.api.i18n.Messages = models.SubmitResult.fallbackMessages) extends StatusRows {
     private implicit val timeout: akka.util.Timeout = akka.util.Timeout(5.seconds)
 
     override def render(id: Int, inTesting: Option[models.SubmitResult])(implicit ec: ExecutionContext): Future[Option[StatusRow]] = {
@@ -110,7 +111,7 @@ object LiveMonitorActor {
           val r = inTesting.fold(found)(res => found.copy(result = res))
           val cid = r.submit.submitId.contestId
           teamClient.getTeams(cid).map { teams =>
-            val body = (rejudge: Boolean) => views.html.admin.submitrow(r, teams, rejudge, linkTeam = true).body.trim
+            val body = (rejudge: Boolean) => views.html.admin.submitrow(r, teams, rejudge, linkTeam = true)(messages).body.trim
             Some(StatusRow(cid, r.submit.submitId.id, r.submit.submitId.teamId,
               body(true), body(false)))
           }
@@ -119,8 +120,9 @@ object LiveMonitorActor {
   }
 
   object DbStatusRows {
-    def fromDb(db: JdbcBackend#DatabaseDef, teamClient: TeamClient, scheduler: akka.actor.Scheduler)(implicit ec: ExecutionContext): DbStatusRows =
-      new DbStatusRows(id => models.AdminSubmits.row(db, id), teamClient, scheduler)
+    def fromDb(db: JdbcBackend#DatabaseDef, teamClient: TeamClient, scheduler: akka.actor.Scheduler,
+               messages: play.api.i18n.Messages = models.SubmitResult.fallbackMessages)(implicit ec: ExecutionContext): DbStatusRows =
+      new DbStatusRows(id => models.AdminSubmits.row(db, id), teamClient, scheduler, messages = messages)
   }
 
   /** Wall clock for the boards and palevo; monotonic milliseconds for the reload rate limit and rejudge ages. */

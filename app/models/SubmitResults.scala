@@ -36,6 +36,7 @@ object SubmitRows {
 trait SubmitResult {
   def success: Boolean
   def message: String
+  def display(implicit messages: Messages): String = message
 }
 
 case class SubmitStats(timeMs: TimeMs, memory: Memory, timeLimitExceeded: Boolean = false)
@@ -44,26 +45,57 @@ case object SubmitWaiting extends SubmitResult {
   override val success: Boolean = false
 
   override val message: String = "Running..."
+
+  override def display(implicit messages: Messages): String = SubmitResult.tr("status.running", message)
 }
 
 case object SubmitCompileError extends SubmitResult {
   override val success = false
   override val message = "Compilation error"
+
+  override def display(implicit messages: Messages): String = SubmitResult.tr("status.2", message)
 }
 
 case class SubmitPointsResult(points: Double, max: Double) extends SubmitResult {
   override val success: Boolean = points == max && max > 0
 
   override val message: String = s"${TestRows.formatPoints(points)} из ${TestRows.formatPoints(max)}"
+
+  override def display(implicit messages: Messages): String =
+    SubmitResult.tr("points.of", message, TestRows.formatPoints(points), TestRows.formatPoints(max))
 }
 
 case object BeingRetestedResult extends SubmitResult {
   override val success: Boolean = false
 
   override val message: String = "Testing in progress..."
+
+  override def display(implicit messages: Messages): String = SubmitResult.tr("status.retesting", message)
 }
 
 object SubmitResult extends Logging {
+  private[models] def tr(key: String, fallback: => String, args: Any*)(implicit messages: Messages): String =
+    if (messages.isDefinedAt(key)) messages(key, args: _*) else fallback
+
+  def statusMessage(code: Int)(implicit messages: Messages): String =
+    tr(s"status.$code", message.getOrElse(code, tr("status.unknown", "Unknown")))
+
+  def toJson(o: SubmitResult)(implicit messages: Messages): JsValue = Json.obj(
+    "success" -> o.success,
+    "message" -> o.display
+  )
+
+  /** English/default fallback Messages for tests constructing actors without a Play MessagesApi. */
+  val fallbackMessages: Messages =
+    new play.api.i18n.DefaultMessagesApi(Map("en" -> Map(
+      "admin.rejudge.one" -> "Rejudge",
+      "label.teamWithId" -> "Team {0}",
+      "status.running" -> "Running...",
+      "status.2" -> "Compilation error",
+      "status.retesting" -> "Testing in progress...",
+      "points.of" -> "{0} из {1}"
+    )), new play.api.i18n.DefaultLangs(Seq(play.api.i18n.Lang("en")))).preferred(Seq(play.api.i18n.Lang("en")))
+
   implicit val submitResultWrites = new Writes[SubmitResult] {
     override def writes(o: SubmitResult): JsValue = Json.obj(
       "success" -> o.success,
@@ -133,6 +165,14 @@ object SubmitResult extends Logging {
 
 object AnnoSubmit {
   implicit val formatAnnoSubmit = Json.writes[AnnoSubmit]
+
+  def toJson(a: AnnoSubmit)(implicit messages: Messages): JsValue = Json.obj(
+    "submitId" -> a.submitId,
+    "contest" -> a.contest,
+    "team" -> a.team,
+    "problem" -> a.problem,
+    "result" -> SubmitResult.toJson(a.result)
+  )
 
   implicit val eventNameExtractor = EventNameExtractor[AnnoSubmit](_ => Some("submit"))
   implicit val eventDataExtractor = EventDataExtractor[AnnoSubmit] { c =>

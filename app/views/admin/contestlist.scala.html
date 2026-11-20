@@ -4,13 +4,13 @@
 @adminmain(tab = "contests", contest=contest) {
 
 <div class="panel panel-success">
-    <div class="panel-heading"><h3 class="panel-title">Rounds of the current season</h3></div>
+    <div class="panel-heading"><h3 class="panel-title">@messages("admin.contests.heading")</h3></div>
     <div class="panel-body">
-        <p>Rounds are edited in teacher-web.</p>
+        <p>@messages("admin.contests.hint")</p>
 
         <table id="rounds" class="table table-hover table-bordered table-responsive">
             <thead>
-            <tr><th>ID</th><th>Name</th><th>Start</th><th>End</th><th>Polygon ID</th></tr>
+            <tr><th>@messages("admin.contests.id")</th><th>@messages("admin.contests.name")</th><th>@messages("admin.contests.start")</th><th>@messages("admin.contests.end")</th><th>@messages("admin.contests.polygonId")</th></tr>
             </thead>
             <tbody>
             @for(s <- contests) {

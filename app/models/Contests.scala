@@ -71,8 +71,8 @@ object Compilers {
   def toSelect(compilers: Seq[Compiler]) =
     compilers.sortBy(_.name).map(x => x.id.toString -> x.name)
 
-  def forForm(compilers: Seq[Compiler]) =
-    Selectable.forSelect(toSelect(compilers), "Select compiler")
+  def forForm(compilers: Seq[Compiler])(implicit messages: play.api.i18n.Messages) =
+    Selectable.forSelect(toSelect(compilers), messages("label.selectCompiler"))
 }
 
 /** Rounds of the current season (qf's contests) and their participants (qf's teams). */
@@ -122,7 +122,7 @@ object Problems {
   def toSelect(problems: Seq[Problem]) =
     problems.map(x => x.id -> s"${x.id}. ${x.name}")
 
-  def forForm(problems: Seq[Problem]) =
-    Selectable.forSelect(toSelect(problems), "Select problem")
+  def forForm(problems: Seq[Problem])(implicit messages: play.api.i18n.Messages) =
+    Selectable.forSelect(toSelect(problems), messages("label.selectProblem"))
 }
 

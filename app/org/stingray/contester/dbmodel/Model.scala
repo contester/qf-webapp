@@ -19,6 +19,10 @@ case class ClarificationRequest(id: Long, contest: Int, team: Int, problem: Stri
   def getAnswer = if (answered) {
     if (answer.isEmpty) "No comments" else answer
   } else "..."
+
+  def displayAnswer(implicit messages: play.api.i18n.Messages): String = if (answered) {
+    if (answer.isEmpty) messages("clarification.noComments") else answer
+  } else "..."
 }
 
 /** A language of the season (season_languages); `ext` is the module id. */

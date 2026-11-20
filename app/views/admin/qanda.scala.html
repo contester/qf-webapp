@@ -4,13 +4,13 @@
 @adminmain(tab = "qanda", contest=contest) {
 
 <div class="panel panel-success">
-    <div class="panel-heading"><h3 class="panel-title">Clarifications</h3></div>
+    <div class="panel-heading"><h3 class="panel-title">@messages("admin.qanda.clarificationsHeading")</h3></div>
     <div class="panel-body">
 
 <table class="table table-hover table-bordered table-responsive">
     <thead>
-    <tr><th>ID</th><th></th><th>Problem</th><th>Text</th><th>Time</th>
-        <th>Hidden</th></tr>
+    <tr><th>ID</th><th></th><th>@messages("label.problem")</th><th>@messages("label.text")</th><th>@messages("label.time")</th>
+        <th>@messages("admin.qanda.hidden")</th></tr>
     </thead>
     <tbody>
     @for(s <- clarifications) {
@@ -27,39 +27,39 @@
                 </a>
                 <ul class="dropdown-menu">
                     <li><a href="javascript:void(0)"
-                           onclick="btn('@controllers.routes.AdminApplication.toggleClarification(id)', '@btnid')">Скрыть/показать</a></li>
+                           onclick="btn('@controllers.routes.AdminApplication.toggleClarification(id)', '@btnid')">@messages("admin.qanda.toggle")</a></li>
                     <li><a href="javascript:void(0)"
-                           onclick="btnDelete('@controllers.routes.AdminApplication.deleteClarification(contest.contest.id, id)', '@btnid', '@rowid')">Удалить</a></li>
+                           onclick="btnDelete('@controllers.routes.AdminApplication.deleteClarification(contest.contest.id, id)', '@btnid', '@rowid')">@messages("admin.delete")</a></li>
                 </ul>
             </div>
                 }
                 }
             </td>
-            <td>@s.problem</td><td>@s.text</td><td>@LocalDateFormat(s.arrived)</td><td>@s.hidden</td></tr>
+            <td>@s.problem</td><td>@s.text</td><td>@LocalDateFormat(s.arrived)</td><td>@if(s.hidden){@messages("admin.yes")}else{@messages("admin.no")}</td></tr>
         }
     }
     }
     </tbody>
 </table>
         @if(contest.canModify) {
-        <a href="@routes.AdminApplication.postNewClarification(contest.contest.id)" class="btn btn-primary">Добавить уточнение</a>
+        <a href="@routes.AdminApplication.postNewClarification(contest.contest.id)" class="btn btn-primary">@messages("admin.qanda.addClarification")</a>
         }
     </div>
 </div>
 
 <div class="panel panel-success">
-    <div class="panel-heading"><h3 class="panel-title">Clarification requests</h3></div>
+    <div class="panel-heading"><h3 class="panel-title">@messages("admin.qanda.requestsHeading")</h3></div>
     <div class="panel-body">
 <table class="table table-hover table-bordered table-responsive">
     <thead>
-    <tr><th>ID</th><th>Contest</th><th>Team</th><th>Problem</th><th>Text</th><th>Time</th>
-        <th>Answer</th><th>Status</th></tr>
+    <tr><th>ID</th><th>@messages("admin.qanda.contest")</th><th>@messages("label.team")</th><th>@messages("label.problem")</th><th>@messages("label.text")</th><th>@messages("label.time")</th>
+        <th>@messages("label.answer")</th><th>@messages("admin.qanda.answered")</th></tr>
     </thead>
     <tbody>
     @for(s <- clReqs) {
     <tr><th scope="row">@if(contest.canModify) {<a href="@routes.AdminApplication.postAnswerForm(s.id)">@s.id</a>} else {@s.id}</th>
         <td>@s.contest</td><td>@s.team</td>
-        <td>@s.problem</td><td>@s.request</td><td>@LocalDateFormat(s.arrived)</td><td>@s.getAnswer</td><td>@s.answered</td></tr>
+        <td>@s.problem</td><td>@s.request</td><td>@LocalDateFormat(s.arrived)</td><td>@s.displayAnswer</td><td>@if(s.answered){@messages("admin.yes")}else{@messages("admin.no")}</td></tr>
     }
 
     </tbody>

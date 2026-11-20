@@ -20,7 +20,7 @@
         @for((cell, p) <- r.cells.zip(status.problems)) {
         @cell.best match {
             case Some(points) => {
-        <td class="text-center points-cell@if(cell.full) { full-score}">@models.TestRows.formatPoints(points)<br/><small class="text-muted">из @models.TestRows.formatPoints(p.maxPoints)</small></td>
+        <td class="text-center points-cell@if(cell.full) { full-score}">@models.TestRows.formatPoints(points)<br/><small class="text-muted">@messages("label.of") @models.TestRows.formatPoints(p.maxPoints)</small></td>
             }
             case None => {
         <td class="text-center points-cell text-muted">—</td>

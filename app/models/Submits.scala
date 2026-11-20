@@ -34,6 +34,8 @@ case class ResultEntry(testingID: Long, test: Int, result: Int, time: TimeMs, me
                        group: Option[String] = None, points: Double = 0) {
   def resultString = SubmitResult.message(result)
 
+  def resultString(messages: play.api.i18n.Messages): String = SubmitResult.statusMessage(result)(messages)
+
   def timeLimitExceeded = result == 11
 
   def success =
@@ -216,6 +218,13 @@ object Submits {
   def loadTestRows(db: JdbcBackend#DatabaseDef, testingId: Long)(implicit ec: ExecutionContext): Future[Seq[TestRowView]] =
     loadSubmitDetails(db, testingId.toInt).zip(loadGroups(db, testingId)).map { case (details, groups) =>
       TestRows.describe(details.map(TestRows.fromEntry), groups)
+    }
+
+  /** Localized variant of [[loadTestRows]] for controllers. */
+  def loadTestRows(db: JdbcBackend#DatabaseDef, testingId: Long, messages: play.api.i18n.Messages)
+                  (implicit ec: ExecutionContext): Future[Seq[TestRowView]] =
+    loadSubmitDetails(db, testingId.toInt).zip(loadGroups(db, testingId)).map { case (details, groups) =>
+      TestRows.describe(details.map(TestRows.fromEntry), groups, messages)
     }
 
   /**

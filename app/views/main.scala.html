@@ -2,7 +2,7 @@
 
 @navlink(myid: String, myhref: play.api.mvc.Call, mytext: Html) = {
     @if(myid == tab) {
-        <li class="active"><a href="#">@mytext <span class="sr-only">(current)</span></a></li>
+        <li class="active"><a href="#">@mytext <span class="sr-only">@messages("nav.current")</span></a></li>
     } else {
         <li><a href="@myhref">@mytext</a></li>
     }

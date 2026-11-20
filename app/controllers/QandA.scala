@@ -41,7 +41,7 @@ class QandA (cc: ControllerComponents,
     statusActorModel.problemClient.getProblems(loggedInTeam.contest.id).flatMap { probs =>
       Ask.apply[Seq[Clarification]](statusActorModel.statusActor, StatusActor.GetVisibleClarifications(loggedInTeam.contest.id)).flatMap { clars =>
         ClarificationModel.getTeamClarificationReqs(db, loggedInTeam.contest.id, loggedInTeam.team.id).map { clReq =>
-          html.clarifications(loggedInTeam, clars, clReq, Seq[(String, String)](("", "Select problem")) ++ Problems.toSelect(probs), form)
+          html.clarifications(loggedInTeam, clars, clReq, Seq[(String, String)](("", request2Messages(request)("label.selectProblem"))) ++ Problems.toSelect(probs), form)
         }
       }
     }

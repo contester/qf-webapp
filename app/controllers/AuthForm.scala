@@ -86,7 +86,7 @@ trait CommonAuthForms[E <: BaseEnv, P <: OneUserProvider] {
       }.map {
         case Some(v) => v
         case None => BadRequest(loginForm(AuthData.form.fill(AuthData(user.username, ""))
-          .withGlobalError("Неверное имя пользователя или пароль")))
+          .withGlobalError("error.invalidCredentials")))
       }
     )
   }

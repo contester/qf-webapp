@@ -125,6 +125,10 @@ class AdminPagesHttpSpec extends AnyFunSuite with BeforeAndAfterAll {
   test("languages page lists the current season's languages; copying from the current season is refused") {
     assume(fx.url.isDefined)
     val page = ok("/admin/languages")
+    assert(page.contains("css/topbar.css"), "languages page includes topbar.css")
+    assert(page.contains("Участники") && page.contains("Выход") && page.contains("listenOnAdmin"), "languages page renders the full admin navbar in Russian")
+    val withContest = ok(s"/admin/languages?contest=${fx.round}")
+    assert(withContest.contains("css/topbar.css") && withContest.contains("Языки") && withContest.contains("Участники"))
     val current = one(sql"select id from seasons where is_current".as[Int])
     val names = fx.await(fx.db.run(sql"select name from season_languages where season_id = $current".as[String]))
     assert(names.nonEmpty && names.forall(n => page.contains(play.twirl.api.HtmlFormat.escape(n).body)))

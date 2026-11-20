@@ -18,8 +18,8 @@
         <table id="submits" class="table table-hover table-bordered table-responsive">
             <thead>
             <tr><th>ID</th><th>@messages("label.time")</th><th>@messages("label.problem")</th><th>@messages("label.attempt")</th><th>@messages("label.language")</th><th>@messages("label.verdict")</th>
-                <th>@messages("label.elapsedTime"), ms</th>
-            <th>@messages("label.memory"), KB</th></tr>
+                <th>@messages("label.elapsedTime"), @messages("unit.ms")</th>
+            <th>@messages("label.memory"), @messages("unit.kb")</th></tr>
             </thead>
             <tbody>
             @for(s <- subs) {

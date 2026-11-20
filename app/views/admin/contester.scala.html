@@ -7,10 +7,9 @@ $(function() { listenOnContester('@routes.AdminApplication.contesterEvents.url',
 }
 @adminmain(tab = "contester", contest = contest, scripts = scripts) {
 <div class="panel panel-info">
-    <div class="panel-heading"><h3 class="panel-title">Open connections <span id="contester-state" class="badge badge-error">*</span></h3></div>
+    <div class="panel-heading"><h3 class="panel-title">@messages("admin.contester.heading") <span id="contester-state" class="badge badge-error">*</span></h3></div>
     <div class="panel-body">
-        <p>Everyone watching right now, by contest. Admins see the live board.
-            This page's own stream is not counted, but its admin feed is.</p>
+        <p>@messages("admin.contester.hint")</p>
         <span class="hidden" id="contester-names">
             @for(c <- contest.contests) {<span data-id="@c._1">@c._2</span>}
         </span>
