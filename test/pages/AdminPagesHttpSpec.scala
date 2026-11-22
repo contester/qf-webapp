@@ -72,10 +72,8 @@ class AdminPagesHttpSpec extends AnyFunSuite with BeforeAndAfterAll {
 
   private def post(uri: String, fields: (String, String)*) = run(asAdmin(form(POST, uri, fields: _*)))
 
-  private def unrated(participant: Int): Option[String] = {
-    val r = fx.round
-    one(sql"select unrated::text from round_credentials where round_id = $r and participant_id = $participant".as[Option[String]])
-  }
+  private def unrated(participant: Int): Option[String] =
+    one(sql"select unrated::text from participants where id = $participant".as[Option[String]])
 
   private def ok(uri: String): String = {
     val r = get(uri)

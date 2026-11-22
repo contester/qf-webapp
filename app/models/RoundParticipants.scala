@@ -28,15 +28,21 @@ object RoundParticipants {
       rc <- SlickModel.roundCredentials if rc.roundId === round
       p <- SlickModel.participants if p.id === rc.participantId && !p.isDeleted
       s <- SlickModel.schools if s.id === p.schoolId
-    } yield (p.id, p.seasonSeq, p.fullName, s.name, s.city, rc.login, rc.isActive, rc.unrated)).sortBy(_._2).result)
+    } yield (p.id, p.seasonSeq, p.fullName, s.name, s.city, rc.login, rc.isActive, p.unrated)).sortBy(_._2).result)
       .map(_.map((RoundParticipant.apply _).tupled))
 
   /**
-    * Writes `round_credentials.unrated` of the participant's credential for the round (NULL for rated). The update
-    * fires teacher-web's `credential_changed` trigger, which updates the live monitor. Returns the rows updated:
+    * Writes `participants.unrated` for a participant enrolled in `round` (NULL for rated). The update
+    * fires teacher-web's `participant_changed` trigger, which updates the live monitor. Returns the rows updated:
     * 0 when the participant has no credential for the round.
     */
-  def setUnrated(db: JdbcBackend#DatabaseDef, round: Int, participant: Int, unrated: Option[Unrated]): Future[Int] =
-    db.run(SlickModel.roundCredentials.filter(rc => rc.roundId === round && rc.participantId === participant)
-      .map(_.unrated).update(unrated))
+  def setUnrated(db: JdbcBackend#DatabaseDef, round: Int, participant: Int, unrated: Option[Unrated])(implicit ec: ExecutionContext): Future[Int] =
+    db.run((for {
+      exists <- SlickModel.roundCredentials
+        .filter(rc => rc.roundId === round && rc.participantId === participant)
+        .exists.result
+      updated <- if (exists)
+        SlickModel.participants.filter(_.id === participant).map(_.unrated).update(unrated)
+      else DBIO.successful(0)
+    } yield updated).transactionally)
 }

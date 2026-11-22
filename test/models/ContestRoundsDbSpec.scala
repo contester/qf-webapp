@@ -110,14 +110,14 @@ class ContestRoundsDbSpec extends AnyFunSuite {
     val p = participantOf("team1_1")
     def readSlick: Option[Unrated] = await(Rounds.teamsOfRound(db, round)).find(_.participantId == p).get.unrated
     def readRaw: Option[String] =
-      await(db.run(sql"select unrated::text from round_credentials where participant_id = $p and round_id = $round".as[Option[String]].head))
+      await(db.run(sql"select unrated::text from participants where id = $p".as[Option[String]].head))
     def writeSlick(v: Option[Unrated]): Int =
-      await(db.run(SlickModel.roundCredentials.filter(x => x.participantId === p && x.roundId === round).map(_.unrated).update(v)))
+      await(db.run(SlickModel.participants.filter(_.id === p).map(_.unrated).update(v)))
     try {
       assert(readSlick.isEmpty && readRaw.isEmpty)
-      exec(sqlu"update round_credentials set unrated = 'not_rated' where participant_id = $p and round_id = $round")
+      exec(sqlu"update participants set unrated = 'not_rated' where id = $p")
       assert(readSlick.contains(NotRated))
-      exec(sqlu"update round_credentials set unrated = 'disqualified' where participant_id = $p and round_id = $round")
+      exec(sqlu"update participants set unrated = 'disqualified' where id = $p")
       assert(readSlick.contains(Disqualified))
 
       assert(writeSlick(Some(NotRated)) == 1)
@@ -127,12 +127,12 @@ class ContestRoundsDbSpec extends AnyFunSuite {
       assert(writeSlick(None) == 1)
       assert(readRaw.isEmpty)
       // filtering by the enum works too
-      exec(sqlu"update round_credentials set unrated = 'not_rated' where participant_id = $p and round_id = $round")
-      val notRated = await(db.run(SlickModel.roundCredentials
-        .filter(x => x.roundId === round && x.unrated === (NotRated: Unrated)).map(_.participantId).result))
+      exec(sqlu"update participants set unrated = 'not_rated' where id = $p")
+      val notRated = await(db.run(SlickModel.participants
+        .filter(x => x.id === p && x.unrated === (NotRated: Unrated)).map(_.id).result))
       assert(notRated == Seq(p))
     } finally {
-      exec(sqlu"update round_credentials set unrated = null where participant_id = $p and round_id = $round")
+      exec(sqlu"update participants set unrated = null where id = $p")
     }
   }
 }

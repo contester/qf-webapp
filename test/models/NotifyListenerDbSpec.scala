@@ -160,14 +160,14 @@ class NotifyListenerDbSpec extends TestKit(ActorSystem("NotifyListenerDbSpec")) 
   test("credential_changed and participant_changed deliver TeamsChanged for the round") {
     withListener { rig =>
       val (r, k) = (fx.round, fx.kid)
-      exec(sqlu"update round_credentials set unrated = 'not_rated' where round_id = $r and participant_id = $k")
+      exec(sqlu"update round_credentials set password = 'updated' where round_id = $r and participant_id = $k")
       rig.teams.expectMsg(2.seconds, StatusActor.TeamsChanged(r))
       rig.teams.expectNoMessage(300.millis)
       exec(sqlu"update participants set grade = 10 where id = $k")
       rig.teams.expectMsg(2.seconds, StatusActor.TeamsChanged(r))
       rig.teams.expectNoMessage(300.millis)
       rig.status.expectNoMessage(100.millis)
-      // the same TeamsChanged reaches the hook (the admin live monitor and the public board cache)
+      // the same TeamsChanged reaches the hook (the admin live monitor)
       assert(rig.teamsHook.toArray.toSeq == Seq(r, r))
     }
   }
@@ -224,7 +224,7 @@ class NotifyListenerDbSpec extends TestKit(ActorSystem("NotifyListenerDbSpec")) 
         }
         awaitCond(kids.contains(k), 10.seconds)
         assert(kids(k).unrated.isEmpty)
-        exec(sqlu"update round_credentials set unrated = 'not_rated' where round_id = $r and participant_id = $k")
+        exec(sqlu"update participants set unrated = 'not_rated' where id = $k")
         teams ! StatusActor.TeamsChanged(r)
         awaitCond(kids.get(k).exists(_.unrated.isDefined), 5.seconds, 50.millis)
         exec(sqlu"update round_credentials set is_active = false where round_id = $r and participant_id = $k")
@@ -268,14 +268,12 @@ class NotifyListenerDbSpec extends TestKit(ActorSystem("NotifyListenerDbSpec")) 
     }
   }
 
-  test("after every (re)connect the listener catches up: board cache dropped, live monitor reloaded, rounds re-sent") {
+  test("after every (re)connect the listener catches up: live monitor reloaded, rounds re-sent") {
     val reconnects = new java.util.concurrent.atomic.AtomicInteger
-    val cache = new PublicBoardCache
     val live = TestProbe()
     val ghost = 2000000000 // a round the status actor still holds that is gone from the database
     val catchUp = NotifyListener.CatchUp(() => scala.concurrent.Future.successful(Seq(fx.round, ghost)), () => {
       reconnects.incrementAndGet()
-      cache.invalidateAll()
       live.ref ! actors.LiveMonitorActor.ReloadAll
     })
     withListenerCatchingUp(Some(catchUp)) { rig =>
@@ -286,8 +284,6 @@ class NotifyListenerDbSpec extends TestKit(ActorSystem("NotifyListenerDbSpec")) 
       rig.teams.fishForMessage(5.seconds) { case StatusActor.TeamsChanged(`ghost`) => true; case _ => false }
       awaitCond(rig.removed.contains(ghost), 2.seconds)
 
-      fx.await(cache.getOrRender(r, "ru")(scala.concurrent.Future.successful("page")))
-      assert(cache.cachedRounds == Set(r))
       val submit = fx.insertSubmit()
       val testing = fx.insertTesting(submit)
       exec(sqlu"update submits set testing_id = $testing where id = $submit")
@@ -309,7 +305,6 @@ class NotifyListenerDbSpec extends TestKit(ActorSystem("NotifyListenerDbSpec")) 
         case _ => false
       }
       awaitCond(rig.contests.toArray.exists { case c: Contest => c.id == r && c.endTime.getMillis == newEnd.getMillis }, 2.seconds)
-      assert(cache.cachedRounds.isEmpty, "the public board cache is dropped")
       assert(reconnects.get == 2)
     }
   }

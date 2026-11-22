@@ -10,7 +10,7 @@ its teacher-web bridge (`cmd/bridge-teacherweb` in the director repository); qf 
 qf uses teacher-web's PostgreSQL database (schema `public`) and never migrates it: the tables, the
 `credential_unrated` enum and the notification triggers are teacher-web's goose migrations (00005 and later).
 Seasons, contests, rounds, participants, credentials and admins are teacher-web's; qf reads them and writes only
-contest data (submits, custom tests, clarifications and requests, messages, extra info), `round_credentials.unrated`
+contest data (submits, custom tests, clarifications and requests, messages, extra info), `participants.unrated`
 and, from the admin languages page, `season_languages`. A qf contest id in URLs is a `contest_rounds.id`. Only rounds
 of the current season (`seasons.is_current`) with both `starts_at` and `ends_at` set exist for qf.
 
@@ -48,8 +48,8 @@ and no CORS is enabled).
 `/admin` (log in with a teacher-web admin): the submit status (live), custom tests (with rerun), the live points
 board, clarifications and questions, rejudge (per submit, or a problem's outdated/all submits), the rounds of the
 current season (read only; rounds are edited in teacher-web), extra info pages per round, the round's participants
-with the unrated toggle (rated / `not_rated` / `disqualified`, written to `round_credentials.unrated`; the live board
-follows through `credential_changed`), and the season languages page (the current season's `season_languages`, and
+with the unrated toggle (rated / `not_rated` / `disqualified`, written to `participants.unrated`; the live board
+follows through `participant_changed`), and the season languages page (the current season's `season_languages`, and
 copying another season's list into it). With no current round the round pages say «Нет текущих туров».
 
 ## Tests
@@ -127,8 +127,7 @@ Submits and custom tests are requests by themselves: the insert triggers notify 
 The scoreboard is a points board: per problem the best points of a team's finished, compiled submits (the points of
 each submit's current testing: a rejudge replaces them, never adds), the total, and places by total (equal totals
 share a place, the next one skips: 1, 1, 3). Not rated participants are listed after the ranked ones without a place;
-disqualified ones are not listed. There is no freeze: admins always see the real board, everybody else sees it once the
-round is over (`is_finished`, or `ends_at` has come).
+disqualified ones are not listed. Admins always see the real live board; public, joined multi-round, and grade-segregated scoreboards live in `teacher-web`.
 
 - `/admin/monitor/:id` (admins): the live board. The page carries the board the stream at `/admin/monitor/:id/events`
   starts with; the stream then sends a `row` event for each changed row (a finished testing, an arrival or a rejudge:
@@ -136,12 +135,6 @@ round is over (`is_finished`, or `ends_at` has come).
   (a credential deactivated, a participant disqualified). Credential and participant edits (`credential_changed`,
   `participant_changed`) re-read the round's participants and update the rows without a reload; a change of the
   round's problems (`round_changed`) reloads the round. The page is sent `Cache-Control: no-store`.
-- `/monitor` (a participant) and `/public/monitor/:id` (anyone, no session): 403 «Результаты будут опубликованы после
-  окончания тура» while the round runs, then the final board rendered from the database. The navbar shows the
-  scoreboard tab to participants only once their round is over. There is no live stream for them.
-- The public page is rendered on demand and kept per round and language until a notification can have changed it:
-  a finished testing, a rejudge, a credential or participant change, a round change or removal (`PublicBoardCache`).
-  It never expires by time, and only rounds that are over are ever cached.
 
 There are no static monitor files and no `monitor.*` settings any more (`monitor.disable_new_monitor`,
 `monitor.public_contests`, `monitor.public_max_connections`, `monitor.static_location` and the old interval keys are

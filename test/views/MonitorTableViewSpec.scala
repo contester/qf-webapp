@@ -1,9 +1,8 @@
 package views
 
 import models._
-import org.joda.time.DateTime
 import org.scalatest.funsuite.AnyFunSuite
-import org.stingray.contester.dbmodel.{Contest, NotRated, Team}
+import org.stingray.contester.dbmodel.{NotRated, Team}
 import play.api.i18n.{DefaultMessagesApi, Lang, MessagesImpl}
 
 import scala.io.Source
@@ -41,11 +40,5 @@ class MonitorTableViewSpec extends AnyFunSuite {
   test("the stylesheet gives full-score a colour") {
     val css = html.boardstyle().body
     assert(css.contains(".full-score"))
-  }
-
-  test("the static page wraps the table with the round name and the style") {
-    val c = Contest(3, "Round Three", new DateTime(2030, 1, 1, 10, 0), new DateTime(2030, 1, 1, 13, 0), None, 1)
-    val h = html.staticmonitor(c, status).body
-    assert(h.contains("Round Three") && h.contains("points-cell full-score") && h.contains(".full-score"))
   }
 }

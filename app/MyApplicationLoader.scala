@@ -146,19 +146,16 @@ class MyComponents(context: ApplicationLoader.Context)
   // Minutes before the start and the end at which palevo is told "in N minutes"; edges of the status actor's round clock.
   lazy val countdownConfig: palevo.CountdownConfig = palevo.CountdownConfig(configuration)
 
-  // The admin live monitor (the only live board) and the public board cache; both hear every change of a board
-  // through the live hooks. Nothing writes static files.
+  // The admin live monitor (the only scoreboard served by qf-webapp); hears every change of a board through the live hooks.
   lazy val liveMonitor: ActorRef = actorSystem.actorOf(actors.LiveMonitorActor.props(dbConfig.db,
     () => models.Rounds.currentRounds(dbConfig.db)(executionContext), palevoSink,
     actors.LiveMonitorActor.DbStatusRows.fromDb(dbConfig.db, statusActorModel.teamClient, actorSystem.scheduler, defaultMessages)(executionContext)),
     "live-monitor-actor")
-  lazy val publicBoardCache: PublicBoardCache = new PublicBoardCache
-  lazy val liveHooks: live.LiveHooks = live.LiveHooks.all(new live.ActorLiveHooks(liveMonitor), publicBoardCache.hooks)
+  lazy val liveHooks: live.LiveHooks = new live.ActorLiveHooks(liveMonitor)
   lazy val liveMonitorRef: live.LiveMonitorRef = live.LiveMonitorRef(Some(liveMonitor))
   lazy val connectionStats: live.ConnectionStats = new live.ConnectionStats
 
   lazy val monitorModel = wire[Monitor]
-  lazy val boardSource: models.BoardSource = monitorModel.source
   // Deferred: the live monitor itself needs statusActorModel's team client (status rows).
   // The status actor's round clock produces palevo's phase, countdown and reschedule events; the live monitor hears
   // its edges on the event stream for the standings.
@@ -172,7 +169,6 @@ class MyComponents(context: ApplicationLoader.Context)
       statusActorModel.contestChanged, statusActorModel.contestRemoved, statusActorModel.teamsChanged,
       // After every (re)connect: notifications missed while disconnected must not leave caches stale.
       Some(NotifyListener.CatchUp(knownStatusRounds, () => {
-        publicBoardCache.invalidateAll()
         liveMonitor ! actors.LiveMonitorActor.ReloadAll
       })))), "notify-listener")
 
@@ -187,7 +183,6 @@ class MyComponents(context: ApplicationLoader.Context)
   lazy val qAndAController = wire[_root_.controllers.QandA]
   lazy val sseController = wire[_root_.controllers.ServerSideEval]
   lazy val adminController = wire[_root_.controllers.AdminApplication]
-  lazy val publicMonitorController = wire[_root_.controllers.PublicMonitor]
 
   lazy val authFormsController = wire[_root_.controllers.AuthForms]
   lazy val adminAuthFormsController = wire[_root_.controllers.AdminAuthForms]

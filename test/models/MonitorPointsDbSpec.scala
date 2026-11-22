@@ -62,8 +62,8 @@ class MonitorPointsDbSpec extends AnyFunSuite {
         id
       }
       val Seq(one, two, unrated, dsq) = ids
-      exec(sqlu"update round_credentials set unrated = 'not_rated' where round_id = $round and participant_id = $unrated")
-      exec(sqlu"update round_credentials set unrated = 'disqualified' where round_id = $round and participant_id = $dsq")
+      exec(sqlu"update participants set unrated = 'not_rated' where id = $unrated")
+      exec(sqlu"update participants set unrated = 'disqualified' where id = $dsq")
       exec(sqlu"""insert into problems (season_id, round_id, problem_id, name, tests, max_points) values
                   ($season, $round, 'P', 'Pe', 5, 20), ($season, $round, 'Q', 'Qu', 5, 25)""")
 

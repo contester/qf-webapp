@@ -13,9 +13,8 @@ import java.nio.file.{Files, Path, Paths}
 import scala.collection.JavaConverters._
 
 /**
-  * No leak while a round runs: no route but the admin ones streams a board, nothing writes monitor files, and the
-  * contestant navbar has no scoreboard tab until the round is over. (BoardAccessSpec and PublicBoardCacheSpec drive
-  * the 403 of /public/monitor/:id; /monitor uses the same BoardAccess.decide with a TeamViewer.)
+  * No leak while a round runs or after: no route but the admin ones streams or serves a scoreboard, nothing writes
+  * monitor files, and the contestant navbar never includes a scoreboard tab.
   */
 class LiveLeakSpec extends AnyFunSuite {
   private def src(f: String) = new String(Files.readAllBytes(Paths.get(f)), "UTF-8")
@@ -37,10 +36,9 @@ class LiveLeakSpec extends AnyFunSuite {
     }
   }
 
-  test("the public routes are the page only, and it is the 403/404-gated PublicMonitor.page") {
-    assert(routes.filter(_.contains("/public/")) == Seq("GET /public/monitor/:contestId controllers.PublicMonitor.page(contestId: Int)"))
-    assert(src("app/controllers/PublicMonitor.scala").contains("BoardAccess.decide(round, Anonymous, now())"))
-    assert(src("app/controllers/Application.scala").contains("BoardAccess.decide(round, TeamViewer(team.team.id, team.contest.id)"))
+  test("no public or contestant scoreboard routes remain in conf/routes") {
+    assert(!routes.exists(_.contains("/public/")))
+    assert(!routes.exists(_.split("\\s+").lift(1).exists(p => p == "/monitor" || p == "/monitor/")))
   }
 
   test("the live monitor has only admin joins") {
@@ -58,25 +56,30 @@ class LiveLeakSpec extends AnyFunSuite {
     assert(writers.isEmpty, writers.toString)
   }
 
-  test("visibility: admins always, teams and the public only once the round is over") {
+  test("visibility: admins always; teams and the public never") {
     val start = new DateTime(2030, 1, 1, 10, 0)
     val c = Contest(5, "R", start, start.plusHours(3), None, 1)
     val during = start.plusHours(1)
     assert(Visibility.canSeeBoard(c, AdminViewer, during))
-    assert(!Visibility.canSeeBoard(c, TeamViewer(1, 5), during) && !Visibility.canSeeBoard(c, Anonymous, during))
-    assert(Visibility.canSeeBoard(c, Anonymous, c.endTime) && Visibility.canSeeBoard(c.copy(isFinished = true), Anonymous, during))
+    for (now <- Seq(during, c.endTime); f <- Seq(false, true)) {
+      val cc = c.copy(isFinished = f)
+      assert(!Visibility.canSeeBoard(cc, TeamViewer(1, 5), now) && !Visibility.canSeeBoard(cc, Anonymous, now))
+    }
   }
 
-  test("the contestant navbar shows the scoreboard tab only once the round is over") {
+  test("the contestant navbar never renders a scoreboard link") {
     implicit val messages: MessagesImpl = MessagesImpl(Lang("en"), new DefaultMessagesApi())
     implicit val request = RequestFactory.plain.createRequest(RemoteConnection("127.0.0.1", secure = false, None), "GET",
       RequestTarget("/", "/", Map.empty), "HTTP/1.1", Headers(), TypedMap.empty, AnyContentAsEmpty)
     val now = DateTime.now
     def page(c: Contest) =
       views.html.main(models.LoggedInTeam("t", c, Team(1, 1, "T", "S", "C", None), Nil))(play.twirl.api.Html("")).body
-    val tab = controllers.routes.Application.monitorDefault.url
-    assert(!page(Contest(5, "R", now.minusHours(1), now.plusHours(1), None, 1)).contains(s"""href="$tab""""))
-    assert(page(Contest(5, "R", now.minusHours(3), now.minusHours(1), None, 1)).contains(s"""href="$tab""""))
-    assert(page(Contest(5, "R", now.minusHours(1), now.plusHours(1), None, 1, isFinished = true)).contains(s"""href="$tab""""))
+    for (cc <- Seq(
+      Contest(5, "R", now.minusHours(1), now.plusHours(1), None, 1),
+      Contest(5, "R", now.minusHours(3), now.minusHours(1), None, 1),
+      Contest(5, "R", now.minusHours(1), now.plusHours(1), None, 1, isFinished = true)
+    )) {
+      assert(!page(cc).contains("""href="/monitor""""))
+    }
   }
 }

@@ -29,7 +29,6 @@ case class SubmitData(problem: String, compiler: Int, inline: String)
 class Application (cc: ControllerComponents,
                              silhouette: Silhouette[TeamsEnv],
                              dbConfig: DatabaseConfig[JdbcProfile],
-                             monitorModel: Monitor,
                             statusActorModel: StatusActorModel,
                             configuration: Configuration,
                             liveHooks: live.LiveHooks,
@@ -50,18 +49,6 @@ class Application (cc: ControllerComponents,
       .zip(db.run(Contests.getCompilers(contest).result))
 
   import scala.concurrent.ExecutionContext.Implicits.global
-
-  // The scoreboard of the team's round, rendered from the database once the round is over (re-read, so a round
-  // finished early is seen at once); 403 while it runs. Contestants have no live board.
-  def monitorDefault = silhouette.SecuredAction.async { implicit request =>
-    val team = request.identity
-    monitorModel.source.round(team.contest.id).flatMap { round =>
-      BoardAccess.decide(round, TeamViewer(team.team.id, team.contest.id), org.joda.time.DateTime.now) match {
-        case Left(result) => Future.successful(result)
-        case Right(contest) => monitorModel.source.board(contest.id).map(b => Ok(html.loggedinmonitor(contest, b, team)))
-      }
-    }
-  }
 
   private[this] def getSubmits(team: LoggedInTeam) = {
     db.run(Submits.getContestTeamSubmits(team.contest.id, team.team.id))

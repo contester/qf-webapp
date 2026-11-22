@@ -33,7 +33,7 @@ trait MyPostgresProfile extends ExPostgresProfile
     with HStoreImplicits
     with SearchImplicits
     with SearchAssistants {
-    /** `round_credentials.unrated`, the PG enum `credential_unrated`; NULL (None) is a rated participant. */
+    /** `participants.unrated`, the PG enum `credential_unrated`; NULL (None) is a rated participant. */
     implicit val unratedTypeMapper: slick.jdbc.JdbcType[Unrated] =
       createEnumJdbcType[Unrated]("credential_unrated", Unrated.toDb, Unrated.fromDb, quoteName = false)
     implicit val strListTypeMapper = new SimpleArrayJdbcType[String]("text").to(_.toList)

@@ -158,7 +158,6 @@ class I18nSpec extends AnyFunSuite {
       "index" -> views.html.index(loggedIn, Seq(fs)).body,
       "login" -> views.html.login(authForm).body,
       "showsubmit" -> views.html.showsubmit(loggedIn, Some(subDetails), testRows, None).body,
-      "loggedinmonitor" -> views.html.loggedinmonitor(contest, board, loggedIn).body,
       "admin/submits" -> views.html.admin.submits(AdminSubmitPage(Seq(adminRow), None, None), Map.empty, selected, admin, None, live = true, newest = true).body,
       "admin/customtests" -> views.html.admin.customtests(AdminCustomPage(Seq(AdminCustomRow(5, 1, "C++", now, None, 10, TimeMs(1), Memory(1024), 0, 4, 2, 0)), None, None), Map.empty, selected, None).body,
       "admin/showcustomtest" -> views.html.admin.showcustomtest(evalEntry, None, selected, canRerun = true).body,

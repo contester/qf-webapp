@@ -535,7 +535,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
     }
   }}
 
-  /** Sets round_credentials.unrated of the participant in the round: `none`, `not_rated` or `disqualified`. */
+  /** Sets participants.unrated of the participant in the round: `none`, `not_rated` or `disqualified`. */
   def setUnrated(contestID: Int, participantID: Int) = silhouette.SecuredAction(AdminPermissions.withModify(contestID)).async { implicit request =>
     val value = request.body.asFormUrlEncoded.flatMap(_.get("value")).flatMap(_.headOption)
     UnratedToggle.respond(value, RoundParticipants.setUnrated(db, contestID, participantID, _),

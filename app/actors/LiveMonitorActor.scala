@@ -27,7 +27,7 @@ object LiveMonitorActor {
   case class Finished(contest: Int, id: Int, compiled: Boolean, points: Option[Double])
   case class RejudgeRequested(id: Int)
   /**
-    * The round's participants changed (credential_changed: unrated, is_active; participant_changed: name, school;
+    * The round's participants changed (credential_changed: is_active; participant_changed: unrated, name, school;
     * round_changed). The team list is read again and each changed, new or vanished row is applied to the board.
     */
   case class TeamsChanged(contest: Int)

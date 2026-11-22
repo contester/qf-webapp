@@ -70,7 +70,7 @@ case class Contest(id: Int, name: String, startTime: DateTime, endTime: DateTime
     formatHMS(timeval)
 }
 
-/** round_credentials.unrated: None is a rated participant. */
+/** participants.unrated: None is a rated participant. */
 sealed trait Unrated
 /** Listed on the board, but without a place. */
 case object NotRated extends Unrated
@@ -211,7 +211,7 @@ object SlickModel {
 
   val schools = TableQuery[Schools]
 
-  case class Participants(tag: Tag) extends Table[(Int, Int, Int, Int, String, Int, Boolean)](tag, "participants") {
+  case class Participants(tag: Tag) extends Table[(Int, Int, Int, Int, String, Int, Boolean, Option[Unrated])](tag, "participants") {
     def id = column[Int]("id", O.PrimaryKey)
     def seasonId = column[Int]("season_id")
     def contestId = column[Int]("contest_id")
@@ -219,14 +219,15 @@ object SlickModel {
     def fullName = column[String]("full_name")
     def schoolId = column[Int]("school_id")
     def isDeleted = column[Boolean]("is_deleted")
+    def unrated = column[Option[Unrated]]("unrated")
 
-    override def * = (id, seasonId, contestId, seasonSeq, fullName, schoolId, isDeleted)
+    override def * = (id, seasonId, contestId, seasonSeq, fullName, schoolId, isDeleted, unrated)
   }
 
   val participants = TableQuery[Participants]
 
-  /** Read only, except `unrated`, which qf admins write. */
-  case class RoundCredentials(tag: Tag) extends Table[(Int, Int, Int, Int, Boolean, String, String, Option[Unrated])](tag, "round_credentials") {
+  /** Read only; owned by teacher-web. */
+  case class RoundCredentials(tag: Tag) extends Table[(Int, Int, Int, Int, Boolean, String, String)](tag, "round_credentials") {
     def id = column[Int]("id", O.PrimaryKey)
     def roundId = column[Int]("round_id")
     def contestId = column[Int]("contest_id")
@@ -234,9 +235,8 @@ object SlickModel {
     def isActive = column[Boolean]("is_active")
     def login = column[String]("login")
     def password = column[String]("password")
-    def unrated = column[Option[Unrated]]("unrated")
 
-    override def * = (id, roundId, contestId, participantId, isActive, login, password, unrated)
+    override def * = (id, roundId, contestId, participantId, isActive, login, password)
   }
 
   val roundCredentials = TableQuery[RoundCredentials]
@@ -284,7 +284,7 @@ object SlickModel {
     rc <- roundCredentials if rc.isActive
     p <- participants if p.id === rc.participantId && !p.isDeleted
     s <- schools if s.id === p.schoolId
-  } yield (rc, LiftedTeam(p.id, p.seasonSeq, p.fullName, s.name, s.city, rc.unrated))
+  } yield (rc, LiftedTeam(p.id, p.seasonSeq, p.fullName, s.name, s.city, p.unrated))
 
   val teamsOfRound = Compiled((roundID: Rep[Int]) => roundTeams.filter(_._1.roundId === roundID).map(_._2))
 

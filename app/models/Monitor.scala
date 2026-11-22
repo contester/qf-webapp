@@ -102,10 +102,10 @@ object Visibility {
   /** A round is over once it is finished or its end has come (ends_at inclusive). */
   def isOver(round: Contest, now: DateTime): Boolean = round.isFinished || !now.isBefore(round.endTime)
 
-  /** Admins see the board always; teams and the public only once the round is over. */
+  /** Admins always see the board; public and contestant scoreboards live in teacher-web. */
   def canSeeBoard(round: Contest, viewer: Viewer, now: DateTime): Boolean = viewer match {
     case AdminViewer => true
-    case _ => isOver(round, now)
+    case _ => false
   }
 }
 
