@@ -1,6 +1,6 @@
 package live
 
-import actors.LiveMonitorActor.{JoinAdmin, JoinAdminStatus}
+import actors.LiveMonitorActor.{JoinAdmin, JoinAdminStatus, JoinTeam}
 import controllers.LiveStreams
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -11,16 +11,37 @@ class LiveStreamsSpec extends AnyFunSuite {
   private def src(f: String) = new String(Files.readAllBytes(Paths.get(f)), "UTF-8")
 
   test("every live join is counted under the kind of feed and the contest it joins") {
+    assert(LiveStreams.feedOf(JoinTeam(4)) == (FeedKind.TeamMonitor, 4))
     assert(LiveStreams.feedOf(JoinAdmin(4)) == (FeedKind.AdminMonitor, 4))
     assert(LiveStreams.feedOf(JoinAdminStatus(4)) == (FeedKind.StatusRows, 4))
-    assert(FeedKind.all.map(_.id) == Seq("teamFeed", "adminMonitor", "adminFeed", "statusRows"))
+    assert(FeedKind.all.map(_.id) == Seq("teamMonitor", "teamFeed", "adminMonitor", "adminFeed", "statusRows"))
   }
 
   test("every route that opens a stream counts it") {
     assert(src("app/controllers/Application.scala").contains("FeedKind.TeamFeed, contestId)"))
     assert(src("app/controllers/AdminApplication.scala").contains("FeedKind.AdminFeed, contestId)"))
-    // The admin monitor and status routes go through LiveStreams.stream, which counts.
+    // The team monitor, admin monitor and status routes go through LiveStreams.stream, which counts.
     assert(src("app/controllers/LiveStreams.scala").contains("stats.track(kind, contest)"))
+  }
+
+  test("the team board join is built only by the actor and LiveStreams, and used only by authenticated Application monitor routes") {
+    assert(LiveStreams.teamJoin(7) == JoinTeam(7))
+    val root = Paths.get("app")
+    assert(Files.isDirectory(root), "tests must run from the project root")
+    val files = Files.walk(root).iterator().asScala.filter(p => p.toString.endsWith(".scala") || p.toString.endsWith(".html")).toList
+    val allowed = Set("app/actors/LiveMonitorActor.scala", "app/controllers/LiveStreams.scala")
+    val offenders = files.filter { p =>
+      val text = new String(Files.readAllBytes(p), "UTF-8")
+      text.contains("LiveMonitorActor.JoinTeam(") || text.contains("JoinTeam(") && text.contains("LiveMonitorActor")
+    }.map(_.toString).filterNot(allowed)
+    assert(offenders.isEmpty, offenders.toString)
+    val users = files.filter(p => new String(Files.readAllBytes(p), "UTF-8").contains("LiveStreams.teamJoin(")).map(_.toString).toSet
+    assert(users == Set("app/controllers/Application.scala"), users.toString)
+    val app = src("app/controllers/Application.scala")
+    Seq("def monitorDefault", "def monitorEvents").foreach { d =>
+      val at = app.indexOf(d)
+      assert(at >= 0 && app.substring(at, at + d.length + 80).contains("silhouette.SecuredAction"), d)
+    }
   }
 
   test("the contester page and its stream are for global admins only, and nothing else shows the link") {

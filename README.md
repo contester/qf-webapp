@@ -1,9 +1,9 @@
 # qf
 
 qf is the contest web front end: contestants log in with their round credentials, submit solutions, run custom
-tests, read clarifications and ask questions, and see their per-test results; admins watch the live points board,
-the submit status, rejudge, answer questions and manage a few round settings. Testing is done by director through
-its teacher-web bridge (`cmd/bridge-teacherweb` in the director repository); qf never talks to director itself.
+tests, watch the live scoreboard of their round, read clarifications and ask questions, and see their per-test results;
+admins watch the live points board, the submit status, rejudge, answer questions and manage a few round settings.
+Testing is done by director through its teacher-web bridge (`cmd/bridge-teacherweb` in the director repository); qf never talks to director itself.
 
 ## Database
 
@@ -108,7 +108,7 @@ notifications (`LISTEN testing_finished, eval_finished, round_changed, credentia
 the triggers are teacher-web's migrations). `NotifyListener` holds one connection of its own, opened from
 `slick.dbs.default.db.url` / `user` / `password` (not from the pool) with `ApplicationName=qf-notify-listener`,
 and reconnects with a backoff of 1 s doubling to 30 s. After every connect (the first one included) it catches up
-once, instead of replaying the notifications it missed: it drops the whole public board cache, makes the admin live
+once, instead of replaying the notifications it missed: it makes the live
 monitor reload every round, re-reads the current rounds (as if each had a `round_changed`) and drops rounds that are
 gone. No timer is involved.
 
@@ -127,14 +127,17 @@ Submits and custom tests are requests by themselves: the insert triggers notify 
 The scoreboard is a points board: per problem the best points of a team's finished, compiled submits (the points of
 each submit's current testing: a rejudge replaces them, never adds), the total, and places by total (equal totals
 share a place, the next one skips: 1, 1, 3). Not rated participants are listed after the ranked ones without a place;
-disqualified ones are not listed. Admins always see the real live board; public, joined multi-round, and grade-segregated scoreboards live in `teacher-web`.
+disqualified ones are not listed. There is no freeze: admins and logged-in participants see the real live board
+(participants see only the participant list without problems or scores before their round starts); public, joined
+multi-round, and grade-segregated scoreboards live in `teacher-web`.
 
-- `/admin/monitor/:id` (admins): the live board. The page carries the board the stream at `/admin/monitor/:id/events`
-  starts with; the stream then sends a `row` event for each changed row (a finished testing, an arrival or a rejudge:
-  `?N` marks N submits in flight, never counted as the best) and a whole `board` event when a row appears or goes
-  (a credential deactivated, a participant disqualified). Credential and participant edits (`credential_changed`,
-  `participant_changed`) re-read the round's participants and update the rows without a reload; a change of the
-  round's problems (`round_changed`) reloads the round. The page is sent `Cache-Control: no-store`.
+- `/monitor` (logged-in participants) and `/admin/monitor/:id` (admins): the live board. The page carries the board
+  the stream (`/monitor/events` for participants, `/admin/monitor/:id/events` for admins) starts with; the stream
+  then sends a `row` event for each changed row (a finished testing, an arrival or a rejudge: `?N` marks N submits in
+  flight, never counted as the best) and a whole `board` event when a row appears or goes (a credential deactivated, a
+  participant disqualified), or when a participant's round starts. Credential and participant edits
+  (`credential_changed`, `participant_changed`) re-read the round's participants and update the rows without a reload;
+  a change of the round's problems (`round_changed`) reloads the round. The page is sent `Cache-Control: no-store`.
 
 There are no static monitor files and no `monitor.*` settings any more (`monitor.disable_new_monitor`,
 `monitor.public_contests`, `monitor.public_max_connections`, `monitor.static_location` and the old interval keys are

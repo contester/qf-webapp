@@ -1,11 +1,14 @@
 package views
 
 import live.{LiveBoard, LiveCell, LiveJson}
-import models.ProblemColumn
+import models.{LoggedInTeam, ProblemColumn}
 import org.scalatest.funsuite.AnyFunSuite
-import org.stingray.contester.dbmodel.{NotRated, Team}
+import org.stingray.contester.dbmodel.{Contest, NotRated, Team}
 import play.api.i18n.{DefaultMessagesApi, Lang, MessagesImpl}
 import play.api.libs.json.Json
+import play.api.libs.typedmap.TypedMap
+import play.api.mvc.{AnyContentAsEmpty, Headers}
+import play.api.mvc.request.{RemoteConnection, RequestFactory, RequestTarget}
 
 import scala.io.Source
 
@@ -43,10 +46,31 @@ class LiveTableSpec extends AnyFunSuite {
   }
 
   test("the admin page shell carries the table and the labels the script needs, and no freeze banner") {
-    val shell = html.liveshell(org.stingray.contester.dbmodel.Contest(1, "R", org.joda.time.DateTime.now.minusHours(1),
+    val shell = html.liveshell(Contest(1, "R", org.joda.time.DateTime.now.minusHours(1),
       org.joda.time.DateTime.now.plusHours(1), None, 1), LiveTableFixture.board).body
     assert(shell.contains(html.livetable(LiveTableFixture.board).body.trim))
     assert(shell.contains("data-label-total=\"label.total\""))
     assert(!shell.contains("contest-frozen") && !shell.contains("frozen"))
+  }
+
+  test("currentTeam adds class=\"info\" only to that team's row, and teamsOnly renders without problem columns") {
+    val rendered = html.livetable(LiveTableFixture.board, currentTeam = 2).body.trim
+    assert(rendered.contains("""<tr data-team="1">"""))
+    assert(rendered.contains("""<tr data-team="2" class="info">"""))
+
+    val teamsOnly = LiveBoard.build(Nil, LiveTableFixture.teams, Map.empty)
+    val teamsRendered = html.livetable(teamsOnly, currentTeam = 1).body.trim
+    assert(teamsRendered.contains("""<tr data-team="1" class="info">"""))
+    assert(teamsRendered.contains("""<tr data-team="2">"""))
+    assert(!teamsRendered.contains("points-cell"))
+
+    implicit val request = RequestFactory.plain.createRequest(RemoteConnection("127.0.0.1", secure = false, None), "GET",
+      RequestTarget("/monitor", "/monitor", Map.empty), "HTTP/1.1", Headers(), TypedMap.empty, AnyContentAsEmpty)
+    val contest = Contest(1, "R", org.joda.time.DateTime.now.minusHours(1), org.joda.time.DateTime.now.plusHours(1), None, 1)
+    val loggedIn = LoggedInTeam("u2", contest, LiveTableFixture.teams(1), Nil)
+    val page = html.livemonitor(contest, loggedIn, LiveTableFixture.board).body
+    assert(page.contains("liveMonitor('/monitor/events', '#live-monitor', 2);"))
+    assert(page.contains("""<tr data-team="2" class="info">"""))
+    assert(page.contains("tr.info > td.full-score"))
   }
 }

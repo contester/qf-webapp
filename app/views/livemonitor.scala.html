@@ -1,0 +1,6 @@
+@import org.stingray.contester.dbmodel._
+@(contest: Contest, loggedIn: LoggedInTeam, initial: live.LiveBoard)(implicit request: RequestHeader, messages: Messages)
+@* The participant's live monitor (real points board, no freeze; teams only before the start). *@
+@main(loggedIn, tab = "monitor", scripts = livescript(routes.Application.monitorEvents.url, loggedIn.team.id)) {
+@liveshell(contest, initial, loggedIn.team.id)
+}

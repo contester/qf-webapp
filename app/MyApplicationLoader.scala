@@ -146,7 +146,7 @@ class MyComponents(context: ApplicationLoader.Context)
   // Minutes before the start and the end at which palevo is told "in N minutes"; edges of the status actor's round clock.
   lazy val countdownConfig: palevo.CountdownConfig = palevo.CountdownConfig(configuration)
 
-  // The admin live monitor (the only scoreboard served by qf-webapp); hears every change of a board through the live hooks.
+  // The live monitor (admin and participant scoreboards); hears every change of a board through the live hooks.
   lazy val liveMonitor: ActorRef = actorSystem.actorOf(actors.LiveMonitorActor.props(dbConfig.db,
     () => models.Rounds.currentRounds(dbConfig.db)(executionContext), palevoSink,
     actors.LiveMonitorActor.DbStatusRows.fromDb(dbConfig.db, statusActorModel.teamClient, actorSystem.scheduler, defaultMessages)(executionContext)),

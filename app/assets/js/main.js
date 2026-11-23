@@ -397,6 +397,7 @@ function listenOnStatus(path, canRejudge, newest, teamFilter) {
 
 function listenOnContester(path, table) {
     var labels = {
+        teamMonitor: qfMsg('contesterTeamMonitor', 'Монитор участников'),
         teamFeed: qfMsg('contesterTeamFeed', 'Участники'),
         adminMonitor: qfMsg('contesterAdminMonitor', 'Монитор жюри'),
         adminFeed: qfMsg('contesterAdminFeed', 'События жюри'),
@@ -456,7 +457,7 @@ function listenOnAdmin(path, iconbase) {
 
     return listenV2(path, setup, setConnectedBadge);
 }
-// Admin live monitor (points). The markup must match app/views/livetable.scala.html exactly (contract documented
+// Live monitor (points). The markup must match app/views/livetable.scala.html exactly (contract documented
 // there, pinned by test/resources/live/livetable.html; check with `node test/js/livetable-check.js`).
 function liveEsc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -516,8 +517,9 @@ function liveFlash(tr, oldCells, moved) {
     }
 }
 
-function liveRowHtml(problems, row, ofWord) {
-    var h = '<tr data-team="' + row.team + '"><th scope="row">' + liveEsc(liveRankText(row.place)) + '</th>' +
+function liveRowHtml(problems, row, ofWord, currentTeamId) {
+    var cls = (currentTeamId > 0 && row.team === currentTeamId) ? ' class="info"' : '';
+    var h = '<tr data-team="' + row.team + '"' + cls + '><th scope="row">' + liveEsc(liveRankText(row.place)) + '</th>' +
         '<td>' + row.number + '</td><td>' + liveEsc(row.name) + '<br/><small>' + liveEsc(row.school) + '</small></td>';
     for (var i = 0; i < problems.length; i++) {
         h += liveCellHtml(row.cells ? row.cells[problems[i].id] : null, problems[i].max, ofWord);
@@ -525,7 +527,7 @@ function liveRowHtml(problems, row, ofWord) {
     return h + '<td class="text-center"><strong>' + liveEsc(row.total) + '</strong></td></tr>';
 }
 
-function liveTableHtml(board, labels) {
+function liveTableHtml(board, labels, currentTeamId) {
     var h = '<table class="table table-hover table-bordered table-responsive points-board"><thead><tr>' +
         '<th>' + liveEsc(labels.rank) + '</th><th>№</th><th>' + liveEsc(labels.team) + '</th>';
     for (var i = 0; i < board.problems.length; i++) {
@@ -535,13 +537,13 @@ function liveTableHtml(board, labels) {
     }
     h += '<th style="text-align: center;">' + liveEsc(labels.total) + '</th></tr></thead><tbody>\n';
     for (var j = 0; j < board.rows.length; j++) {
-        h += liveRowHtml(board.problems, board.rows[j], labels.of) + '\n';
+        h += liveRowHtml(board.problems, board.rows[j], labels.of, currentTeamId) + '\n';
     }
     return h + '</tbody></table>';
 }
 
-// Fills containerSelector from the admin live stream at eventsPath.
-function liveMonitor(eventsPath, containerSelector) {
+// Fills containerSelector from the live stream at eventsPath; currentTeamId (> 0) gets the `info` row.
+function liveMonitor(eventsPath, containerSelector, currentTeamId) {
     var box = $(containerSelector);
     var labels = {
         rank: box.attr('data-label-rank') || '',
@@ -556,7 +558,7 @@ function liveMonitor(eventsPath, containerSelector) {
     var setup = function(add) {
         add('board', function(b) {
             problems = b.problems;
-            box.html(liveTableHtml(b, labels));
+            box.html(liveTableHtml(b, labels, currentTeamId));
         });
 
         add('row', function(e) {
@@ -568,7 +570,7 @@ function liveMonitor(eventsPath, containerSelector) {
             var oldRank = old.children('th').first().text();
             var oldCells = liveCellsOf(old);
             old.remove();
-            var tr = $(liveRowHtml(problems, e.row, labels.of));
+            var tr = $(liveRowHtml(problems, e.row, labels.of, currentTeamId));
             var rows = tbody.children('tr');
             if (e.pos < rows.length) {
                 rows.eq(e.pos).before(tr);

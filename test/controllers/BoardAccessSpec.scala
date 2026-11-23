@@ -18,7 +18,7 @@ import scala.io.Source
 
 /**
   * The page-level visibility of the scoreboard: the pure decision every monitor page uses (BoardAccess.decide).
-  * Only admins view the scoreboard in qf-webapp; contestant and public scoreboards are in teacher-web.
+  * Admins always view any round; participants view their own round; public scoreboards live in teacher-web.
   */
 class BoardAccessSpec extends TestKit(ActorSystem("BoardAccessSpec", ConfigFactory.parseString(
   """
@@ -61,16 +61,17 @@ class BoardAccessSpec extends TestKit(ActorSystem("BoardAccessSpec", ConfigFacto
       assert(BoardAccess.decide(None, v, running).left.map(_.header.status) == Left(404))
   }
 
-  test("decide: teams and the public always get 403 while admins always get the round") {
-    for (rd <- Seq(round(), round(finished = true)); now <- Seq(running, end, end.plusHours(1))) {
-      for (v <- Seq(TeamViewer(1, 5), Anonymous)) {
+  test("decide: admins and participants of the round get the round; other rounds and the public get 403") {
+    for (rd <- Seq(round(), round(finished = true)); now <- Seq(start.minusHours(1), running, end, end.plusHours(1))) {
+      assert(BoardAccess.decide(Some(rd), AdminViewer, now) == Right(rd))
+      assert(BoardAccess.decide(Some(rd), TeamViewer(1, 5), now) == Right(rd))
+      for (v <- Seq(TeamViewer(1, 6), Anonymous)) {
         val r = BoardAccess.decide(Some(rd), v, now)
         assert(r.isLeft)
         val res = r.left.get
         assert(res.header.status == 403)
         assert(body(res) == notPublished)
       }
-      assert(BoardAccess.decide(Some(rd), AdminViewer, now) == Right(rd))
     }
   }
 }

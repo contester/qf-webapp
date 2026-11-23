@@ -77,6 +77,10 @@ object MonitorPoints {
     MonitorPoints(problems, Board.rank(rows))
   }
 
+  /** What a participant sees before the round starts: active non-disqualified participants, no problems or scores. */
+  def teamsOnly(board: MonitorPoints): MonitorPoints =
+    MonitorPoints(Nil, Board.rank(board.rows.map(r => TeamRow(r.team, Nil))))
+
   /** Loads the board of a round from the database: three queries, problems ordered by id. */
   def load(db: JdbcBackend#DatabaseDef, roundId: Int)(implicit ec: ExecutionContext): Future[MonitorPoints] = {
     import org.stingray.contester.dbmodel.MyPostgresProfile.api._
@@ -99,13 +103,17 @@ case class TeamViewer(participantId: Int, roundId: Int) extends Viewer
 case object Anonymous extends Viewer
 
 object Visibility {
+  /** A round has started once it is finished or its start has come (starts_at inclusive). */
+  def isStarted(round: Contest, now: DateTime): Boolean = round.isFinished || !now.isBefore(round.startTime)
+
   /** A round is over once it is finished or its end has come (ends_at inclusive). */
   def isOver(round: Contest, now: DateTime): Boolean = round.isFinished || !now.isBefore(round.endTime)
 
-  /** Admins always see the board; public and contestant scoreboards live in teacher-web. */
+  /** Admins always see the board; logged-in participants see their own round's board; public boards live in teacher-web. */
   def canSeeBoard(round: Contest, viewer: Viewer, now: DateTime): Boolean = viewer match {
     case AdminViewer => true
-    case _ => false
+    case TeamViewer(_, roundId) => round.id == roundId
+    case Anonymous => false
   }
 }
 

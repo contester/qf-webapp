@@ -11,6 +11,10 @@ GET /evaldetails/:id controllers.ServerSideEval.details(id: Long)
 
 POST /ackMessage controllers.Application.ackMessage
 
+GET /monitor controllers.Application.monitorDefault
+GET /monitor/ controllers.Application.monitorDefault
+GET /monitor/events controllers.Application.monitorEvents
+
 GET /submit controllers.Application.submit
 POST /submit controllers.Application.submitPost
 GET /submit/:submitId controllers.Application.showSubmit(submitId: Int)

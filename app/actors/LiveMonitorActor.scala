@@ -42,9 +42,10 @@ object LiveMonitorActor {
   case object ReloadAll
 
   // Each join is answered with a Source[Event, NotUsed] whose first element is the `board` event (`ready` for the
-  // status rows), or with Status.Failure when the contest is unknown. There are only admin joins: nobody else gets a
-  // live board (contestants and the public see the board once the round is over, rendered from the database).
+  // status rows), or with Status.Failure when the contest is unknown. Participants get teams only before the start
+  // and the real live board once started (no freeze); admins always get the real live board.
   sealed trait Join
+  case class JoinTeam(contest: Int) extends Join
   case class JoinAdmin(contest: Int) extends Join
   /**
     * The rows of the admin status page: a `ready` event first, then a `statusRow` event for every submit that arrives,
@@ -188,7 +189,8 @@ object LiveMonitorActor {
   private case class StatusRowReady(seq: Long, id: Int, result: Try[Option[StatusRow]])
 
   private sealed trait Viewer
-  private case object BoardViewer extends Viewer
+  private case object AdminBoardViewer extends Viewer
+  private case object TeamBoardViewer extends Viewer
   // Not a board: the rows of the status page.
   private case object StatusViewer extends Viewer
 
@@ -200,11 +202,15 @@ object LiveMonitorActor {
 
   private val pingEvent = Event("", None, Some("ping"))
   private val roundChangedReason = "round changed"
+
+  /** What a participant sees before the round starts: active non-disqualified participants in number order, no problems or scores. */
+  private[actors] def teamsOnly(lc: LiveContest): LiveBoard =
+    LiveBoard.build(Nil, lc.teamList, Map.empty)
 }
 
 /**
-  * Owns one LiveContest per contest, applies submit events to it and streams the points board to admins over SSE.
-  * Nothing else gets a live board, and nothing is written to files.
+  * Owns one LiveContest per contest, applies submit events to it and streams the points board to admins and
+  * participants over SSE. Nothing is written to files.
   *
   * Startup loads every contest before any event is handled (Stash). Each event is applied inside Try: a failure is
   * logged and the contest is rebuilt from the database (rate-limited). The database is read only at startup, for a
@@ -349,7 +355,9 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
     }
 
     case Snapshot(j) =>
-      val board = contests.get(contestOf(j)).map(st => Try(st.live.board))
+      val board = viewerOf(j).flatMap { case (cid, viewer) =>
+        contests.get(cid).map(st => Try(boardFor(st, viewer)))
+      }
       sender() ! (board match {
         case Some(Success(b)) => b
         case Some(Failure(e)) => Status.Failure(e)
@@ -359,12 +367,24 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
     case Register(cid, viewer, q) => register(cid, viewer, q)
     case Unregister(cid, q) => unregister(cid, q)
 
-    // A round clock edge (no timer of this actor's own): at the end the final standings become public (see
-    // StandingsAnnouncer). The clock's row is used, as this actor may not have heard of an early is_finished yet.
-    // Idempotent: observing the same board twice says nothing new.
-    case RoundClockActor.Fired(_, c) =>
+    // A round clock edge (no timer of this actor's own): at the start participants switch to the live board;
+    // at the end the final standings become public (see StandingsAnnouncer). The clock's row is used, as this
+    // actor may not have heard of an early is_finished yet. Idempotent: observing the same board twice says nothing new.
+    case RoundClockActor.Fired(edge, c) =>
       expireRejudges()
-      contests.get(c.id).foreach(st => guarded(c.id, st)(observePalevo(st, c)))
+      contests.get(c.id).foreach { st =>
+        guarded(c.id, st) {
+          observePalevo(st, c)
+          edge match {
+            case _: RoundClock.Started if isStarted(st.live.contest) =>
+              publishTeamBoard(c.id, st.live.board)
+            case _: RoundClock.Ended if c.isFinished && !isStarted(st.live.contest) =>
+              st.live.onContest(c)
+              publishTeamBoard(c.id, st.live.board)
+            case _ => ()
+          }
+        }
+      }
 
     case StartReload(cid) =>
       contests.get(cid).foreach { st =>
@@ -399,9 +419,17 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
       }
   }
 
+  private def isStarted(c: Contest): Boolean = models.Visibility.isStarted(c, clock.now())
+
+  private def boardFor(st: ContestState, viewer: Viewer): LiveBoard = viewer match {
+    case TeamBoardViewer if !isStarted(st.live.contest) => teamsOnly(st.live)
+    case _ => st.live.board
+  }
+
   private def notFound(cid: Int) = new NoSuchElementException(s"live monitor: no contest $cid")
 
   private def contestOf(j: Join): Int = j match {
+    case JoinTeam(c) => c
     case JoinAdmin(c) => c
     case JoinAdminStatus(c) => c
   }
@@ -410,7 +438,8 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
 
   /** The contest and viewer of a join. */
   private def viewerOf(j: Join): Option[(Int, Viewer)] = j match {
-    case JoinAdmin(cid) => Some(cid -> BoardViewer)
+    case JoinTeam(cid) => Some(cid -> TeamBoardViewer)
+    case JoinAdmin(cid) => Some(cid -> AdminBoardViewer)
     case JoinAdminStatus(cid) => Some(cid -> StatusViewer)
   }
 
@@ -478,8 +507,11 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
     result match {
       case Success(ts) =>
         st.loading.foreach(l => l.teams = Some(ts))
+        val before = if (!isStarted(st.live.contest)) Some(teamsOnly(st.live)) else None
         Try(st.live.onTeams(ts)) match {
-          case Success(d) => changed(cid, st, d)
+          case Success(d) =>
+            val teamUp = before.map(_ => teamsOnly(st.live)).filterNot(before.contains)
+            changed(cid, st, d, teamUp)
           case Failure(e) => failed(cid, st, e)
         }
       case Failure(e) =>
@@ -613,7 +645,12 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
         val wasDirty = st.dirty
         st.live = fresh
         st.dirty = false
-        if (diffs.nonEmpty || wasDirty) changed(cid, st, Delta(Seq(WholeOut(fresh.board))))
+        if (diffs.nonEmpty || wasDirty) {
+          val teamUp =
+            if (!isStarted(fresh.contest) && (wasDirty || teamsOnly(old) != teamsOnly(fresh))) Some(teamsOnly(fresh))
+            else None
+          changed(cid, st, Delta(Seq(WholeOut(fresh.board))), teamUp)
+        }
         true
     }
   }
@@ -627,9 +664,13 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
     case Some(st) if st.live.contest == c =>
       if (st.loading.isEmpty) startLoad(c.id, st, roundChangedReason) else st.reloadAgain = true
     case Some(st) =>
+      val wasStarted = isStarted(st.live.contest)
       Try(st.live.onContest(c)) match {
         case Success(d) =>
           changed(c.id, st, d)
+          val nowStarted = isStarted(c)
+          if (wasStarted != nowStarted)
+            publishTeamBoard(c.id, if (nowStarted) st.live.board else teamsOnly(st.live))
           // A new end or is_finished may make the round over without changing the board.
           guarded(c.id, st)(observePalevo(st))
         case Failure(e) => failed(c.id, st, e)
@@ -641,10 +682,10 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
       }
   }
 
-  /** After a change: stream it to the admins and feed palevo. */
-  private def changed(cid: Int, st: ContestState, d: Delta): Unit =
+  /** After a change: stream it to admins and participants and feed palevo. */
+  private def changed(cid: Int, st: ContestState, d: Delta, teamUpdate: Option[LiveBoard] = None): Unit =
     guarded(cid, st) {
-      publish(cid, st, d)
+      publish(cid, st, d, teamUpdate)
       if (d.nonEmpty) observePalevo(st)
     }
 
@@ -685,7 +726,7 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
         subs(q) = viewer
         viewer match {
           case StatusViewer => offer(cid, q, LiveJson.event("ready", Json.obj()))
-          case BoardViewer => offer(cid, q, Try(boardEvent(st.live.board)).getOrElse(boardEvent(LiveBoard.empty)))
+          case v => offer(cid, q, Try(boardEvent(boardFor(st, v))).getOrElse(boardEvent(LiveBoard.empty)))
         }
       case None => q.complete()
     }
@@ -738,11 +779,24 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
       }
     }
 
-  private def publish(cid: Int, st: ContestState, d: Delta): Unit =
+  private def publishTeamBoard(cid: Int, board: LiveBoard): Unit =
+    subscribers.get(cid).filter(_.nonEmpty).foreach { subs =>
+      lazy val event = boardEvent(board)
+      subs.toList.foreach {
+        case (q, TeamBoardViewer) => offer(cid, q, event)
+        case _ => ()
+      }
+    }
+
+  private def publish(cid: Int, st: ContestState, d: Delta, teamUpdate: Option[LiveBoard] = None): Unit =
     subscribers.get(cid).filter(_.nonEmpty).foreach { subs =>
       lazy val events = d.board.map(plainEvent)
+      lazy val teamEvents =
+        if (isStarted(st.live.contest)) events
+        else teamUpdate.map(boardEvent).toSeq
       subs.toList.foreach {
-        case (q, BoardViewer) => events.foreach(offer(cid, q, _))
+        case (q, AdminBoardViewer) => events.foreach(offer(cid, q, _))
+        case (q, TeamBoardViewer) => teamEvents.foreach(offer(cid, q, _))
         case (_, StatusViewer) => ()
       }
     }

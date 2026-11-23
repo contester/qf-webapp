@@ -12,7 +12,7 @@ import play.api.mvc.{Result, Results}
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 
-/** Joins a live monitor stream and turns it into an SSE response; for the admin routes only. */
+/** Joins a live monitor stream and turns it into an SSE response; shared by the participant and admin routes. */
 object LiveStreams extends Results {
   private val askTimeout = 3.seconds
   private val snapshotTimeout = 1.second
@@ -41,7 +41,10 @@ object LiveStreams extends Results {
   /** The page is a snapshot of a moving board; nothing may cache it. */
   val pageHeaders: Seq[(String, String)] = Seq(HeaderNames.CACHE_CONTROL -> "no-store")
 
-  /** The admin live board of a round (admins only: nobody else gets a live board). */
+  /** The participant live board of a round (teams only before the start; real board once started). */
+  def teamJoin(contestId: Int): actors.LiveMonitorActor.JoinTeam = actors.LiveMonitorActor.JoinTeam(contestId)
+
+  /** The admin live board of a round (real board always). */
   def adminJoin(contestId: Int): actors.LiveMonitorActor.JoinAdmin = actors.LiveMonitorActor.JoinAdmin(contestId)
 
   /** The rows of the admin status page (every submit of the round). */
@@ -53,11 +56,12 @@ object LiveStreams extends Results {
 
   /** The kind of feed and the contest a join is counted under on the contester page. */
   def feedOf(j: actors.LiveMonitorActor.Join): (FeedKind, Int) = j match {
+    case actors.LiveMonitorActor.JoinTeam(c) => (FeedKind.TeamMonitor, c)
     case actors.LiveMonitorActor.JoinAdmin(c) => (FeedKind.AdminMonitor, c)
     case actors.LiveMonitorActor.JoinAdminStatus(c) => (FeedKind.StatusRows, c)
   }
 
-  /** The whole route body for the admin streams, counted in `stats`; 404 without a live monitor. */
+  /** The whole route body for the participant and admin streams, counted in `stats`; 404 without a live monitor. */
   def stream(ref: Option[ActorRef], msg: actors.LiveMonitorActor.Join, stats: ConnectionStats)(implicit ec: ExecutionContext): Future[Result] =
     ref match {
       case None => Future.successful(NotFound)

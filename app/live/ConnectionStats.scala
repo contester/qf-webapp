@@ -15,14 +15,15 @@ import scala.concurrent.duration._
 sealed abstract class FeedKind(val id: String)
 
 object FeedKind {
+  case object TeamMonitor extends FeedKind("teamMonitor")
   case object TeamFeed extends FeedKind("teamFeed")
-  /** The admin live board (there is no team or public live board). */
+  /** The admin live board (there is no public live board). */
   case object AdminMonitor extends FeedKind("adminMonitor")
   case object AdminFeed extends FeedKind("adminFeed")
   case object StatusRows extends FeedKind("statusRows")
 
   /** In the order of the columns. */
-  val all: Seq[FeedKind] = Seq(TeamFeed, AdminMonitor, AdminFeed, StatusRows)
+  val all: Seq[FeedKind] = Seq(TeamMonitor, TeamFeed, AdminMonitor, AdminFeed, StatusRows)
 }
 
 /**

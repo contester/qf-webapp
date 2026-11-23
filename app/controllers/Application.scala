@@ -29,9 +29,11 @@ case class SubmitData(problem: String, compiler: Int, inline: String)
 class Application (cc: ControllerComponents,
                              silhouette: Silhouette[TeamsEnv],
                              dbConfig: DatabaseConfig[JdbcProfile],
+                             monitorModel: Monitor,
                             statusActorModel: StatusActorModel,
                             configuration: Configuration,
                             liveHooks: live.LiveHooks,
+                            liveMonitor: live.LiveMonitorRef,
                             stats: live.ConnectionStats,
                             ws: WSClient) extends AbstractController(cc) with I18nSupport with Logging {
 
@@ -49,6 +51,33 @@ class Application (cc: ControllerComponents,
       .zip(db.run(Contests.getCompilers(contest).result))
 
   import scala.concurrent.ExecutionContext.Implicits.global
+
+  // The participant's live points board (no freeze; teams only before the start). Falls back to a DB render when no snapshot is available.
+  def monitorDefault = silhouette.SecuredAction.async { implicit request =>
+    val team = request.identity
+    val now = org.joda.time.DateTime.now
+    monitorModel.source.round(team.contest.id).flatMap { round =>
+      BoardAccess.decide(round, TeamViewer(team.team.id, team.contest.id), now) match {
+        case Left(result) => Future.successful(result)
+        case Right(contest) =>
+          LiveStreams.snapshot(liveMonitor.ref, LiveStreams.teamJoin(contest.id)).flatMap {
+            case Some(initial) =>
+              Future.successful(Ok(html.livemonitor(contest, team, initial))
+                .withHeaders(LiveStreams.pageHeaders: _*))
+            case None =>
+              monitorModel.source.board(contest.id).map { board =>
+                val visible = if (Visibility.isStarted(contest, now)) board else MonitorPoints.teamsOnly(board)
+                Ok(html.loggedinmonitor(contest, visible, team))
+                  .withHeaders(LiveStreams.pageHeaders: _*)
+              }
+          }
+      }
+    }
+  }
+
+  def monitorEvents = silhouette.SecuredAction.async { implicit request =>
+    LiveStreams.stream(liveMonitor.ref, LiveStreams.teamJoin(request.identity.contest.id), stats)
+  }
 
   private[this] def getSubmits(team: LoggedInTeam) = {
     db.run(Submits.getContestTeamSubmits(team.contest.id, team.team.id))

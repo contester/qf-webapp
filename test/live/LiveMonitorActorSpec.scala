@@ -12,11 +12,11 @@ import com.typesafe.config.ConfigFactory
 import org.joda.time.DateTime
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuiteLike
-import org.stingray.contester.dbmodel.Contest
+import org.stingray.contester.dbmodel.{Contest, Disqualified, NotRated}
 import actors.{RoundClock, RoundClockActor}
 import palevo.{ContestEnding, ContestRescheduled, ContestStarting, FinalStandings, FirstSolveContest, JuryAudience, PalevoEvent, PalevoSink, PublicAudience}
 import play.api.libs.EventSource.Event
-import play.api.libs.json.JsValue
+import play.api.libs.json.{JsObject, JsValue}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
@@ -438,5 +438,115 @@ class LiveMonitorActorSpec extends TestKit(ActorSystem("LiveMonitorActorSpec", C
     probe.expectMsg(TeamsChanged(5))
     probe.expectMsg(ContestRemoved(4))
     NoopLiveHooks.rejudged(1)
+  }
+
+  test("before the start JoinTeam and Snapshot(JoinTeam) get teamsOnly while JoinAdmin still sees the real board") {
+    val ts = teams :+ team(4).copy(unrated = Some(NotRated)) :+ team(5).copy(unrated = Some(Disqualified))
+    val subs = Seq(rec(1, 1, "A", running, ok))
+    val f = new Fixture(t0.minusMinutes(5), overrideData = Map(1 -> ContestData(problems, ts, subs)))
+
+    val tb = next(f.subscribe(JoinTeam(1)), "board")
+    assert((tb \ "problems").as[Seq[JsValue]].isEmpty)
+    val rows = (tb \ "rows").as[Seq[JsValue]]
+    assert(rows.map(r => ((r \ "team").as[Int], (r \ "place").asOpt[Int], (r \ "total").as[String])) ==
+      Seq((1, Some(1), "0"), (2, Some(1), "0"), (3, Some(1), "0"), (4, None, "0")))
+    assert(rows.forall(r => (r \ "cells").as[JsObject].value.isEmpty))
+
+    val probe = TestProbe()
+    probe.send(f.actor, Snapshot(JoinTeam(1)))
+    val snap = probe.expectMsgType[LiveBoard](5.seconds)
+    assert(snap == LiveBoard.build(Nil, ts, Map.empty))
+
+    val ab = next(f.subscribe(JoinAdmin(1)), "board")
+    assert((ab \ "problems").as[Seq[JsValue]].map(p => (p \ "id").as[String]) == problemIds)
+    assert(best(cellJs(ab, 1, "A")).contains("10"))
+    f.stop()
+  }
+
+  test("before the start submit events never reach JoinTeam while TeamsChanged updates teamsOnly") {
+    val f = new Fixture(t0.minusMinutes(5))
+    val adm = f.subscribe(JoinAdmin(1))
+    val tm = f.subscribe(JoinTeam(1))
+    next(adm, "board")
+    next(tm, "board")
+
+    f.actor ! Arrived(1, rec(21, 2, "B", t0.minusMinutes(2)))
+    next(adm, "row")
+    f.actor ! Finished(1, 21, compiled = true, Some(7.0))
+    next(adm, "row")
+    f.actor ! RejudgeRequested(21)
+    next(adm, "row")
+    tm.expectNoMessage(250.millis)
+
+    f.teamLists = Map(1 -> (teams :+ team(4)))
+    f.actor ! TeamsChanged(1)
+    assert((next(adm, "board") \ "rows").as[Seq[JsValue]].size == 4)
+    val tb = next(tm, "board")
+    assert((tb \ "problems").as[Seq[JsValue]].isEmpty)
+    assert((tb \ "rows").as[Seq[JsValue]].map(r => (r \ "team").as[Int]) == Seq(1, 2, 3, 4))
+    assert((tb \ "rows").as[Seq[JsValue]].forall(r => (r \ "total").as[String] == "0"))
+    f.stop()
+  }
+
+  test("at RoundClock.Started JoinTeam gets the live board and streams every submit with no freeze") {
+    val f = new Fixture(t0.minusMinutes(1), subs = Map(1 -> Seq(rec(1, 1, "A", running, ok))))
+    val tm = f.subscribe(JoinTeam(1))
+    assert((next(tm, "board") \ "problems").as[Seq[JsValue]].isEmpty)
+
+    f.clock.at = t0
+    system.eventStream.publish(RoundClockActor.Fired(RoundClock.Started(1), contest()))
+    val started = next(tm, "board")
+    assert((started \ "problems").as[Seq[JsValue]].map(p => (p \ "id").as[String]) == problemIds)
+    assert(best(cellJs(started, 1, "A")).contains("10"))
+
+    // During the last hour (no freeze) and after the end, JoinTeam streams row events identically to JoinAdmin.
+    f.clock.at = late
+    f.actor ! Arrived(1, rec(22, 2, "B", late))
+    assert(pending(rowCellJs(next(tm, "row"), "B")) == 1)
+    f.actor ! Finished(1, 22, compiled = true, Some(8.0))
+    val done = next(tm, "row")
+    assert(best(rowCellJs(done, "B")).contains("8") && (done \ "row" \ "total").as[String] == "8")
+    f.actor ! RejudgeRequested(22)
+    assert(pending(rowCellJs(next(tm, "row"), "B")) == 1)
+
+    f.clock.at = t0.plusHours(6)
+    f.actor ! Finished(1, 22, compiled = true, Some(9.0))
+    assert(best(rowCellJs(next(tm, "row"), "B")).contains("9"))
+    f.stop()
+  }
+
+  test("an early is_finished clock edge before startTime pushes the full board to JoinTeam") {
+    val f = new Fixture(t0.minusMinutes(1), subs = Map(1 -> Seq(rec(1, 1, "A", running, ok))))
+    val tm = f.subscribe(JoinTeam(1))
+    assert((next(tm, "board") \ "problems").as[Seq[JsValue]].isEmpty)
+
+    f.actor ! RoundClockActor.Fired(RoundClock.Ended(1), contest().copy(isFinished = true))
+    val fin = next(tm, "board")
+    assert((fin \ "problems").as[Seq[JsValue]].map(p => (p \ "id").as[String]) == problemIds)
+    assert(best(cellJs(fin, 1, "A")).contains("10"))
+    f.stop()
+  }
+
+  test("ContestChanged moving startTime across now switches open JoinTeam streams between teamsOnly and full board") {
+    val f = new Fixture(t0.minusMinutes(5), subs = Map(1 -> Seq(rec(1, 1, "A", running, ok))))
+    val tm = f.subscribe(JoinTeam(1))
+    assert((next(tm, "board") \ "problems").as[Seq[JsValue]].isEmpty)
+
+    f.actor ! ContestChanged(contest().copy(startTime = t0.minusMinutes(10)))
+    assert((next(tm, "board") \ "problems").as[Seq[JsValue]].map(p => (p \ "id").as[String]) == problemIds)
+
+    f.actor ! ContestChanged(contest().copy(startTime = t0.plusMinutes(10)))
+    assert((next(tm, "board") \ "problems").as[Seq[JsValue]].isEmpty)
+    f.stop()
+  }
+
+  test("an unknown contest is refused for JoinTeam and Snapshot(JoinTeam)") {
+    val f = new Fixture(running)
+    val probe = TestProbe()
+    probe.send(f.actor, JoinTeam(42))
+    probe.expectMsgType[akka.actor.Status.Failure](5.seconds)
+    probe.send(f.actor, Snapshot(JoinTeam(42)))
+    probe.expectMsgType[akka.actor.Status.Failure](5.seconds)
+    f.stop()
   }
 }

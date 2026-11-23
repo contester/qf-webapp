@@ -1,13 +1,14 @@
-@(board: live.LiveBoard)(implicit messages: Messages)
+@(board: live.LiveBoard, currentTeam: Int = 0)(implicit messages: Messages)
 @*
-  Admin live board markup contract. liveTableHtml() in app/assets/js/main.js builds the SAME string from a `board`
+  Live board markup contract. liveTableHtml() in app/assets/js/main.js builds the SAME string from a `board`
   event; test/resources/live/livetable.html pins it (views.LiveTableSpec, test/js/livetable-check.js).
   - <table class="table table-hover table-bordered table-responsive points-board"><thead><tr>, then
     <th>rank</th><th>№</th><th>team</th>, then per problem
     <th style="text-align: center;" title="NAME">ID<div style="font-size: 65%;">NAME (MAX)</div></th>, then
     <th style="text-align: center;">total</th></tr></thead><tbody> and a newline.
   - One line per row, in board order, each followed by a newline:
-    <tr data-team="ID"><th scope="row">PLACE</th> (empty for a team that is not rated) <td>NUMBER</td>
+    <tr data-team="ID"> (class="info" added when currentTeam > 0 && ID == currentTeam) <th scope="row">PLACE</th>
+    (empty for a team that is not rated) <td>NUMBER</td>
     <td>NAME<br/><small>SCHOOL, CITY</small></td>, then per problem <td class="CLASSES">CELL</td>, then
     <td class="text-center"><strong>TOTAL</strong></td></tr>.
   - CLASSES: "text-center points-cell", plus " full-score" at the maximum, plus " text-muted" without points.
@@ -22,5 +23,5 @@ case Some(b) => {@fmt(b)<br/><small class="text-muted">@if(messages.isDefinedAt(
 case None => {—}
 }@if(c.pending > 0){<br/><span class="text-warning">?@c.pending</span>}}
 <table class="table table-hover table-bordered table-responsive points-board"><thead><tr><th>@messages("label.rank")</th><th>№</th><th>@messages("label.team")</th>@for(p <- board.problems) {<th style="text-align: center;" title="@p.name">@p.id<div style="font-size: 65%;">@p.name (@fmt(p.maxPoints))</div></th>}<th style="text-align: center;">@messages("label.total")</th></tr></thead><tbody>
-@for(r <- board.rows) {<tr data-team="@r.team.id"><th scope="row">@r.place.map(_.toString).getOrElse("")</th><td>@r.team.number</td><td>@r.team.name<br/><small>@r.team.schoolWithCity</small></td>@for(p <- board.problems) {<td class="@cellClass(r.cell(p.id))">@cell(r.cell(p.id), p)</td>}<td class="text-center"><strong>@fmt(r.total)</strong></td></tr>
+@for(r <- board.rows) {<tr data-team="@r.team.id"@if(currentTeam > 0 && r.team.id == currentTeam){ class="info"}><th scope="row">@r.place.map(_.toString).getOrElse("")</th><td>@r.team.number</td><td>@r.team.name<br/><small>@r.team.schoolWithCity</small></td>@for(p <- board.problems) {<td class="@cellClass(r.cell(p.id))">@cell(r.cell(p.id), p)</td>}<td class="text-center"><strong>@fmt(r.total)</strong></td></tr>
 }</tbody></table>

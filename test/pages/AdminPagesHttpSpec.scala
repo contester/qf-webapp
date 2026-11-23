@@ -120,6 +120,29 @@ class AdminPagesHttpSpec extends AnyFunSuite with BeforeAndAfterAll {
     assert(unrated(fx.kid).isEmpty)
   }
 
+  test("participant scoreboard: logged-in contestant gets live monitor, anonymous is redirected to /login") {
+    assume(fx.url.isDefined)
+    for (uri <- Seq("/monitor", "/monitor/", "/monitor/events")) {
+      val anon = run(FakeRequest(GET, uri))
+      assert(status(anon) == SEE_OTHER && redirectLocation(anon).exists(_.contains("/login")), uri)
+    }
+
+    val login = one(sql"select login from round_credentials where participant_id = ${fx.kid}".as[String])
+    val auth = run(form(POST, "/login", "username" -> login, "password" -> "777000"))
+    assert(status(auth) == SEE_OTHER && !redirectLocation(auth).exists(_.contains("login")))
+    val teamSession = session(auth).data.toSeq
+
+    val index = run(FakeRequest(GET, "/").withSession(teamSession: _*))
+    assert(status(index) == OK && contentAsString(index).contains("""href="/monitor""""))
+
+    val mon = run(FakeRequest(GET, "/monitor").withSession(teamSession: _*))
+    assert(status(mon) == OK)
+    assert(header(CACHE_CONTROL, mon).contains("no-store"))
+    val body = contentAsString(mon)
+    assert(body.contains("id=\"live-monitor\"") && body.contains("/monitor/events"))
+    assert(body.contains(s"""<tr data-team="${fx.kid}" class="info">""") && body.contains(fx.kidName))
+  }
+
   test("languages page lists the current season's languages; copying from the current season is refused") {
     assume(fx.url.isDefined)
     val page = ok("/admin/languages")

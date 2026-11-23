@@ -34,7 +34,7 @@ case class Extrainfo(contest: Int, num: Int, heading: String, data: String)
 
 /**
   * A round of the current season, with both times set. `id` is contest_rounds.id, the "contest id" of qf's URLs.
-  * There is no freeze: the board is live for admins and public once the round is over.
+  * There is no freeze: the board is live for admins and participants (teams only before the start).
   */
 case class Contest(id: Int, name: String, startTime: DateTime, endTime: DateTime, polygonId: Option[String], seasonId: Int,
                    isFinished: Boolean = false) {

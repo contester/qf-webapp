@@ -10,7 +10,7 @@ import play.api.i18n.{DefaultMessagesApi, Lang, MessagesImpl}
 
 import scala.concurrent.duration._
 
-/** The board rendered into the admin page is the board the stream starts with. */
+/** The board rendered into the admin and participant pages is the board the stream starts with. */
 class LiveSnapshotSpec extends TestKit(ActorSystem("LiveSnapshotSpec", ConfigFactory.parseString(
   """
     |akka.loglevel = WARNING
@@ -43,10 +43,26 @@ class LiveSnapshotSpec extends TestKit(ActorSystem("LiveSnapshotSpec", ConfigFac
     f.stop()
   }
 
+  test("the participant snapshot is teamsOnly before start and the real board once started, matching the stream") {
+    val before = new Fixture(t0.minusMinutes(5), subs = Map(1 -> subs))
+    val bBefore = snapshot(before, JoinTeam(1))
+    assert(bBefore == LiveBoard.build(Nil, teams, Map.empty))
+    assert(LiveJson.board(bBefore) == next(before.subscribe(JoinTeam(1)), "board"))
+    before.stop()
+
+    val after = new Fixture(late, subs = Map(1 -> subs))
+    val bAfter = snapshot(after, JoinTeam(1))
+    assert(bAfter == boardOf(contest(), subs))
+    assert(LiveJson.board(bAfter) == next(after.subscribe(JoinTeam(1)), "board"))
+    after.stop()
+  }
+
   test("an unknown contest is refused like the join") {
     val f = new Fixture(late, subs = Map(1 -> subs))
     val p = TestProbe()
     p.send(f.actor, Snapshot(JoinAdmin(9)))
+    p.expectMsgType[Status.Failure](5.seconds)
+    p.send(f.actor, Snapshot(JoinTeam(9)))
     p.expectMsgType[Status.Failure](5.seconds)
     f.stop()
   }

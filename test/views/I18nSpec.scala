@@ -150,6 +150,8 @@ class I18nSpec extends AnyFunSuite {
     val testRows = TestRows.describe(Seq(ResultRow(1, 13, TimeMs(10), Memory(1024), None, 0)), Nil, ruMessages)
     val board = MonitorPoints(Seq(ProblemColumn("A", "Alpha", 10)),
       Seq(RankedRow(Some(1), team, Seq(PointsCell(Some(5), 1, full = false)), 5)))
+    val liveBoard = live.LiveBoard.build(Seq(ProblemColumn("A", "Alpha", 10)), Seq(team),
+      Map(team.id -> Map("A" -> live.LiveCell(Some(5), 1, full = false, 0, None))))
 
     val pages: Seq[(String, String)] = Seq(
       "sendsolution" -> views.html.sendsolution(loggedIn, submitForm, Problems.forForm(Seq(Problem(3, "A", "Alpha", 1, 10))), Compilers.forForm(Seq(Compiler(1, "C++", "g++")))).body,
@@ -158,6 +160,8 @@ class I18nSpec extends AnyFunSuite {
       "index" -> views.html.index(loggedIn, Seq(fs)).body,
       "login" -> views.html.login(authForm).body,
       "showsubmit" -> views.html.showsubmit(loggedIn, Some(subDetails), testRows, None).body,
+      "livemonitor" -> views.html.livemonitor(contest, loggedIn, liveBoard).body,
+      "loggedinmonitor" -> views.html.loggedinmonitor(contest, board, loggedIn).body,
       "admin/submits" -> views.html.admin.submits(AdminSubmitPage(Seq(adminRow), None, None), Map.empty, selected, admin, None, live = true, newest = true).body,
       "admin/customtests" -> views.html.admin.customtests(AdminCustomPage(Seq(AdminCustomRow(5, 1, "C++", now, None, 10, TimeMs(1), Memory(1024), 0, 4, 2, 0)), None, None), Map.empty, selected, None).body,
       "admin/showcustomtest" -> views.html.admin.showcustomtest(evalEntry, None, selected, canRerun = true).body,

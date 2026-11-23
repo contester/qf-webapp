@@ -16,15 +16,35 @@ const board = JSON.parse(fixture('livetable.json'));
 const labels = {rank: 'label.rank', team: 'label.team', total: 'label.total'};
 
 assert.strictEqual(ctx.liveTableHtml(board, labels), fixture('livetable.html'));
+assert.strictEqual(
+  ctx.liveTableHtml(board, labels, 2),
+  fixture('livetable.html').replace('<tr data-team="2">', '<tr data-team="2" class="info">')
+);
+
+const teamsOnly = {
+  problems: [],
+  rows: [
+    {team: 1, number: 2, name: '<Alpha>', school: 'Lyceum & Co, City', place: 1, total: '0', cells: {}},
+    {team: 2, number: 5, name: "Beta's", school: 'School 2, City', place: null, total: '0', cells: {}}
+  ]
+};
+const teamsOnlyHtml = ctx.liveTableHtml(teamsOnly, labels, 1);
+assert(teamsOnlyHtml.includes('<tr data-team="1" class="info">'));
+assert(teamsOnlyHtml.includes('<tr data-team="2">'));
+assert(!teamsOnlyHtml.includes('points-cell'));
 
 // A `row` event omits empty problems: they render as cells without points.
 const problems = [{id: 'A', name: 'a', max: '10'}, {id: 'B', name: 'b', max: '20'}];
 const row = {team: 2, number: 7, name: 'N', school: 'S, C', place: 3, total: '5', cells: {B: {n: 1, f: false, p: 0, b: '5'}}};
-assert.strictEqual(ctx.liveRowHtml(problems, row),
+const expectedRow =
   '<tr data-team="2"><th scope="row">3</th><td>7</td><td>N<br/><small>S, C</small></td>' +
   '<td class="text-center points-cell text-muted">—</td>' +
   '<td class="text-center points-cell">5<br/><small class="text-muted">из 20</small></td>' +
-  '<td class="text-center"><strong>5</strong></td></tr>');
+  '<td class="text-center"><strong>5</strong></td></tr>';
+assert.strictEqual(ctx.liveRowHtml(problems, row), expectedRow);
+assert.strictEqual(ctx.liveRowHtml(problems, row, undefined, 99), expectedRow);
+assert.strictEqual(ctx.liveRowHtml(problems, row, undefined, 2),
+  expectedRow.replace('<tr data-team="2">', '<tr data-team="2" class="info">'));
 // Places in a row event are numbers, null for a team that is not rated.
 assert.strictEqual(ctx.liveRankText(null), '');
 assert.strictEqual(ctx.liveRankText(4), '4');
