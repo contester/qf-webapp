@@ -4,8 +4,8 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.stingray.contester.dbmodel.{Memory, TimeMs}
 
 class TestRowsSpec extends AnyFunSuite {
-  private def r(no: Int, code: Int, group: Option[String] = None, points: Double = 0) =
-    ResultRow(no, code, TimeMs(15), Memory(2048), group, points)
+  private def r(no: Int, code: Int, group: Option[String] = None, points: Double = 0, sample: Boolean = false) =
+    ResultRow(no, code, TimeMs(15), Memory(2048), group, points, sample)
 
   private def eachGroup(name: String, earned: Double = 0, max: Double = 0, passed: Boolean = true) =
     GroupRow(name, "each-test", earned, max, passed, skipped = false)
@@ -105,5 +105,28 @@ class TestRowsSpec extends AnyFunSuite {
     assert(SubmitPointsResult(10, 10).success)
     assert(!SubmitPointsResult(0, 0).success)
     assert(!SubmitPointsResult(3, 10).success)
+  }
+
+  test("sample tests clear group and policy, show sample points text, and do not steal lastOf in complete-group") {
+    val g = Seq(eachGroup("0", 0, 0), completeGroup("2", 12, 12, passed = true))
+    val rows = Seq(
+      r(1, 10, Some("0"), 0, sample = true),
+      r(2, 13, Some("0"), 0, sample = true),
+      r(3, 18, Some("0"), 0, sample = true),
+      r(4, 10, Some("2")),
+      r(5, 10, Some("2")),
+      r(6, 10, Some("2"), 0, sample = true))
+    val described = TestRows.describe(rows, g)
+    assert(described.map(_.pointsText) == Seq(
+      "0 (тест из условия, пройден)",
+      "0 (тест из условия, не пройден)",
+      "не запускался",
+      "тест пройден",
+      "12 (все тесты группы пройдены)",
+      "0 (тест из условия, пройден)"))
+    for (idx <- Seq(0, 1, 2, 5)) {
+      assert(described(idx).group.isEmpty && described(idx).policy.isEmpty)
+    }
+    assert(described(3).group.contains("2") && described(3).policy.contains("complete-group"))
   }
 }

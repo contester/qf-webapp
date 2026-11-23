@@ -112,6 +112,8 @@ test.group.passed={0} (все тесты группы пройдены)
 test.group.failed=0 (не все тесты группы пройдены)
 test.passed=тест пройден
 test.failed=тест не пройден
+test.sample.passed=0 (тест из условия, пройден)
+test.sample.failed=0 (тест из условия, не пройден)
 
 run.noResults=нет результатов
 run.accepted=Полное решение

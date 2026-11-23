@@ -112,6 +112,8 @@ test.group.passed={0} (all group tests passed)
 test.group.failed=0 (not all group tests passed)
 test.passed=passed
 test.failed=failed
+test.sample.passed=0 (sample test, passed)
+test.sample.failed=0 (sample test, failed)
 
 run.noResults=no results
 run.accepted=ACCEPTED

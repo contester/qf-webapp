@@ -603,15 +603,16 @@ object SlickModel {
     def memoryBytes = column[Memory]("memory_bytes")
     def returnCode = column[Long]("return_code")
     def testerReturnCode = column[Long]("tester_return_code")
+    def isSample = column[Boolean]("is_sample")
 
     override def * = (testingID, testID, resultCode, recordTime, timeMs, memoryBytes, returnCode,
-      testerReturnCode, groupName, points) <> (DBResultEntry.tupled, DBResultEntry.unapply)
+      testerReturnCode, groupName, points, isSample) <> (DBResultEntry.tupled, DBResultEntry.unapply)
   }
 
   val results = TableQuery[Results]
 
   case class DBResultEntry(testingID: Long, testID: Int, resultCode: Int, recordTime: DateTime, timeMs: TimeMs, memoryBytes:Memory,
-                           returnCode: Long, testerReturnCode: Long, groupName: Option[String], points: Double)
+                           returnCode: Long, testerReturnCode: Long, groupName: Option[String], points: Double, isSample: Boolean = false)
 
   val results0 = results.sortBy(_.testID)
 

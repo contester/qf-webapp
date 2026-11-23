@@ -31,7 +31,7 @@ object SecondsToTimeStr {
 }
 
 case class ResultEntry(testingID: Long, test: Int, result: Int, time: TimeMs, memory: Memory, info: Long, testerExitCode: Long,
-                       group: Option[String] = None, points: Double = 0) {
+                       group: Option[String] = None, points: Double = 0, isSample: Boolean = false) {
   def resultString = SubmitResult.message(result)
 
   def resultString(messages: play.api.i18n.Messages): String = SubmitResult.statusMessage(result)(messages)
@@ -206,7 +206,7 @@ object Submits {
   def loadSubmitDetails(db: JdbcBackend#DatabaseDef, testingId: Int)(implicit ec: ExecutionContext) =
     db.run(SlickModel.results0ByTesting(testingId.toLong).result).map(_.map(x =>
       ResultEntry(x.testingID, x.testID, x.resultCode, x.timeMs, x.memoryBytes,
-        x.returnCode, x.testerReturnCode, x.groupName, x.points)
+        x.returnCode, x.testerReturnCode, x.groupName, x.points, x.isSample)
     ))
 
   /** The groups of a testing, as the per-test table wants them. */

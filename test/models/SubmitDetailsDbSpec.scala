@@ -71,24 +71,25 @@ class SubmitDetailsDbSpec extends AnyFunSuite {
       val cur = await(db.run(sql"insert into testings (submit_id, finished_at) values ($id, now()) returning id".as[Long].head))
       exec(sqlu"""insert into results (testing_id, test_no, group_name, result_code, points, time_ms, memory_bytes) values
                   ($old, 1, '1', 13, 0, 1, 1024)""")
-      exec(sqlu"""insert into results (testing_id, test_no, group_name, result_code, points, time_ms, memory_bytes) values
-                  ($cur, 0, null, 1, 0, 0, 0),
-                  ($cur, 3, '2', 10, 0, 30, 3072),
-                  ($cur, 1, '1', 10, 2.5, 10, 1024),
-                  ($cur, 2, '1', 13, 0, 20, 2048),
-                  ($cur, 4, '2', 13, 0, 40, 4096),
-                  ($cur, 5, '2', 18, 0, 0, 0)""")
+      exec(sqlu"""insert into results (testing_id, test_no, group_name, result_code, points, time_ms, memory_bytes, is_sample) values
+                  ($cur, 0, null, 1, 0, 0, 0, false),
+                  ($cur, 3, '2', 10, 0, 30, 3072, false),
+                  ($cur, 1, '1', 10, 2.5, 10, 1024, false),
+                  ($cur, 2, '1', 13, 0, 20, 2048, false),
+                  ($cur, 4, '2', 13, 0, 40, 4096, false),
+                  ($cur, 5, '2', 18, 0, 0, 0, false),
+                  ($cur, 6, '1', 10, 0, 5, 512, true)""")
       exec(sqlu"""insert into testing_groups (testing_id, group_name, policy, points_earned, points_max, passed, skipped) values
                   ($cur, '1', 'each-test', 2.5, 5, false, false), ($cur, '2', 'complete-group', 0, 3, false, false),
                   ($old, '1', 'each-test', 0, 5, false, false)""")
       exec(sqlu"update submits set tested = true, compiled = true, passed = 1, taken = 5, points = 2.5, testing_id = $cur where id = $id")
 
       val rows = await(Submits.loadTestRows(db, cur))
-      assert(rows.map(_.testNo) == Seq(1, 2, 3, 4, 5))
-      assert(rows.map(_.pointsText) == Seq("2.5 (тест пройден)", "0 (тест не пройден)", "тест пройден", "тест не пройден", "не запускался"))
-      assert(rows.map(_.group) == Seq(Some("1"), Some("1"), Some("2"), Some("2"), Some("2")))
-      assert(rows.map(_.policy) == Seq("each-test", "each-test", "complete-group", "complete-group", "complete-group").map(Some(_)))
-      assert(rows.map(_.verdict) == Seq("Ok", "Wrong answer", "Ok", "Wrong answer", "не запускался"))
+      assert(rows.map(_.testNo) == Seq(1, 2, 3, 4, 5, 6))
+      assert(rows.map(_.pointsText) == Seq("2.5 (тест пройден)", "0 (тест не пройден)", "тест пройден", "тест не пройден", "не запускался", "0 (тест из условия, пройден)"))
+      assert(rows.map(_.group) == Seq(Some("1"), Some("1"), Some("2"), Some("2"), Some("2"), None))
+      assert(rows.map(_.policy) == Seq(Some("each-test"), Some("each-test"), Some("complete-group"), Some("complete-group"), Some("complete-group"), None))
+      assert(rows.map(_.verdict) == Seq("Ok", "Wrong answer", "Ok", "Wrong answer", "не запускался", "Ok"))
       assert(rows.head.timeMs == TimeMs(10) && rows.head.memoryBytes == Memory(1024))
 
       // the submit as the list shows it: points of max
