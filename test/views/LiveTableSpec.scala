@@ -89,5 +89,6 @@ class LiveTableSpec extends AnyFunSuite {
     assert(page.contains("liveMonitor('/monitor/events', '#live-monitor', 2);"))
     assert(page.contains("""<tr data-team="2" class="info">"""))
     assert(page.contains("tr.info > td.full-score"))
+    assert(page.contains("vertical-align: middle"))
   }
 }

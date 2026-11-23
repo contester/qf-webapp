@@ -1,6 +1,9 @@
 @* Look of a points scoreboard, pure CSS. *@
 <style>
-/* Points board: a cell at the problem's maximum. */
+/* Points board: center row cells vertically (overrides Bootstrap's vertical-align: top) and highlight a cell at the problem's maximum. */
+.table.points-board > tbody > tr > th,
+.table.points-board > tbody > tr > td { vertical-align: middle; }
+.points-board td.points-cell { text-align: center; }
 .points-board td.full-score,
 .table.points-board > tbody > tr.info > td.full-score { background-color: #dff0d8; color: #2b6a2b; font-weight: bold; }
 .points-board td.full-score small { color: #3c763d; }

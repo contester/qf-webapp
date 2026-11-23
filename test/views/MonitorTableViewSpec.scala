@@ -28,7 +28,7 @@ class MonitorTableViewSpec extends AnyFunSuite {
   test("cells, the full-score class, totals, places and team data are on the table") {
     val h = html.monitortable(status, current = 11).body
     assert("points-cell full-score".r.findAllMatchIn(h).size == 1, "only the full cell carries the class")
-    assert("points-cell".r.findAllMatchIn(h).size == 4)
+    assert("""<td class="[^"]*points-cell""".r.findAllMatchIn(h).size == 4)
     for (t <- Seq(">32.5<", ">20<", ">12.5<", "Seven", "Lyceum 1, Town", "Eight", "title=\"Alpha\"", "title=\"Beta\"",
       "20 баллов", "25 баллов", "Место", "Итого", "Участник"))
       assert(h.contains(t), t)
@@ -47,5 +47,12 @@ class MonitorTableViewSpec extends AnyFunSuite {
   test("the stylesheet gives full-score a colour") {
     val css = html.boardstyle().body
     assert(css.contains(".full-score"))
+  }
+
+  test("the stylesheet centers problem score cells horizontally and vertically") {
+    val css = html.boardstyle().body
+    assert(css.contains(".table.points-board > tbody > tr > th"))
+    assert(css.contains(".table.points-board > tbody > tr > td { vertical-align: middle; }"))
+    assert(css.contains(".points-board td.points-cell { text-align: center; }"))
   }
 }
