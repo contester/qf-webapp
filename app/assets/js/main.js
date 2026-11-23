@@ -218,6 +218,10 @@ function listenV2(path, setup, state) {
     return source;
 }
 
+function isStaleWaiting(curState, nextState) {
+    return curState === 'finished' && nextState === 'waiting';
+}
+
 function listenOnEvents(path, iconbase, ackMessagePath) {
     var setup = function(add) {
         // Server-rendered rows (not stored): the finished attempt's row.
@@ -225,6 +229,10 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
             obj.rows.forEach(function(row) {
                 var old = $('#result-' + row.id).closest('tr');
                 if (old.length) {
+                    var curState = old.find('#result-' + row.id).attr('data-state');
+                    var $tmp = $('<tbody>').html(row.html);
+                    var nextState = $tmp.find('#result-' + row.id).attr('data-state');
+                    if (isStaleWaiting(curState, nextState)) { return; }
                     old.replaceWith(row.html);
                 } else {
                     $('#submits > tbody').prepend(row.html);
@@ -236,17 +244,25 @@ function listenOnEvents(path, iconbase, ackMessagePath) {
         add('submit', function(obj) {
             // The status page fed by the live monitor (listenOnStatus) takes care of its rows.
             if (window.statusLive) { return; }
+            var nextState = (obj.result && obj.result.state) || '';
             var tr = $('#result-' + obj.submitId);
             if (tr.length) {
-                tr.toggleClass('success', !!obj.result.success);
-                var href = tr.closest('tr').find('th a').attr('href');
-                if (href) {
-                    tr.empty().append($('<a>').attr('href', href).text(obj.result.message));
-                } else {
-                    tr.text(obj.result.message);
+                if (!isStaleWaiting(tr.attr('data-state'), nextState)) {
+                    tr.toggleClass('success', !!obj.result.success);
+                    if (nextState) { tr.attr('data-state', nextState); }
+                    var href = tr.closest('tr').find('th a').attr('href');
+                    if (href) {
+                        tr.empty().append($('<a>').attr('href', href).text(obj.result.message));
+                    } else {
+                        tr.text(obj.result.message);
+                    }
                 }
             } else {
-                $('#submits > tbody').prepend('<tr><th scope="row">' + obj.submitId + '</th><td id="result-' + obj.submitId + '"></td></tr>');
+                var $td = $('<td>').attr('id', 'result-' + obj.submitId);
+                if (obj.result && obj.result.success) { $td.addClass('success'); }
+                if (nextState) { $td.attr('data-state', nextState); }
+                $td.append($('<a>').attr('href', '/submit/' + obj.submitId).text((obj.result && obj.result.message) || ''));
+                $('#submits > tbody').prepend($('<tr>').append($('<th scope="row">').text(obj.submitId)).append($td));
             }
 
             if (ackMessagePath) {
@@ -371,13 +387,19 @@ function listenOnStatus(path, canRejudge, newest, teamFilter) {
         });
         add('statusRow', function(obj) {
             if (teamFilter && obj.team !== teamFilter) { return; }
+            var nextRow = rowOf(obj);
+            var nextState = nextRow.find('#result-' + obj.id).attr('data-state');
             var on = $('#result-row-' + obj.id);
             if (on.length) {
-                on.replaceWith(rowOf(obj));
+                if (!isStaleWaiting(on.find('#result-' + obj.id).attr('data-state'), nextState)) {
+                    on.replaceWith(nextRow);
+                }
             } else if (held[obj.id]) {
-                held[obj.id] = rowOf(obj);
+                if (!isStaleWaiting(held[obj.id].find('#result-' + obj.id).attr('data-state'), nextState)) {
+                    held[obj.id] = nextRow;
+                }
             } else if (newest && belongsHere(obj.id)) {
-                held[obj.id] = rowOf(obj);
+                held[obj.id] = nextRow;
                 showBar();
             }
         });

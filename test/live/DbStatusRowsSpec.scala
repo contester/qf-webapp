@@ -71,12 +71,15 @@ class DbStatusRowsSpec extends TestKit(ActorSystem("DbStatusRowsSpec", ConfigFac
     assert(await(rows(_ => Future.successful(None)).render(42, None)).isEmpty)
   }
 
-  test("a fresh submit and a rejudge are shown as being tested whatever the database says") {
-    val read = (id: Int) => Future.successful(Some(submitRow(id, finished = true, success = false)))
-    val fresh = await(rows(read).render(42, Some(SubmitWaiting))).get
+  test("a fresh submit and a rejudge are shown as being tested, unless the fresh submit already finished") {
+    val unfinishedRead = (id: Int) => Future.successful(Some(submitRow(id, finished = false, success = false)))
+    val fresh = await(rows(unfinishedRead).render(42, Some(SubmitWaiting))).get
     assert(fresh.rw.contains("Running...") && !fresh.rw.contains("Wrong answer"), fresh.rw)
-    val again = await(rows(read).render(42, Some(BeingRetestedResult))).get
-    assert(again.rw.contains("Testing in progress...") && !again.rw.contains("Wrong answer"))
+    val finishedRead = (id: Int) => Future.successful(Some(submitRow(id, finished = true, success = false)))
+    val alreadyDone = await(rows(finishedRead).render(42, Some(SubmitWaiting))).get
+    assert(alreadyDone.rw.contains("Баллы: 1 из 3") && !alreadyDone.rw.contains("Running..."), alreadyDone.rw)
+    val again = await(rows(finishedRead).render(42, Some(BeingRetestedResult))).get
+    assert(again.rw.contains("Testing in progress...") && !again.rw.contains("Баллы:"))
   }
 
   test("a finish heard before its result is visible is read again until it is") {
@@ -116,7 +119,9 @@ class DbStatusRowsSpec extends TestKit(ActorSystem("DbStatusRowsSpec", ConfigFac
     val done = await(r.render(42, None)).get
     assert(done.rw.contains("Перепроверить") && done.rw.contains("Команда 5") && done.rw.contains("Баллы: 3 из 3"))
     assert(!done.rw.contains(">Rejudge<") && !done.rw.contains("Team 5"))
-    val wait = await(r.render(42, Some(SubmitWaiting))).get
+    val unfinished = new DbStatusRows(id => Future.successful(Some(submitRow(id, finished = false))), noTeams, system.scheduler,
+      retryAfter = 20.millis, retries = 3, messages = ru)
+    val wait = await(unfinished.render(42, Some(SubmitWaiting))).get
     assert(wait.rw.contains("Выполняется..."))
     val retest = await(r.render(42, Some(BeingRetestedResult))).get
     assert(retest.rw.contains("Идёт тестирование..."))

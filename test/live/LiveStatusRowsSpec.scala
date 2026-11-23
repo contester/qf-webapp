@@ -52,6 +52,12 @@ class LiveStatusRowsSpec extends TestKit(ActorSystem("LiveStatusRowsSpec", Confi
 
     f.actor ! Finished(1, 11, compiled = true, Some(3.0))
     assert((row(p) \ "rw").as[String] == "rw-11-done")
+
+    // A late arrival for an already-finished submit must not ask for SubmitWaiting.
+    f.actor ! Arrived(1, rec(11, 1, "A", running))
+    val late = row(p)
+    assert((late \ "rw").as[String] == "rw-11-done")
+    assert(rows.asked.get(11).isEmpty)
     f.stop()
   }
 

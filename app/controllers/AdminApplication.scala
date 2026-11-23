@@ -326,7 +326,7 @@ class AdminApplication (cc: ControllerComponents, silhouette: Silhouette[AdminEn
 
   def feed(contestId: Int) = silhouette.SecuredAction(AdminPermissions.withSpectate(contestId)).async { implicit request =>
     joinAdminFeed(contestId).map { e =>
-      Ok.chunked(e.via(stats.track(live.FeedKind.AdminFeed, contestId))).as(ContentTypes.EVENT_STREAM)
+      Ok.chunked(e.via(stats.track(live.FeedKind.AdminFeed, contestId))).as(ContentTypes.EVENT_STREAM).withHeaders(LiveStreams.streamHeaders: _*)
     }
   }
 

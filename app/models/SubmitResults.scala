@@ -37,6 +37,7 @@ trait SubmitResult {
   def success: Boolean
   def message: String
   def display(implicit messages: Messages): String = message
+  def stateTag: String = "finished"
 }
 
 case class SubmitStats(timeMs: TimeMs, memory: Memory, timeLimitExceeded: Boolean = false)
@@ -45,6 +46,8 @@ case object SubmitWaiting extends SubmitResult {
   override val success: Boolean = false
 
   override val message: String = "Running..."
+
+  override val stateTag: String = "waiting"
 
   override def display(implicit messages: Messages): String = SubmitResult.tr("status.running", message)
 }
@@ -70,6 +73,8 @@ case object BeingRetestedResult extends SubmitResult {
 
   override val message: String = "Testing in progress..."
 
+  override val stateTag: String = "retesting"
+
   override def display(implicit messages: Messages): String = SubmitResult.tr("status.retesting", message)
 }
 
@@ -82,7 +87,8 @@ object SubmitResult extends Logging {
 
   def toJson(o: SubmitResult)(implicit messages: Messages): JsValue = Json.obj(
     "success" -> o.success,
-    "message" -> o.display
+    "message" -> o.display,
+    "state" -> o.stateTag
   )
 
   /** English/default fallback Messages for tests constructing actors without a Play MessagesApi. */
@@ -99,7 +105,8 @@ object SubmitResult extends Logging {
   implicit val submitResultWrites = new Writes[SubmitResult] {
     override def writes(o: SubmitResult): JsValue = Json.obj(
       "success" -> o.success,
-      "message" -> o.message
+      "message" -> o.message,
+      "state" -> o.stateTag
     )
   }
 

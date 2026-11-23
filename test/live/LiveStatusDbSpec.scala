@@ -63,22 +63,30 @@ class LiveStatusDbSpec extends TestKit(ActorSystem("LiveStatusDbSpec", ConfigFac
   test("db: an arrival, a finish and a rejudge each push the submit's own row") {
     assume(fx.url.isDefined)
     fx.withFixture {
-    val sample = this.sample()
-    val cid = sample.submit.submitId.contestId
-    val id = sample.submit.submitId.id
+    val rawId = fx.insertSubmit()
+    val pending = Await.result(AdminSubmits.row(fx.db, rawId.toInt), 60.seconds).get
+    val cid = pending.submit.submitId.contestId
+    val id = pending.submit.submitId.id
     val f = new Fixture(running, rows = Seq(contest(cid)), statusRows = realRows)
     val p = f.subscribe(JoinAdminStatus(cid))
     next(p, "ready")
 
-    f.actor ! Arrived(cid, hookRec(sample))
+    f.actor ! Arrived(cid, hookRec(pending))
     val arrived = rowOf(p)
-    assert((arrived \ "id").as[Int] == id && (arrived \ "team").as[Int] == sample.submit.submitId.teamId)
+    assert((arrived \ "id").as[Int] == id && (arrived \ "team").as[Int] == pending.submit.submitId.teamId)
     assert((arrived \ "rw").as[String].contains("Running..."), "an arrival shows as running")
 
+    fx.finishSubmit(rawId, passed = 1)
+    val sample = Await.result(AdminSubmits.row(fx.db, rawId.toInt), 60.seconds).get
     f.actor ! Finished(cid, id, compiled = true, sample.submit.points)
     val finished = rowOf(p)
     assert((finished \ "rw").as[String].contains(sample.result.message), s"expected '${sample.result.message}'")
     assert((finished \ "rw").as[String].contains(s"rejudge-$id") && !(finished \ "ro").as[String].contains(s"rejudge-$id"))
+
+    // A late arrival for a finished submit does not revert to Running...
+    f.actor ! Arrived(cid, hookRec(sample))
+    val late = rowOf(p)
+    assert((late \ "rw").as[String].contains(sample.result.message) && !(late \ "rw").as[String].contains("Running..."))
 
     // The hook for a rejudge has only the id: the contest comes from the database.
     f.actor ! RejudgeRequested(id)

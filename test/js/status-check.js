@@ -33,9 +33,12 @@ const main = fs.readFileSync(path.join(root, 'app/assets/js/main.js'), 'utf8');
 // @@VERDICT@@), with the rejudge cell (rw) and without (ro).
 const pinned = (name) => fs.readFileSync(path.join(root, 'test/resources/admin', name), 'utf8').trim();
 const fixtures = {rw: pinned('statusrow-rw.html'), ro: pinned('statusrow-ro.html')};
-const rowHtml = (id, verdict, team, variant) =>
-    fixtures[variant].split('4242').join(String(id)).split('7777').join(String(team)).split('@@VERDICT@@').join(verdict);
-const ev = (id, team, verdict) => ({id, team, rw: rowHtml(id, verdict, team, 'rw'), ro: rowHtml(id, verdict, team, 'ro')});
+const defaultState = (verdict) => verdict === 'Running...' ? 'waiting' : (verdict === 'Testing in progress...' ? 'retesting' : 'finished');
+const rowHtml = (id, verdict, team, variant, state) =>
+    fixtures[variant].split('4242').join(String(id)).split('7777').join(String(team)).split('@@VERDICT@@').join(verdict)
+        .split('data-state="finished"').join('data-state="' + (state || defaultState(verdict)) + '"');
+const ev = (id, team, verdict, state) =>
+    ({id, team, rw: rowHtml(id, verdict, team, 'rw', state), ro: rowHtml(id, verdict, team, 'ro', state)});
 
 // A page with the rows `ids` (newest first), the stream opened with the given options. Returns helpers.
 function page(ids, opts) {
@@ -200,6 +203,21 @@ check('a failed first connection is not a drop', () => {
     p.drop();
     p.open(); p.send('ready', {});
     assert.ok(!p.barShown());
+});
+
+check('a stale waiting update never overwrites a finished row (on page or held), while retesting does', () => {
+    const p = page([100, 99]);
+    p.open();
+    p.send('statusRow', ev(99, 1, 'Compilation error', 'finished'));
+    assert.strictEqual(p.verdict(99), 'Compilation error');
+    p.send('statusRow', ev(99, 1, 'Running...', 'waiting'));
+    assert.strictEqual(p.verdict(99), 'Compilation error');
+    p.send('statusRow', ev(99, 1, 'Testing in progress...', 'retesting'));
+    assert.strictEqual(p.verdict(99), 'Testing in progress...');
+    p.send('statusRow', ev(101, 1, 'Compilation error', 'finished'));
+    p.send('statusRow', ev(101, 1, 'Running...', 'waiting'));
+    p.bar().click();
+    assert.strictEqual(p.verdict(101), 'Compilation error');
 });
 
 console.log(`status-check: OK (${n} checks)`);

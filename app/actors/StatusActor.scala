@@ -193,7 +193,7 @@ class StatusActor(db: JdbcBackend#DatabaseDef, palevo: PalevoSink,
   private def annotateFinished(finished: FinishedTesting): Future[(AnnoSubmit, Seq[SubmitRow])] = {
     val sub = finished.submit
     Submits.teamProblemSubmits(db, sub.contest, sub.team, sub.problem).flatMap { described =>
-      described.find(_.submit.submitId.id == sub.id).filter(_.submit.testingId.contains(finished.testingId)) match {
+      described.find(_.submit.submitId.id == sub.id).filter(m => m.submit.testingId.contains(finished.testingId) && m.submit.finished) match {
         case Some(mine) =>
           // Only this attempt's row changed: there is no per-attempt score that depends on the earlier ones.
           val rows = Seq(SubmitRow(mine.submit.submitId.id, views.html.singlesubmit(mine)(defaultMessages).body))

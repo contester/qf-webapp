@@ -109,7 +109,8 @@ object LiveMonitorActor {
       attempt(retries).flatMap {
         case None => Future.successful(None)
         case Some(found) =>
-          val r = inTesting.fold(found)(res => found.copy(result = res))
+          val effective = inTesting.filterNot(res => res == models.SubmitWaiting && found.submit.finished)
+          val r = effective.fold(found)(res => found.copy(result = res))
           val cid = r.submit.submitId.contestId
           teamClient.getTeams(cid).map { teams =>
             val body = (rejudge: Boolean) => views.html.admin.submitrow(r, teams, rejudge, linkTeam = true)(messages).body.trim
@@ -331,7 +332,8 @@ class LiveMonitorActor(contestRows: () => Future[Seq[Contest]],
   def running: Receive = {
     case Arrived(cid, rec) =>
       withContest(cid, "arrival")(st => applyEvent(cid, st, EvArrived(rec), mayReload = false))
-      requestStatusRow(cid, rec.id, Some(models.SubmitWaiting))
+      val waiting = if (contests.get(cid).exists(_.live.isFinished(rec.id))) None else Some(models.SubmitWaiting)
+      requestStatusRow(cid, rec.id, waiting)
 
     case Finished(cid, id, compiled, points) =>
       rejudging -= id

@@ -92,7 +92,7 @@ class Application (cc: ControllerComponents,
     getSubmits(request.identity).flatMap(x =>
       Submits.groupAndAnnotate(db, x.map(Submits.upliftSub(_))
       )).map { subs =>
-      Ok(html.index(request.identity, subs))
+      Ok(html.index(request.identity, subs)).withHeaders(LiveStreams.pageHeaders: _*)
     }
   }
 
@@ -174,9 +174,11 @@ class Application (cc: ControllerComponents,
           if sub.fsub.details.exists(d => d.test == 0 && !d.success)
         } yield Outputs.getCompileAssets(ws, base, shortn, submitId, tid)).getOrElse(Future.successful(None))
         val rowsF = sub.fsub.submit.testingId.map(t => Submits.loadTestRows(db, t.toLong, request2Messages(request))).getOrElse(Future.successful(Nil))
-        compileF.zip(rowsF).map { case (compileOut, rows) => Ok(html.showsubmit(request.identity, Some(sub), rows, compileOut)) }
+        compileF.zip(rowsF).map { case (compileOut, rows) =>
+          Ok(html.showsubmit(request.identity, Some(sub), rows, compileOut)).withHeaders(LiveStreams.pageHeaders: _*)
+        }
       case None =>
-        Future.successful(Ok(html.showsubmit(request.identity, None, Nil, None)))
+        Future.successful(Ok(html.showsubmit(request.identity, None, Nil, None)).withHeaders(LiveStreams.pageHeaders: _*))
     }
   }
 
@@ -192,7 +194,7 @@ class Application (cc: ControllerComponents,
 
     statusActorModel.statusActor.ask(StatusActor.JoinUser(contestId, teamId))(Duration(5, SECONDS)).map {
       case StatusActor.UserJoined(e) => {
-        Ok.chunked(e.via(stats.track(live.FeedKind.TeamFeed, contestId))).as(ContentTypes.EVENT_STREAM)
+        Ok.chunked(e.via(stats.track(live.FeedKind.TeamFeed, contestId))).as(ContentTypes.EVENT_STREAM).withHeaders(LiveStreams.streamHeaders: _*)
       }
       case _ => BadRequest("foo")
     }

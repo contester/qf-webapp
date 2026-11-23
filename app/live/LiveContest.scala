@@ -41,6 +41,8 @@ class LiveContest(initial: Contest, val problems: Seq[ProblemColumn], teams: Seq
   /** Whether an arrival can be on this board: a listed team and a known problem. */
   def accepts(rec: SubmitRec): Boolean = teamById.contains(rec.team) && maxPoints.contains(rec.problem)
 
+  def isFinished(id: Int): Boolean = byId.get(id).exists(!_.inFlight)
+
   // A repeated arrival (e.g. a late message after the row was loaded for an early finish) is ignored:
   // the stored record and its state win.
   def onArrived(rec: SubmitRec): Delta =

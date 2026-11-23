@@ -15,7 +15,7 @@
     }
     <td>@s.submit.submitId.arrived.asString</td>
     <td>@defining(teams.get(s.submit.submitId.teamId).map(_.teamFullName).getOrElse(messages("label.teamWithId", s.submit.submitId.teamId.toString))) { name =>@if(linkTeam){<a class="team-link" href="@routes.AdminApplication.submits(s.submit.submitId.contestId, Some(s.submit.submitId.teamId), None, None)">@name</a>}else{@name}}</td><td>@s.submit.submitId.problem.id</td><td>@s.submit.submitId.ext</td>
-    <td @if(s.result.success) { class="success" } id="result-@{s.submit.submitId.id}">
+    <td @if(s.result.success) { class="success" } id="result-@{s.submit.submitId.id}" data-state="@s.result.stateTag">
         @s.result.display
     </td>
     <td>@s.stats.timeMs</td><td>@s.stats.memory</td>
