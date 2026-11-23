@@ -38,9 +38,9 @@ const problems = [{id: 'A', name: 'a', max: '10'}, {id: 'B', name: 'b', max: '20
 const row = {team: 2, number: 7, name: 'N', school: 'S, C', place: 3, total: '5', cells: {B: {n: 1, f: false, p: 0, b: '5'}}};
 const expectedRow =
   '<tr data-team="2"><th scope="row">3</th><td>7</td><td>N<br/><small>S, C</small></td>' +
+  '<td class="text-center"><strong>5</strong></td>' +
   '<td class="text-center points-cell text-muted">—</td>' +
-  '<td class="text-center points-cell">5<br/><small class="text-muted">из 20</small></td>' +
-  '<td class="text-center"><strong>5</strong></td></tr>';
+  '<td class="text-center points-cell">5<br/><small class="text-muted">из 20</small></td></tr>';
 assert.strictEqual(ctx.liveRowHtml(problems, row), expectedRow);
 assert.strictEqual(ctx.liveRowHtml(problems, row, undefined, 99), expectedRow);
 assert.strictEqual(ctx.liveRowHtml(problems, row, undefined, 2),

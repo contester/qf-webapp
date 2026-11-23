@@ -542,22 +542,24 @@ function liveFlash(tr, oldCells, moved) {
 function liveRowHtml(problems, row, ofWord, currentTeamId) {
     var cls = (currentTeamId > 0 && row.team === currentTeamId) ? ' class="info"' : '';
     var h = '<tr data-team="' + row.team + '"' + cls + '><th scope="row">' + liveEsc(liveRankText(row.place)) + '</th>' +
-        '<td>' + row.number + '</td><td>' + liveEsc(row.name) + '<br/><small>' + liveEsc(row.school) + '</small></td>';
+        '<td>' + row.number + '</td><td>' + liveEsc(row.name) + '<br/><small>' + liveEsc(row.school) + '</small></td>' +
+        '<td class="text-center"><strong>' + liveEsc(row.total) + '</strong></td>';
     for (var i = 0; i < problems.length; i++) {
         h += liveCellHtml(row.cells ? row.cells[problems[i].id] : null, problems[i].max, ofWord);
     }
-    return h + '<td class="text-center"><strong>' + liveEsc(row.total) + '</strong></td></tr>';
+    return h + '</tr>';
 }
 
 function liveTableHtml(board, labels, currentTeamId) {
     var h = '<table class="table table-hover table-bordered table-responsive points-board"><thead><tr>' +
-        '<th>' + liveEsc(labels.rank) + '</th><th>№</th><th>' + liveEsc(labels.team) + '</th>';
+        '<th>' + liveEsc(labels.rank) + '</th><th>№</th><th>' + liveEsc(labels.team) + '</th>' +
+        '<th style="text-align: center;">' + liveEsc(labels.total) + '</th>';
     for (var i = 0; i < board.problems.length; i++) {
         var p = board.problems[i];
         h += '<th style="text-align: center;" title="' + liveEsc(p.name) + '">' + liveEsc(p.id) +
             '<div style="font-size: 65%;">' + liveEsc(p.name) + ' (' + liveEsc(p.max) + ')</div></th>';
     }
-    h += '<th style="text-align: center;">' + liveEsc(labels.total) + '</th></tr></thead><tbody>\n';
+    h += '</tr></thead><tbody>\n';
     for (var j = 0; j < board.rows.length; j++) {
         h += liveRowHtml(board.problems, board.rows[j], labels.of, currentTeamId) + '\n';
     }

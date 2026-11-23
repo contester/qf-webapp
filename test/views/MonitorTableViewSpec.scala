@@ -35,6 +35,8 @@ class MonitorTableViewSpec extends AnyFunSuite {
     assert(h.contains("<th scope=\"row\">1</th>"))
     assert(h.contains("<th scope=\"row\"></th>"))
     assert(h.indexOf("Seven") < h.indexOf("Eight"))
+    assert(h.indexOf("Итого") < h.indexOf("Alpha"))
+    assert(h.indexOf(">32.5<") < h.indexOf("12.5"))
   }
 
   test("the stylesheet gives full-score a colour") {

@@ -38,7 +38,10 @@ class LiveTableSpec extends AnyFunSuite {
   private implicit val messages: MessagesImpl = MessagesImpl(Lang("en"), new DefaultMessagesApi())
 
   test("livetable renders the exact contract markup: full, partial, no points, in flight, unranked, escaping") {
-    assert(html.livetable(LiveTableFixture.board).body.trim == LiveTableFixture.html)
+    val h = html.livetable(LiveTableFixture.board).body.trim
+    assert(h == LiveTableFixture.html)
+    assert(h.indexOf("label.total") < h.indexOf(">A<"))
+    assert(h.indexOf("<strong>10</strong>") < h.indexOf("full-score"))
   }
 
   test("the JSON fixture used by the browser-side check is LiveJson.board of the same board") {
