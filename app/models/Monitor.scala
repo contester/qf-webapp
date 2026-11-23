@@ -13,7 +13,9 @@ import scala.concurrent.{ExecutionContext, Future}
   * are set (None when there is none); `attempts`: all the team's submits for the problem, in flight ones included;
   * `full`: best is the problem's maximum, and that maximum is above 0.
   */
-case class PointsCell(best: Option[Double], attempts: Int, full: Boolean)
+case class PointsCell(best: Option[Double], attempts: Int, full: Boolean, pending: Int = 0) {
+  def finishedAttempts: Int = (attempts - pending).max(0)
+}
 
 object PointsCell {
   val empty: PointsCell = PointsCell(None, 0, full = false)
@@ -28,7 +30,8 @@ object PointsScorer {
   def cell(submits: Seq[Submit], maxPoints: Double): PointsCell = {
     val scored = submits.filter(s => s.finished && s.compiled).flatMap(_.points)
     val best = if (scored.isEmpty) None else Some(scored.max)
-    PointsCell(best, submits.size, full = maxPoints > 0 && best.contains(maxPoints))
+    val inFlight = submits.count(s => !s.finished || (s.compiled && s.points.isEmpty))
+    PointsCell(best, submits.size, full = maxPoints > 0 && best.contains(maxPoints), pending = inFlight)
   }
 }
 

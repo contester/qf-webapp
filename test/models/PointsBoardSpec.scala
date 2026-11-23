@@ -32,8 +32,11 @@ class PointsBoardSpec extends AnyFunSuite {
   test("a submit with NULL points (testing in flight or being retested) is ignored for best but counts as an attempt") {
     val inFlight = submit(2, None, finished = false)
     val finishedNull = submit(3, None) // finished and compiled, points not yet written
-    assert(PointsScorer.cell(Seq(submit(1, Some(6)), inFlight, finishedNull), 20) == PointsCell(Some(6), 3, full = false))
-    assert(PointsScorer.cell(Seq(inFlight), 20) == PointsCell(None, 1, full = false))
+    val compileError = submit(4, None, finished = true, compiled = false)
+    assert(PointsScorer.cell(Seq(submit(1, Some(6)), inFlight, finishedNull), 20) == PointsCell(Some(6), 3, full = false, pending = 2))
+    assert(PointsScorer.cell(Seq(inFlight), 20) == PointsCell(None, 1, full = false, pending = 1))
+    assert(PointsScorer.cell(Seq(compileError), 20) == PointsCell(None, 1, full = false, pending = 0))
+    assert(PointsScorer.cell(Seq(compileError), 20).finishedAttempts == 1)
   }
 
   test("unfinished or not compiled submits never give the best, even if they carry points") {

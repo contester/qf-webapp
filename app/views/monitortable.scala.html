@@ -1,6 +1,6 @@
 @(status: models.MonitorPoints, current: Int)(implicit messages: Messages)
-@* The points board: place, team, one cell per problem (points of the maximum; full-score at the maximum; «—» when
-   there are no points), total. Unrated teams follow the ranked ones without a place. *@
+@* The points board: place, participant, total, one cell per problem (best earned points, "0" if attempted without
+   scoring, blank if unattempted; full-score at the maximum). Unrated participants follow ranked ones without a place. *@
 
 @boardstyle()
 <table class="table table-hover table-bordered table-responsive points-board">
@@ -18,14 +18,9 @@
         <th scope="row">@r.place.map(_.toString).getOrElse("")</th><td>@r.team.number</td>
         <td>@r.team.name<br/><small>@r.team.schoolWithCity</small></td>
         <td class="text-center"><strong>@models.TestRows.formatPoints(r.total)</strong></td>
-        @for((cell, p) <- r.cells.zip(status.problems)) {
-        @cell.best match {
-            case Some(points) => {
-        <td class="text-center points-cell@if(cell.full) { full-score}">@models.TestRows.formatPoints(points)<br/><small class="text-muted">@messages("label.of") @models.TestRows.formatPoints(p.maxPoints)</small></td>
-            }
-            case None => {
-        <td class="text-center points-cell text-muted">—</td>
-            }
+        @for(cell <- r.cells) {
+        @defining(cell.best.map(models.TestRows.formatPoints).orElse(if (cell.finishedAttempts > 0) Some("0") else None)) { pts =>
+        <td class="text-center points-cell@if(cell.full) { full-score}">@pts.getOrElse("")</td>
         }
         }
     </tr>

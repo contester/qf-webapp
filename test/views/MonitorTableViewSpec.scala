@@ -29,17 +29,19 @@ class MonitorTableViewSpec extends AnyFunSuite {
     val h = html.monitortable(status, current = 11).body
     assert("points-cell full-score".r.findAllMatchIn(h).size == 1, "only the full cell carries the class")
     assert("points-cell".r.findAllMatchIn(h).size == 4)
-    for (t <- Seq(">32.5<", "12.5", "Seven", "Lyceum 1, Town", "Eight", "title=\"Alpha\"", "title=\"Beta\"",
-      "20 баллов", "25 баллов", "—", "Место", "Итого", "Участник"))
+    for (t <- Seq(">32.5<", ">20<", ">12.5<", "Seven", "Lyceum 1, Town", "Eight", "title=\"Alpha\"", "title=\"Beta\"",
+      "20 баллов", "25 баллов", "Место", "Итого", "Участник"))
       assert(h.contains(t), t)
-    assert(!h.contains("Команда"))
+    assert(!h.contains("Команда") && !h.contains("—") && !h.contains("из 20") && !h.contains("из 25") && !h.contains("text-muted"))
     assert(!h.contains("Alpha (20)") && !h.contains("(20)") && !h.contains("(25)"))
+    assert(h.contains("""<strong>0</strong></td><td class="text-center points-cell"></td><td class="text-center points-cell">0</td>""".replace("</td><td", "</td>\n        <td")) ||
+      (h.contains("""<td class="text-center points-cell"></td>""") && h.contains("""<td class="text-center points-cell">0</td>""")))
     // the unrated row has no place; the ranked row's place is 1
     assert(h.contains("<th scope=\"row\">1</th>"))
     assert(h.contains("<th scope=\"row\"></th>"))
     assert(h.indexOf("Seven") < h.indexOf("Eight"))
     assert(h.indexOf("Итого") < h.indexOf("20 баллов"))
-    assert(h.indexOf(">32.5<") < h.indexOf("12.5"))
+    assert(h.indexOf(">32.5<") < h.indexOf(">12.5<"))
   }
 
   test("the stylesheet gives full-score a colour") {

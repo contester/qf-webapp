@@ -39,12 +39,23 @@ const row = {team: 2, number: 7, name: 'N', school: 'S, C', place: 3, total: '5'
 const expectedRow =
   '<tr data-team="2"><th scope="row">3</th><td>7</td><td>N<br/><small>S, C</small></td>' +
   '<td class="text-center"><strong>5</strong></td>' +
-  '<td class="text-center points-cell text-muted">—</td>' +
-  '<td class="text-center points-cell">5<br/><small class="text-muted">из 20</small></td></tr>';
+  '<td class="text-center points-cell"></td>' +
+  '<td class="text-center points-cell">5</td></tr>';
 assert.strictEqual(ctx.liveRowHtml(problems, row), expectedRow);
-assert.strictEqual(ctx.liveRowHtml(problems, row, undefined, 99), expectedRow);
-assert.strictEqual(ctx.liveRowHtml(problems, row, undefined, 2),
+assert.strictEqual(ctx.liveRowHtml(problems, row, 99), expectedRow);
+assert.strictEqual(ctx.liveRowHtml(problems, row, 2),
   expectedRow.replace('<tr data-team="2">', '<tr data-team="2" class="info">'));
+
+// Pending-only, CE-only (0), and mixed (0 + ?1) cells.
+const edgeRow = {team: 2, number: 7, name: 'N', school: 'S, C', place: 3, total: '0', cells: {
+  A: {n: 1, f: false, p: 1},
+  B: {n: 1, f: false, p: 0}
+}};
+assert.strictEqual(ctx.liveRowHtml(problems, edgeRow),
+  '<tr data-team="2"><th scope="row">3</th><td>7</td><td>N<br/><small>S, C</small></td>' +
+  '<td class="text-center"><strong>0</strong></td>' +
+  '<td class="text-center points-cell"><span class="text-warning">?1</span></td>' +
+  '<td class="text-center points-cell">0</td></tr>');
 // Places in a row event are numbers, null for a team that is not rated.
 assert.strictEqual(ctx.liveRankText(null), '');
 assert.strictEqual(ctx.liveRankText(4), '4');
@@ -52,9 +63,13 @@ assert.strictEqual(ctx.liveRankText(4), '4');
 // Flash: a changed cell flashes by what it became, an unchanged one not at all; the row when it moved.
 const td = (cls, h) => `<td class="text-center points-cell${cls}">${h}</td>`;
 const plan = ctx.liveFlashPlan(
-  [td(' text-muted', '—'), td('', '3<br/><small class="text-muted">из 10</small>'), td(' text-muted', '—')],
-  [td(' text-muted', '—<br/><span class="text-warning">?1</span>'), td(' full-score', '10<br/><small class="text-muted">из 10</small>'), td(' text-muted', '—')], true);
-assert.deepStrictEqual(Array.from(plan.cells), ['pend', 'ok', null]);
+  [td('', ''), td('', '3'), td('', ''), td('', '0')],
+  [td('', '<span class="text-warning">?1</span>'), td(' full-score', '10'), td('', ''), td('', '0')], true);
+assert.deepStrictEqual(Array.from(plan.cells), ['pend', 'ok', null, null]);
+assert.strictEqual(ctx.liveCellKind(td('', '0')), 'fail');
+assert.strictEqual(ctx.liveCellKind(td('', '')), 'fail');
+assert.strictEqual(ctx.liveCellKind(td('', '5')), 'ok');
+assert.strictEqual(ctx.liveCellKind(td('', '0<br/><span class="text-warning">?1</span>')), 'pend');
 assert.strictEqual(plan.row, true);
 assert.strictEqual(ctx.liveFlashPlan(['a'], ['a'], false).row, false);
 

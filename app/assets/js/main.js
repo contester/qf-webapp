@@ -491,21 +491,24 @@ function liveRankText(place) {
     return (place === null || place === undefined) ? '' : String(place);
 }
 
-// One problem cell, <td> included. c: {b: best as text (absent: none), n: attempts, f: full, p: in flight}; max as text.
-function liveCellHtml(c, max, ofWord) {
+// One problem cell, <td> included. c: {b: best as text (absent: none), n: attempts, f: full, p: in flight}.
+function liveCellHtml(c) {
     c = c || {n: 0, f: false, p: 0};
-    ofWord = ofWord || 'из';
-    var has = c.b !== undefined && c.b !== null;
-    var cls = 'text-center points-cell' + (c.f ? ' full-score' : '') + (has ? '' : ' text-muted');
-    var h = has ? liveEsc(c.b) + '<br/><small class="text-muted">' + liveEsc(ofWord) + ' ' + liveEsc(max) + '</small>' : '—';
-    if (c.p > 0) h += '<br/><span class="text-warning">?' + c.p + '</span>';
+    var hasBest = c.b !== undefined && c.b !== null;
+    var finished = (c.n || 0) - (c.p || 0);
+    var pts = hasBest ? liveEsc(c.b) : (finished > 0 ? '0' : '');
+    var cls = 'text-center points-cell' + (c.f ? ' full-score' : '');
+    var h = pts;
+    if (c.p > 0) h += (pts ? '<br/>' : '') + '<span class="text-warning">?' + c.p + '</span>';
     return '<td class="' + cls + '">' + h + '</td>';
 }
 
-// What colour a cell flashes when it changes, from its new markup: in flight, with points, or without.
+// What colour a cell flashes when it changes, from its new markup: in flight, positive points, or 0/empty.
 function liveCellKind(html) {
     if (html.indexOf('text-warning') >= 0) return 'pend';
-    if (html.indexOf('<small') >= 0) return 'ok';
+    var m = html.match(/>([^<]*)/);
+    var num = m ? parseFloat(m[1]) : NaN;
+    if (!isNaN(num) && num > 0) return 'ok';
     return 'fail';
 }
 
@@ -539,13 +542,13 @@ function liveFlash(tr, oldCells, moved) {
     }
 }
 
-function liveRowHtml(problems, row, ofWord, currentTeamId) {
+function liveRowHtml(problems, row, currentTeamId) {
     var cls = (currentTeamId > 0 && row.team === currentTeamId) ? ' class="info"' : '';
     var h = '<tr data-team="' + row.team + '"' + cls + '><th scope="row">' + liveEsc(liveRankText(row.place)) + '</th>' +
         '<td>' + row.number + '</td><td>' + liveEsc(row.name) + '<br/><small>' + liveEsc(row.school) + '</small></td>' +
         '<td class="text-center"><strong>' + liveEsc(row.total) + '</strong></td>';
     for (var i = 0; i < problems.length; i++) {
-        h += liveCellHtml(row.cells ? row.cells[problems[i].id] : null, problems[i].max, ofWord);
+        h += liveCellHtml(row.cells ? row.cells[problems[i].id] : null);
     }
     return h + '</tr>';
 }
@@ -577,7 +580,7 @@ function liveTableHtml(board, labels, currentTeamId) {
     }
     h += '</tr></thead><tbody>\n';
     for (var j = 0; j < board.rows.length; j++) {
-        h += liveRowHtml(board.problems, board.rows[j], labels.of, currentTeamId) + '\n';
+        h += liveRowHtml(board.problems, board.rows[j], currentTeamId) + '\n';
     }
     return h + '</tbody></table>';
 }
@@ -589,7 +592,6 @@ function liveMonitor(eventsPath, containerSelector, currentTeamId) {
         rank: box.attr('data-label-rank') || '',
         team: box.attr('data-label-team') || '',
         total: box.attr('data-label-total') || '',
-        of: box.attr('data-label-of') || 'из',
         lang: box.attr('data-lang') || '',
         pointsOne: box.attr('data-points-one') || '',
         pointsFew: box.attr('data-points-few') || '',
@@ -614,7 +616,7 @@ function liveMonitor(eventsPath, containerSelector, currentTeamId) {
             var oldRank = old.children('th').first().text();
             var oldCells = liveCellsOf(old);
             old.remove();
-            var tr = $(liveRowHtml(problems, e.row, labels.of, currentTeamId));
+            var tr = $(liveRowHtml(problems, e.row, currentTeamId));
             var rows = tbody.children('tr');
             if (e.pos < rows.length) {
                 rows.eq(e.pos).before(tr);

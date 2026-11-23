@@ -44,6 +44,18 @@ class LiveTableSpec extends AnyFunSuite {
     assert(h.indexOf("<strong>10</strong>") < h.indexOf("full-score"))
     assert(h.contains("""title="Alpha&#x27;s"""") && h.contains("10 баллов"))
     assert(h.contains("""title="B&amp;B"""") && h.contains("2.5 балла"))
+    assert(!h.contains("—") && !h.contains("из 10") && !h.contains("text-muted"))
+
+    val edgeBoard = LiveBoard.build(
+      Seq(ProblemColumn("A", "A", 10), ProblemColumn("B", "B", 10), ProblemColumn("C", "C", 10)),
+      LiveTableFixture.teams.take(1),
+      Map(1 -> Map(
+        "A" -> LiveCell(None, 1, full = false, 0, None),   // failed/CE attempt -> 0
+        "B" -> LiveCell(None, 1, full = false, 1, None)))) // pending only -> ?1 (no 0), C empty
+    val eh = html.livetable(edgeBoard).body
+    assert(eh.contains("""<td class="text-center points-cell">0</td>"""))
+    assert(eh.contains("""<td class="text-center points-cell"><span class="text-warning">?1</span></td>"""))
+    assert(eh.contains("""<td class="text-center points-cell"></td>"""))
   }
 
   test("the JSON fixture used by the browser-side check is LiveJson.board of the same board") {

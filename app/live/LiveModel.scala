@@ -40,7 +40,8 @@ object SubmitRec {
   * maximum (for palevo's first-solve announcements).
   */
 case class LiveCell(best: Option[Double], attempts: Int, full: Boolean, pending: Int, fullAt: Option[Int]) {
-  def points: PointsCell = PointsCell(best, attempts, full)
+  def points: PointsCell = PointsCell(best, attempts, full, pending)
+  def finishedAttempts: Int = (attempts - pending).max(0)
   def isEmpty: Boolean = attempts == 0
 }
 

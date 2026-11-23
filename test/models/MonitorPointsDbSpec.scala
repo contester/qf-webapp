@@ -94,8 +94,8 @@ class MonitorPointsDbSpec extends AnyFunSuite {
         t
       }
       assert(board.rows == Seq(
-        RankedRow(Some(1), team(one, 91, "Board Spec One"), Seq(PointsCell(Some(20), 2, full = true), PointsCell(Some(10), 2, full = false)), 30),
-        RankedRow(Some(2), team(two, 92, "Board Spec Two"), Seq(PointsCell(None, 2, full = false), PointsCell(Some(25), 1, full = true)), 25),
+        RankedRow(Some(1), team(one, 91, "Board Spec One"), Seq(PointsCell(Some(20), 2, full = true), PointsCell(Some(10), 2, full = false, pending = 1)), 30),
+        RankedRow(Some(2), team(two, 92, "Board Spec Two"), Seq(PointsCell(None, 2, full = false, pending = 1), PointsCell(Some(25), 1, full = true)), 25),
         RankedRow(None, team(unrated, 93, "Board Spec Unrated", Some(NotRated)), Seq(PointsCell(Some(20), 1, full = true), PointsCell(Some(20), 1, full = false)), 40)))
       assert(!board.rows.exists(_.team.participantId == dsq))
 
