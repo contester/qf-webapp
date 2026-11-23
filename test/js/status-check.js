@@ -160,7 +160,7 @@ check('with a team filter other teams are ignored and the team link is plain tex
     p.bar().click();
     assert.deepStrictEqual(p.ids(), [102, 100, 99]);
     assert.strictEqual(p.$('#result-row-102 a.team-link').length, 0);
-    assert.ok(p.$('#result-row-102').text().includes('Team 1'));
+    assert.ok(p.$('#result-row-102').text().includes('Participant 1'));
 });
 
 check('without a filter the team link stays a link', () => {

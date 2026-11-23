@@ -59,7 +59,7 @@ class DbStatusRowsSpec extends TestKit(ActorSystem("DbStatusRowsSpec", ConfigFac
     assert(r.rw.startsWith("<tr id=\"result-row-42\"") && r.ro.startsWith("<tr id=\"result-row-42\""))
     assert(r.rw.contains("rejudge-42") && !r.ro.contains("rejudge-42"))
     assert(r.rw.contains("Баллы: 3 из 3") && r.ro.contains("Баллы: 3 из 3"))
-    assert(r.rw.contains("class=\"team-link\"") && r.rw.contains("Team 5"))
+    assert(r.rw.contains("class=\"team-link\"") && r.rw.contains("Participant 5"))
   }
 
   test("the team is named, escaped, from the team list") {
@@ -117,8 +117,8 @@ class DbStatusRowsSpec extends TestKit(ActorSystem("DbStatusRowsSpec", ConfigFac
     val r = new DbStatusRows(id => Future.successful(Some(submitRow(id, finished = true))), noTeams, system.scheduler,
       retryAfter = 20.millis, retries = 3, messages = ru)
     val done = await(r.render(42, None)).get
-    assert(done.rw.contains("Перепроверить") && done.rw.contains("Команда 5") && done.rw.contains("Баллы: 3 из 3"))
-    assert(!done.rw.contains(">Rejudge<") && !done.rw.contains("Team 5"))
+    assert(done.rw.contains("Перепроверить") && done.rw.contains("Участник 5") && done.rw.contains("Баллы: 3 из 3"))
+    assert(!done.rw.contains(">Rejudge<") && !done.rw.contains("Participant 5"))
     val unfinished = new DbStatusRows(id => Future.successful(Some(submitRow(id, finished = false))), noTeams, system.scheduler,
       retryAfter = 20.millis, retries = 3, messages = ru)
     val wait = await(unfinished.render(42, Some(SubmitWaiting))).get

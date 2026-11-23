@@ -78,7 +78,7 @@ class AdminStatusViewSpec extends AnyFunSuite {
     val r = rendered(true)
     assert(r.startsWith("<tr id=\"result-row-4242\">"))
     assert(r.contains("id=\"result-4242\""))
-    assert(r.contains("<a class=\"team-link\" href=\"/admin/submits/3?team=7777\">Team 7777</a>"))
+    assert(r.contains("<a class=\"team-link\" href=\"/admin/submits/3?team=7777\">Participant 7777</a>"))
     assert(r.endsWith("</tr>"))
   }
 
@@ -134,6 +134,6 @@ class AdminStatusViewSpec extends AnyFunSuite {
       new play.api.i18n.DefaultLangs(Seq(Lang("ru")))))
     val r = html.admin.submitrow(row, Map.empty, showRejudge = true, linkTeam = true)(ru).body
     assert(r.contains("Перепроверить") && !r.contains(">Rejudge<"))
-    assert(r.contains("Команда 7777") && !r.contains("Team 7777"))
+    assert(r.contains("Участник 7777") && !r.contains("Participant 7777"))
   }
 }

@@ -95,7 +95,7 @@ object SubmitResult extends Logging {
   val fallbackMessages: Messages =
     new play.api.i18n.DefaultMessagesApi(Map("en" -> Map(
       "admin.rejudge.one" -> "Rejudge",
-      "label.teamWithId" -> "Team {0}",
+      "label.teamWithId" -> "Participant {0}",
       "status.running" -> "Running...",
       "status.2" -> "Compilation error",
       "status.retesting" -> "Testing in progress...",

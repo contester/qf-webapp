@@ -29,8 +29,9 @@ class MonitorTableViewSpec extends AnyFunSuite {
     val h = html.monitortable(status, current = 11).body
     assert("points-cell full-score".r.findAllMatchIn(h).size == 1, "only the full cell carries the class")
     assert("points-cell".r.findAllMatchIn(h).size == 4)
-    for (t <- Seq(">32.5<", "12.5", "Seven", "Lyceum 1, Town", "Eight", "Alpha", "Beta", "(20)", "(25)", "—", "Место", "Итого"))
+    for (t <- Seq(">32.5<", "12.5", "Seven", "Lyceum 1, Town", "Eight", "Alpha", "Beta", "(20)", "(25)", "—", "Место", "Итого", "Участник"))
       assert(h.contains(t), t)
+    assert(!h.contains("Команда"))
     // the unrated row has no place; the ranked row's place is 1
     assert(h.contains("<th scope=\"row\">1</th>"))
     assert(h.contains("<th scope=\"row\"></th>"))
