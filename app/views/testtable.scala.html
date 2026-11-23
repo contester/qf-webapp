@@ -2,13 +2,40 @@
 
 @policyLabel(p: String) = @{ if (p == "complete-group") messages("policy.completeGroup") else messages("policy.eachTest") }
 
+@groupedRows(items: Seq[TestRowView]) = @{
+    var idx = -1
+    var prev: Option[String] = None
+    items.zipWithIndex.map { case (r, pos) =>
+        val cls = r.group match {
+            case Some(g) =>
+                val changed = !prev.contains(g)
+                if (changed) idx += 1
+                prev = Some(g)
+                val parity = if (idx % 2 == 0) "test-group-even" else "test-group-odd"
+                if (changed && pos > 0) s"$parity test-group-start" else parity
+            case None =>
+                prev = None
+                ""
+        }
+        (r, cls)
+    }
+}
+
+<style>
+#tests tbody tr.test-group-even > td { background-color: #f3f7fc; }
+#tests tbody tr.test-group-odd > td { background-color: #faf6ee; }
+#tests.table-hover tbody tr.test-group-even:hover > td { background-color: #e6effa; }
+#tests.table-hover tbody tr.test-group-odd:hover > td { background-color: #f3ead8; }
+#tests tbody tr.test-group-start > td { border-top: 2px solid #9aa5b1; }
+</style>
+
 <table class="table table-hover table-bordered table-responsive" id="tests">
     <thead>
     <tr><th>@messages("label.test")</th><th>@messages("label.result")</th><th>@messages("label.elapsedTime"), @messages("unit.ms")</th><th>@messages("label.memory"), @messages("unit.kb")</th><th>@messages("label.group")</th><th>@messages("label.policy")</th><th>@messages("label.points")</th></tr>
     </thead>
     <tbody>
-    @for(r <- rows) {
-    <tr><td>@r.testNo</td><td>@r.verdict</td><td>@r.timeMs</td><td>@r.memoryBytes</td><td>@r.group.getOrElse("")</td><td>@r.policy.map(policyLabel(_)).getOrElse("")</td><td>@r.pointsText</td></tr>
+    @for((r, cls) <- groupedRows(rows)) {
+    <tr@if(cls.nonEmpty){ class="@cls"}><td>@r.testNo</td><td>@r.verdict</td><td>@r.timeMs</td><td>@r.memoryBytes</td><td>@r.group.getOrElse("")</td><td>@r.policy.map(policyLabel(_)).getOrElse("")</td><td>@r.pointsText</td></tr>
     }
     </tbody>
 </table>

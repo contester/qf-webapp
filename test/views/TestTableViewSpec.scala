@@ -37,4 +37,21 @@ class TestTableViewSpec extends AnyFunSuite {
     assert(h.contains("<tr><td>1</td><td>OK</td><td>10</td><td>2</td><td></td><td></td><td>0 (тест из условия, пройден)</td></tr>"))
     assert(h.indexOf("Неправильный ответ") > h.indexOf(">OK<", h.indexOf("<td>2</td>")))
   }
+
+  test("groups alternate subtle row tints with group-start border and leave sample/ungrouped rows plain") {
+    val h = html.testtable(rows).body
+    assert(h.contains("""class="test-group-even test-group-start"><td>2</td>"""))
+    assert(h.contains("""class="test-group-even"><td>3</td>"""))
+    assert(h.contains("""class="test-group-odd test-group-start"><td>4</td>"""))
+    assert(h.contains("""class="test-group-odd"><td>5</td>"""))
+    val allGrouped = TestRows.describe(Seq(
+      ResultRow(1, 10, TimeMs(10), Memory(2048), Some("1"), 2.5),
+      ResultRow(2, 10, TimeMs(10), Memory(2048), Some("2"), 3.0)),
+      Seq(GroupRow("1", "each-test", 2.5, 2.5, passed = true, skipped = false),
+        GroupRow("2", "each-test", 3.0, 3.0, passed = true, skipped = false)),
+      messages)
+    val h2 = html.testtable(allGrouped).body
+    assert(h2.contains("""class="test-group-even"><td>1</td>"""))
+    assert(h2.contains("""class="test-group-odd test-group-start"><td>2</td>"""))
+  }
 }
