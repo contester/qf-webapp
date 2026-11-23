@@ -191,5 +191,6 @@ class I18nSpec extends AnyFunSuite {
         assert(!html.contains(bad), s"$name leaked English UI string '$bad'")
       }
     }
+    assert(!pages.toMap.apply("index").contains("""href="/sendwithinput""""))
   }
 }
