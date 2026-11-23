@@ -58,8 +58,8 @@ class AdminSubmitsDbSpec extends AnyFunSuite {
       // the verdicts: untested ones wait, the others show their current testing's points
       val byId = one.rows.map(r => r.submit.submitId.id.toLong -> r).toMap
       assert(!byId(ids(2)).submit.finished)
-      assert(byId(ids(1)).result.message == "3.33 из 10")  // one test of three
-      assert(byId(ids(3)).result.message == "10 из 10")
+      assert(byId(ids(1)).result.message == "Баллы: 3.33 из 10")  // one test of three
+      assert(byId(ids(3)).result.message == "Баллы: 10 из 10")
     }
   }
 

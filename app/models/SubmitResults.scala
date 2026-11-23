@@ -59,7 +59,7 @@ case object SubmitCompileError extends SubmitResult {
 case class SubmitPointsResult(points: Double, max: Double) extends SubmitResult {
   override val success: Boolean = points == max && max > 0
 
-  override val message: String = s"${TestRows.formatPoints(points)} из ${TestRows.formatPoints(max)}"
+  override val message: String = s"Баллы: ${TestRows.formatPoints(points)} из ${TestRows.formatPoints(max)}"
 
   override def display(implicit messages: Messages): String =
     SubmitResult.tr("points.of", message, TestRows.formatPoints(points), TestRows.formatPoints(max))
@@ -93,7 +93,7 @@ object SubmitResult extends Logging {
       "status.running" -> "Running...",
       "status.2" -> "Compilation error",
       "status.retesting" -> "Testing in progress...",
-      "points.of" -> "{0} из {1}"
+      "points.of" -> "Баллы: {0} из {1}"
     )), new play.api.i18n.DefaultLangs(Seq(play.api.i18n.Lang("en")))).preferred(Seq(play.api.i18n.Lang("en")))
 
   implicit val submitResultWrites = new Writes[SubmitResult] {

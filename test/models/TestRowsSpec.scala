@@ -101,7 +101,7 @@ class TestRowsSpec extends AnyFunSuite {
   }
 
   test("SubmitPointsResult reads points of max") {
-    assert(SubmitPointsResult(2.5, 10).message == "2.5 из 10")
+    assert(SubmitPointsResult(2.5, 10).message == "Баллы: 2.5 из 10")
     assert(SubmitPointsResult(10, 10).success)
     assert(!SubmitPointsResult(0, 0).success)
     assert(!SubmitPointsResult(3, 10).success)

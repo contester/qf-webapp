@@ -93,7 +93,7 @@ class SubmitDetailsDbSpec extends AnyFunSuite {
 
       // the submit as the list shows it: points of max
       val sub = Submits.upliftSub(await(db.run(SlickModel0.byId(id))))
-      assert(SubmitResult.fromSubmit(sub).message == "2.5 из 8")
+      assert(SubmitResult.fromSubmit(sub).message == "Баллы: 2.5 из 8")
       // the older testing keeps its own rows
       assert(await(Submits.loadTestRows(db, old)).map(_.pointsText) == Seq("0 (тест не пройден)"))
     } finally cleanup()

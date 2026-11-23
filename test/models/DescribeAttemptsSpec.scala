@@ -30,14 +30,14 @@ class DescribeAttemptsSpec extends AnyFunSuite {
   test("attempts are numbered in arrival order and each shows its own points, with no ACM score") {
     val rows = Submits.describeAttempts(Seq(attempt(11, 600, 3, testing = 1), attempt(12, 1200, 3, testing = 2), attempt(13, 1800, 5, testing = 3)), results)
     assert(rows.map(_.index) == Seq(1, 2, 3))
-    assert(rows.map(_.result.message) == Seq("3 из 10", "3 из 10", "10 из 10"))
+    assert(rows.map(_.result.message) == Seq("Баллы: 3 из 10", "Баллы: 3 из 10", "Баллы: 10 из 10"))
     assert(row(rows(2)).contains("class=\"success\"") && !row(rows(2)).contains("+70") && !row(rows(2)).contains("score-"))
   }
 
   test("rejudging the first attempt changes only that attempt's row") {
     val rejudged = Map(accepted(4), wrongAnswer(2), accepted(3))
     val rows = Submits.describeAttempts(Seq(attempt(11, 600, 5, testing = 4), attempt(12, 1200, 3, testing = 2), attempt(13, 1800, 5, testing = 3)), rejudged)
-    assert(rows.map(_.result.message) == Seq("10 из 10", "3 из 10", "10 из 10"))
+    assert(rows.map(_.result.message) == Seq("Баллы: 10 из 10", "Баллы: 3 из 10", "Баллы: 10 из 10"))
     assert(row(rows(2)) == row(Submits.describeAttempts(Seq(attempt(13, 1800, 5, testing = 3)), results).head.copy(index = 3)))
   }
 

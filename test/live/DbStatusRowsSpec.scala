@@ -58,7 +58,7 @@ class DbStatusRowsSpec extends TestKit(ActorSystem("DbStatusRowsSpec", ConfigFac
     assert(r.contest == 3 && r.id == 42 && r.team == 5)
     assert(r.rw.startsWith("<tr id=\"result-row-42\"") && r.ro.startsWith("<tr id=\"result-row-42\""))
     assert(r.rw.contains("rejudge-42") && !r.ro.contains("rejudge-42"))
-    assert(r.rw.contains("3 из 3") && r.ro.contains("3 из 3"))
+    assert(r.rw.contains("Баллы: 3 из 3") && r.ro.contains("Баллы: 3 из 3"))
     assert(r.rw.contains("class=\"team-link\"") && r.rw.contains("Team 5"))
   }
 
@@ -83,7 +83,7 @@ class DbStatusRowsSpec extends TestKit(ActorSystem("DbStatusRowsSpec", ConfigFac
     val reads = new AtomicInteger
     val r = await(rows(id => Future.successful(Some(submitRow(id, finished = reads.incrementAndGet() >= 3)))).render(42, None)).get
     assert(reads.get == 3)
-    assert(r.rw.contains("3 из 3") && !r.rw.contains("Running..."))
+    assert(r.rw.contains("Баллы: 3 из 3") && !r.rw.contains("Running..."))
   }
 
   test("a result that never shows up is given up on after the retries, and the row is still sent") {
@@ -114,7 +114,7 @@ class DbStatusRowsSpec extends TestKit(ActorSystem("DbStatusRowsSpec", ConfigFac
     val r = new DbStatusRows(id => Future.successful(Some(submitRow(id, finished = true))), noTeams, system.scheduler,
       retryAfter = 20.millis, retries = 3, messages = ru)
     val done = await(r.render(42, None)).get
-    assert(done.rw.contains("Перепроверить") && done.rw.contains("Команда 5") && done.rw.contains("3 из 3"))
+    assert(done.rw.contains("Перепроверить") && done.rw.contains("Команда 5") && done.rw.contains("Баллы: 3 из 3"))
     assert(!done.rw.contains(">Rejudge<") && !done.rw.contains("Team 5"))
     val wait = await(r.render(42, Some(SubmitWaiting))).get
     assert(wait.rw.contains("Выполняется..."))
@@ -145,7 +145,7 @@ class DbStatusRowsSpec extends TestKit(ActorSystem("DbStatusRowsSpec", ConfigFac
         assert(r.rw.contains(s.result.message) && r.ro.contains(s.result.message), s"verdict of $id")
         assert(r.rw.contains(s"rejudge-$id") && !r.ro.contains(s"rejudge-$id"), s"rejudge button of $id")
       }
-      assert(await(real.render(done.toInt, None)).get.rw.contains("6.67 из 10"))
+      assert(await(real.render(done.toInt, None)).get.rw.contains("Баллы: 6.67 из 10"))
     }
   }
 
