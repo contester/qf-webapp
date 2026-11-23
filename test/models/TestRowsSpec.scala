@@ -129,4 +129,29 @@ class TestRowsSpec extends AnyFunSuite {
     }
     assert(described(3).group.contains("2") && described(3).policy.contains("complete-group"))
   }
+
+  test("formatPointsWithUnit pluralizes Russian, English, and fallback point units") {
+    import play.api.i18n.{DefaultLangs, DefaultMessagesApi, Lang, MessagesImpl}
+    val emptyEn = MessagesImpl(Lang("en"), new DefaultMessagesApi())
+    assert(TestRows.formatPointsWithUnit(10)(emptyEn) == "10 баллов")
+    assert(TestRows.formatPointsWithUnit(2.5)(emptyEn) == "2.5 балла")
+
+    val ruApi = new DefaultMessagesApi(Map("ru" -> Map(
+      "points.unit.one" -> "балл", "points.unit.few" -> "балла", "points.unit.many" -> "баллов"
+    )), new DefaultLangs(Seq(Lang("ru"))))
+    val ru = MessagesImpl(Lang("ru"), ruApi)
+    val ruCases = Seq(
+      0.0 -> "0 баллов", 1.0 -> "1 балл", 2.0 -> "2 балла", 4.0 -> "4 балла",
+      5.0 -> "5 баллов", 11.0 -> "11 баллов", 12.0 -> "12 баллов", 14.0 -> "14 баллов",
+      21.0 -> "21 балл", 22.0 -> "22 балла", 30.0 -> "30 баллов", 2.5 -> "2.5 балла")
+    for ((n, expected) <- ruCases) assert(TestRows.formatPointsWithUnit(n)(ru) == expected, n)
+
+    val enApi = new DefaultMessagesApi(Map("en" -> Map(
+      "points.unit.one" -> "point", "points.unit.few" -> "points", "points.unit.many" -> "points"
+    )), new DefaultLangs(Seq(Lang("en"))))
+    val en = MessagesImpl(Lang("en"), enApi)
+    val enCases = Seq(
+      0.0 -> "0 points", 1.0 -> "1 point", 2.0 -> "2 points", 21.0 -> "21 points", 2.5 -> "2.5 points")
+    for ((n, expected) <- enCases) assert(TestRows.formatPointsWithUnit(n)(en) == expected, n)
+  }
 }

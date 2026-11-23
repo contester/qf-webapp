@@ -42,6 +42,8 @@ class LiveTableSpec extends AnyFunSuite {
     assert(h == LiveTableFixture.html)
     assert(h.indexOf("label.total") < h.indexOf(">A<"))
     assert(h.indexOf("<strong>10</strong>") < h.indexOf("full-score"))
+    assert(h.contains("""title="Alpha&#x27;s"""") && h.contains("10 баллов"))
+    assert(h.contains("""title="B&amp;B"""") && h.contains("2.5 балла"))
   }
 
   test("the JSON fixture used by the browser-side check is LiveJson.board of the same board") {

@@ -8,7 +8,7 @@
     <tr><th>@messages("label.rank")</th><th>№</th><th>@messages("label.team")</th>
         <th style="text-align: center;">@messages("label.total")</th>
         @for(p <- status.problems) {
-        <th style="text-align: center;" title="@p.name">@p.id<div style="font-size: 65%;">@p.name (@models.TestRows.formatPoints(p.maxPoints))</div></th>
+        <th style="text-align: center;" title="@p.name">@p.id<div style="font-size: 65%;">@models.TestRows.formatPointsWithUnit(p.maxPoints)</div></th>
         }
     </tr>
     </thead>

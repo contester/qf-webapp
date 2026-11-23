@@ -24,6 +24,30 @@ object TestRows {
     if (x.isNaN || x.isInfinite) "0" // never stored, but a page must not fail on one
     else BigDecimal(x).setScale(2, RoundingMode.HALF_UP).bigDecimal.stripTrailingZeros.toPlainString
 
+  /** Formats max points with localized pluralized points unit (Russian fallback when keys absent). */
+  def formatPointsWithUnit(x: Double)(implicit messages: play.api.i18n.Messages): String = {
+    val s = formatPoints(x)
+    val hasFraction = s.contains('.')
+    val n = BigDecimal(s).abs.toBigInt
+    def pickRu(one: String, few: String, many: String): String =
+      if (hasFraction) few
+      else {
+        val m100 = (n % 100).toInt
+        val m10 = (n % 10).toInt
+        if (m100 >= 11 && m100 <= 14) many
+        else if (m10 == 1) one
+        else if (m10 >= 2 && m10 <= 4) few
+        else many
+      }
+    val unit =
+      if (!messages.isDefinedAt("points.unit.one")) pickRu("балл", "балла", "баллов")
+      else if (messages.lang.language == "en") {
+        if (!hasFraction && n == BigInt(1)) messages("points.unit.one")
+        else messages("points.unit.many")
+      } else pickRu(messages("points.unit.one"), messages("points.unit.few"), messages("points.unit.many"))
+    s"$s $unit"
+  }
+
   def fromEntry(e: ResultEntry): ResultRow = ResultRow(e.test, e.result, e.time, e.memory, e.group, e.points, e.isSample)
 
   /** The rows of the per-test table: ascending by test number, the compile row (test 0) left out. */

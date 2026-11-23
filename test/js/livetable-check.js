@@ -58,4 +58,14 @@ assert.deepStrictEqual(Array.from(plan.cells), ['pend', 'ok', null]);
 assert.strictEqual(plan.row, true);
 assert.strictEqual(ctx.liveFlashPlan(['a'], ['a'], false).row, false);
 
+// Pluralization of problem header points matches TestRows.formatPointsWithUnit.
+[
+  ['0', '0 баллов'], ['1', '1 балл'], ['2', '2 балла'], ['4', '4 балла'],
+  ['5', '5 баллов'], ['11', '11 баллов'], ['14', '14 баллов'],
+  ['21', '21 балл'], ['30', '30 баллов'], ['2.5', '2.5 балла']
+].forEach(([n, want]) => assert.strictEqual(ctx.livePointsWithUnit(n), want));
+const enLabels = {lang: 'en', pointsOne: 'point', pointsFew: 'points', pointsMany: 'points'};
+[['0', '0 points'], ['1', '1 point'], ['2', '2 points'], ['21', '21 points'], ['2.5', '2.5 points']]
+  .forEach(([n, want]) => assert.strictEqual(ctx.livePointsWithUnit(n, enLabels), want));
+
 console.log('livetable-check: OK');

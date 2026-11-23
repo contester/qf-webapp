@@ -550,6 +550,22 @@ function liveRowHtml(problems, row, ofWord, currentTeamId) {
     return h + '</tr>';
 }
 
+function livePointsWithUnit(numStr, labels) {
+    var s = String(numStr);
+    var one = (labels && labels.pointsOne) || 'балл';
+    var few = (labels && labels.pointsFew) || 'балла';
+    var many = (labels && labels.pointsMany) || 'баллов';
+    var hasFraction = s.indexOf('.') >= 0;
+    if (labels && labels.lang === 'en') {
+        return s + ' ' + (!hasFraction && parseInt(s, 10) === 1 ? one : many);
+    }
+    if (hasFraction) return s + ' ' + few;
+    var n = Math.abs(parseInt(s, 10)) || 0;
+    var m100 = n % 100, m10 = n % 10;
+    var u = (m100 >= 11 && m100 <= 14) ? many : (m10 === 1 ? one : (m10 >= 2 && m10 <= 4 ? few : many));
+    return s + ' ' + u;
+}
+
 function liveTableHtml(board, labels, currentTeamId) {
     var h = '<table class="table table-hover table-bordered table-responsive points-board"><thead><tr>' +
         '<th>' + liveEsc(labels.rank) + '</th><th>№</th><th>' + liveEsc(labels.team) + '</th>' +
@@ -557,7 +573,7 @@ function liveTableHtml(board, labels, currentTeamId) {
     for (var i = 0; i < board.problems.length; i++) {
         var p = board.problems[i];
         h += '<th style="text-align: center;" title="' + liveEsc(p.name) + '">' + liveEsc(p.id) +
-            '<div style="font-size: 65%;">' + liveEsc(p.name) + ' (' + liveEsc(p.max) + ')</div></th>';
+            '<div style="font-size: 65%;">' + liveEsc(livePointsWithUnit(p.max, labels)) + '</div></th>';
     }
     h += '</tr></thead><tbody>\n';
     for (var j = 0; j < board.rows.length; j++) {
@@ -573,7 +589,11 @@ function liveMonitor(eventsPath, containerSelector, currentTeamId) {
         rank: box.attr('data-label-rank') || '',
         team: box.attr('data-label-team') || '',
         total: box.attr('data-label-total') || '',
-        of: box.attr('data-label-of') || 'из'
+        of: box.attr('data-label-of') || 'из',
+        lang: box.attr('data-lang') || '',
+        pointsOne: box.attr('data-points-one') || '',
+        pointsFew: box.attr('data-points-few') || '',
+        pointsMany: box.attr('data-points-many') || ''
     };
     var problems = [];
 
